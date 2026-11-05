@@ -1,6 +1,6 @@
 // Folders in a signed-in account: they are kept in the account, and stay put as the dashboard lists again.
 
-import { expect, test } from '../fixtures';
+import { dragOnto, expect, test } from '../fixtures';
 import { cloudDocs, makeDocx, newPerson, uploadDoc, waitForCloudDoc } from './helpers';
 
 test('moving documents into a folder keeps them there as the dashboard refreshes, and after a reload', { tag: '@heavy' }, async ({ browser }) => {
@@ -24,7 +24,7 @@ test('moving documents into a folder keeps them there as the dashboard refreshes
   const folder = dashboard.locator('article.wm-folder').filter({ hasText: 'Work' });
   await expect(folder).toHaveCount(1);
 
-  for (const name of ['one.docx', 'two.docx']) await cards.filter({ hasText: name }).dragTo(folder);
+  for (const name of ['one.docx', 'two.docx']) await dragOnto(cards.filter({ hasText: name }), folder);
   await expect(folder.locator('.wm-card-meta')).toHaveText('2 items');
   await expect(cards).toHaveCount(0);
 
@@ -63,9 +63,9 @@ test('documents made in the app (with a copy in this browser) stay in their fold
   const folder = dashboard.locator('article.wm-folder').filter({ hasText: 'Work' });
   await expect(folder).toHaveCount(1);
 
-  await cards.first().dragTo(folder);
+  await dragOnto(cards.first(), folder);
   await expect(cards).toHaveCount(1);
-  await cards.first().dragTo(folder);
+  await dragOnto(cards.first(), folder);
   await expect(folder.locator('.wm-card-meta')).toHaveText('2 items');
 
   await page.waitForTimeout(4000);
@@ -88,7 +88,7 @@ test('if the folders can’t be listed during a refresh, the ones on screen stay
   const field = dashboard.getByRole('textbox', { name: 'Folder name' });
   await field.fill('Work');
   await field.press('Enter');
-  await cards.first().dragTo(dashboard.locator('article.wm-folder').filter({ hasText: 'Work' }));
+  await dragOnto(cards.first(), dashboard.locator('article.wm-folder').filter({ hasText: 'Work' }));
   await expect(cards).toHaveCount(0);
 
   // The folders fail to load on the next refresh, which a rename causes.

@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import type { CloudDocument } from '../src/cloud.ts';
 import type { SavedInfo } from '../src/storage/local.ts';
 import { childFolders, folderOf, folderPath, folderTree, isInside, itemsIn, parentsFirst, treeRows, type Folder } from '../src/folders.ts';
-import { classify, deletedElsewhere, hasUnsentChanges, mergeLibrary, type LibraryEntry } from '../src/sync.ts';
+import { classify, deletedElsewhere, hasUnsentChanges, madeInAccount, makingInAccount, mergeLibrary, type LibraryEntry } from '../src/sync.ts';
 import { THUMB_MAX_HEIGHT, THUMB_WIDTH, thumbnailSize, toTopDownOpaque } from '../src/thumbnail.ts';
 import { formatSize, matchesSearch, opensFromCloud, relativeTime, syncBadge } from '../src/ui/dashboardFormat.ts';
 
@@ -54,6 +54,35 @@ test('classifying a document by what changed where', () => {
   assert.equal(classify(linked(), null, false), 'unknown', 'cloud unreachable');
   // Linked before the cloud's date was recorded: the cloud counts as unchanged.
   assert.equal(classify(linked({ cloudUpdatedAt: undefined }), cloud({ updatedAt: 999 }), true), 'synced');
+});
+
+test('a document on its way to the account is listed once, by what was sent, until the upload has answered', () => {
+  const now = Date.now();
+  const sent = cloud({ id: 'new', name: 'Mine.docx', size: 40, createdAt: now, updatedAt: now });
+  makingInAccount('l9', 'Mine.docx', 40);
+  // Edited and renamed since it was sent: it is still what was sent that the account lists.
+  const here = [local({ id: 'l9', name: 'Renamed.docx', size: 99, updatedAt: now })];
+  assert.deepEqual(mergeLibrary(here, [sent]).map((e) => e.key), ['l9']);
+  madeInAccount('l9');
+  assert.deepEqual(mergeLibrary(here, [sent]).map((e) => e.key).sort(), ['l9', 'new'], 'an upload that failed leaves what the account has showing');
+});
+
+test('only the new document is taken for one on its way: others like it stay listed', () => {
+  const now = Date.now();
+  const old = cloud({ id: 'old', name: 'Document1.docx', size: 40, createdAt: now - 3_600_000, updatedAt: now - 3_600_000 });
+  const other = cloud({ id: 'other', name: 'Other.docx', size: 40, createdAt: now, updatedAt: now });
+  const sized = cloud({ id: 'sized', name: 'Document1.docx', size: 41, createdAt: now, updatedAt: now });
+  const here = [local({ id: 'l9', name: 'Document1.docx', size: 40, updatedAt: now })];
+  makingInAccount('l9', 'Document1.docx', 40);
+  try {
+    assert.deepEqual(mergeLibrary(here, [old, other, sized]).map((e) => e.key).sort(), ['l9', 'old', 'other', 'sized']);
+    // Two alike, and one upload: the newest is the one being made, and the other is still listed.
+    const twin = cloud({ id: 'twin', name: 'Document1.docx', size: 40, createdAt: now - 10, updatedAt: now - 10 });
+    const made = cloud({ id: 'made', name: 'Document1.docx', size: 40, createdAt: now, updatedAt: now });
+    assert.deepEqual(mergeLibrary(here, [twin, made]).map((e) => e.key).sort(), ['l9', 'twin']);
+  } finally {
+    madeInAccount('l9');
+  }
 });
 
 test('the library pairs copies, lists cloud-only documents once, and sorts newest first', () => {

@@ -265,7 +265,7 @@ export async function ownStorage(env: Env, userId: string, method: string): Prom
  * on after the response (a delete's cleanup); without it that work is done before answering.
  */
 /**
- * GET /api/view/:token and /api/view/:token/file: a document shared view-only, as the read-only viewer (/view/?s=<token>) reads it:
+ * GET /api/view/:token and /api/view/:token/file: a document shared view-only, as the read-only viewer (/view?s=<token>) reads it:
  * its name, and its file (304 for `If-None-Match` while unchanged). The token is the share's own (`shares.view_token`), and only the
  * person it was shared with may use it; anyone else, and a token dropped by unsharing or a role change, gets 404. Nothing answered
  * names the document's id.
@@ -286,7 +286,7 @@ export async function handleView(request: Request, env: Env, userId: string, tok
 
 /**
  * GET /api/public/:token and /api/public/:token/file: a document's public link (`public_links`), as the viewer reads it at
- * /view/?p=<token> (and embedded in other sites, /view/?p=<token>&embed), for anyone, signed in or not. The same answers as
+ * /view?p=<token> (and embedded in other sites, /view?p=<token>&embed), for anyone, signed in or not. The same answers as
  * `handleView`. A dropped or reset link, a deleted document and an owner whose sync ended all get 404, so a link says
  * nothing about why it stopped. Browsers may keep an answer for a minute, which is how long a dropped link can still show.
  */

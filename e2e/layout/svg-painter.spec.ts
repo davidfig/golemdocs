@@ -68,8 +68,8 @@ test('the painter draws what the converter writes the way the browser does', asy
   expect(list.length).toBeGreaterThanOrEqual(5);
   await app.goto('?doc=welcome');
   const results = await page.evaluate(async (items) => {
-    const { readSvg } = await import('/src/vector/svgRead.ts');
-    const { paintScene } = await import('/src/vector/paint.ts');
+    const { readSvg } = await import('/src/vector/svgRead.ts' as string);
+    const { paintScene } = await import('/src/vector/paint.ts' as string);
     const out: { name: string; differing: number; painted: number }[] = [];
     for (const [name, svg] of items) {
       const match = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg)!;

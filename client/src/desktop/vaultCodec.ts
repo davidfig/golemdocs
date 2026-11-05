@@ -13,6 +13,9 @@
 // is also how a format the app reads but cannot write (`.doc`, GIF, BMP, HEIC) goes out until the app has saved it; after
 // that it is written as what the app edits it as (Word, PNG, JPEG), under the same name.
 //
+// A CSV or TSV file is kept as it is. One with a layout (column widths and the like) is kept in the container with it
+// (formats/wdocDelimited.ts): the vault gets the file, byte for byte, and a file changed on disk replaces the file and keeps the layout.
+//
 // Text formats need no fonts. A PDF (laid out, or with its text edited) and a picture or drawing of a page of text do: the
 // app's fonts are loaded the first time one asks, as the layout worker loads them (`VaultFonts`).
 
@@ -23,7 +26,7 @@ import { exportDocument, importDocument, isFormat, type Format } from '../format
 import { withDrawingText } from '../formats/drawingText.ts';
 import { annotatedPdf, reflow } from '../formats/pdfFile.ts';
 import { sourceFromFile } from '../formats/source.ts';
-import { readWdoc, writeWdoc, WDOC_VERSION, type Extensions } from '../formats/wdoc.ts';
+import { delimitedWdoc, isWdoc, readWdoc, writeWdoc, WDOC_VERSION, type Extensions } from '../formats/wdoc.ts';
 import { vaultFormat, vaultKind } from './vaultFormats.ts';
 
 export { vaultFormat };
@@ -77,6 +80,11 @@ export async function toVaultFile(stored: Uint8Array, name: string, fonts: Vault
     return write(document, extensions, format, fonts);
   }
   const wdoc = await readWdoc(stored);
+  if (wdoc.delimited) {
+    if (format === wdoc.manifest.lens) return wdoc.delimited;
+    const { document, extensions } = await importDocument(wdoc.manifest.lens, wdoc.delimited);
+    return write(document, extensions, format, fonts);
+  }
   // A PDF whose text was not edited is its pages: the original with what was done to them. Download gives the same file (see `exportAs` in layoutWorker.ts).
   if (format === 'pdf' && wdoc.original && (!wdoc.document || wdoc.manifest.pagesCurrent)) return annotatedPdf(wdoc.original, wdoc.extensions, () => editFonts(fonts));
   let document: WordDocument;
@@ -88,8 +96,11 @@ export async function toVaultFile(stored: Uint8Array, name: string, fonts: Vault
   return write(document, extensions, format, fonts);
 }
 
-/** The bytes for the account from a vault file named `name`. Throws if the name is not a format the vault keeps. */
-export async function fromVaultFile(file: Uint8Array, name: string): Promise<Uint8Array> {
+/**
+ * The bytes for the account from a vault file named `name`. Throws if the name is not a format the vault keeps. `previous` is what
+ * the account stores now, for a CSV or TSV file (`keepsLayout`): its layout stays with the new file.
+ */
+export async function fromVaultFile(file: Uint8Array, name: string, previous?: Uint8Array): Promise<Uint8Array> {
   const format = vaultFormat(name);
   if (!format) throw new Error(`not a file the vault keeps: ${name}`);
   const kind = vaultKind(name);
@@ -97,7 +108,11 @@ export async function fromVaultFile(file: Uint8Array, name: string): Promise<Uin
   // opens them so and saves them as what it edits them as.
   if (format === 'docx' || (kind === 'image' && !/\.(png|jpe?g|webp)$/i.test(name))) return file;
   // A workbook, CSV or TSV too: the account keeps them as the files themselves, edited in the grid.
-  if (format === 'xlsx' || format === 'csv' || format === 'tsv') return file;
+  if (format === 'csv' || format === 'tsv') {
+    const layout = previous && isWdoc(previous) ? await readWdoc(previous).then((wdoc) => wdoc.extensions.csv?.layout, () => undefined) : undefined;
+    return layout ? delimitedWdoc(file, format, layout) : file;
+  }
+  if (format === 'xlsx') return file;
   // A PDF becomes its own original: what was done to the one before it is in the file now.
   if (format === 'pdf') return writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'pdf', origin: 'pdf', pagesCurrent: true }, document: null, original: file, extensions: {} });
   const { document, extensions } = await importDocument(format, file);

@@ -42,7 +42,6 @@ test.describe('comments panel', () => {
   });
 
   test('the new comment box has the keyboard, so typing goes into the comment', async ({ app, page }) => {
-    test.fixme(true, 'Suspected app bug: after Insert > Comment the keyboard is handed back to the document, so typing replaces the selected text instead of filling the comment box');
     await app.blank();
     await app.type('alpha beta');
     await app.press('Home');

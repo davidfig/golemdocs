@@ -37,6 +37,11 @@ export const app: Partial<Messages> = {
   'app.saveFailed': '保存に失敗しました：{message}',
   'app.linkOneParagraph': 'リンクにするには、1 つの段落内でテキストを選択してください',
   'app.allowPopups': '印刷プレビューを表示するには、ポップアップを許可してください',
+  'app.fileReady': 'ファイルの準備ができました',
+  'app.fileReadySave': '保存',
+  'app.printInPreview': 'プレビューで開きました。印刷するには「ファイル」›「プリント」を選択してください',
+  'app.printFailed': '印刷できませんでした: {message}',
+  'app.printSavedInstead': '「{name}」をダウンロードに保存しました。開いて印刷してください。直接印刷するにはアプリをアップデートしてください。',
   'app.downloaded': '「{name}」をダウンロードしました',
   'app.downloadAllNone': 'ダウンロードできる保存済みドキュメントがありません',
   'app.downloadAllName': 'documents.zip',
@@ -70,6 +75,7 @@ export const app: Partial<Messages> = {
 
   // Account and cloud
   'app.adopted': 'このブラウザーのドキュメント {count} 件をアカウントに追加しました',
+  'app.journalCut': '「{name}」の最後の編集の一部を復元できませんでした。',
   'app.conflictNotice': '「{before}」は別の場所でも変更されたため、これらの変更は「{name}」として保存されました',
   'app.mergedNotice': '「{name}」は別の場所でも別の段落が変更されたため、両方の変更を残しました。以前の状態はバージョン履歴にあります。',
   'app.signInToShare': 'このドキュメントを共有するにはサインインしてください',

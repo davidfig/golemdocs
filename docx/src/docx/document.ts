@@ -259,7 +259,8 @@ export class WordDocument {
 
   // --- Writing -----------------------------------------------------------------------------
 
-  async write(): Promise<Uint8Array> {
+  /** `onBody` is called in the same synchronous stretch as the body is written: an edit made before the call is in the file, and one made after it is not. */
+  async write(options: { onBody?: () => void } = {}): Promise<Uint8Array> {
     const pkg = this.pkg;
     const rels = await pkg.relationships(this.mainPart);
     let nextId = maxDrawingId(this) + 1;
@@ -270,6 +271,7 @@ export class WordDocument {
     // Keep a missing w:sectPr missing unless the section has since been given properties.
     const omitSection = this.sectionAbsent && !section.children.length && !Object.keys(section.attrs).length;
     const body = el('w:body', this.bodyAttrs, [...writeBlocks(this.body, ctx), ...(omitSection ? [] : [section])]);
+    options.onBody?.();
     const root = el('w:document', { ...this.rootAttrs }, [
       ...this.rootChildren.before,
       body,

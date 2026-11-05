@@ -72,7 +72,8 @@ test('a device that comes back with changes the account does not have, while ano
   const person = await newPerson(browser, 'picture');
   await person.page.goto('/?doc=welcome');
   await openPicture(person.app, CANVAS());
-  const doc = await waitForCloudDoc(person.page);
+  // By name: the account also has the blank document the picture was imported from.
+  const doc = await waitForCloudDoc(person.page, (docs) => docs.find((d) => d.name === 'picture.png'));
   // This device draws while its saves can't reach the account, then leaves.
   await person.context.route('**/api/documents/*', (route) => (route.request().method() === 'PUT' ? route.fulfill({ status: 500, body: '{"error":"down"}' }) : route.continue()));
   await person.app.toolbarButton(/^Line$/).click();

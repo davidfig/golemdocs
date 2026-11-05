@@ -23,6 +23,8 @@ Documents live in the browser's IndexedDB first. Signed out they never leave the
         Documents screen, Files Sidebar, File > Open Recent all read this one copy
 ```
 
+An autosave waits for a pause in typing, and the document is in the layout worker, so a page going away can't wait for a last save. The [edit journal](../edit-journal.md) keeps the edits since the last save in `localStorage` and replays them on opening. Each save records how far through the journal it reaches (`SavedInfo.journal`), in the same IndexedDB transaction as its bytes, and any other write of the copy clears that.
+
 Nothing is ever overwritten. A copy that started from an older cloud version is merged with the cloud's when the two changed different things, and otherwise becomes a separate "(conflicted copy)" document (`conflictCopyName` in `client/src/library.ts`). Multi-person live editing is a different path (a room becomes the single writer; see [Collaboration](collaboration.md)).
 
 ## Merging a conflict
@@ -82,6 +84,7 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 | `client/src/subscription.ts` | `fetchSubscription`, checkout/portal URLs; `sync: false` switches the app to guest mode |
 | `client/src/settingsSync.ts` | `SYNCED_KEYS`, `planSync`, `syncSettings`, per-profile (`desktop`/`mobile`) |
 | `client/src/thumbnail.ts` | first-page thumbnail drawn with the editor's renderer into an offscreen framebuffer (max about 2x card size) |
+| `client/src/storage/editJournal.ts` | the edits since the last save, in `localStorage`, so a page going away can't lose them: replayed on opening (see [edit-journal.md](../edit-journal.md)) |
 | `client/src/main.ts` | wires it all: `LibraryStore` host, `connect()`, `UploadQueue` host, autosave, sign-out |
 
 ## Key data types
@@ -94,6 +97,7 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 ## Reconciliation and offline behavior
 
 - **Lazy sync.** A new computer only fetches the catalogue (names, sizes, dates, thumbnail links). Bytes come on open: `openFromCloud` uses the local copy if it has unsent changes, skips the download if `cloudUpdatedAt` already matches, and falls back to the local copy if the download fails with a network error. `prefetchFromCloud` starts a download on hover (30 s, 3 entries). Opening from the account passes `early`: the bytes are opened the moment they arrive and the browser copy is chunked and written behind them (`OpenedFromCloud.stored`); `main.ts` chains that write into `saving`, so no later save can be overwritten by it. `downloadDocument` can report the share received as the body arrives (shown in the status bar), and the page sends the worker `warm` so the default fonts load during the download.
+- **A document being made in the account shows once.** The account has it before its copy here knows its id. `uploadToCloud` and `uploadNewToCloud` say what they are sending (`makingInAccount`, `madeInAccount` in `sync.ts`), and until the answer `mergeLibrary` leaves out the newest document with that name and size, made since the upload began. It is per tab: another tab can still show both for that moment.
 - **Cloud-first folders.** Signed in with sync, folder and move operations are made on the account first and only happen if they save; guest folders live in the `folders` store. `forgetInCatalogue` / `patchCatalogue` keep the cached catalogue matching what was just done, and `isDeleted` (`cloud.ts`) hides items deleted this session from stale listings.
 - **Offline.** There is no service worker; the app shell loads from the browser cache. Saves always succeed locally. `currentUser` returns the remembered account on a network error or 5xx, `LibraryStore.refresh` shows local copies plus the last cached catalogue before the network answers, and keeps the last-known account list if the listing fails (`cloudProblem`). A `TypeError` from `fetch` marks the queue offline: uploads wait, retry every 30 s and on the `online` event (`backOnline` in `main.ts`). A 401 sets `signedOut` and waits for sign-in.
 - **Delta uploads.** Documents kept as chunks upload only chunks not in `syncedHashes`; if the server answers `missing-chunks` (a room rewrote the file whole), everything is sent once (`sendChunked`). Limits: 50 MiB per document (`MAX_DOCUMENT_BYTES`), 25 GB per account, history included (`ACCOUNT_STORAGE_BYTES`; a refusal's `storage-full` code becomes a translated message in `cloud.ts`, shown as the upload's failure), batches of 200 documents / 24 MiB for ZIP imports. During a batch the ordinary queue skips those ids (`batching`).

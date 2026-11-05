@@ -4,6 +4,7 @@
 // (the page lays the glyphs out, where the fonts are); levels 1 and up are the overview, a picture of the cells as laid out.
 
 import type { DelimitedKind } from './delimited.ts';
+import type { SheetLayout } from '../formats/wdoc.ts';
 import type { PageSetup, PrintLayout } from './print.ts';
 import type { SolverModel } from './solver.ts';
 import type { SolverOutcome } from './whatIf.ts';
@@ -325,7 +326,7 @@ export interface Changed {
 
 export type ToWorker =
   /** A workbook (.xlsx), or a CSV or TSV file (`format`), opened into the grid. */
-  | { t: 'open'; name: string; bytes: ArrayBuffer; image: ArrayBuffer | null; format?: DelimitedKind }
+  | { t: 'open'; name: string; bytes: ArrayBuffer; image: ArrayBuffer | null; format?: DelimitedKind; layout?: SheetLayout }
   | { t: 'tiles'; id: number; sheet: number; keys: TileKey[] }
   | { t: 'cell'; id: number; sheet: number; row: number; col: number }
   | { t: 'styles'; id: number; ids: number[] }
@@ -395,7 +396,7 @@ export type FromWorker =
   | { t: 'copy'; id: number; text: string; html: string }
   | { t: 'found'; id: number; at: { sheet: number; row: number; col: number } | null }
   /** The file as it is now (.xlsx, or the CSV or TSV it was: `lossy` when that left something out), and its memory image (empty for CSV and TSV). */
-  | { t: 'saved'; id: number; file: ArrayBuffer; image: ArrayBuffer; sha256: string; lossy?: boolean; lossyFormat?: string }
+  | { t: 'saved'; id: number; file: ArrayBuffer; image: ArrayBuffer; sha256: string; lossy?: boolean; lossyFormat?: string; stored?: ArrayBuffer }
   | { t: 'end'; id: number; at: { row: number; col: number } }
   | { t: 'error'; id: number; message: string };
 

@@ -60,7 +60,7 @@ test.describe('Link form', () => {
     expect(await links(app)).toContain('https://example.org/');
   });
 
-  test('Remove Link takes the link off and keeps its text', async ({ app }) => {
+  test('Remove Link takes the link off and keeps its text', { tag: '@heavy' }, async ({ app }) => {
     const on = await linked(app);
     await app.page.mouse.move(on.x, on.y);
     await card(app).getByRole('button', { name: 'Remove Link' }).click();

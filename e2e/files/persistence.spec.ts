@@ -27,14 +27,15 @@ test('typing is saved by itself, and a reload brings it back', async ({ app, pag
   expect(await formatLabel(page)).toBe('Word Document');
 });
 
-// Suspected bug: the save on pagehide is asynchronous (a round trip to the layout worker, then an IndexedDB write), so edits made within the 1 s autosave delay before a reload are lost.
-test.fixme('edits made right before a reload are not lost', async ({ app, page }) => {
+// The save on the way out can't finish (a round trip to the layout worker): the edit journal brings them back (see e2e/files/edit-journal.spec.ts).
+test('edits made right before a reload are not lost', async ({ app, page }) => {
   await blankWith(app, 'quick edit');
   await waitForSaved(page);
-  await app.type(' and a last-second one');
+  // Faster than anyone types, with no pause before the reload. (With no delay at all, 22 keys in 40 ms queue up for a moment on their way through the layout worker: see docs/edit-journal.md.)
+  await app.type(' and a last-second one', 20);
   await page.reload();
   await app.ready();
-  expect(await app.text()).toBe('quick edit and a last-second one');
+  await expect.poll(() => app.text()).toBe('quick edit and a last-second one');
 });
 
 test('opening the bare address carries on with the document that was open last', async ({ app, page }) => {
@@ -46,8 +47,7 @@ test('opening the bare address carries on with the document that was open last',
   await expect.poll(() => page.url()).toMatch(/doc=local%3A/);
 });
 
-// Suspected bug: opening a saved document from the dashboard doesn't record it as the last one open (only a save does), so a bare address reopens the last document that was saved instead.
-test.fixme('the document last opened is the one that comes back, not the newest edit elsewhere', async ({ app, page }) => {
+test('the document last opened is the one that comes back, not the newest edit elsewhere', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await importFile(app, text('first.txt', 'one'));
   await waitForSaved(page, 'first.txt');

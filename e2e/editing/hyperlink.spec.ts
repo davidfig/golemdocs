@@ -243,7 +243,7 @@ test.describe('editing and removing a link', () => {
     await expect.poll(() => app.text()).toBe('abc');
   });
 
-  test.fixme('text typed right after the end of a link does not become part of the link (it does: the link grows)', async ({ app }) => {
+  test('text typed right after the end of a link does not become part of the link', async ({ app }) => {
     await app.blank();
     await app.type('the link');
     await app.press(`Shift+Home`);
@@ -257,7 +257,7 @@ test.describe('editing and removing a link', () => {
     await app.type(' after');
     await expect.poll(() => app.text()).toBe('the link after');
     const gaps = await lineGaps(app, 'the link after'.length);
-    await clickAt(app, gaps[11]);
+    await clickAt(app, gaps[3]);
     const again = await openLinkDialog(app);
     await expect(again.getByRole('textbox', { name: 'Text to display' })).toHaveValue('the link');
   });

@@ -129,16 +129,14 @@ test.describe('a cloud document open on two devices', () => {
     const { a, b } = await cloudPair(browser, ['base']);
     await b.context.setOffline(true);
     await b.app.focus();
-    await b.app.press(`${MOD}+End`);
-    await b.app.type(' offline-edit');
+    // At either end: edits made at the same spot both stay, but one can land in the middle of the other.
+    await b.app.press(`${MOD}+Home`);
+    await b.app.type('offline-edit ');
     await a.app.type(' online-edit');
     await b.context.setOffline(false);
     await expect
-      .poll(async () => {
-        const [ta, tb] = [await a.app.text(), await b.app.text()];
-        return ta === tb && ta.includes('offline-edit') && ta.includes('online-edit') && ta.startsWith('base');
-      }, { timeout: 40_000, message: 'both edits end up on both devices' })
-      .toBe(true);
+      .poll(async () => [await a.app.text(), await b.app.text()], { timeout: 40_000, message: 'both edits end up on both devices' })
+      .toEqual(['offline-edit base online-edit', 'offline-edit base online-edit']);
     await b.context.close();
     await a.context.close();
   });

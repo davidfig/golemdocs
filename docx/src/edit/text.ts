@@ -66,7 +66,7 @@ export function paragraphText(paragraph: Paragraph): string {
  * Plain text of the positions [from, to), for the clipboard: text as is, tabs as \t, line
  * breaks as \n, deleted text and other items dropped.
  */
-export function plainText(paragraph: Paragraph, from = 0, to = Infinity): string {
+export function plainText(paragraph: Paragraph, from = 0, to = Infinity, pageBreak = ''): string {
   const out: string[] = [];
   let pos = 0;
   const take = (text: string, length: number) => {
@@ -82,7 +82,7 @@ export function plainText(paragraph: Paragraph, from = 0, to = Infinity): string
         for (const item of inline.content) {
           if (item.kind === 'text') take(item.text, item.text.length);
           else if (item.kind === 'tab') take('\t', 1);
-          else if (item.kind === 'break' || item.kind === 'cr') take(item.kind === 'break' && item.type === 'page' ? '' : '\n', 1);
+          else if (item.kind === 'break' || item.kind === 'cr') take(item.kind === 'break' && item.type === 'page' ? pageBreak : '\n', 1);
           else pos += itemLength(item);
         }
       } else if (inline.kind === 'raw') pos += 1;
@@ -285,12 +285,32 @@ function insertInto(inlines: Inline[], offset: number, text: string): boolean {
     const len = inlineLength(inline);
     if (offset <= pos + len && !isRemoved(inline)) {
       if (inline.kind === 'run' && insertIntoRun(inline, offset - pos, text)) return true;
-      if ((inline.kind === 'hyperlink' || inline.kind === 'wrapper') && insertInto(inline.children, offset - pos, text)) return true;
+      // Text at either end of a link is not part of it; only text put inside it is.
+      if (inline.kind === 'hyperlink' && offset > pos && offset < pos + len && insertInto(inline.children, offset - pos, text)) return true;
+      if (inline.kind === 'wrapper' && insertInto(inline.children, offset - pos, text)) return true;
     }
     pos += len;
     if (pos > offset) break;
   }
   return false;
+}
+
+/** The formatting of a link that starts or ends at `offset`, without what makes it look like a link: text put right beside it stays in the same font and size. */
+function lookBesideLink(inlines: readonly Inline[], offset: number): RunProperties | undefined {
+  let pos = 0;
+  for (const inline of inlines) {
+    const len = inlineLength(inline);
+    if (inline.kind === 'hyperlink' && (offset === pos || offset === pos + len)) {
+      const runs = inline.children.filter((c): c is Run => c.kind === 'run');
+      const properties = offset === pos ? runs[0]?.properties : runs[runs.length - 1]?.properties;
+      if (!properties) return undefined;
+      const { style, ...rest } = properties;
+      return style === 'Hyperlink' ? rest : properties;
+    }
+    pos += len;
+    if (pos > offset) break;
+  }
+  return undefined;
 }
 
 /**
@@ -300,7 +320,7 @@ function insertInto(inlines: Inline[], offset: number, text: string): boolean {
 export function insertText(paragraph: Paragraph, offset: number, text: string): void {
   if (!text) return;
   if (!insertInto(paragraph.children, offset, text)) {
-    const run = emptyRun(paragraph.properties.runProperties);
+    const run = emptyRun(lookBesideLink(paragraph.children, offset) ?? paragraph.properties.runProperties);
     run.content.push({ kind: 'text', text });
     const [a, b] = splitInlines(paragraph.children, offset);
     paragraph.children = [...a, run, ...b];

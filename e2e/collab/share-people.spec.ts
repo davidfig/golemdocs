@@ -197,14 +197,24 @@ test.describe('live editing between two accounts', () => {
   });
 });
 
-test('Share on a document that has not reached the account yet explains why', async ({ browser }) => {
+test('Share on a document that could not reach the account explains why', async ({ browser }) => {
   const owner = await newPerson(browser, 'fresh');
   await owner.app.blank();
-  // Nothing typed yet: a blank new document isn't saved, let alone uploaded.
+  // Share tries to upload it first (see the public link spec for when that works): here the upload fails.
+  await owner.page.route(/\/api\/documents(\?|\/batch|$)/, (route) => (route.request().method() === 'POST' ? route.abort() : route.fallback()));
   await owner.app.menu('File', 'Share');
   const dialog = owner.page.locator('dialog.wm-share');
-  await expect(dialog.getByText(/Make a change first|give it a moment to upload/)).toBeVisible();
+  await expect(dialog.getByText(/give it a moment to upload/)).toBeVisible();
   await expect(dialog.getByLabel('Email address')).toHaveCount(0);
+  await owner.context.close();
+});
+
+test('an upload that never answers does not keep the Share dialog from opening', async ({ browser }) => {
+  const owner = await newPerson(browser, 'slow');
+  await owner.app.blank();
+  await owner.page.route(/\/api\/documents(\?|\/batch|$)/, (route) => (route.request().method() === 'POST' ? undefined : route.fallback()));
+  await owner.app.menu('File', 'Share');
+  await expect(owner.page.locator('dialog.wm-share').getByText(/give it a moment to upload/)).toBeVisible({ timeout: 20_000 });
   await owner.context.close();
 });
 

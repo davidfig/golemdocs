@@ -8,6 +8,7 @@ import { createChromeHost } from './chromeHost.ts';
 import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, listTrash, purgeTrash, renameCloudDocument, restoreFromTrash, saveChunked, saveDocument, type CloudDocument } from './cloud.ts';
 import { CHUNK_MIN_FILE, chunkBytes } from './storage/chunker.ts';
 import { zipDocuments } from './storage/archive.ts';
+import { EditJournal, hasJournal, holdPage, journalDocuments, journalsSupported, letPageGo, otherPages, pageId, planRecovery, readJournals, removeJournal, type RecoveryPlan } from './storage/editJournal.ts';
 import { droppedFromFiles, pickedFolder, takeDropped, type Dropped } from './storage/droppedFiles.ts';
 import { incomingBridge, watchIncoming } from './desktop/incoming.ts';
 import { importFiles, readZipFiles, sameBytes, type ZipContents } from './storage/zipImport.ts';
@@ -109,7 +110,7 @@ import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { TrashDialog } from './ui/trashDialog.ts';
 import { VaultDialog } from './ui/vaultDialog.ts';
-import { desktopUpdater, isDesktopApp } from './desktop/bridge.ts';
+import { desktopUpdater, isDesktopApp, isTouchDevice, macPrinter, ShellTooOldError } from './desktop/bridge.ts';
 import { saveFile } from './ui/saveFile.ts';
 import { VaultService } from './desktop/vaultService.ts';
 import { UpdateService } from './desktop/updateService.ts';
@@ -144,6 +145,7 @@ import { droppedDocumentKey, isDocumentDrag } from './ui/documentDrag.ts';
 import { SelectionLayer } from './webgl/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
 import { isZipName, sourceFromFile, stem } from './formats/source.ts';
+import type { SheetLayout } from './formats/wdoc.ts';
 import { sniffImage } from './formats/images.ts';
 import { LARGE_TEXT_BYTES, hasExtension, isProseName, textFileName, usesTextEngine, toUtf8WithEncoding } from './formats/textFiles.ts';
 import { isVectorFormat } from './formats/roomDoc.ts';
@@ -208,6 +210,7 @@ const worker = new LayoutClient((faces) => {
 });
 await localeReady;
 worker.setLocale(getLocale());
+holdPage();
 
 // Formatting marks (¶): remembered in this browser, and told to the worker before any document opens.
 const MARKS_KEY = 'word.formattingMarks';
@@ -401,7 +404,7 @@ function openTicket(): () => boolean {
 }
 
 /** `keepRoom`: the same document, opened again in place of itself (watching it, it was saved): it keeps its room; `version`: the save it is. */
-type OpenOptions = { delimited?: 'csv' | 'tsv'; wdocChecked?: boolean; detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean; none?: boolean };
+type OpenOptions = { delimited?: 'csv' | 'tsv'; sheetLayout?: SheetLayout; wdocChecked?: boolean; detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean; none?: boolean };
 
 /** Everything that starts a new document, before whatever shows it is asked for it: the old one is put away, the page's state is reset, and `current` is the new one. */
 function beginOpen(source: DocumentSource, options: OpenOptions): { name: string; opening: OpenDocument } {
@@ -436,6 +439,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   if (!options.pictureEdit) pictureHistory = { undo: [], redo: [] };
   current = {
     localId: options.localId ?? null,
+    journal: !options.shared && !options.detour && journalsSupported() ? new EditJournal(localStorage, crypto.randomUUID(), pageId) : null,
     unsavedSince: 0,
     builtIn: !!options.none || source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'changelog' || source.kind === 'fonts',
     room: null,
@@ -513,14 +517,14 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     return;
   }
   // A CSV or TSV saved as a document, as they all were before they opened in the grid (its name says what it is edited as):
-  // its table becomes the file, opened in the grid and saved as that from now on.
+  // its table becomes the file, opened in the grid and saved as that from now on. Or one kept in the container with its layout.
   if (source.kind === 'wdoc' && /\.(csv|tsv|tab)$/i.test(source.name) && !options.asDocument && !options.wdocChecked) {
     const latest = openTicket();
     void import('./formats/wdocDelimited.ts')
       .then(({ delimitedFromWdoc }) => delimitedFromWdoc(new Uint8Array(source.bytes)))
       .then((file) => {
         if (!latest()) return;
-        if (file) void openSheet(source.name, file.bytes, { ...options, delimited: file.kind });
+        if (file) void openSheet(source.name, file.bytes, { ...options, delimited: file.kind, sheetLayout: file.layout });
         else open(source, { ...options, wdocChecked: true });
       });
     return;
@@ -605,6 +609,14 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       if (current.localId) backfillThumbnail(current.localId);
       // A file the person added is kept in the document store as soon as it is open, edited or not.
       else if (options.store && opening === current) documentEdited();
+    },
+    journal(seq, ops) {
+      const journal = opening.journal;
+      if (!journal || cleared) return;
+      const blocked = journal.blocked;
+      const kept = ops ? journal.add(seq, ops) : (journal.barrier(seq), false);
+      // What can't be kept is only safe once saved. Later edits count on the usual autosave.
+      if (!kept && !blocked && opening === current) void saveInBrowser();
     },
     selection(update) {
       applySelection(update);
@@ -819,6 +831,7 @@ function roomStateChanged(state: RoomState): void {
   const doc = current;
   const was = doc.room;
   doc.room = state;
+  if (state.mode === 'shared') doc.journal?.clear(); // the room holds the edits now
   const text = describeRoom(state);
   if (text !== lastRoomText) notify(text || t('app.editingAlone'));
   lastRoomText = text;
@@ -876,7 +889,7 @@ async function joinSheetRoom(doc: OpenDocument, cloudId: string): Promise<void> 
     client: crypto.randomUUID(),
     name: room.user,
     color: room.color,
-    serialize: async () => (await sheetView.save())?.file ?? new Uint8Array(0),
+    serialize: async () => (await sheetView.save())?.stored ?? new Uint8Array(0),
     changed: (state) => {
       const d = open();
       if (!d) return;
@@ -1023,10 +1036,12 @@ window.addEventListener('pagehide', () => {
   rememberView();
   saveIfEdited();
   worker.leave();
+  letPageGo();
 });
 // Back from the back/forward cache: the room was left on the way out (above), so edits here would
 // reach no one. Reloading joins it again, at the view and with the edits saved on the way out.
 window.addEventListener('pageshow', (event) => {
+  holdPage();
   if (event.persisted && current.roomRequested) location.reload();
 });
 
@@ -1250,12 +1265,16 @@ interface OpenDocument {
   detour?: boolean;
   /** Nothing is open (File › Close): an empty document the No Document screen covers, which nothing can change. */
   none?: boolean;
+  /** The edits since its last save, kept where the page going away can't lose them (see storage/editJournal.ts). */
+  journal: EditJournal | null;
+  /** Earlier sessions' journals put back into it: done with once a save holds them. */
+  absorbing?: string[];
   /** A merge with the account's copy is being put into it (see `mergeHost`): its saves wait for it, or they would save over the merge. */
   merging?: Promise<void>;
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
-let current: OpenDocument = { localId: null, unsavedSince: 0, builtIn: false, room: null, roomRequested: false, ignored: { words: [], rules: [] }, shared: null, newFolder: null, name: '', kind: 'docx' };
+let current: OpenDocument = { localId: null, journal: null, unsavedSince: 0, builtIn: false, room: null, roomRequested: false, ignored: { words: [], rules: [] }, shared: null, newFolder: null, name: '', kind: 'docx' };
 /**
  * The folder the next document to open goes in once first saved (null: the top level): set just
  * before it opens (New, Import or a file dropped on a folder), and taken over by open().
@@ -1325,7 +1344,7 @@ async function uploadShared(): Promise<void> {
     // No name: only the owner renames it (`fileName()` would also be the next document's, if one is
     // being opened). The whole document goes, so what it is edited as (Markdown...) is kept.
     const sheetSave = sheetView.save();
-    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).file : null) ?? (await worker.save());
+    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).stored : null) ?? (await worker.save());
     if (bytes.length >= CHUNK_MIN_FILE) {
       // A big document goes as chunks, and after the first save of this session only those that changed.
       const { manifest, fresh } = await traced('chunkBytes', () => chunkBytes(bytes));
@@ -1363,6 +1382,61 @@ function saveNow(): Promise<string | null> {
   const doc = current;
   if (doc.shared) return Promise.resolve(null); // no copy in this browser
   return doc.unsavedSince || (!doc.localId && !doc.builtIn) ? saveInBrowser() : saving.then(() => doc.localId);
+}
+
+/** What is kept for a saved copy from before the page last went away, and what to do with it. Null, as nearly always, when nothing is. */
+async function keptEdits(info: SavedInfo): Promise<RecoveryPlan | null> {
+  if (!journalsSupported() || !hasJournal(localStorage, info.id)) return null;
+  const others = await otherPages();
+  return others && planRecovery(info, readJournals(localStorage, info.id), others);
+}
+
+/** A saved copy has just been opened: its journal starts from it, and what was kept from before goes back in. */
+function bringBackEdits(info: SavedInfo, source: DocumentSource, plan: RecoveryPlan | null): void {
+  const doc = current;
+  if (doc.localId !== info.id) return;
+  doc.journal?.attach(info.id, info.updatedAt);
+  if (!plan) return;
+  for (const session of plan.discard) removeJournal(localStorage, info.id, session);
+  // A kept journal is of a document, and those open in the worker: not one that has since become something else (a workbook, a big text file).
+  const inWorker = !textView.active && !sheetView.active && source.kind !== 'xlsx' && source.kind !== 'csv' && source.kind !== 'tsv' && source.kind !== 'txt' && !/\.(csv|tsv|tab)$/i.test(info.name);
+  if (plan.replay.length && inWorker) {
+    worker.replayJournal(plan.replay);
+    doc.absorbing = plan.absorb;
+    documentEdited();
+  }
+  if (plan.conflict.length && inWorker) void keepKeptEdits(info, plan);
+  if (plan.cut) notify(t('app.journalCut', { name: info.name }));
+}
+
+/** Edits made on top of a copy that has since been replaced don't go over it: they are saved as a "(conflicted copy)" of their own. */
+async function keepKeptEdits(info: SavedInfo, plan: RecoveryPlan): Promise<void> {
+  try {
+    // Read again: what was opened has gone to the worker.
+    const stored = await getSaved(info.id);
+    if (!stored) return;
+    const source = sourceFromFile(stored.info.name, stored.bytes) ?? { kind: 'docx' as const, name: stored.info.name, bytes: stored.bytes };
+    const bytes = await worker.journalCopy(source, plan.conflict);
+    const copy = await saveSaved({ name: conflictCopyName(info.name), bytes, owner: account?.id });
+    library.putLocal(copy);
+    if (account) uploads.add(copy.id);
+    for (const session of plan.conflicted) removeJournal(localStorage, info.id, session);
+    notify(t('app.conflictNotice', { before: info.name, name: copy.name }));
+  } catch (e) {
+    console.error(e); // the journal stays, to try again next time
+  }
+}
+
+/** A journal whose document has gone is no use, and it is someone's text: it isn't kept. */
+async function sweepJournals(): Promise<void> {
+  if (!journalsSupported()) return;
+  const documents = journalDocuments(localStorage);
+  if (!documents.size) return;
+  const saved = new Set((await listSaved()).map((info) => info.id));
+  for (const id of documents) {
+    if (saved.has(id)) continue;
+    for (const { session } of readJournals(localStorage, id)) removeJournal(localStorage, id, session);
+  }
 }
 
 /** Shown when the current document finishes loading, which would otherwise replace it. */
@@ -1810,10 +1884,12 @@ async function downloadAll(): Promise<void> {
     // Folder ids are unique, so the account's folders and this browser's can be looked up together.
     const folders = [...(account ? await listFolders().catch(() => []) : []), ...(await listLocalFolders().catch(() => []))];
     const placed = new Map(library.entries.filter((e) => e.local).map((e) => [e.local!.id, e.folderId]));
+    // A CSV or TSV file kept with its layout goes as the file: other programs must be able to read what is in the ZIP.
+    const plain = await Promise.all(docs.map(async (d) => (/\.(csv|tsv|tab)$/i.test(d.info.name) ? ((await (await import('./formats/wdocDelimited.ts')).delimitedFromWdoc(new Uint8Array(d.bytes)))?.bytes ?? d.bytes) : d.bytes)));
     const bytes = await zipDocuments(
-      docs.map((d) => ({
+      docs.map((d, i) => ({
         name: d.info.name,
-        bytes: d.bytes,
+        bytes: plain[i],
         folders: folderPath(folders, folderOf({ local: { folderId: placed.get(d.info.id) ?? null } }, folders)).map((f) => f.name),
       })),
     );
@@ -2036,7 +2112,8 @@ function saveInBrowser(): Promise<string | null> {
   // Asked for now, while the worker (or the large-text editor) still has this document.
   const large = textView.active;
   const sheetSave = sheetView.save();
-  const bytes = large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.file) : worker.save();
+  const marked = large || sheetSave ? null : worker.saveMarked();
+  const bytes = large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.stored) : marked!.then((saved) => saved.bytes);
   bytes.catch(() => {}); // handled below, once earlier saves are written
   const done = saving.then(async () => {
     const created = !doc.localId;
@@ -2046,7 +2123,15 @@ function saveInBrowser(): Promise<string | null> {
       // A renamed document breaks the links to it, unless they are written again once it is saved.
       const was = created ? undefined : library.entries.find((e) => e.local?.id === doc.localId);
       const linksAfter = was && was.name !== name ? keepLinks({ kind: 'rename', key: was.key, name }) : null;
-      const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner, folderId });
+      const seq = marked ? (await marked).seq : 0;
+      const absorbed = doc.absorbing;
+      const journal = doc.journal && marked ? { session: doc.journal.session, seq, ...(absorbed && { absorbed }) } : undefined;
+      const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner, folderId, journal });
+      if (journal) {
+        doc.journal!.saved(info.id, info.updatedAt, seq);
+        for (const session of absorbed ?? []) removeJournal(localStorage, info.id, session);
+        doc.absorbing = undefined;
+      }
       linksAfter?.();
       // The workbook's memory image goes with the file it was made from.
       if (sheetSave)
@@ -2367,6 +2452,7 @@ async function openLocal(id: string): Promise<void> {
   // browser's copy: reading the copy before they land would open, and then save, the older one.
   if (!early) await saving;
   const saved = await (early ?? getSaved(id).catch(() => null));
+  const kept = saved && (await keptEdits(saved.info));
   if (!latest()) return;
   if (!saved) {
     // Gone (deleted, or Back to where it was): nothing is open in its place.
@@ -2381,6 +2467,7 @@ async function openLocal(id: string): Promise<void> {
   // A huge text file (imported in a ZIP, say) opens in the viewer, as it does from the computer.
   if (usesTextEngine(source.kind, saved.bytes.byteLength)) return openLarge(saved.info.name, new Uint8Array(saved.bytes), { localId: id });
   open(source, { localId: id, cloudId });
+  bringBackEdits(saved.info, source, kept ?? null);
   const doc = current;
   if (cloudId && !doc.roomRequested) {
     void accountKnown.then(() => {
@@ -2495,7 +2582,7 @@ async function openShared(id: string): Promise<void> {
     }
     // Someone who may only look opens it in the read-only viewer, a page of its own (src/viewer/share.ts), at the share's own address
     // rather than the document's id. It takes this page's place in the history, so Back goes to where they chose it from.
-    if (doc.role === 'viewer' && doc.viewToken) return location.replace(`/view/?s=${encodeURIComponent(doc.viewToken)}`);
+    if (doc.role === 'viewer' && doc.viewToken) return location.replace(`/view?s=${encodeURIComponent(doc.viewToken)}`);
     setStatus(t('app.openingShared'));
     worker.warm();
     open({ kind: 'docx-url', name: doc.name, url: documentUrl(doc.id) }, { shared: doc });
@@ -2505,13 +2592,28 @@ async function openShared(id: string): Promise<void> {
   }
 }
 
+/** How long File ▸ Share waits for the open document's first upload before opening anyway. */
+const SHARE_UPLOAD_WAIT_MS = 10_000;
+
 /** File ▸ Share: a link that lets anyone edit the open document with you, and the people it is shared with. */
 async function share(): Promise<void> {
   // Who may share depends on the account's plan: asked just after the page opened, wait for it
   // (otherwise the dialog would say to sign in, or to subscribe, to someone who has).
   await accountKnown;
+  // Sharing needs the document in the account: one just opened and not saved yet, or still waiting for its first upload, goes now,
+  // rather than asking to edit it or to try again later. What can't be done (offline, say) is said below.
+  if (account && !current.shared && !current.builtIn) await saveNow().catch(() => null);
   if (current.localId && !library.local.some((d) => d.id === current.localId)) await library.reloadLocal();
-  const info = library.local.find((d) => d.id === current.localId);
+  let info = library.local.find((d) => d.id === current.localId);
+  if (account && !current.shared && info && !info.cloudId) {
+    uploads.failures.delete(info.id);
+    uploads.backOnline();
+    uploads.add(info.id);
+    showSync();
+    // A slow connection or a long queue of other documents mustn't keep the dialog from opening: it then says to try again.
+    await Promise.race([flushUploads().catch(() => undefined), new Promise((resolve) => setTimeout(resolve, SHARE_UPLOAD_WAIT_MS))]);
+    info = library.local.find((d) => d.id === current.localId);
+  }
   const people = !account
     ? { unavailable: !signedIn ? t('app.signInToShare') : sellsSubscriptions() ? t('app.subscribeToShare') : t('app.shareNotIncluded') }
     : current.shared
@@ -2550,10 +2652,14 @@ async function openCloud(id: string): Promise<void> {
       });
       saving = Promise.all([saving, writing]).catch(() => null);
     } else if ((info.owner ?? null) === (account?.id ?? null)) library.putLocal(info);
+    const kept = await keptEdits(info);
     if (!latest()) return; // something else was opened meanwhile: this one is saved here, for next time
     const source = sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes };
     if (usesTextEngine(source.kind, bytes.byteLength)) openLarge(info.name, new Uint8Array(bytes), { localId: info.id });
-    else open(source, { localId: info.id, cloudId: info.cloudId });
+    else {
+      open(source, { localId: info.id, cloudId: info.cloudId });
+      bringBackEdits(info, source, kept);
+    }
     rememberInUrl(`local:${info.id}`);
     // Only the lists need the new browser copy, so they catch up after the document is on screen.
     window.setTimeout(() => void refreshLibrary(), 1000);
@@ -2582,12 +2688,31 @@ async function download(): Promise<void> {
 /**
  * File ▸ Print and Print Preview. The document is exported as a PDF (the same export as
  * Download), then printed from a hidden frame, or opened in a new tab to look at first.
+ * A phone or tablet can't do either: iOS prints only the first page of a PDF in a frame, Android shows none, and an app's web view has
+ * no tabs. There the PDF goes to the system share sheet, whose Print has every page (`saveFile`). The Mac app opens it in Preview.
  */
 async function print(preview: boolean): Promise<void> {
   // A workbook prints its active sheet as Excel does (its page setup, from the grid itself); anything else as a document.
   const sheetPdf = sheetView.active ? sheetView.printPdf() : null;
   if (!sheetPdf && !(await openAsDocument())) return;
+  const name = fileName().replace(/\.[^.]*$/, '') + '.pdf'; // named now: another document may be open by the time the bytes come back
   const bytes = sheetPdf ? await sheetPdf : await worker.convert('pdf');
+  if (isTouchDevice()) {
+    await saveFile(name, bytes as Uint8Array, FORMATS.pdf.mime);
+    return;
+  }
+  // The Mac app's web view ignores print() and opens no tabs: Preview prints it. A shell without that command can still download.
+  const printer = macPrinter();
+  if (printer) {
+    try {
+      await printer.open(name, bytes as Uint8Array);
+      setStatus(t('app.printInPreview'));
+    } catch (e) {
+      if (!(e instanceof ShellTooOldError)) return reportError(t('app.printFailed', { message: (e as Error).message }));
+      if (await saveFile(name, bytes as Uint8Array, FORMATS.pdf.mime)) setStatus(t('app.printSavedInstead', { name }));
+    }
+    return;
+  }
   const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS.pdf.mime }));
   if (preview) {
     if (!window.open(url, '_blank')) reportError(t('app.allowPopups'));
@@ -3058,7 +3183,7 @@ async function openSheet(name: string, bytes: Uint8Array, options: OpenOptions =
   camera.zoom = Math.min(Math.max(1, camera.minZoom), camera.maxZoom);
   camera.x = 0;
   camera.y = 0;
-  sheetView.open(name, bytes, image, options.delimited);
+  sheetView.open(name, bytes, image, options.delimited, options.sheetLayout);
   sheetView.readOnly = options.shared?.role === 'viewer';
   if (keptRoom) {
     opening.room = keptRoom;
@@ -6243,6 +6368,7 @@ window.addEventListener('popstate', () => {
     chrome.accountChanged();
   });
   firstConnect = connect(accountLookup);
+  void sweepJournals().catch(() => {});
   // The phone apps: files opened in or shared to the app arrive here (desktop/incoming.ts), once the library is ready.
   const incoming = incomingBridge();
   if (incoming) void Promise.resolve(firstConnect).catch(() => {}).then(() => watchIncoming(incoming, (files) => dropFile(droppedFromFiles(files), null)));

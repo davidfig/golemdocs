@@ -37,6 +37,11 @@ export const app: Partial<Messages> = {
   'app.saveFailed': '儲存失敗：{message}',
   'app.linkOneParagraph': '請在單一段落內選取文字，才能將其設為連結',
   'app.allowPopups': '請允許彈出視窗以檢視列印預覽',
+  'app.fileReady': '檔案已準備好',
+  'app.fileReadySave': '儲存',
+  'app.printInPreview': '已在「預覽程式」中開啟：選擇「檔案」›「列印」進行列印',
+  'app.printFailed': '無法列印：{message}',
+  'app.printSavedInstead': '已將「{name}」儲存到「下載項目」：開啟它即可列印。更新 App 後可直接列印。',
   'app.downloaded': '已下載「{name}」',
   'app.downloadAllNone': '沒有可下載的已儲存文件',
   'app.downloadAllName': 'documents.zip',
@@ -70,6 +75,7 @@ export const app: Partial<Messages> = {
 
   // Account and cloud
   'app.adopted': '已將此瀏覽器中的 {count} 份文件加入你的帳號',
+  'app.journalCut': '無法復原對「{name}」的部分最新編輯。',
   'app.conflictNotice': '「{before}」在其他地方也被修改過，因此這些變更已另存為「{name}」',
   'app.mergedNotice': '「{name}」在其他地方的其他段落也被修改過，因此兩處變更都已保留。之前的狀態在版本記錄中。',
   'app.signInToShare': '請登入以分享此文件',

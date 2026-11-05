@@ -62,11 +62,11 @@ test.describe('Edit PDF: text', () => {
     expect(await savedText(app)).toContain('Hello big PDF world');
   });
 
-  test.fixme('a click on an empty part of the page right after typing closes the editor and keeps the change', async ({ app }) => {
+  test('a click on an empty part of the page right after typing closes the editor and keeps the change', async ({ app }) => {
     await pick(app);
     await app.page.keyboard.press('ControlOrMeta+a');
     await app.page.keyboard.type('Kept');
-    // FIXME (app bug): when this click comes within the typing's 250 ms send delay, the editor stays open until a second click.
+    // This click comes within the typing's 250 ms send delay.
     await clickOnPage(app.page, 0, 200, 250);
     await expect(editor(app)).toBeHidden();
     expect(await savedText(app)).toContain('Kept');

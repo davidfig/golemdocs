@@ -8,6 +8,7 @@ import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, c
 import { CHUNK_ALGO } from './storage/chunker.ts';
 import type { Manifest } from './storage/chunker.ts';
 import { getChunks, getSaved, getSavedManifest, getSyncedBase, getThumbnail, listSaved, markSynced, rebaseSaved, saveFromCloud, saveFromCloudIfSent, type SavedInfo } from './storage/local.ts';
+import { madeInAccount, makingInAccount } from './sync.ts';
 import { t } from './i18n/index.ts';
 
 export interface Uploaded {
@@ -119,6 +120,7 @@ async function sendable(localId: string) {
   // A new cloud document goes in the folder it is in here. If the account doesn't have that folder
   // (it was made while signed out and hasn't been sent yet), it goes at the top level instead.
   const create = async (name: string) => {
+    makingInAccount(localId, name, info.size);
     try {
       return await make(name, info.folderId);
     } catch (error) {
@@ -144,6 +146,14 @@ async function placedAsHere(localId: string, sentFolder: string | undefined, doc
 
 /** Uploads the saved browser copy to the cloud (creating the cloud document the first time). `host` decides about a merge (see MergeHost). */
 export async function uploadToCloud(localId: string, retry = true, host: MergeHost = CLOSED, merges = MERGES): Promise<Uploaded> {
+  try {
+    return await sendToCloud(localId, retry, host, merges);
+  } finally {
+    madeInAccount(localId);
+  }
+}
+
+async function sendToCloud(localId: string, retry: boolean, host: MergeHost, merges: number): Promise<Uploaded> {
   const { info, bytes, manifest, source, known, create } = await sendable(localId);
   let doc: CloudDocument;
   let conflictCopy = false;
@@ -217,20 +227,25 @@ export async function uploadNewToCloud(localIds: readonly string[]): Promise<Map
     batch = [];
     size = 0;
     if (!sending.length) return;
-    let results: Awaited<ReturnType<typeof createDocuments>>;
+    for (const { id, info, bytes } of sending) makingInAccount(id, info.name, bytes.byteLength);
     try {
-      results = await createDocuments(sending.map(({ info, bytes }) => ({ name: info.name, bytes, folderId: info.folderId ?? null })));
-    } catch (error) {
-      // Refused as a whole: these are left for the ordinary upload, which finds out why, and the
-      // next batch is still sent. Unreachable, or signed out, nothing more would go either.
-      if (error instanceof TypeError || (error instanceof CloudError && error.status === 401)) throw error;
-      return;
-    }
-    for (const [i, result] of results.entries()) {
-      if ('error' in result) continue;
-      const { id, info } = sending[i]!;
-      await markSynced(id, { cloudId: result.id, syncedAt: info.updatedAt, cloudUpdatedAt: result.updatedAt, base: sending[i]!.bytes });
-      made.set(id, await placedAsHere(id, info.folderId, result));
+      let results: Awaited<ReturnType<typeof createDocuments>>;
+      try {
+        results = await createDocuments(sending.map(({ info, bytes }) => ({ name: info.name, bytes, folderId: info.folderId ?? null })));
+      } catch (error) {
+        // Refused as a whole: these are left for the ordinary upload, which finds out why, and the
+        // next batch is still sent. Unreachable, or signed out, nothing more would go either.
+        if (error instanceof TypeError || (error instanceof CloudError && error.status === 401)) throw error;
+        return;
+      }
+      for (const [i, result] of results.entries()) {
+        if ('error' in result) continue;
+        const { id, info } = sending[i]!;
+        await markSynced(id, { cloudId: result.id, syncedAt: info.updatedAt, cloudUpdatedAt: result.updatedAt, base: sending[i]!.bytes });
+        made.set(id, await placedAsHere(id, info.folderId, result));
+      }
+    } finally {
+      for (const { id } of sending) madeInAccount(id);
     }
   };
   for (const id of localIds) {

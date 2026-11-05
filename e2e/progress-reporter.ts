@@ -1,6 +1,6 @@
 // Records how every test attempt ended, one JSON line per attempt, as the run goes. `pnpm e2e:rest`
 // reads these lines to run only the tests that failed or never reported (a run that hung, was stopped
-// or timed out): the last line for a test says how it ended. The runner (scripts/e2e.ts) gives each
+// or timed out): the last line for a test (known by its title) says how it ended. The runner (scripts/e2e.ts) gives each
 // shard its own file through E2E_PROGRESS.
 
 import fs from 'node:fs';

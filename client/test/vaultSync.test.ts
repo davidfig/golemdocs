@@ -7,7 +7,7 @@ import type { FontSet } from '@golemdocs/layout';
 import { PageDrawing, PdfDocument, readAnnotations } from '../../pdf/src/index.ts';
 import { fromVaultFile, toVaultFile, vaultFormat } from '../src/desktop/vaultCodec.ts';
 import { GUEST_ACCOUNT, STATE_PATH, syncVault, type SyncReport, type VaultCloud, type VaultCodec, type VaultDisk, type VaultHost, type VaultMemory } from '../src/desktop/vaultSync.ts';
-import { readWdoc, writeWdoc, WDOC_VERSION } from '../src/formats/wdoc.ts';
+import { delimitedWdoc, readWdoc, writeWdoc, WDOC_VERSION } from '../src/formats/wdoc.ts';
 import { installFakeCanvas } from './fakeCanvas.ts';
 
 const text = (s: string) => new TextEncoder().encode(s);
@@ -523,6 +523,31 @@ test('a folder that belongs to an account is not used signed out on another comp
   const report = await syncVault({ ...s.host, account: GUEST_ACCOUNT, cloud: fakeCloud().cloud, memory: fakeMemory() });
   assert.equal(report.wrongAccount, true);
   assert.deepEqual(s.folder.paths(), ['one.md']);
+});
+
+test('a CSV edited in the vault keeps its layout, and a layout changed in the account leaves the file alone', async () => {
+  const fonts = { fonts: async () => ({}) as FontSet, file: () => Promise.reject(new Error('no fonts needed')) };
+  const s = setup();
+  s.host.codec = { toFile: (stored, name) => toVaultFile(stored, name, fonts), fromFile: fromVaultFile, keepsLayout: (name) => name.endsWith('.csv'), kept: (name) => vaultFormat(name) !== null };
+  const id = s.add('sales.csv', '');
+  s.docs.get(id)!.bytes = await delimitedWdoc(text('a,b\n'), 'csv', { columns: [[0, 200]] });
+  await s.sync();
+  assert.equal(s.folder.get('sales.csv'), 'a,b\n');
+  const written = s.folder.files.get('sales.csv')!.mtimeMs;
+
+  // Only the widths change in the account: the file is not written again.
+  s.docs.get(id)!.bytes = await delimitedWdoc(text('a,b\n'), 'csv', { columns: [[0, 300]] });
+  s.docs.get(id)!.updatedAt++;
+  assert.deepEqual((await s.sync()).errors, []);
+  assert.equal(s.folder.files.get('sales.csv')!.mtimeMs, written);
+  assert.equal(counts(await s.sync()), quiet, 'and the sync settles');
+
+  // An agent changes the file: the account gets the new file, with the widths.
+  s.folder.put('sales.csv', 'a,b\n1,2\n');
+  assert.equal((await s.sync()).uploaded, 1);
+  const wdoc = await readWdoc(s.docs.get(id)!.bytes);
+  assert.equal(read(wdoc.delimited!), 'a,b\n1,2\n');
+  assert.deepEqual(wdoc.extensions.csv?.layout, { columns: [[0, 300]] });
 });
 
 test('with the real converters, PDFs and pictures go out as the files they are and a changed one comes back in place of the document', async () => {

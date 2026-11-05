@@ -5,7 +5,7 @@
 import { isMathInline, paragraphLength, sha256Hex, sharedMediaHash, sharedMediaPart, paragraphText, plainText, type DocumentProperties, type Inline, type Paragraph, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
 import { Editor, type Command } from '@golemdocs/editor';
 import { wordRange } from '@golemdocs/editor/textUnits';
-import { diffDocuments, Replica, ROOM_POLICY, type ClientMessage, type DocumentChange, type Pos, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
+import { diffDocuments, Replica, ROOM_POLICY, type ClientMessage, type DocumentChange, type Pos, type Operation, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
 import { cloudRoomTransport } from '../collab/cloudRoom.ts';
 import { RoomClient, type RoomHost, type RoomStart } from '../collab/roomClient.ts';
 import {
@@ -261,6 +261,12 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
     }
     case 'wdoc': {
       const wdoc = await readWdoc(new Uint8Array(source.bytes));
+      // A CSV or TSV file kept with its layout, as a document (the viewer, printing): the file's table.
+      if (wdoc.delimited) {
+        const kind = wdoc.manifest.lens;
+        const { document, extensions } = await importDocument(kind, wdoc.delimited);
+        return flowing(source.name, document, kind, extensions);
+      }
       // A PDF edited as something else, with its text unedited, is reflowed afresh: that picks up
       // annotations added on its own pages since.
       const reflowAgain = wdoc.original && wdoc.manifest.pagesCurrent && wdoc.manifest.lens !== 'pdf';
@@ -395,6 +401,8 @@ class OpenDocument {
   private replacedPdfPages = new Map<number, number>();
   document: WordDocument | null = null;
   replica: Replica | null = null;
+  /** The last edit told to the page (see storage/editJournal.ts). */
+  journalSeq = 0;
   session: LayoutSession | null = null;
   editor: Editor | null = null;
   formats: FormatReader | null = null;
@@ -1576,6 +1584,31 @@ class OpenDocument {
     };
   }
 
+  /** Tells the page of an edit, to keep until a save holds it. A room that is shared holds the edits itself; `ops` null: what was done can't be replayed. */
+  journalEdit(ops: Operation[] | null): void {
+    if (this.shared || this.readOnly || this.closed) return;
+    post({ type: 'journal', doc: this.doc, seq: ++this.journalSeq, ops });
+  }
+
+  /** Edits kept from before the page last went away, put back. They are in a journal already, so they are not told to the page again. */
+  replayJournal(batches: Operation[][]): void {
+    if (!this.isSetUp) return this.later(() => this.setUp.then(() => this.replayJournal(batches)));
+    const { editor, replica } = this;
+    if (!editor || !replica || this.readOnly || this.closed) return;
+    const tell = replica.onTransaction;
+    replica.onTransaction = null;
+    try {
+      for (const ops of batches) editor.external(ops);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      replica.onTransaction = tell;
+    }
+    this.edited = true;
+    this.typedAt = performance.now();
+    void this.pump();
+  }
+
   /** A picture at the caret, no wider than the page's text. Not in a room: the others would have no bytes for it. */
   insertImage(bytes: Uint8Array, ext: string, width: number, height: number, description?: string): void {
     // Asked for while the document is still loading: once it has, in turn with the commands.
@@ -1590,7 +1623,10 @@ class OpenDocument {
     }
     const place = (image: string) => this.apply({ kind: 'insertContent', content: [{ kind: 'run', properties: {}, content: [{ kind: 'drawing', inline: true, width, height, image, ...(description && { description }) }], attrs: {} }] });
     // Alone, at once. With others, once the picture is in the room for them to fetch.
-    if (!this.shared) return place(document.addImage(bytes, ext));
+    if (!this.shared) {
+      this.journalEdit(null); // its bytes aren't in the operation
+      return place(document.addImage(bytes, ext));
+    }
     this.mediaChain = this.mediaChain.then(() => this.addMedia(bytes, ext)).then(
       (image) => this.later(() => place(image)),
       (error) => this.mediaFailed(error),
@@ -1603,7 +1639,10 @@ class OpenDocument {
     const document = this.document;
     if (!document || this.readOnly || this.pdf) return;
     const place = (image: string) => this.apply({ kind: 'replacePicture', image, aspect });
-    if (!this.shared) return place(document.addImage(bytes, ext));
+    if (!this.shared) {
+      this.journalEdit(null); // its bytes aren't in the operation
+      return place(document.addImage(bytes, ext));
+    }
     this.mediaChain = this.mediaChain.then(() => this.addMedia(bytes, ext)).then(
       (image) => this.later(() => place(image)),
       (error) => this.mediaFailed(error),
@@ -1669,6 +1708,7 @@ class OpenDocument {
       else this.apply({ kind: 'insertContent', content: [{ kind: 'run', properties: {}, content: [drawing], attrs: {} }] });
     };
     // Alone, at once. With others, once the parts are in the room for them to fetch.
+    if (!this.shared) this.journalEdit(null); // its bytes aren't in the operation
     if (!this.shared) return place(document.addImage(png, 'png'), document.addImage(new TextEncoder().encode(svg), 'svg'));
     this.mediaChain = this.mediaChain.then(() => Promise.all([this.addMedia(png, 'png'), this.addMedia(new TextEncoder().encode(svg), 'svg')])).then(
       ([image, svgPart]) => this.later(() => place(image, svgPart)),
@@ -1820,7 +1860,7 @@ class OpenDocument {
         const p = list[k];
         const from = selection && k === first ? start.offset : 0;
         const to = selection && k === last ? end.offset : Infinity;
-        texts.push(plainText(p, from, to));
+        texts.push(plainText(p, from, to, '\n')); // a page break parts words, as a line break does
       }
       // Lines and pages: those of the paragraphs counted, and (for a selection) that the selected text touches.
       const inRange = new Set(list.slice(first, last + 1));
@@ -2590,6 +2630,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     // A picture another person added is fetched from the room when it is first needed.
     document.fetchPart = (part) => entry.fetchRoomMedia(part);
     entry.replica = replica;
+    replica.onTransaction = (transaction) => entry.journalEdit(transaction.ops);
     entry.session = session;
     entry.editor = new Editor(replica, session);
     entry.formats = new FormatReader(document);
@@ -2690,11 +2731,34 @@ async function save(doc: number, request: number, lens?: Format): Promise<void> 
     await open.document?.fetchMissingMedia();
     // A document changed since it was opened records when.
     if (open.document && open.edited) open.document.properties.modified = now();
+    // What the body holds is known exactly: the edits up to this one, read in the same synchronous stretch as it is written. What is written
+    // after it (styles, comments, properties) may hold later edits too, which replace rather than add, so replaying those is harmless.
+    let seq = open.journalSeq;
     const bytes = await writeWdoc({
       manifest: { version: WDOC_VERSION, lens: lens ?? open.format, origin: open.origin, pagesCurrent: open.pagesCurrent && !open.edited },
-      document: open.document ? await open.document.write() : null,
+      document: open.document ? await open.document.write({ onBody: () => (seq = open.journalSeq) }) : null,
       original: open.original,
       extensions: currentExtensions(open),
+    });
+    const buffer = bytes.slice().buffer;
+    post({ type: 'saved', request, bytes: buffer, seq }, [buffer]);
+  } catch (e) {
+    post({ type: 'saved', request, bytes: null, error: (e as Error).message });
+  }
+}
+
+/** What `source` holds with edits put in it, as a .wdoc: for edits made on top of a copy that isn't the one stored any more. */
+async function journalCopy(request: number, source: DocumentSource, batches: Operation[][]): Promise<void> {
+  try {
+    const loaded = await load(source, await fontsReady);
+    if (!loaded.document) throw new Error(t('app.documentNotOpen'));
+    const replica = new Replica(loaded.document);
+    for (const ops of batches) replica.external(ops);
+    const bytes = await writeWdoc({
+      manifest: { version: WDOC_VERSION, lens: loaded.lens, origin: loaded.origin, pagesCurrent: false },
+      document: await loaded.document.write(),
+      original: loaded.original,
+      extensions: loaded.extensions,
     });
     const buffer = bytes.slice().buffer;
     post({ type: 'saved', request, bytes: buffer }, [buffer]);
@@ -2935,6 +2999,12 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'save':
       void save(message.doc, message.request, message.lens);
+      break;
+    case 'replayJournal':
+      if (current?.doc === message.doc) current.replayJournal(message.batches);
+      break;
+    case 'journalCopy':
+      void journalCopy(message.request, message.source, message.batches);
       break;
     case 'convert':
       void exportAs(message.doc, message.request, message.to);

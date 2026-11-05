@@ -1,5 +1,5 @@
 // Sharing a document view-only (File ▸ Share, "Can view") and opening it: the other person gets the read-only viewer at
-// /view/?s=<token> (src/viewer/share.ts, docs/architecture/viewer.md), not the editor, under the share's own address that never names
+// /view?s=<token> (src/viewer/share.ts, docs/architecture/viewer.md), not the editor, under the share's own address that never names
 // the document; it catches up with each save; and the server refuses them any change whatever the page does.
 
 import type { Page, Response } from '@playwright/test';
@@ -59,7 +59,7 @@ test('the owner shares a document with "Can view", and the other person opens it
 
   // Opened the way the app opens a shared document, it lands in the viewer instead of the editor, at an address of its own.
   await guest.page.goto(`/?doc=shared:${doc.id}`);
-  await guest.page.waitForURL(/\/view\/\?s=[\w-]{32}$/);
+  await guest.page.waitForURL(/\/view\?s=[\w-]{32}$/);
   expect(guest.page.url()).not.toContain(doc.id);
   expect(new URL(guest.page.url()).searchParams.get('s')).toBe(await viewTokenOf(guest.page, doc.id));
   await expect(guest.page).toHaveTitle('Plan.docx (view only)');
@@ -89,7 +89,7 @@ test('the viewer catches up with a newer save, and the server refuses the viewer
   const doc = await uploadDoc(owner.page, 'Plan.docx', await makeDocx(browser, ['first version']));
   await shareWith(owner.page, doc.id, guest.email, 'viewer');
   const viewing = recordResponses(guest.page);
-  await guest.page.goto(`/view/?s=${await viewTokenOf(guest.page, doc.id)}`);
+  await guest.page.goto(`/view?s=${await viewTokenOf(guest.page, doc.id)}`);
   await expect.poll(() => viewerText(guest.page)).toBe('first version');
 
   // Whatever the page does, a viewer can't change the file.
@@ -118,21 +118,21 @@ test('the address dies when the share becomes an editor\'s, the document\'s id o
   // Signed out: asked to sign in, coming back to the same address (which still doesn't name the document).
   const stranger = await signedOutContext(browser);
   const page = await stranger.newPage();
-  await page.goto(`/view/?s=${token}`);
+  await page.goto(`/view?s=${token}`);
   await expect(page.getByRole('status')).toContainText('Sign in to see this document.');
   const signIn = page.getByRole('link', { name: /^Continue with/ }).first();
   const href = (await signIn.getAttribute('href'))!;
-  expect(new URL(href, CLIENT_ORIGIN).searchParams.get('return')).toBe(`/view/?s=${token}`);
+  expect(new URL(href, CLIENT_ORIGIN).searchParams.get('return')).toBe(`/view?s=${token}`);
   expect(await page.content()).not.toContain(doc.id);
   await stranger.close();
 
   // The document's own id is no address.
-  await guest.page.goto(`/view/?s=${doc.id}`);
+  await guest.page.goto(`/view?s=${doc.id}`);
   await expect(guest.page.getByRole('status')).toContainText('no longer shared with you');
 
   // Made an editor: the viewer address is gone, and the app opens it in the editor.
   await shareWith(owner.page, doc.id, guest.email, 'editor');
-  await guest.page.goto(`/view/?s=${token}`);
+  await guest.page.goto(`/view?s=${token}`);
   await expect(guest.page.getByRole('status')).toContainText('no longer shared with you');
   await guest.page.goto(`/?doc=shared:${doc.id}`);
   await guest.app.ready();
@@ -161,7 +161,7 @@ test('an open viewer lets the document go once the owner removes the person in t
   const doc = await uploadDoc(owner.page, 'Plan.docx', await makeDocx(browser, ['the plan']));
   await openCloud(owner.page, doc.id);
   await shareWith(owner.page, doc.id, guest.email, 'viewer');
-  const address = `/view/?s=${await viewTokenOf(guest.page, doc.id)}`;
+  const address = `/view?s=${await viewTokenOf(guest.page, doc.id)}`;
   await guest.page.goto(address);
   await expect.poll(() => viewerText(guest.page)).toBe('the plan');
 
@@ -185,7 +185,7 @@ test('an open viewer lets the document go once the person leaves it from their d
   await owner.page.goto('/?doc=welcome');
   const doc = await uploadDoc(owner.page, 'Plan.docx', await makeDocx(browser, ['the plan']));
   await shareWith(owner.page, doc.id, guest.email, 'viewer');
-  const address = `/view/?s=${await viewTokenOf(guest.page, doc.id)}`;
+  const address = `/view?s=${await viewTokenOf(guest.page, doc.id)}`;
   const viewer = await guest.context.newPage();
   await viewer.goto(address);
   await expect.poll(() => viewerText(viewer)).toBe('the plan');

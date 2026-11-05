@@ -37,6 +37,11 @@ export const app: Partial<Messages> = {
   'app.saveFailed': '저장하지 못했습니다: {message}',
   'app.linkOneParagraph': '링크로 만들려면 한 문단 안에서 텍스트를 선택하십시오',
   'app.allowPopups': '인쇄 미리 보기를 보려면 팝업을 허용하십시오',
+  'app.fileReady': '파일이 준비되었습니다',
+  'app.fileReadySave': '저장',
+  'app.printInPreview': '미리 보기에서 열었습니다. 인쇄하려면 파일 › 프린트를 선택하세요',
+  'app.printFailed': '인쇄할 수 없습니다: {message}',
+  'app.printSavedInstead': '“{name}”을(를) 다운로드에 저장했습니다. 파일을 열어 인쇄하세요. 바로 인쇄하려면 앱을 업데이트하세요.',
   'app.downloaded': '“{name}”을(를) 다운로드했습니다',
   'app.downloadAllNone': '다운로드할 저장된 문서가 없습니다',
   'app.downloadAllName': 'documents.zip',
@@ -70,6 +75,7 @@ export const app: Partial<Messages> = {
 
   // Account and cloud
   'app.adopted': '이 브라우저의 문서 {count}개를 계정에 추가했습니다',
+  'app.journalCut': '“{name}”의 마지막 편집 내용 중 일부를 복원하지 못했습니다.',
   'app.conflictNotice': '“{before}”이(가) 다른 곳에서도 변경되어, 이 변경 사항을 “{name}”(으)로 저장했습니다',
   'app.mergedNotice': '“{name}”이(가) 다른 곳에서도 다른 단락이 변경되어 두 변경 사항을 모두 유지했습니다. 이전 상태는 버전 기록에 있습니다.',
   'app.signInToShare': '이 문서를 공유하려면 로그인하십시오',

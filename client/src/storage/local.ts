@@ -8,6 +8,7 @@ import { t } from '../i18n/index.ts';
 import { traced } from '../quietRunner.ts';
 import { CHUNK_ALGO, CHUNK_MIN_FILE, assemble, chunkBytes } from './chunker.ts';
 import type { Chunked } from './chunker.ts';
+import type { JournalMarker } from './editJournal.ts';
 
 export interface SavedInfo {
   id: string;
@@ -18,6 +19,8 @@ export interface SavedInfo {
   owner?: string;
   /** The cloud document this is a copy of, once it has been saved to (or opened from) the cloud. */
   cloudId?: string;
+  /** How far through the edit journal of the session that saved it this copy reaches (see editJournal.ts). Only that session's saves have one. */
+  journal?: JournalMarker;
   /** `updatedAt` as of the last time this copy and the cloud copy were identical. */
   cloudSyncedAt?: number;
   /** The cloud copy's `updatedAt` as of that sync (the server's clock), to tell whether it has changed since. */
@@ -177,6 +180,8 @@ interface WriteInput {
   owner?: string;
   /** The folder it goes in; kept from the saved copy when absent. */
   folderId?: string;
+  /** Written with the bytes, so a crash can't leave a copy that doesn't say which edits it holds. Absent, whatever was there goes: these bytes aren't that session's. */
+  journal?: JournalMarker;
   /** Only over a copy of the same cloud document with nothing unsent (see `keepSyncedCopy` in ../library.ts): otherwise nothing is written. */
   onlyIfSent?: boolean;
 }
@@ -302,6 +307,8 @@ async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint
     // Strictly increasing per document, so "saved after the last sync" is always decidable.
     updatedAt: Math.max(Date.now(), (existing?.updatedAt ?? 0) + 1),
   };
+  if (input.journal) info.journal = input.journal;
+  else delete info.journal;
   if (cloud) {
     info.cloudId = cloud.id;
     info.cloudSyncedAt = info.updatedAt;

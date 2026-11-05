@@ -2,6 +2,7 @@
 // in its own worker) is only fetched when a workbook is first opened; until then this is all there is, and it reports
 // nothing open. See docs/spreadsheets.md.
 
+import type { SheetLayout } from '../formats/wdoc.ts';
 import type { Action, FormatState, SheetOp } from '../ui/actions.ts';
 import type { SheetEditorDeps, SheetEditorView } from './view.ts';
 
@@ -40,9 +41,9 @@ export class SheetEditor {
     return this.view?.isOpen ? this.view : null;
   }
 
-  open(name: string, bytes: Uint8Array, image: Uint8Array | null, format?: 'csv' | 'tsv'): void {
+  open(name: string, bytes: Uint8Array, image: Uint8Array | null, format?: 'csv' | 'tsv', layout?: SheetLayout): void {
     if (!this.view) throw new Error('the spreadsheet editor is not loaded');
-    this.view.open(name, bytes, image, format);
+    this.view.open(name, bytes, image, format, layout);
   }
 
   close(): void {
@@ -83,8 +84,8 @@ export class SheetEditor {
     return this.view?.isDragging ?? false;
   }
 
-  /** The file (.xlsx, or the CSV or TSV it was) and its memory image (null when nothing is open). */
-  save(): Promise<{ file: Uint8Array; image: Uint8Array; sha256: string }> | null {
+  /** The file (.xlsx, or the CSV or TSV it was), what to store of it (see `SheetEditorView.save`) and its memory image (null when nothing is open). */
+  save(): Promise<{ file: Uint8Array; stored: Uint8Array; image: Uint8Array; sha256: string }> | null {
     return this.view?.isOpen ? this.view.save() : null;
   }
 

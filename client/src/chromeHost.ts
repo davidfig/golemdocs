@@ -531,6 +531,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           if (!app.annotating()) return app.startComment();
           const text = window.prompt(t('app.notePrompt'));
           if (text !== null) app.send({ kind: 'annotate', annotation: 'note', text });
+          app.focusEditor(); // no box of its own to keep the keyboard (see CommandRegistry.execute)
           return;
         }
         default:

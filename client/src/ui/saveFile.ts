@@ -1,9 +1,12 @@
 // Giving a file to the person: a download on a computer, the system share sheet (Save to Files, AirDrop, Mail, Open in...) on a phone or tablet.
 // A phone's web view has no download list to show a link's download in, so there the sheet is the way out. On iOS the page
-// asks for it (navigator.share); Android's web view has no such call, so the app's shell lends the page one (`GolemShare`,
+// asks for it (navigator.share), and if the file took too long to make for that to be allowed, for one more tap; Android's web view has no such call, so the app's shell lends the page one (`GolemShare`,
 // desktop/src-tauri/gen/android/.../ShareBridge.kt) that takes the file in chunks.
 
 import { isTouchDevice } from '../desktop/bridge.ts';
+import { t } from '../i18n/index.ts';
+import { h } from './dom.ts';
+import { showConfirm } from './popup.ts';
 
 type ShareNavigator = Pick<Navigator, 'userAgent' | 'platform' | 'maxTouchPoints'> & {
   canShare?: (data: ShareData) => boolean;
@@ -61,7 +64,17 @@ export async function saveFile(name: string, bytes: Uint8Array, type: string): P
       return true;
     } catch (e) {
       if ((e as Error).name === 'AbortError') return false;
-      // Not allowed (the sheet needs a tap just before it, and the export took longer) or another failure: fall through to a download.
+      // The sheet needs a tap just before it, and the export took longer: ask for one. A link is no way out here, as an app's web view ignores it.
+      if ((e as Error).name === 'NotAllowedError') {
+        if (!(await showConfirm(t('app.fileReady'), h('p', { text: name }), t('app.fileReadySave')))) return false;
+        try {
+          await navigator.share({ files: [file], title: name });
+          return true;
+        } catch (again) {
+          if ((again as Error).name === 'AbortError') return false;
+        }
+      }
+      // Any other failure: fall through to a download.
     }
   }
   const url = URL.createObjectURL(file);

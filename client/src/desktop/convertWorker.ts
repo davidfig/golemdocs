@@ -9,15 +9,17 @@ export interface ConvertRequest {
   op: 'toFile' | 'fromFile';
   bytes: ArrayBuffer;
   name: string;
+  /** For `fromFile`: what the account stores now (see `fromVaultFile`). */
+  previous?: ArrayBuffer;
 }
 
 /** `bytes` is null when the vault does not keep the document (see `toVaultFile`). */
 export type ConvertReply = { id: number; bytes: ArrayBuffer | null } | { id: number; error: string };
 
 /** Handles one request; the same function the worker runs, so tests can call it without a worker. */
-export async function convert({ op, bytes, name }: Pick<ConvertRequest, 'op' | 'bytes' | 'name'>): Promise<Uint8Array | null> {
+export async function convert({ op, bytes, name, previous }: Pick<ConvertRequest, 'op' | 'bytes' | 'name' | 'previous'>): Promise<Uint8Array | null> {
   const input = new Uint8Array(bytes);
-  return op === 'toFile' ? toVaultFile(input, name) : fromVaultFile(input, name);
+  return op === 'toFile' ? toVaultFile(input, name) : fromVaultFile(input, name, previous && new Uint8Array(previous));
 }
 
 /** The bytes as a buffer of their own, which can be handed to another thread. */

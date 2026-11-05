@@ -12,7 +12,7 @@ test.use({ hasTouch: true });
 /** A finger: put down at a point, moved, lifted (real touches, through the browser's devtools protocol). */
 async function finger(page: Page) {
   const cdp = await page.context().newCDPSession(page);
-  const fire = (type: string, at?: { x: number; y: number }) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: at ? [{ x: at.x, y: at.y }] : [] });
+  const fire = (type: 'touchStart' | 'touchMove' | 'touchEnd', at?: { x: number; y: number }) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: at ? [{ x: at.x, y: at.y }] : [] });
   return {
     down: (at: { x: number; y: number }) => fire('touchStart', at),
     move: (at: { x: number; y: number }) => fire('touchMove', at),

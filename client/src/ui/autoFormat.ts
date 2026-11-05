@@ -14,6 +14,16 @@ const listeners = new Set<(on: boolean) => void>();
 
 export const autoFormatOn = (): boolean => on;
 
+/** The saved choice changed (it came from the account): follows it. */
+export function rereadAutoFormat(): void {
+  try {
+    on = localStorage.getItem(KEY) !== 'off';
+  } catch {
+    return;
+  }
+  for (const listener of listeners) listener(on);
+}
+
 export function setAutoFormat(value: boolean): void {
   if (value === on) return;
   on = value;

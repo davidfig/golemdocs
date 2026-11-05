@@ -92,6 +92,17 @@ try {
 
 export const autoCorrectReplacements = (): Replacement[] => replacementList.map(([text, replacement]) => [text, replacement]);
 
+/** The saved rules or list changed (they came from the account): follows them. */
+export function rereadAutoCorrect(): void {
+  try {
+    options = parseAutoCorrect(localStorage.getItem(AUTOCORRECT_KEY));
+    replacementList = parseReplacements(localStorage.getItem(REPLACEMENTS_KEY));
+  } catch {
+    return;
+  }
+  for (const listener of listeners) listener();
+}
+
 export function setReplacements(list: unknown): void {
   replacementList = cleanReplacements(list);
   try {

@@ -361,14 +361,24 @@ export class TextEditorView {
   }
 
   setWrap(on: boolean): void {
-    this.wrap = on;
-    this.scene.wrap = on;
-    this.scene.widest = 0;
     try {
       localStorage.setItem(WRAP_KEY, on ? '1' : '0');
     } catch {
       // The choice lasts until the page closes.
     }
+    this.showWrap(on);
+  }
+
+  /** The saved choice changed (it came from the account): follows it. */
+  rereadWrap(): void {
+    const on = readWrap();
+    if (on !== this.wrap) this.showWrap(on);
+  }
+
+  private showWrap(on: boolean): void {
+    this.wrap = on;
+    this.scene.wrap = on;
+    this.scene.widest = 0;
     if (on) this.deps.camera.x = 0;
     this.entriesChanged(true);
   }

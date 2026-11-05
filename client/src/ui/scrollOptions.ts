@@ -20,6 +20,12 @@ export const scrollPastEndOn = (): boolean => past;
 /** Calls `listener` whenever the choice changes. */
 export const onScrollPastEndChange = (listener: () => void): void => void listeners.add(listener);
 
+/** The saved choice changed (it came from the account): follows it. */
+export function rereadScrollPastEnd(): void {
+  past = read();
+  for (const listener of listeners) listener();
+}
+
 export function setScrollPastEnd(on: boolean): void {
   past = on;
   try {

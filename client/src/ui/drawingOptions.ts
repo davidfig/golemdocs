@@ -148,6 +148,17 @@ export function setPencilSmoothing(value: Smoothing): void {
   changed();
 }
 
+/** The saved options changed (they came from the account): follows them. The guides' switches stay on this device. */
+export function rereadDrawingOptions(): void {
+  selectAfterPencil = read(SELECT_AFTER_PENCIL_KEY) !== 'off';
+  returnToSelect = read(RETURN_TO_SELECT_KEY) !== 'off';
+  smoothing = parseSmoothing(read(PENCIL_SMOOTHING_KEY));
+  penPressure = read(PEN_PRESSURE_KEY) !== 'off';
+  nudgeRadius = parseNumber(read(NUDGE_SIZE_KEY), NUDGE_SIZE_MIN, NUDGE_SIZE_MAX, NUDGE_SIZE_DEFAULT);
+  nudgePercent = parseNumber(read(NUDGE_STRENGTH_KEY), NUDGE_STRENGTH_MIN, NUDGE_STRENGTH_MAX, NUDGE_STRENGTH_MAX);
+  changed();
+}
+
 /** Calls `listener` when any drawing option changes (a menu's check marks follow it). */
 export function onDrawingOptions(listener: () => void): void {
   listeners.add(listener);

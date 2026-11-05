@@ -176,6 +176,11 @@ export class TextEditor {
     if (this.view) this.view.setWrap(!this.view.wrapping);
   }
 
+  /** The saved wrapping choice changed (it came from the account). A view made later reads it then. */
+  rereadWrap(): void {
+    this.view?.rereadWrap();
+  }
+
   debugState(): ReturnType<TextEditorView['debugState']> {
     return this.view?.debugState() ?? null;
   }

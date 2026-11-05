@@ -70,6 +70,13 @@ export function setKeepMenuInFullScreen(on: boolean): void {
   apply();
 }
 
+/** The saved choices changed (they came from the account): follows them. */
+export function rereadFullScreenOptions(): void {
+  keepMenu = read(FULL_SCREEN_MENU_KEY) === 'on';
+  apply();
+  for (const listener of inAppListeners) listener();
+}
+
 function apply(): void {
   const on = isFullScreen();
   document.body.classList.toggle('wm-fullscreen', on);

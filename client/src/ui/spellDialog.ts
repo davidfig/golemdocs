@@ -136,6 +136,14 @@ export class SpellDialog {
     this.setProblem(false);
   }
 
+  /** The saved choices or the user's dictionary changed (they came from the account): follows them. */
+  reread(): void {
+    this.live = { spelling: readFlag(SPELLING_KEY), grammar: readFlag(GRAMMAR_KEY) };
+    this.grammar.checked = this.live.grammar;
+    this.asYouType.checked = this.live.spelling;
+    this.sendLive();
+  }
+
   /** Tells the layout worker what to underline as the user types, and the user's dictionary (on each document opened). */
   sendLive(): void {
     this.host.send({ kind: 'spellCheck', spelling: this.live.spelling, grammar: this.live.grammar, words: this.host.userWords() });

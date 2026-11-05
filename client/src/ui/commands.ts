@@ -111,6 +111,15 @@ export class CommandRegistry {
     saveShortcutOverrides(this.overrides);
   }
 
+  /** The saved shortcuts changed (they came from the account): follows them. */
+  rereadShortcuts(): void {
+    this.overrides = loadShortcutOverrides();
+    for (const command of this.commands.values()) {
+      const custom = !command.nativeShortcut && command.id in this.overrides;
+      this.apply(command, custom ? parseShortcut(this.overrides[command.id]) : command.defaultShortcut);
+    }
+  }
+
   private assign(command: Command, shortcut: Shortcut | null): void {
     this.apply(command, shortcut);
     if (sameShortcut(shortcut, command.defaultShortcut) || (!shortcut && !command.defaultShortcut)) delete this.overrides[command.id];

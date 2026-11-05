@@ -8,6 +8,7 @@
 
 ### Fixed
 
+- Signed in, the app no longer loads twice when you open it after your settings changed on another computer. Settings from your account now apply straight away, and the note about a new release stays. A language chosen on another computer shows the next time you open the app.
 - In the desktop app, documents and folders can be dragged again: into folders on the Files sidebar and the Open screen, and files from your computer into the window. This needs the app's next update.
 - In Safari and the desktop app, documents and folders on the Open screen can be dragged by their pictures and names.
 - A document moved to a folder while it is still uploading stays there, instead of jumping back when the upload finishes.

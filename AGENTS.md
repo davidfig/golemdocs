@@ -52,7 +52,7 @@ The home page's "It opens everything" picture plays `client/public/home/war-and-
 
 ## Settings that follow the account
 
-A setting kept in browser storage is either per device or follows the person (see `client/src/settingsSync.ts`). When you add a persisted setting, decide which: a preference (a choice of look, language, behavior, view) goes in `SYNCED_KEYS` so every computer shows it; anything tied to this screen (sizes, positions, panel or toolbar layout, per-document zoom or scroll) and notices already dismissed stay out. A phone's settings are separate from a computer's, so a synced setting needs a sensible default on both.
+A setting kept in browser storage is either per device or follows the person (see `client/src/settingsSync.ts`). When you add a persisted setting, decide which: a preference (a choice of look, language, behavior, view) goes in `SYNCED_KEYS` so every computer shows it; anything tied to this screen (sizes, positions, panel or toolbar layout, per-document zoom or scroll) and notices already dismissed stay out. A phone's settings are separate from a computer's, so a synced setting needs a sensible default on both. A setting from the account never reloads the page: a new synced key says how it applies live in `SETTING_APPLIED` (`client/src/main.ts`).
 
 ## Welcome document
 

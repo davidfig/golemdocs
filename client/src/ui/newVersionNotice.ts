@@ -53,4 +53,9 @@ export class NewVersionNotice {
     const footer = document.getElementById('footer');
     if (footer) new ResizeObserver(() => this.el.style.setProperty('--wm-footer-clearance', `${footer.offsetHeight}px`)).observe(footer);
   }
+
+  /** "Don't show again" came from the account: the note goes, if it is showing. */
+  rereadOff(): void {
+    if (read(OFF_KEY) === '1') this.el.hidden = true;
+  }
 }

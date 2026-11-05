@@ -1,7 +1,7 @@
 import './style.css';
 import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import { replacementFor } from '@golemdocs/editor/pattern';
-import { deskColor, onThemeChange, pagesDark } from './ui/theme.ts';
+import { deskColor, onThemeChange, pagesDark, rereadTheme } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, remembered, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
@@ -42,7 +42,9 @@ import {
 import { folderOf, folderPath } from './folders.ts';
 import { UploadQueue } from './uploadQueue.ts';
 import { LibraryStore } from './libraryStore.ts';
-import { stopSettingsSync, syncSettings } from './settingsSync.ts';
+import { stopSettingsSync, syncSettings, type SyncedKey } from './settingsSync.ts';
+import { rereadDrawingOptions } from './ui/drawingOptions.ts';
+import { rereadFullScreenOptions } from './ui/fullScreen.ts';
 import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, localCopies, putDocInCatalogue, type LibraryEntry } from './sync.ts';
 import { QuietRunner, traced } from './quietRunner.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage, textThumbnail } from './thumbnail.ts';
@@ -86,14 +88,14 @@ import { FONT_BASE, type DocumentSource, type LayoutUpdate, type RoomOptions, ty
 import { ImageRenderer } from './webgl/shapes/imageRenderer.ts';
 import { AtlasLibrary } from './webgl/text/gpuFace.ts';
 import { Camera, CSS_PX_PER_POINT } from './view/camera.ts';
-import { onScrollPastEndChange, scrollPastEndOn } from './ui/scrollOptions.ts';
+import { onScrollPastEndChange, rereadScrollPastEnd, scrollPastEndOn } from './ui/scrollOptions.ts';
 import { GpuPage } from './webgl/gpuPage.ts';
 import { PageRenderer, type FrameStats } from './webgl/pageRenderer.ts';
 import { getLocale, initLocale, t, type MessageKey } from './i18n/index.ts';
 import { FindDialog } from './ui/findDialog.ts';
 import { SpellDialog } from './ui/spellDialog.ts';
-import { autoCorrectOptions, autoCorrectReplacements, onAutoCorrect } from './ui/autoCorrect.ts';
-import { autoFormatOn, onAutoFormat } from './ui/autoFormat.ts';
+import { autoCorrectOptions, autoCorrectReplacements, onAutoCorrect, rereadAutoCorrect } from './ui/autoCorrect.ts';
+import { autoFormatOn, onAutoFormat, rereadAutoFormat } from './ui/autoFormat.ts';
 import { SpellMenu } from './ui/spellMenu.ts';
 import { ThesaurusDialog } from './ui/thesaurusDialog.ts';
 import { loadIgnored, saveIgnored, withIgnored, type Ignored } from './spelling/ignored.ts';
@@ -279,16 +281,19 @@ const pictureSizing = new WeakSet<object>();
 // View: Print layout (pages) or Flow (the text reflowed to the window). Remembered in this browser. The third
 // view, the page grid, is `grid`: it is left when another document opens, back to this one.
 const VIEW_KEY = 'word.viewMode';
-// With no saved choice, a phone-sized screen starts in Flow (a page shrunk to fit is unreadable there).
-let viewMode: Exclude<ViewMode, 'grid'> = window.matchMedia('(max-width: 720px)').matches ? 'flow' : 'print';
-try {
-  const saved = localStorage.getItem(VIEW_KEY);
-  // 'normal' is Flow's earlier name.
-  if (saved === 'flow' || saved === 'normal') viewMode = 'flow';
-  else if (saved === 'print') viewMode = saved;
-} catch {
-  // Storage unavailable: use the default for this screen.
+function savedViewMode(): Exclude<ViewMode, 'grid'> {
+  try {
+    const saved = localStorage.getItem(VIEW_KEY);
+    // 'normal' is Flow's earlier name.
+    if (saved === 'flow' || saved === 'normal') return 'flow';
+    if (saved === 'print') return saved;
+  } catch {
+    // Storage unavailable: use the default for this screen.
+  }
+  // With no saved choice, a phone-sized screen starts in Flow (a page shrunk to fit is unreadable there).
+  return window.matchMedia('(max-width: 720px)').matches ? 'flow' : 'print';
 }
+let viewMode = savedViewMode();
 
 let earlySaved: { id: string; saved: Promise<Awaited<ReturnType<typeof getSaved>>> } | null = null;
 {
@@ -1423,8 +1428,8 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   // Signed in but no sync (never subscribed, or it ended): what they made here stays in view as this browser's own.
   if (signedIn && !account) await releaseToGuest(signedIn.id).catch(() => {});
   sharedDeviceNotice.update({ signedIn: signedIn !== null });
-  // Interface settings follow the account (and a reload shows what came from it); see settingsSync.ts.
-  if (account) void syncSettings(account.id, { reload: reloadForSettings });
+  // Interface settings follow the account, and what comes from it shows at once; see settingsSync.ts.
+  if (account) void syncSettings(account.id, { applied: showSettingsFromAccount });
   else stopSettingsSync();
   if (account) {
     // Folders made before signing in go to the account first, so the documents in them can be filed there.
@@ -1444,12 +1449,85 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   showSync();
 }
 
-/** Reloads the page, once what is open is saved: to show settings that came from the account, or a new version of the site. */
-async function reloadForSettings(): Promise<void> {
+/** Reloads the page into a new version of the site, once what is open is saved. */
+async function reloadForUpdate(): Promise<void> {
   if (cleared) return;
   saveIfEdited();
   await saving.catch(() => {});
   location.reload();
+}
+
+/**
+ * How a setting from the account takes effect with no reload (settingsSync.ts): what the page holds of it is read
+ * from storage again. These read and never write, so a value isn't sent straight back to the account in another form.
+ * Null: nothing to do, as the setting is read from storage each time it is used. The type makes a new synced key choose.
+ */
+const SETTING_APPLIED: Record<SyncedKey, (() => void) | null> = {
+  'golem.theme': rereadTheme,
+  'golem.appearance': rereadTheme,
+  'golem.darkPages': rereadTheme,
+  'wm.locale': null, // the interface is built in its language at startup, so a language from the account shows from the next load
+  'wm-shortcuts': () => chrome.rereadShortcuts(),
+  'word.autoFormat': rereadAutoFormat,
+  'word.replacements.v1': rereadAutoCorrect,
+  'word.autoCorrect': rereadAutoCorrect,
+  'word.spelling.asYouType': rereadSpelling,
+  'word.spelling.grammar': rereadSpelling,
+  'word.userDictionary.v1': rereadSpelling,
+  'word.spelling.ignored.v1': null, // read as each document opens
+  'golem.newKinds': null,
+  'golem.newVersion.off': () => newVersionNotice.rereadOff(),
+  'word.viewMode': rereadViewMode,
+  'word.formattingMarks': rereadViewOptions,
+  'word.ruler': rereadViewOptions,
+  'word.footer': rereadViewOptions,
+  'word.toolbarsShown': rereadViewOptions,
+  'word.fullScreenMenus': rereadFullScreenOptions,
+  'golem.macInAppMenu': rereadFullScreenOptions,
+  'word.scrollPastEnd': rereadScrollPastEnd,
+  'wm.largeWrap': () => textView.rereadWrap(),
+  'vector.selectAfterPencil': rereadDrawingOptions,
+  'vector.returnToSelect': rereadDrawingOptions,
+  'vector.pencilSmoothing': rereadDrawingOptions,
+  'vector.penPressure': rereadDrawingOptions,
+  'vector.nudgeSize': rereadDrawingOptions,
+  'vector.nudgeStrength': rereadDrawingOptions,
+};
+
+function rereadSpelling(): void {
+  spellDialog.reread();
+}
+
+/** The status bar, toolbars, ruler and formatting marks, as saved. */
+function rereadViewOptions(): void {
+  const stored = (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  };
+  footerOn = stored(FOOTER_KEY) !== 'off';
+  toolbarsOn = stored(TOOLBARS_KEY) !== 'off';
+  rulerOn = stored(RULER_KEY) === 'on';
+  const marks = stored(MARKS_KEY) === 'on';
+  if (marks !== formattingMarks) worker.setMarks((formattingMarks = marks));
+  if (footerOn) refreshFooter();
+  requestRender();
+}
+
+/** Print or Flow, as saved. The page grid, if it is showing, stays until it is left. */
+function rereadViewMode(): void {
+  const mode = savedViewMode();
+  if (mode === viewMode) return;
+  viewMode = mode;
+  if (!grid) placeViewAgain();
+}
+
+/** Shows what came from the account, each setting once however many of its keys came. */
+function showSettingsFromAccount(keys: SyncedKey[]): void {
+  for (const show of new Set(keys.map((key) => SETTING_APPLIED[key]))) show?.();
+  chrome.refresh(); // the check marks in the menus
 }
 
 /** Refreshes what File ▸ Open Recent lists. */
@@ -4628,6 +4706,11 @@ function setViewMode(mode: ViewMode): void {
       // Storage unavailable: the choice lasts for this session only.
     }
   }
+  placeViewAgain();
+}
+
+/** The view changed: the document is placed in it from the start. */
+function placeViewAgain(): void {
   cameraPlaced = false;
   userMoved = false;
   pendingView = null;
@@ -5397,9 +5480,9 @@ const dashboard = new Dashboard(document.body, {
 const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clearLocalData());
 
 // A new release: offer What's New (once per version, unless turned off).
-new NewVersionNotice(document.body, () => openSource('changelog'));
+const newVersionNotice = new NewVersionNotice(document.body, () => openSource('changelog'));
 // The site updated while this page was open: offer a reload, once what is open is saved.
-new UpdateNotice(document.body, __BUILD_ID__, () => void reloadForSettings(), updateService ? async () => (await updateService.check()) !== null : undefined);
+new UpdateNotice(document.body, __BUILD_ID__, () => void reloadForUpdate(), updateService ? async () => (await updateService.check()) !== null : undefined);
 
 // --- Searching every document ------------------------------------------------------------------
 // Each document has an index kept in this browser (see search/searchLibrary.ts); the panel searches

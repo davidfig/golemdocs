@@ -4,13 +4,14 @@
 // A phone has settings of its own: a profile ('mobile') kept apart from a computer's ('desktop').
 //
 // On load the account's settings are compared with this browser's (`planSync`): what the account has
-// that this browser hasn't changed since the last sync is applied (and the page reloads once, as most
-// settings are read at startup); what this browser changed is sent. Later changes are sent as they happen.
+// that this browser hasn't changed since the last sync is applied, and the page is told which keys came
+// down so it can show them (`SETTING_APPLIED` in main.ts) without loading again; what this browser changed
+// is sent. Later changes are sent as they happen.
 
 export type Profile = 'desktop' | 'mobile';
 
 /** The browser-storage keys that are kept in the account. */
-export const SYNCED_KEYS: readonly string[] = [
+const KEYS = [
   'golem.theme', // color scheme
   'golem.appearance', // light, dark or automatic
   'golem.darkPages',
@@ -40,7 +41,10 @@ export const SYNCED_KEYS: readonly string[] = [
   'vector.penPressure',
   'vector.nudgeSize', // the Nudge brush (its options strip)
   'vector.nudgeStrength',
-];
+] as const;
+
+export type SyncedKey = (typeof KEYS)[number];
+export const SYNCED_KEYS: readonly string[] = KEYS;
 
 /** A phone or tablet (a touch screen with nothing to hover with), whose settings are its own. */
 export function settingsProfile(): Profile {
@@ -159,10 +163,9 @@ const WATCH_MS = 2000;
 
 /**
  * Brings this browser and the account's settings together for `user`, then keeps sending what changes here.
- * When settings were taken from the account the page has to reload to show them: `reload` does that, once its
- * work is saved.
+ * Settings taken from the account are in browser storage by the time `applied` hears their keys: it shows them.
  */
-export async function syncSettings(user: string, options: { api?: SettingsApi; profile?: Profile; reload: () => void | Promise<void>; watchChanges?: boolean }): Promise<void> {
+export async function syncSettings(user: string, options: { api?: SettingsApi; profile?: Profile; applied: (keys: SyncedKey[]) => void; watchChanges?: boolean }): Promise<void> {
   const api = options.api ?? serverSettings;
   const profile = options.profile ?? settingsProfile();
   let base: Values;
@@ -173,22 +176,19 @@ export async function syncSettings(user: string, options: { api?: SettingsApi; p
     const plan = planSync(local, readMeta(user, profile), cloud);
     if (Object.keys(plan.push).length) await api.put(profile, plan.push);
     base = { ...local, ...plan.push };
-    let applied = false;
+    const applied: SyncedKey[] = [];
     for (const [key, value] of Object.entries(plan.apply)) {
       try {
         if (value === null) localStorage.removeItem(key);
         else localStorage.setItem(key, value);
         base[key] = value;
-        applied = true;
+        applied.push(key as SyncedKey);
       } catch {
         // Storage blocked: nothing can be kept here.
       }
     }
     writeMeta(user, profile, base);
-    if (applied) {
-      await options.reload();
-      return;
-    }
+    if (applied.length) options.applied(applied);
   } catch {
     return; // Offline or the account is unreachable: this browser's settings stand until the next load.
   }

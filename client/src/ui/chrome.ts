@@ -242,6 +242,13 @@ export class Chrome {
   }
 
   /** Who is signed in changed: the Admin menu appears or goes. */
+  /** The saved shortcuts changed (they came from the account): menus and keys follow them. */
+  rereadShortcuts(): void {
+    this.registry.rereadShortcuts();
+    this.refresh();
+    this.nativeMenu?.schedule();
+  }
+
   accountChanged(): void {
     this.menuBar.refresh();
     this.nativeMenu?.schedule();
@@ -252,7 +259,8 @@ export class Chrome {
     this.toolbarsEl.hidden = !this.state.toolbars || this.toolbars.every((t) => t.el.hidden || t.el.classList.contains('wm-mobile-only'));
   }
 
-  private refresh(): void {
+  /** Brings the toolbars and menus up to date with the state (their check marks, say). */
+  refresh(): void {
     for (const toolbar of this.toolbars) toolbar.refresh(this.state);
     this.syncToolbarsHidden();
     this.menuBar.refresh();

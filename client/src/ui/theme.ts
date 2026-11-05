@@ -45,16 +45,17 @@ const isAppearance = (value: unknown): value is Appearance => value === 'auto' |
 
 let scheme: SchemeId = 'golem';
 let appearance: Appearance = 'auto';
-let darkPages = read(PAGES_KEY) === 'on';
-{
+let darkPages = false;
+function readSaved(): void {
   const savedScheme = read(SCHEME_KEY);
   const savedAppearance = read(APPEARANCE_KEY);
-  if (isScheme(savedScheme)) scheme = savedScheme;
-  if (isAppearance(savedAppearance)) appearance = savedAppearance;
+  scheme = isScheme(savedScheme) ? savedScheme : 'golem';
   // Before appearance existed the scheme list held Dark; a saved Dark stays dark, and any other
   // saved scheme is just a palette, so appearance stays automatic.
-  else if (savedScheme === 'dark') appearance = 'dark';
+  appearance = isAppearance(savedAppearance) ? savedAppearance : savedScheme === 'dark' ? 'dark' : 'auto';
+  darkPages = read(PAGES_KEY) === 'on';
 }
+readSaved();
 
 let desk: [number, number, number] | null = null;
 let accent: string | null = null;
@@ -92,6 +93,12 @@ function apply(): void {
   accent = null;
   setRootData();
   for (const listener of listeners) listener();
+}
+
+/** The saved colors changed (they came from the account): shows them. */
+export function rereadTheme(): void {
+  readSaved();
+  apply();
 }
 
 export function setScheme(id: SchemeId): void {

@@ -123,13 +123,18 @@ export function withMoved(entries: readonly LibraryEntry[], moved: readonly Libr
 
 /** Moves documents to a folder (null: the top level); the account's in one request. */
 export async function moveEntries(entries: readonly LibraryEntry[], folderId: string | null): Promise<void> {
-  const cloudIds = entries.flatMap((e) => (e.cloud ? [e.cloud.id] : []));
+  // A copy linked to the account is moved there too, even when the account's list hasn't come yet.
+  const cloudIdOf = (e: LibraryEntry) => e.cloud?.id ?? e.local?.cloudId;
+  const cloudIds = entries.flatMap((e) => {
+    const id = cloudIdOf(e);
+    return id ? [id] : [];
+  });
   const linksAfter = linkKeeper?.({ kind: 'move', keys: entries.map((e) => e.key), to: folderId });
   const result = cloudIds.length ? await moveDocuments(cloudIds, folderId) : { ok: [], failed: [] };
   // What did move is recorded, here too, even when some did not (and that is then reported).
   const refused = new Set(result.failed.map((f) => f.id));
   if (result.ok.length) moveDocsInCatalogue(result.ok, folderId);
-  for (const entry of entries) if (entry.local && !(entry.cloud && refused.has(entry.cloud.id))) await setSavedFolder(entry.local.id, folderId);
+  for (const entry of entries) if (entry.local && !refused.has(cloudIdOf(entry) ?? '')) await setSavedFolder(entry.local.id, folderId);
   // Links are only written for a move that all happened.
   if (!result.failed.length) linksAfter?.();
   throwIfFailed(result);

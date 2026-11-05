@@ -107,8 +107,10 @@ export async function putFolders(db: UserDb, items: FolderInput[]): Promise<{ ok
       }
       const row: FolderRow = { id, name, parent_id: parentId, created_at: existing?.created_at ?? now, updated_at: now };
       folders.set(id, row);
+      // Only what this request changes: another in flight (a rename just as it is moved) read the table before this wrote, and the other way round.
+      const changed = [...(item.name !== undefined ? ['name = excluded.name'] : []), ...(item.parentId !== undefined ? ['parent_id = excluded.parent_id'] : []), 'updated_at = excluded.updated_at'];
       statements.push({
-        sql: 'INSERT INTO folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, parent_id = excluded.parent_id, updated_at = excluded.updated_at',
+        sql: `INSERT INTO folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET ${changed.join(', ')}`,
         params: [id, name, parentId, now, now],
       });
       ok.push({ folder: describeFolder(row), created: !existing });

@@ -820,6 +820,9 @@ export class Dashboard {
 
   private makeDraggable(el: HTMLElement, item: Dragged): void {
     el.draggable = true;
+    // WebKit (Safari, the desktop app) starts no drag from a button inside a draggable card: the button has to be draggable itself.
+    const open = el.querySelector<HTMLElement>(':scope > button.wm-card-open');
+    if (open) open.draggable = true;
     el.addEventListener('dragstart', (e) => {
       this.dragged = item;
       el.classList.add('wm-dragging');

@@ -6120,7 +6120,7 @@ window.addEventListener('drop', (e) => {
 });
 
 // Debug/automation hooks.
-Object.assign(window, { camera, requestRender, render, openSource, refreshWith, send, pageAt });
+Object.assign(window, { camera, requestRender, render, openSource, refreshWith, send, pageAt, library });
 Object.defineProperties(window, {
   pages: { get: () => pages },
   loaded: { get: () => loaded },

@@ -4,7 +4,7 @@
 // older version than the cloud's is merged with the cloud's when the two changed different
 // paragraphs (formats/merge.ts), and otherwise becomes a separate "(conflicted copy)" document.
 
-import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, listDocuments, saveChunked, saveCloudVersion, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
+import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, listDocuments, moveDocuments, saveChunked, saveCloudVersion, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
 import { CHUNK_ALGO } from './storage/chunker.ts';
 import type { Manifest } from './storage/chunker.ts';
 import { getChunks, getSaved, getSavedManifest, getSyncedBase, getThumbnail, listSaved, markSynced, rebaseSaved, saveFromCloud, saveFromCloudIfSent, type SavedInfo } from './storage/local.ts';
@@ -129,6 +129,19 @@ async function sendable(localId: string) {
   return { info, bytes, manifest, source, known, create };
 }
 
+/**
+ * The account's document for a copy that was moved to another folder here while it was being sent: an upload carries the folder the
+ * copy was in when it started, and the account's folder is the one shown, so the move would be undone. Not worth failing the upload
+ * over: if the account refuses (it doesn't have that folder yet, say), the document stays where it was sent.
+ */
+async function placedAsHere(localId: string, sentFolder: string | undefined, doc: CloudDocument): Promise<CloudDocument> {
+  const now = ((await getSavedManifest(localId)) ?? (await getSaved(localId)))?.info;
+  if (!now || (now.folderId ?? null) === (sentFolder ?? null)) return doc;
+  const folderId = now.folderId ?? null;
+  const moved = await moveDocuments([doc.id], folderId).catch(() => null);
+  return moved?.ok.includes(doc.id) ? { ...doc, folderId } : doc;
+}
+
 /** Uploads the saved browser copy to the cloud (creating the cloud document the first time). `host` decides about a merge (see MergeHost). */
 export async function uploadToCloud(localId: string, retry = true, host: MergeHost = CLOSED, merges = MERGES): Promise<Uploaded> {
   const { info, bytes, manifest, source, known, create } = await sendable(localId);
@@ -161,6 +174,7 @@ export async function uploadToCloud(localId: string, retry = true, host: MergeHo
     }
   }
   await markSynced(localId, { cloudId: doc.id, syncedAt: info.updatedAt, cloudUpdatedAt: doc.updatedAt, name: conflictCopy ? doc.name : undefined, ...(manifest && { syncedHashes: manifest.chunks.map((c) => c.h) }), ...(bytes && { base: bytes }) });
+  if (!conflictCopy) doc = await placedAsHere(localId, info.folderId, doc);
   // The thumbnail goes with the document, so other computers can show it without downloading the
   // document. Not worth failing the save over; the next save sends another.
   const thumbnail = await getThumbnail(localId).catch(() => null);
@@ -216,7 +230,7 @@ export async function uploadNewToCloud(localIds: readonly string[]): Promise<Map
       if ('error' in result) continue;
       const { id, info } = sending[i]!;
       await markSynced(id, { cloudId: result.id, syncedAt: info.updatedAt, cloudUpdatedAt: result.updatedAt, base: sending[i]!.bytes });
-      made.set(id, result);
+      made.set(id, await placedAsHere(id, info.folderId, result));
     }
   };
   for (const id of localIds) {

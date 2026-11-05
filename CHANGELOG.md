@@ -6,6 +6,13 @@
 
 - The Windows installers are now digitally signed, so Windows can show who published them.
 
+### Fixed
+
+- In the desktop app, documents and folders can be dragged again: into folders on the Files sidebar and the Open screen, and files from your computer into the window. This needs the app's next update.
+- In Safari and the desktop app, documents and folders on the Open screen can be dragged by their pictures and names.
+- A document moved to a folder while it is still uploading stays there, instead of jumping back when the upload finishes.
+- Naming a folder and moving it straight away keeps both changes.
+
 ## 0.33.1 - 2026-11-03
 
 ### Fixed

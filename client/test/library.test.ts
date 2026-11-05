@@ -56,7 +56,8 @@ const bytes = (...values: number[]) => new Uint8Array(values);
 (globalThis as { indexedDB: unknown }).indexedDB = fakeIndexedDB();
 const local = await import('../src/storage/local.ts');
 const { CloudError } = await import('../src/cloud.ts');
-const { keepSyncedCopy, openFromCloud, prefetchFromCloud, uploadToCloud } = await import('../src/library.ts');
+const { keepSyncedCopy, openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud } = await import('../src/library.ts');
+const { moveEntries } = await import('../src/folderOps.ts');
 const { downloadDocument } = await import('../src/cloud.ts');
 const sync = await import('../src/sync.ts');
 const { loadLibrary } = sync;
@@ -656,4 +657,57 @@ test('a bare .docx on the other side leaves this copy’s other entries as they 
   assert.match(await zip.entries.get('manifest.json')!.text(), /"lens": "md"/);
   assert.match(await zip.entries.get('extensions/md.json')!.text(), /a: 1/);
   assert.deepEqual(await textsOf(await zip.entries.get('document.docx')!.read()), ['A, mine.', 'B, theirs.']);
+});
+
+/** While the document is being created, moves the copy here to folder `f2`, as a drag during the upload does. */
+function movedDuringCreate(localId: string, seen: { folderId?: string | null }[]): void {
+  const server = globalThis.fetch;
+  globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: unknown }) => {
+    const url = String(input);
+    if (init?.method === 'POST' && url.startsWith('/api/documents')) {
+      await local.setSavedFolder(localId, 'f2');
+      if (url === '/api/documents/batch') return new Response(JSON.stringify({ results: [{ document: { id: 'c1', name: 'Doc.docx', size: 1, createdAt: 1, updatedAt: 1 } }] }), { status: 201, headers: { 'content-type': 'application/json' } });
+      return server(input as string, init);
+    }
+    if (init?.method === 'PATCH' && url === '/api/documents') {
+      const body = JSON.parse(String(init.body)) as { ids: string[]; folderId: string | null };
+      seen.push({ folderId: body.folderId });
+      return new Response(JSON.stringify({ ok: body.ids, failed: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return server(input as string, init);
+  }) as typeof fetch;
+}
+
+test('a copy moved to another folder while it is first uploaded is moved in the account too', async () => {
+  const info = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1, 2, 3), folderId: 'f1' });
+  const seen: { folderId?: string | null }[] = [];
+  movedDuringCreate(info.id, seen);
+  const { doc } = await uploadToCloud(info.id);
+  assert.deepEqual(seen, [{ folderId: 'f2' }]);
+  assert.equal(doc.folderId, 'f2');
+});
+
+test('a copy that stays in its folder during its upload sends no move', async () => {
+  const info = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1, 2, 3), folderId: 'f1' });
+  await uploadToCloud(info.id);
+  assert.equal(calls.filter((c) => c.method === 'PATCH').length, 0);
+});
+
+test('a copy moved while a batch uploads it is moved in the account too', async () => {
+  const info = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1, 2, 3) });
+  const seen: { folderId?: string | null }[] = [];
+  movedDuringCreate(info.id, seen);
+  const made = await uploadNewToCloud([info.id]);
+  assert.deepEqual(seen, [{ folderId: 'f2' }]);
+  assert.equal(made.get(info.id)?.folderId, 'f2');
+});
+
+test('moving a copy that is uploaded, but not yet in the account\'s list, moves it in the account', async () => {
+  const info = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1, 2, 3) });
+  await local.markSynced(info.id, { cloudId: 'c1', syncedAt: info.updatedAt });
+  const saved = (await local.getSaved(info.id))!.info;
+  const seen: { folderId?: string | null }[] = [];
+  movedDuringCreate(info.id, seen);
+  await moveEntries([{ key: info.id, name: 'Doc.docx', size: 3, updatedAt: 1, local: saved, cloud: null, state: 'synced', folderId: null } as never], 'f3');
+  assert.deepEqual(seen, [{ folderId: 'f3' }]);
 });

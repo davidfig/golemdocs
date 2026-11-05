@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, test } from 'node:test';
+import { putFolders } from '../src/folders.ts';
 import { USER_MIGRATIONS } from '../src/schema.ts';
 import { DOCX, world, type World } from './harness.ts';
 
@@ -216,4 +217,32 @@ test('deleting folders takes two requests to Cloudflare however many, and nested
   assert.equal(((await (await call('GET', '/api/documents')).json()) as any[]).find((d) => d.id === doc).folderId, null);
   assert.equal(await requestsFor(async () => assert.equal((await call('DELETE', `/api/folders/${c}`)).status, 204)), 2);
   assert.equal((await call('DELETE', `/api/folders/${c}`)).status, 404);
+});
+
+test('a rename and a move of one folder made at the same moment both stay', async () => {
+  const sqlite = new DatabaseSync(':memory:');
+  for (const statements of USER_MIGRATIONS) for (const sql of statements) sqlite.exec(sql);
+  const insert = sqlite.prepare('INSERT INTO folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, NULL, 1, 1)');
+  const [a, b] = [id(), id()];
+  insert.run(a, 'A');
+  insert.run(b, 'New folder');
+  // Each request reads the table before the other has written anything, as two in flight together can.
+  let reads = 0;
+  let bothRead = () => {};
+  const barrier = new Promise<void>((resolve) => (bothRead = resolve));
+  const db = {
+    all: async (sql: string) => {
+      const rows = sqlite.prepare(sql).all();
+      if (++reads === 2) bothRead();
+      await barrier;
+      return rows;
+    },
+    runAll: async (statements: { sql: string; params: never[] }[]) => {
+      for (const { sql, params } of statements) sqlite.prepare(sql).run(...params);
+    },
+  } as unknown as Parameters<typeof putFolders>[0];
+  await Promise.all([putFolders(db, [{ id: b, name: 'Bee' }]), putFolders(db, [{ id: b, parentId: a }])]);
+  const row = sqlite.prepare('SELECT name, parent_id FROM folders WHERE id = ?').get(b) as { name: string; parent_id: string | null };
+  assert.equal(row.name, 'Bee');
+  assert.equal(row.parent_id, a);
 });

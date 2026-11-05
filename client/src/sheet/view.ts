@@ -41,6 +41,7 @@ import { parseRange, rangeName } from './refs.ts';
 import { parseTabbed } from './clipboard.ts';
 import type { BookInfo, CellContent, Changed, ChartChange, ChartScene, EditOp, FromWorker, SheetInfo, TileKey, ToWorker } from './protocol.ts';
 import type { DelimitedKind } from './delimited.ts';
+import type { SheetLayout } from '../formats/wdoc.ts';
 import './view.css';
 
 /** A row of filter buttons: the AutoFilter's, a table's (`table`), or a pivot field's button (one cell, `pivot`). */
@@ -306,7 +307,7 @@ export class SheetEditorView {
   // --- Opening and closing ---
 
   /** Opens a workbook: the file's bytes, and its memory image if one was kept. */
-  open(name: string, bytes: Uint8Array, image: Uint8Array | null, format?: DelimitedKind): void {
+  open(name: string, bytes: Uint8Array, image: Uint8Array | null, format?: DelimitedKind, layout?: SheetLayout): void {
     this.close();
     this.name = name;
     this.lossNoted = false;
@@ -315,7 +316,7 @@ export class SheetEditorView {
     this.worker.onerror = (e) => this.deps.notify(t('app.openFailed', { message: e.message }));
     const buffer = bytes.slice().buffer;
     const imageBuffer = image ? image.slice().buffer : null;
-    this.send({ t: 'open', name, bytes: buffer, image: imageBuffer, format }, imageBuffer ? [buffer, imageBuffer] : [buffer]);
+    this.send({ t: 'open', name, bytes: buffer, image: imageBuffer, format, layout }, imageBuffer ? [buffer, imageBuffer] : [buffer]);
     this.savedMinZoom = this.deps.camera.minZoom;
     this.deps.camera.minZoom = SHEET_MIN_ZOOM;
     this.el.hidden = false;
@@ -396,7 +397,7 @@ export class SheetEditorView {
     return reply ? { input: reply.content.input, display: reply.content.display } : null;
   }
 
-  /** The workbook written as another of the grid's formats (File › Convert To). */
+  /** The workbook written as another of the grid's formats, as it is to be stored (File › Convert To). */
   async saveAs(format: 'xlsx' | DelimitedKind): Promise<Uint8Array> {
     const reply = await this.ask<Extract<FromWorker, { t: 'savedAs' }>>({ t: 'saveAs', id: this.id(), format });
     return new Uint8Array(reply.file);
@@ -407,15 +408,19 @@ export class SheetEditorView {
   /** The camera's own floor, put back when the workbook closes. */
   private savedMinZoom: number | null = null;
 
-  /** The file as it is now (.xlsx, or the CSV or TSV it was), and its new memory image (empty for CSV and TSV). */
-  async save(): Promise<{ file: Uint8Array; image: Uint8Array; sha256: string }> {
+  /**
+   * The file as it is now (.xlsx, or the CSV or TSV it was), and its new memory image (empty for CSV and TSV). `stored` is
+   * what to keep of it: the file, or a CSV or TSV file in its container with its layout (a download is `file`, never this).
+   */
+  async save(): Promise<{ file: Uint8Array; stored: Uint8Array; image: Uint8Array; sha256: string }> {
     // A cell being typed into is left alone: what is saved is what was entered (an autosave must never end someone's typing).
     const reply = await this.ask<Extract<FromWorker, { t: 'saved' }>>({ t: 'save', id: this.id() });
     if (reply.lossy && !this.lossNoted) {
       this.lossNoted = true;
       this.deps.notify(t('sheet.csvLossy', { format: reply.lossyFormat ?? 'CSV' }));
     }
-    return { file: new Uint8Array(reply.file), image: new Uint8Array(reply.image), sha256: reply.sha256 };
+    const file = new Uint8Array(reply.file);
+    return { file, stored: reply.stored ? new Uint8Array(reply.stored) : file, image: new Uint8Array(reply.image), sha256: reply.sha256 };
   }
 
   // --- Drawing ---

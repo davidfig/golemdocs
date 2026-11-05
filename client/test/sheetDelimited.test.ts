@@ -7,7 +7,7 @@ import { History } from '../src/sheet/edit.ts';
 import { Engine } from '../src/sheet/formula/engine.ts';
 import { Kind } from '../src/sheet/model/column.ts';
 import type { Worksheet } from '../src/sheet/model/worksheet.ts';
-import { DelimitedLoad, readDelimited, sheetNameOf, writeDelimitedSheet } from '../src/sheet/delimited.ts';
+import { applySheetLayout, DelimitedLoad, readDelimited, sheetLayout, sheetNameOf, writeDelimitedSheet } from '../src/sheet/delimited.ts';
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 const text = (b: Uint8Array) => new TextDecoder().decode(b);
@@ -84,4 +84,35 @@ test('a CSV read a few rows at a time is the same as one read whole, and is writ
   const a = whole.book.sheets[0] as Worksheet;
   const b = load.book.sheets[0] as Worksheet;
   for (let r = 0; r < 5; r++) for (let c = 0; c < 8; c++) assert.equal(b.grid.columns[c]?.kind(r), a.grid.columns[c]?.kind(r), `${r},${c}`);
+});
+
+test('a sheet as it opens has no layout; widths, heights, hidden columns and frozen rows are read back onto a new copy', () => {
+  const opened = readDelimited(bytes('a,b,c\n1,2,3\n'), 'x.csv', 'csv');
+  assert.equal(sheetLayout(opened.book), null);
+  const sheet = opened.book.sheets[0] as Worksheet;
+  sheet.colSizes.set(1, 180);
+  sheet.colSizes.set(2, 90);
+  sheet.colSizes.setHidden(2, true);
+  sheet.rowSizes.set(0, 40);
+  sheet.pane = { rows: 1, cols: 0 };
+  const layout = sheetLayout(opened.book)!;
+  assert.deepEqual(layout, { columns: [[1, 180], [2, 90]], rows: [[0, 40]], hiddenColumns: [2], frozen: { rows: 1, cols: 0 } });
+
+  const again = readDelimited(bytes('a,b,c\n1,2,3\n'), 'x.csv', 'csv');
+  applySheetLayout(again.book.sheets[0] as Worksheet, JSON.parse(JSON.stringify(layout)));
+  assert.deepEqual(sheetLayout(again.book), layout);
+  assert.equal(text(writeDelimitedSheet(again.book, again.format).bytes), 'a,b,c\n1,2,3\n', 'the file is not touched by its layout');
+});
+
+test('rows hidden (by a filter, which is not kept) are not part of the layout', () => {
+  const { book } = readDelimited(bytes('a\n1\n'), 'x.csv', 'csv');
+  (book.sheets[0] as Worksheet).rowSizes.setHidden(1, true);
+  assert.equal(sheetLayout(book), null);
+});
+
+test('a layout that makes no sense is passed over', () => {
+  const { book } = readDelimited(bytes('a\n'), 'x.csv', 'csv');
+  const sheet = book.sheets[0] as Worksheet;
+  applySheetLayout(sheet, { columns: [[-1, 50], [1.5, 50], [99999999, 50], [0, -5], [1, Number.NaN]], rows: [[0, 0]], hiddenColumns: [-3], frozen: { rows: -1, cols: 0 } });
+  assert.equal(sheetLayout(book), null);
 });

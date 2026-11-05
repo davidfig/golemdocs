@@ -94,7 +94,20 @@ export interface EmlExtension {
   attachments?: { name: string; type: string; data: string }[];
 }
 
+/** How a CSV or TSV file looks in the grid: what the file itself cannot hold, kept beside it (see wdocDelimited.ts). */
+export interface SheetLayout {
+  /** Column widths that differ from the default: [column, points]. */
+  columns?: [number, number][];
+  /** Row heights that differ from the default: [row, points]. */
+  rows?: [number, number][];
+  hiddenColumns?: number[];
+  /** Rows and columns frozen at the top and left. */
+  frozen?: { rows: number; cols: number };
+}
+
 export interface CsvExtension {
+  /** A file kept whole in the container (`Wdoc.delimited`): how it looks in the grid. */
+  layout?: SheetLayout;
   /** The delimiter of a .csv, when it isn't a comma. */
   delimiter?: ';' | '|' | '\t';
   lineEnding?: '\r\n' | '\r';
@@ -134,12 +147,21 @@ export interface Wdoc {
   document: Uint8Array | null;
   /** The original PDF's bytes, when the document came from one. */
   original: Uint8Array | null;
+  /** A CSV or TSV file kept whole, byte for byte, when it has a layout to keep beside it (`extensions.csv.layout`). */
+  delimited?: Uint8Array | null;
   extensions: Extensions;
 }
 
 const encoder = new TextEncoder();
+/** A CSV or TSV file kept whole, stored so a large one is not compressed at every save (see wdocDelimited.ts). */
+const DELIMITED_ENTRY = 'originals/delimited';
 const MIME_BYTES = encoder.encode(WDOC_MIME);
 const NAMESPACES = ['md', 'txt', 'pdf', 'odt', 'html', 'csv', 'eml', 'ipynb', 'svg', 'img', 'vec'] as const satisfies readonly (keyof Extensions)[];
+
+/** What the app stores for a CSV or TSV file with a layout: the file itself, and how it looks in the grid. */
+export function delimitedWdoc(file: Uint8Array, kind: 'csv' | 'tsv', layout: SheetLayout): Promise<Uint8Array> {
+  return writeWdoc({ manifest: { version: WDOC_VERSION, lens: kind, origin: kind, pagesCurrent: false }, document: null, original: null, delimited: file, extensions: { csv: { layout } } });
+}
 
 /** Whether bytes are a .wdoc: a ZIP whose first entry is the stored `mimetype`. */
 export function isWdoc(input: Uint8Array | ArrayBuffer): boolean {
@@ -169,6 +191,7 @@ export async function writeWdoc(wdoc: Wdoc): Promise<Uint8Array> {
     if (extension && Object.keys(extension).length) entries.push({ name: `extensions/${ns}.json`, data: json(extension) });
   }
   if (wdoc.original) entries.push({ name: 'originals/source.pdf', data: wdoc.original, compress: false });
+  if (wdoc.delimited) entries.push({ name: DELIMITED_ENTRY, data: wdoc.delimited, compress: false });
   return writeZip(entries);
 }
 
@@ -196,11 +219,13 @@ export async function readWdoc(bytes: Uint8Array): Promise<Wdoc> {
   }
   const document = await binary('document.docx');
   const original = await binary('originals/source.pdf');
-  if (!document && !original) throw new Error(t('app.wdocNoContent'));
+  const delimited = await binary(DELIMITED_ENTRY);
+  if (!document && !original && !delimited) throw new Error(t('app.wdocNoContent'));
   return {
     manifest: { version: manifest.version, lens: manifest.lens, origin: manifest.origin ?? manifest.lens, pagesCurrent: manifest.pagesCurrent ?? false },
     document,
     original,
+    delimited,
     extensions,
   };
 }

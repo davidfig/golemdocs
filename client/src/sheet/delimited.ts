@@ -1,9 +1,11 @@
 // CSV and TSV files in the grid (docs/spreadsheets.md, decision 2): read into a workbook of one sheet (named after the file,
 // each value as if typed, so numbers, dates and formulas come in as Excel brings them in), and written back as the file they
 // were: the active sheet's values as shown, with the file's delimiter, encoding, line endings and final line ending.
-// Formulas, other sheets and formatting are not kept by such a file: `lossy` says when something was left out.
+// Formulas, other sheets and formatting are not kept by such a file: `lossy` says when something was left out. How the sheet
+// is laid out (column widths and the like) is kept beside the file in the account (`sheetLayout`, formats/wdocDelimited.ts).
 
 import { DelimitedReader, sniffDelimiter, writeDelimited } from '../formats/csv.ts';
+import type { SheetLayout } from '../formats/wdoc.ts';
 import { decodeText } from '../formats/textFiles.ts';
 import type { TextEncoding } from '../formats/textFiles.ts';
 import { applyEdit } from './edit.ts';
@@ -145,4 +147,38 @@ export function writeDelimitedSheet(book: Workbook, format: DelimitedFormat): { 
     bom: format.bom,
   });
   return { bytes, lossy: formulas || book.sheets.length > 1 || sheet.charts.length > 0 };
+}
+
+/**
+ * How the active sheet is laid out, or null when it is as a file opens by default. Rows hidden are left out: a filter hides
+ * them, and it isn't kept, so they could not be got back.
+ */
+export function sheetLayout(book: Workbook): SheetLayout | null {
+  const sheet = book.sheets[book.activeSheet];
+  if (!sheet || !isWorksheet(sheet)) return null;
+  const layout: SheetLayout = {};
+  const columns: [number, number][] = [];
+  const hiddenColumns: number[] = [];
+  for (const i of sheet.colSizes.uniform ? [] : sheet.colSizes.specials()) {
+    if (sheet.colSizes.custom(i)) columns.push([i, sheet.colSizes.ownSize(i)]);
+    if (sheet.colSizes.hidden(i)) hiddenColumns.push(i);
+  }
+  const rows: [number, number][] = [];
+  for (const i of sheet.rowSizes.uniform ? [] : sheet.rowSizes.specials()) if (sheet.rowSizes.custom(i)) rows.push([i, sheet.rowSizes.ownSize(i)]);
+  if (columns.length) layout.columns = columns;
+  if (rows.length) layout.rows = rows;
+  if (hiddenColumns.length) layout.hiddenColumns = hiddenColumns;
+  if (sheet.pane) layout.frozen = { rows: sheet.pane.rows, cols: sheet.pane.cols };
+  return Object.keys(layout).length ? layout : null;
+}
+
+/** Lays the sheet out as it was. It came from a file, so anything out of range or that isn't a size is passed over. */
+export function applySheetLayout(sheet: Worksheet, layout: SheetLayout): void {
+  const index = (i: unknown, count: number) => Number.isInteger(i) && (i as number) >= 0 && (i as number) < count;
+  const size = (s: unknown) => typeof s === 'number' && Number.isFinite(s) && s > 0;
+  for (const [i, width] of layout.columns ?? []) if (index(i, sheet.colSizes.count) && size(width)) sheet.colSizes.set(i, width);
+  for (const [i, height] of layout.rows ?? []) if (index(i, sheet.rowSizes.count) && size(height)) sheet.rowSizes.set(i, height);
+  for (const i of layout.hiddenColumns ?? []) if (index(i, sheet.colSizes.count)) sheet.colSizes.setHidden(i, true);
+  const frozen = layout.frozen;
+  if (frozen && index(frozen.rows, sheet.rowSizes.count) && index(frozen.cols, sheet.colSizes.count) && (frozen.rows || frozen.cols)) sheet.pane = { rows: frozen.rows, cols: frozen.cols };
 }

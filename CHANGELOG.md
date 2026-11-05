@@ -2,6 +2,10 @@
 
 ## 0.33.3 - Unreleased
 
+### Added
+
+- CSV and TSV files remember their column widths, row heights, hidden columns and frozen rows. The file itself stays exactly as it was, so other programs see no difference.
+
 ### Fixed
 
 - Search All Documents finds the text of PDFs added to your account from outside the app, such as from a vault folder.

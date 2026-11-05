@@ -38,23 +38,29 @@ export class ConvertWorker implements VaultCodec {
     return this.run('toFile', stored, name);
   }
 
-  async fromFile(file: Uint8Array, name: string): Promise<Uint8Array> {
-    const bytes = await this.run('fromFile', file, name);
+  keepsLayout(name: string): boolean {
+    const format = vaultFormat(name);
+    return format === 'csv' || format === 'tsv';
+  }
+
+  async fromFile(file: Uint8Array, name: string, previous?: Uint8Array): Promise<Uint8Array> {
+    const bytes = await this.run('fromFile', file, name, previous);
     if (!bytes) throw new Error(`not a file the vault keeps: ${name}`);
     return bytes;
   }
 
-  private run(op: ConvertRequest['op'], input: Uint8Array, name: string): Promise<Uint8Array | null> {
+  private run(op: ConvertRequest['op'], input: Uint8Array, name: string, previous?: Uint8Array): Promise<Uint8Array | null> {
     clearTimeout(this.idle);
     const worker = (this.worker ??= this.launch());
     const id = this.nextId++;
     // A copy goes: the caller still holds its bytes (a file that is also hashed and recorded).
     const bytes = input.slice().buffer as ArrayBuffer;
+    const before = previous?.slice().buffer as ArrayBuffer | undefined;
     return new Promise<Uint8Array | null>((resolve, reject) => {
       const timer = setTimeout(() => this.stop(new Error(`converting ${name} did not finish in ${Math.round(this.jobMs / 1000)} seconds`)), this.jobMs);
       this.waiting.set(id, { resolve: (value) => (clearTimeout(timer), resolve(value)), reject: (error) => (clearTimeout(timer), reject(error)) });
       try {
-        worker.postMessage({ id, op, bytes, name }, [bytes]);
+        worker.postMessage({ id, op, bytes, name, previous: before }, before ? [bytes, before] : [bytes]);
       } catch (e) {
         this.waiting.delete(id);
         reject(e instanceof Error ? e : new Error(String(e)));

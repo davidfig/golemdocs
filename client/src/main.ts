@@ -143,6 +143,7 @@ import { droppedDocumentKey, isDocumentDrag } from './ui/documentDrag.ts';
 import { SelectionLayer } from './webgl/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
 import { isZipName, sourceFromFile, stem } from './formats/source.ts';
+import type { SheetLayout } from './formats/wdoc.ts';
 import { sniffImage } from './formats/images.ts';
 import { LARGE_TEXT_BYTES, hasExtension, isProseName, textFileName, usesTextEngine, toUtf8WithEncoding } from './formats/textFiles.ts';
 import { isVectorFormat } from './formats/roomDoc.ts';
@@ -398,7 +399,7 @@ function openTicket(): () => boolean {
 }
 
 /** `keepRoom`: the same document, opened again in place of itself (watching it, it was saved): it keeps its room; `version`: the save it is. */
-type OpenOptions = { delimited?: 'csv' | 'tsv'; wdocChecked?: boolean; detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean; none?: boolean };
+type OpenOptions = { delimited?: 'csv' | 'tsv'; sheetLayout?: SheetLayout; wdocChecked?: boolean; detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean; none?: boolean };
 
 /** Everything that starts a new document, before whatever shows it is asked for it: the old one is put away, the page's state is reset, and `current` is the new one. */
 function beginOpen(source: DocumentSource, options: OpenOptions): { name: string; opening: OpenDocument } {
@@ -511,14 +512,14 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     return;
   }
   // A CSV or TSV saved as a document, as they all were before they opened in the grid (its name says what it is edited as):
-  // its table becomes the file, opened in the grid and saved as that from now on.
+  // its table becomes the file, opened in the grid and saved as that from now on. Or one kept in the container with its layout.
   if (source.kind === 'wdoc' && /\.(csv|tsv|tab)$/i.test(source.name) && !options.asDocument && !options.wdocChecked) {
     const latest = openTicket();
     void import('./formats/wdocDelimited.ts')
       .then(({ delimitedFromWdoc }) => delimitedFromWdoc(new Uint8Array(source.bytes)))
       .then((file) => {
         if (!latest()) return;
-        if (file) void openSheet(source.name, file.bytes, { ...options, delimited: file.kind });
+        if (file) void openSheet(source.name, file.bytes, { ...options, delimited: file.kind, sheetLayout: file.layout });
         else open(source, { ...options, wdocChecked: true });
       });
     return;
@@ -883,7 +884,7 @@ async function joinSheetRoom(doc: OpenDocument, cloudId: string): Promise<void> 
     client: crypto.randomUUID(),
     name: room.user,
     color: room.color,
-    serialize: async () => (await sheetView.save())?.file ?? new Uint8Array(0),
+    serialize: async () => (await sheetView.save())?.stored ?? new Uint8Array(0),
     changed: (state) => {
       const d = open();
       if (!d) return;
@@ -1338,7 +1339,7 @@ async function uploadShared(): Promise<void> {
     // No name: only the owner renames it (`fileName()` would also be the next document's, if one is
     // being opened). The whole document goes, so what it is edited as (Markdown...) is kept.
     const sheetSave = sheetView.save();
-    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).file : null) ?? (await worker.save());
+    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).stored : null) ?? (await worker.save());
     if (bytes.length >= CHUNK_MIN_FILE) {
       // A big document goes as chunks, and after the first save of this session only those that changed.
       const { manifest, fresh } = await traced('chunkBytes', () => chunkBytes(bytes));
@@ -1805,10 +1806,12 @@ async function downloadAll(): Promise<void> {
     // Folder ids are unique, so the account's folders and this browser's can be looked up together.
     const folders = [...(account ? await listFolders().catch(() => []) : []), ...(await listLocalFolders().catch(() => []))];
     const placed = new Map(library.entries.filter((e) => e.local).map((e) => [e.local!.id, e.folderId]));
+    // A CSV or TSV file kept with its layout goes as the file: other programs must be able to read what is in the ZIP.
+    const plain = await Promise.all(docs.map(async (d) => (/\.(csv|tsv|tab)$/i.test(d.info.name) ? ((await (await import('./formats/wdocDelimited.ts')).delimitedFromWdoc(new Uint8Array(d.bytes)))?.bytes ?? d.bytes) : d.bytes)));
     const bytes = await zipDocuments(
-      docs.map((d) => ({
+      docs.map((d, i) => ({
         name: d.info.name,
-        bytes: d.bytes,
+        bytes: plain[i],
         folders: folderPath(folders, folderOf({ local: { folderId: placed.get(d.info.id) ?? null } }, folders)).map((f) => f.name),
       })),
     );
@@ -2032,7 +2035,7 @@ function saveInBrowser(): Promise<string | null> {
   const large = textView.active;
   const sheetSave = sheetView.save();
   const marked = large || sheetSave ? null : worker.saveMarked();
-  const bytes = large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.file) : marked!.then((saved) => saved.bytes);
+  const bytes = large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.stored) : marked!.then((saved) => saved.bytes);
   bytes.catch(() => {}); // handled below, once earlier saves are written
   const done = saving.then(async () => {
     const created = !doc.localId;
@@ -3102,7 +3105,7 @@ async function openSheet(name: string, bytes: Uint8Array, options: OpenOptions =
   camera.zoom = Math.min(Math.max(1, camera.minZoom), camera.maxZoom);
   camera.x = 0;
   camera.y = 0;
-  sheetView.open(name, bytes, image, options.delimited);
+  sheetView.open(name, bytes, image, options.delimited, options.sheetLayout);
   sheetView.readOnly = options.shared?.role === 'viewer';
   if (keptRoom) {
     opening.room = keptRoom;

@@ -47,7 +47,10 @@ export interface VaultCloud {
 export interface VaultCodec {
   /** The vault file for stored bytes, or null if the vault does not keep this one. */
   toFile(stored: Uint8Array, name: string): Promise<Uint8Array | null>;
-  fromFile(file: Uint8Array, name: string): Promise<Uint8Array>;
+  /** `previous`: what the account stores now, given only when `keepsLayout` says the file's layout is kept in it. */
+  fromFile(file: Uint8Array, name: string, previous?: Uint8Array): Promise<Uint8Array>;
+  /** Whether what the account stores for this file holds something the file doesn't (a CSV's column widths) to keep when it changes on disk. */
+  keepsLayout?(name: string): boolean;
   /** Whether the vault keeps files with this name. */
   kept(name: string): boolean;
 }
@@ -221,15 +224,19 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
           report.skipped++;
           return;
         }
-        const mtime = await disk.write(action.path, file);
+        // The same file (only what the account keeps beside it changed, such as a CSV's column widths): it is left as it is, so nothing watching the folder sees a change.
+        const hash = await host.hash(file);
+        const same = existing?.path === action.path && existing.hash === hash && localByPath.has(action.path);
+        const mtime = same ? existing.mtimeMs : await disk.write(action.path, file);
         taken.add(action.path);
-        record(action.id, action.path, file, mtime, remoteById.get(action.id)?.updatedAt ?? 0, await host.hash(file));
+        record(action.id, action.path, file, mtime, remoteById.get(action.id)?.updatedAt ?? 0, hash);
         report.downloaded++;
         return;
       }
       case 'upload': {
         const file = await disk.read(action.path);
-        const stored = await codec.fromFile(file, baseName(action.path));
+        const previous = codec.keepsLayout?.(baseName(action.path)) ? await cloud.download(action.id).catch(() => undefined) : undefined;
+        const stored = await codec.fromFile(file, baseName(action.path), previous);
         if (action.keepCloudVersion) await cloud.keepVersion(action.id);
         const { updatedAt } = await cloud.replace(action.id, stored);
         record(action.id, action.path, file, localByPath.get(action.path)?.mtimeMs ?? 0, updatedAt, await host.hash(file));

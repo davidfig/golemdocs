@@ -31,6 +31,11 @@ export async function segmentsFromBytes(bytes: ArrayBuffer): Promise<Segment[] |
     const { workbookRows } = await import('./handlers/xlsx.ts');
     return (await workbookRows(new Uint8Array(bytes))).map((row) => ({ text: row.filter(Boolean).join(' ') })).filter((s) => s.text);
   }
+  // A CSV or TSV file kept with its layout: the file's lines, as when it is kept alone.
+  if (isWdoc(bytes)) {
+    const { delimited } = await readWdoc(new Uint8Array(bytes));
+    if (delimited) return textSegments(delimited);
+  }
   const doc = await wordDocumentFromBytes(bytes);
   return doc ? paragraphSegments(doc) : null;
 }

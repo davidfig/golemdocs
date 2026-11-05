@@ -7,7 +7,8 @@
 import { pivotButtons, pivotChoice, pivotFieldItems, pivotLookOf } from './pivot.ts';
 import { calculateDataTables, goalSeek, runSolver, scenarioSummaryRows } from './whatIf.ts';
 import { readSolverModel } from './solver.ts';
-import { DELIMITED_BATCH, DelimitedLoad, writeDelimitedSheet } from './delimited.ts';
+import { delimitedWdoc, type SheetLayout } from '../formats/wdoc.ts';
+import { applySheetLayout, DELIMITED_BATCH, DelimitedLoad, sheetLayout, writeDelimitedSheet } from './delimited.ts';
 import type { DelimitedFormat, DelimitedKind } from './delimited.ts';
 import { printNames } from './print.ts';
 import { parseRange } from './refs.ts';
@@ -123,7 +124,7 @@ export function info(b: Workbook): BookInfo {
 }
 
 /** `opened` is called once the workbook can be shown (its first rows are in); the promise settles once all of it is read. */
-async function open(bytes: Uint8Array, image: Uint8Array | null, name = '', format: DelimitedKind | undefined, opened: () => void): Promise<void> {
+async function open(bytes: Uint8Array, image: Uint8Array | null, name = '', format: DelimitedKind | undefined, layout: SheetLayout | undefined, opened: () => void): Promise<void> {
   const started = performance.now();
   source = await fingerprint(bytes);
   delimited = null;
@@ -133,6 +134,7 @@ async function open(bytes: Uint8Array, image: Uint8Array | null, name = '', form
     const load = new DelimitedLoad(bytes, name, format);
     let more = load.step(DELIMITED_BATCH);
     book = load.book;
+    if (layout) applySheetLayout(book.sheets[0] as Worksheet, layout);
     delimited = load.format;
     cache = new TileCache(book);
     history = new History(book);
@@ -314,7 +316,7 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
       book = null;
       let opened!: () => void;
       ready = new Promise<void>((resolve) => (opened = resolve));
-      const reading = open(new Uint8Array(m.bytes), m.image ? new Uint8Array(m.image) : null, m.name, m.format, opened);
+      const reading = open(new Uint8Array(m.bytes), m.image ? new Uint8Array(m.image) : null, m.name, m.format, m.layout, opened);
       loading = reading.then(
         () => undefined,
         () => undefined,
@@ -420,6 +422,9 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
           // A CSV or TSV file as it was (its encoding and line endings), or as Excel writes one.
           const base: DelimitedFormat = delimited ?? { kind: m.format, delimiter: ',', encoding: 'utf-8', bom: false, lineEnding: '\r\n', trailingNewline: true, widths: [] };
           file = writeDelimitedSheet(book, { ...base, kind: m.format, delimiter: m.format === 'tsv' ? '\t' : base.delimiter === '\t' ? ',' : base.delimiter }).bytes;
+          // This becomes what is stored, so its layout goes with it.
+          const layout = sheetLayout(book);
+          if (layout) file = await delimitedWdoc(file, m.format, layout);
         }
         return post({ t: 'savedAs', id: m.id, file: file.buffer as ArrayBuffer }, [file.buffer as ArrayBuffer]);
       }
@@ -523,7 +528,10 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
           source = await fingerprint(written.bytes);
           for (const sheet of book.sheets) if (isWorksheet(sheet)) sheet.dirty = { cells: false, layout: false };
           book.dirty = false;
-          return post({ t: 'saved', id: m.id, file: written.bytes.buffer as ArrayBuffer, image: new ArrayBuffer(0), sha256: source.sha256, lossy: written.lossy, lossyFormat: delimited.kind.toUpperCase() }, [written.bytes.buffer as ArrayBuffer]);
+          // What the account keeps: the file, and beside it how the sheet looks, if that is not as a file opens by default.
+          const layout = sheetLayout(book);
+          const stored = layout ? await delimitedWdoc(written.bytes, delimited.kind, layout) : null;
+          return post({ t: 'saved', id: m.id, file: written.bytes.buffer as ArrayBuffer, image: new ArrayBuffer(0), sha256: source.sha256, lossy: written.lossy, lossyFormat: delimited.kind.toUpperCase(), stored: stored?.buffer as ArrayBuffer | undefined }, stored ? [written.bytes.buffer as ArrayBuffer, stored.buffer as ArrayBuffer] : [written.bytes.buffer as ArrayBuffer]);
         }
         // Our values are Excel's unless some formula uses what the engine cannot calculate yet: then Excel recalculates on opening.
         const writing = writeWorkbook(book, { pause: yieldToEvents, recalculate: engine?.incomplete ?? true });

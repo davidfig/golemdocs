@@ -598,6 +598,17 @@ that leaves something out (formulas, other sheets, charts) says so once. They ha
 before (named `.csv`) is turned back into the file on opening (`formats/wdocDelimited.ts`); the vault keeps workbooks, CSV
 and TSV as the files themselves. The status bar shows a sheet's rows and columns.
 
+**A CSV's layout.** What such a file cannot hold but the sheet shows (column widths, row heights, hidden columns, frozen
+panes: `sheetLayout` in `sheet/delimited.ts`) is kept beside it. With no layout the account stores the plain file. With one
+it stores a `.wdoc` of lens `csv` or `tsv` with no document: the file byte for byte in `originals/delimited` (`Wdoc.delimited`,
+stored rather than compressed) and the layout in `extensions.csv.layout` (`delimitedWdoc`). `SheetEditorView.save` gives both:
+`file` for a download or a conversion, `stored` for the browser, the account and the room. Everything else sees the file:
+the vault (`toVaultFile`; a file changed on disk replaces the file and keeps the layout, by position, through
+`VaultCodec.keepsLayout` and `fromVaultFile`'s `previous`), Download All, search (`segmentsFromBytes`; the server finds no
+document and leaves it to the page) and the viewer (`load` in the layout worker). A change only to the layout rewrites nothing
+in the vault folder, and a layout changed on two computers is not a conflict (`mergeStored` keeps this side's). Rows hidden
+are not kept: a filter hides them and is not kept itself.
+
 A large file streams in as an `.xlsx` sheet does: `DelimitedLoad` reads `DELIMITED_BATCH` rows at a time (the rows from
 `DelimitedReader` in `formats/csv.ts`, which takes each field as a slice of the text), the worker posts `opened` after the
 first batch and `progress` after each other, and edits and saves wait for the rest (`loading`, in `settled`). Strings typed

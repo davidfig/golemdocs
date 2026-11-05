@@ -3,6 +3,7 @@
 
 import type { Browser, BrowserContext, Page, Request } from '@playwright/test';
 import { test, expect, App } from '../fixtures';
+import { makePdf } from '../pdf/helpers';
 import { cloudDocs, newPerson, shareWith, signInAs, uploadDoc, waitForCloudDoc, waitSaved, makeDocx, type CloudDoc, type Person } from './helpers';
 
 const panel = (page: Page) => page.locator('dialog.wm-search');
@@ -175,6 +176,29 @@ test.describe('search with the account index', () => {
       [200, String(next.updatedAt)],
     ]);
     expect(seen.files(doc.id)).toEqual([]);
+    await one.context.close();
+    await two.context.close();
+  });
+
+  test('F: a PDF put in the account as the file itself is read by the page, with no error logged', async ({ browser }) => {
+    const one = await newPerson(browser, 'rawpdf');
+    await one.page.goto('/?doc=welcome');
+    const doc = await uploadDoc(one.page, 'Fish.pdf', makePdf({ pages: [[{ text: 'The zebrafish tank', x: 40, y: 240, size: 18 }]] }));
+    const two = await anotherComputer(browser, one);
+    const seen = watch(two.page);
+    const errors: string[] = [];
+    two.page.on('console', (message) => {
+      if (message.type() === 'error') errors.push(message.text());
+    });
+    await two.app.goto('?doc=welcome');
+    await openPanel(two.app);
+    await input(two.page).fill('zebrafish');
+    await expect(rows(two.page)).toHaveCount(1);
+    await expect(rows(two.page).first()).toContainText('Fish.pdf');
+    // The server has no index of a PDF and says so without an error; the page then reads the file.
+    expect(seen.indexes(doc.id).map((c) => c.status)).toEqual([204]);
+    expect(seen.files(doc.id)).toHaveLength(1);
+    expect(errors.filter((text) => /indexing failed|status of 4\d\d/.test(text))).toEqual([]);
     await one.context.close();
     await two.context.close();
   });

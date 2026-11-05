@@ -800,3 +800,34 @@ test('emoji in cells show as color glyphs, a family or a flag as one', async ({ 
   // Four emoji, each one glyph (the family's three people and joiners, the flag's two letters, the thumb and its tone).
   await expect.poll(async () => (await state(page)).emoji, { timeout: 20_000 }).toEqual({ glyphs: 4, ready: true });
 });
+
+test('a CSV keeps its column widths when it opens again, and still downloads as the same file', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  const text = 'Name,City\r\nAnn,Paris\r\n';
+  await dropFile(page, { name: 'people.csv', buffer: Buffer.from(text), mimeType: 'text/csv' });
+  await waitForOpen(app, 'people.csv');
+  await expect.poll(async () => (await state(page)).loaded, { timeout: 20_000 }).toBe(true);
+  const edge = () => page.evaluate(() => (window as unknown as { sheetEditor: { columnEdge(c: number): { x: number; y: number; width: number } } }).sheetEditor.columnEdge(0));
+  const before = await edge();
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.move(box.x + before.x, box.y + before.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + before.x + 120, box.y + before.y, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => (await edge()).width).toBeGreaterThan(before.width + 50);
+  const width = (await edge()).width;
+
+  const file = await app.download(() => app.menu('File', 'Download'));
+  expect(file.bytes.toString('utf8')).toBe(text);
+
+  await page.waitForTimeout(2500); // the autosave
+  await page.reload();
+  await app.ready();
+  await expect.poll(async () => (await state(page))?.loaded, { timeout: 20_000 }).toBe(true);
+  expect((await state(page)).info?.name).toBe('people');
+  await expect.poll(async () => (await edge()).width).toBeCloseTo(width, 0);
+  // Opened from the container, it is still the file.
+  const again = await app.download(() => app.menu('File', 'Download'));
+  expect(again.name).toBe('people.csv');
+  expect(again.bytes.toString('utf8')).toBe(text);
+});

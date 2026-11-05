@@ -68,7 +68,7 @@ Files are followed by their cloud id in the manifest, never by path. Folders are
 
 | On disk | Going out (`toVaultFile`) | Coming back (`fromVaultFile`) |
 |---|---|---|
-| Excel workbooks, CSV and TSV (edited in the grid) | the file itself, as the account keeps it | the file itself |
+| Excel workbooks, CSV and TSV (edited in the grid) | the file itself, as the account keeps it; for a CSV or TSV with a layout, the file inside its container | the file itself; a CSV or TSV with a layout keeps it |
 | Word, ODT, RTF, HTML, EPUB, MHTML, Markdown, text and source files, the markup formats, DocBook/JATS/FB2/OPML, EML, notebooks | `exportDocument` with the container's extensions (Markdown front matter and the like come back exactly); Word is kept byte for byte both ways | `importDocument`, wrapped as a `.wdoc` with that format as its lens |
 | PDF | the original with its annotations, fields and edits written in (`annotatedPdf`, `formats/pdfFile.ts`, the same function Download uses); a PDF whose reflowed text was edited is laid out from the text, as Download does | the new original, with no reflowed text and nothing done to it (the annotations, fields and edits of the old one are gone with it) |
 | PNG, JPEG, WebP | the picture with its layers drawn in (the picture handler's `write`) | the picture, with no layers |

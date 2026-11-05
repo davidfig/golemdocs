@@ -11,6 +11,7 @@ import { isWdoc } from './wdoc.ts';
 /** Formats whose document isn't flowing text: one person edits them at a time, or they are drawn, so there is nothing to merge. */
 const UNMERGED_LENSES = new Set(['pdf', 'png', 'jpeg', 'webp', 'svg', 'svgz']);
 const DOCUMENT = 'document.docx';
+const DELIMITED = 'originals/delimited';
 
 const same = (a: Uint8Array | undefined, b: Uint8Array | undefined): boolean => a === b || (!!a && !!b && a.length === b.length && a.every((x, i) => x === b[i]));
 
@@ -46,6 +47,8 @@ export async function mergeStored(baseBytes: Uint8Array, mineBytes: Uint8Array, 
     let take: Uint8Array | undefined;
     if (same(m, t) || same(t, b)) take = m;
     else if (same(m, b)) take = t;
+    // A CSV or TSV file's layout, changed on two computers while the file was not: not worth a conflicted copy.
+    else if (name === 'extensions/csv.json' && mine.entries.has(DELIMITED) && same(mine.entries.get(DELIMITED), theirs.entries.get(DELIMITED))) take = m;
     else if (name === DOCUMENT && b && m && t) {
       try {
         const document = mergeDocuments(await WordDocument.read(b), await WordDocument.read(m), await WordDocument.read(t));
@@ -61,7 +64,7 @@ export async function mergeStored(baseBytes: Uint8Array, mineBytes: Uint8Array, 
   if (!merged.has('mimetype') || !merged.has('manifest.json')) return null;
   const manifest = merged.get('manifest.json');
   const lens = manifest ? (JSON.parse(new TextDecoder().decode(manifest)) as { lens?: string }).lens : undefined;
-  if (!merged.has(DOCUMENT) || (lens !== undefined && UNMERGED_LENSES.has(lens))) return null;
+  if ((!merged.has(DOCUMENT) && !merged.has(DELIMITED)) || (lens !== undefined && UNMERGED_LENSES.has(lens))) return null;
   // `mimetype` first and stored, so the file is still recognised by its first bytes; the document is already compressed.
   const names = ['mimetype', ...[...merged.keys()].filter((name) => name !== 'mimetype')];
   return writeZip(names.filter((name) => merged.has(name)).map((name) => ({ name, data: merged.get(name)!, compress: name.endsWith('.json') })));

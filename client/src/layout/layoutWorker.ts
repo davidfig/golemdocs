@@ -261,6 +261,12 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
     }
     case 'wdoc': {
       const wdoc = await readWdoc(new Uint8Array(source.bytes));
+      // A CSV or TSV file kept with its layout, as a document (the viewer, printing): the file's table.
+      if (wdoc.delimited) {
+        const kind = wdoc.manifest.lens;
+        const { document, extensions } = await importDocument(kind, wdoc.delimited);
+        return flowing(source.name, document, kind, extensions);
+      }
       // A PDF edited as something else, with its text unedited, is reflowed afresh: that picks up
       // annotations added on its own pages since.
       const reflowAgain = wdoc.original && wdoc.manifest.pagesCurrent && wdoc.manifest.lens !== 'pdf';

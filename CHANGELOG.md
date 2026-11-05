@@ -2,10 +2,15 @@
 
 ## 0.33.3 - Unreleased
 
+### Added
+
+- CSV and TSV files remember their column widths, row heights, hidden columns and frozen rows. The file itself stays exactly as it was, so other programs see no difference.
+
 ### Fixed
 
 - What you typed just before reloading, closing a tab or a tab crashing is no longer lost: it is there when the document opens again. This covers documents such as Word and Markdown, not yet text files, spreadsheets, PDFs or pictures.
 - A new document could show twice in the Files Sidebar and on the Documents screen for a moment while it was being uploaded. It now shows once.
+- Search All Documents finds the text of PDFs added to your account from outside the app, such as from a vault folder.
 
 ## 0.33.2 - 2026-11-05
 

@@ -45,6 +45,13 @@ const headers = (size: number, at: number): Record<string, string> => ({
   "x-content-type-options": "nosniff",
 });
 
+/** The document is fine, but the page makes its index (a PDF, a picture, a workbook): nothing here, and no error for the browser to log. */
+const notForTheServer = (): Response =>
+  new Response(null, {
+    status: 204,
+    headers: { "cache-control": "private, no-cache", "x-content-type-options": "nosniff" },
+  });
+
 /** The index of the document whose row is `row`, owned by `ownerId`: the stored one if it is current, else a new one. */
 export async function documentIndex(
   env: Env,
@@ -69,7 +76,7 @@ export async function documentIndex(
   if (bytes === "too-large")
     throw new HttpError(413, "document too large to index");
   // A workbook's index is made by the page, from its active sheet as shown (number formats and all), as a PDF's is.
-  if (isWorkbook(bytes)) throw new HttpError(422, "the document could not be read");
+  if (isWorkbook(bytes)) return notForTheServer();
   let encoded: Uint8Array;
   try {
     // A plain text file is kept as it is: its lines are its paragraphs.
@@ -78,15 +85,16 @@ export async function documentIndex(
     else {
       // The app keeps its own wrapper around the .docx: a wrapper with no document in it has no text here, and the page reads the document itself.
       const docx = await storedDocx(bytes);
-      if (!docx) throw new Error("no flowing document to read");
+      if (!docx) return notForTheServer();
       encoded = await encodeIndex(
         buildIndex(paragraphSegments(await WordDocument.read(docx))),
       );
     }
   } catch (error) {
-    // A PDF, a picture or a drawing is not a .docx and has no text for the server to read: the page reads those itself, so this is no failure to log.
-    if (!(error instanceof ZipError && error.message.startsWith("not a ZIP file")))
-      console.error("indexing failed", error);
+    // A PDF, a picture or a drawing is not a .docx and has no text for the server to read: the page reads those itself.
+    if (error instanceof ZipError && error.message.startsWith("not a ZIP file"))
+      return notForTheServer();
+    console.error("indexing failed", error);
     throw new HttpError(422, "the document could not be read");
   }
   await env.FILES.put(

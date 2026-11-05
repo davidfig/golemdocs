@@ -8,7 +8,7 @@ import { WordDocument } from '@golemdocs/docx';
 import { FontSet } from '@golemdocs/layout';
 import { PageDrawing, PdfDocument, type PdfEdit } from '../../pdf/src/index.ts';
 import { fromVaultFile, toVaultFile, vaultFormat, type VaultFonts } from '../src/desktop/vaultCodec.ts';
-import { isWdoc, readWdoc, writeWdoc, WDOC_VERSION, type Extensions } from '../src/formats/wdoc.ts';
+import { delimitedWdoc, isWdoc, readWdoc, writeWdoc, WDOC_VERSION, type Extensions } from '../src/formats/wdoc.ts';
 import { sceneToObjects } from '../src/vector/nodes.ts';
 import { readSvg } from '../src/vector/svgRead.ts';
 import { FakeCanvas, installFakeCanvas } from './fakeCanvas.ts';
@@ -51,6 +51,23 @@ test('a workbook, a CSV and a TSV are kept as themselves both ways (the grid edi
     assert.equal(await fromVaultFile(file, name), file, name);
     assert.equal(await toVaultFile(file, name), file, name);
   }
+});
+
+test('a CSV kept with its layout goes out as the file; a changed file comes back with the layout', async () => {
+  const layout = { columns: [[1, 180]] as [number, number][] };
+  const file = text('a,b\r\n1,2\r\n');
+  const stored = await delimitedWdoc(file, 'csv', layout);
+  assert.deepEqual(await toVaultFile(stored, 'a.csv'), file);
+  const changed = text('a,b\r\n1,3\r\n');
+  const back = await fromVaultFile(changed, 'a.csv', stored);
+  assert.deepEqual((await readWdoc(back)).delimited, changed);
+  assert.deepEqual((await readWdoc(back)).extensions.csv?.layout, layout);
+  // Nothing to keep: the plain file, as ever.
+  assert.equal(await fromVaultFile(changed, 'a.csv', file), changed);
+  assert.equal(await fromVaultFile(changed, 'a.csv'), changed);
+  // Renamed to another format: written in that one, and a TSV keeps the layout under its own kind.
+  assert.match(read(await toVaultFile(stored, 'a.html')), /<table/);
+  assert.equal((await readWdoc(await fromVaultFile(text('a\tb\n'), 'a.tsv', stored))).manifest.lens, 'tsv');
 });
 
 test('a stored document becomes a file in the format its name asks for', async () => {

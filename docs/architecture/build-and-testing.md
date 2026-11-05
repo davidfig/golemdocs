@@ -107,6 +107,11 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-02 | `e2e/collab/room-picture.spec.ts` › what the holder draws over the picture reaches the watcher when it is saved, and the watcher cannot draw | Failed at 39.4 s in pass one of the 0.33.0 release run; alone, with the rest of its file on a side run's servers, passed in 14.5 s. The third test of this file logged here: if another turns up, look at the picture room's save-to-watcher path under load rather than tagging it |
 | 2026-11-02 | `e2e/editing/clipboard.spec.ts` › copy, cut and paste › Cut then Paste moves text | Failed at 12.3 s in pass one of the 0.33.0 release run; alone, the whole file passed on a side run's servers |
 | 2026-11-03 | `e2e/files/convert.spec.ts` › the notice after a conversion says what the new format leaves out | Failed at 12.3 s in pass one of the 0.33.1 release run; alone, passed five times in about 3 s |
+| 2026-11-04 | `e2e/files/files-sidebar.spec.ts` › a long press with a finger opens a row's menu, and lifting the finger does not open the document | Failed at 16 s in pass one of the 0.33.2 release run, passed its retry; alone, passed four times |
+| 2026-11-04 | `e2e/shell/app-shell.spec.ts` › search-engine text and metadata › the home page has a title, description, canonical link, Open Graph tags and JSON-LD | Failed at 30.7 s in pass one of the 0.33.2 release run (machine load about 50), passed its retry; alone, passed four times |
+| 2026-11-04 | `e2e/collab/sync.spec.ts` › the save indicator when signed in › the account holds what was typed | Failed at 31 s in pass one of the 0.33.2 release run, passed its retry; alone, passed four times |
+| 2026-11-04 | `e2e/shell/view-options.spec.ts` › Full Screen › keeps the menu bar, and hides only the toolbars, when Options says so | Failed at 30.9 s in pass one of the 0.33.2 release run, passed its retry; alone, passed three times |
+| 2026-11-04 | `e2e/editing/link-popover.spec.ts` › Link form › Remove Link takes the link off and keeps its text | Failed at 25 s and again on its retry (1 min) in pass one of the 0.33.2 release run; alone, passed six times |
 
 ## Performance traces (`golem:*`)
 

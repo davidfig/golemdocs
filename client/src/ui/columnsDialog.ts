@@ -76,7 +76,8 @@ export function showColumnsDialog(current: ColumnsState): Promise<ColumnsChoice 
     const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': t('columns.close') } });
     const form = h(
       'form',
-      { attrs: { method: 'dialog' } },
+      // A number box's step is how far its arrows go, not a limit on what can be typed (A4 is 8.27 in, line spacing can be 1.08): the submit handler below checks the values.
+      { attrs: { method: 'dialog', novalidate: '' } },
       h(
         'div',
         { class: 'wm-dialog-body wm-link-body' },

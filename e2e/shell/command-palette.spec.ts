@@ -163,10 +163,7 @@ test.describe('command palette', () => {
     await expect(palette(page)).toBeVisible();
   });
 
-  // Suspected bug: commands run from the keyboard or a menu end by returning the keyboard to the
-  // document (CommandRegistry.execute), which steals it straight back from the palette that command
-  // just opened, so typed text lands in the document while the palette sits open.
-  test.fixme('Ctrl/Cmd+Shift+P opens it with the search box focused', async ({ app, page }) => {
+  test('Ctrl/Cmd+Shift+P opens it with the search box focused', async ({ app, page }) => {
     await app.blank();
     await page.keyboard.press(`${MOD}+Shift+P`);
     await expect(palette(page)).toBeVisible();
@@ -176,7 +173,7 @@ test.describe('command palette', () => {
     expect(await app.text()).toBe('');
   });
 
-  test.fixme('Tools ▸ Command palette opens it with the search box focused', async ({ app, page }) => {
+  test('Tools ▸ Command palette opens it with the search box focused', async ({ app, page }) => {
     await app.blank();
     await choose(app, 'Tools', 'Command palette');
     await expect(search(page)).toBeFocused();

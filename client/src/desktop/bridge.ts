@@ -189,5 +189,15 @@ export function desktopMenu(): DesktopMenu | null {
   };
 }
 
+/**
+ * Printing in the Mac app, whose web view ignores `print()` and can't open a tab: the PDF opens in Preview. Null anywhere else.
+ * `open` rejects with `ShellTooOldError` in a shell without the command.
+ */
+export function macPrinter(): { open(name: string, bytes: Uint8Array): Promise<void> } | null {
+  const core = tauriCore();
+  if (!core || !/Mac/.test(navigator.platform)) return null;
+  return { open: (name, bytes) => needsNewerShell(() => core.invoke<void>('print_open_pdf', { name, data: toBase64(bytes) })) };
+}
+
 /** True inside the desktop app. */
 export const isDesktopApp = (): boolean => tauriCore() !== null;

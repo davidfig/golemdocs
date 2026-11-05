@@ -34,6 +34,8 @@ const PAPER: [string, number, number][] = [
   ['A5', 8391, 11906],
 ];
 const CUSTOM = 'custom';
+/** How far a size shown in a box (to two decimals, so 0.005 in out) can be from a paper's and still be that paper. */
+const SAME_PAPER = 8;
 /** Twips in the smallest page or text area, an inch. */
 const MIN = 1440;
 
@@ -103,7 +105,7 @@ export function showPageSetupDialog(current: PageState): Promise<PageChoice | un
     /** The paper size that the width and height fields say (either way up), or custom. */
     const syncSize = () => {
       const [w, h2] = [twips('width'), twips('height')].sort((a, b) => a - b);
-      size.value = PAPER.find(([, pw, ph]) => Math.abs(pw - w) <= 2 && Math.abs(ph - h2) <= 2)?.[0] ?? CUSTOM;
+      size.value = PAPER.find(([, pw, ph]) => Math.abs(pw - w) <= SAME_PAPER && Math.abs(ph - h2) <= SAME_PAPER)?.[0] ?? CUSTOM;
     };
     syncSize();
     numbers.get('width')!.addEventListener('input', syncSize);
@@ -143,7 +145,8 @@ export function showPageSetupDialog(current: PageState): Promise<PageChoice | un
     const cancel = h('button', { class: 'wm-button', text: t('pageSetup.cancel'), attrs: { type: 'button' } });
     const form = h(
       'form',
-      { attrs: { method: 'dialog' } },
+      // A number box's step is how far its arrows go, not a limit on what can be typed (A4 is 8.27 in, line spacing can be 1.08): the submit handler below checks the values.
+      { attrs: { method: 'dialog', novalidate: '' } },
       tabs,
       h('div', { class: 'wm-dialog-body wm-link-body' }, marginsTab, paperTab, h('label', { text: t('pageSetup.apply') }), scope, message),
       h('div', { class: 'wm-dialog-buttons' }, h('span', { class: 'wm-link-actions' }, ok, cancel)),
@@ -156,9 +159,12 @@ export function showPageSetupDialog(current: PageState): Promise<PageChoice | un
     cancel.addEventListener('click', () => dialog.close());
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      // A named paper is written at its exact size, not at what its rounded boxes come to.
+      const paper = PAPER.find(([name]) => name === size.value);
+      const wide = twips('width') > twips('height');
       const page: PageState = {
-        width: twips('width'),
-        height: twips('height'),
+        width: paper ? paper[wide ? 2 : 1] : twips('width'),
+        height: paper ? paper[wide ? 1 : 2] : twips('height'),
         landscape: landscape.input.checked,
         top: twips('top'),
         bottom: twips('bottom'),

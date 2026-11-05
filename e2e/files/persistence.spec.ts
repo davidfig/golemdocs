@@ -46,8 +46,7 @@ test('opening the bare address carries on with the document that was open last',
   await expect.poll(() => page.url()).toMatch(/doc=local%3A/);
 });
 
-// Suspected bug: opening a saved document from the dashboard doesn't record it as the last one open (only a save does), so a bare address reopens the last document that was saved instead.
-test.fixme('the document last opened is the one that comes back, not the newest edit elsewhere', async ({ app, page }) => {
+test('the document last opened is the one that comes back, not the newest edit elsewhere', async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await importFile(app, text('first.txt', 'one'));
   await waitForSaved(page, 'first.txt');

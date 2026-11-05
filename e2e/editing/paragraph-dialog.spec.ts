@@ -127,7 +127,7 @@ test.describe('Format ▸ Paragraph', () => {
     expect(await pPr(app)).not.toContain('w:jc');
   });
 
-  test.fixme('OK works when only an unrelated field is changed (1.08 in the At box fails its step=0.1 validation, so OK does nothing)', async ({ app }) => {
+  test('OK works when only an unrelated field is changed (1.08 in the At box is not a step of its arrows)', async ({ app }) => {
     await app.blank();
     await app.type('text');
     const box = await open(app, { keepStep: true });

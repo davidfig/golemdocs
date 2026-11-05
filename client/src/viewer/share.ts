@@ -1,12 +1,12 @@
-// The site's page for a document shared view-only (/view/?s=<token>, view/index.html): the embeddable viewer, hosted by the site
+// The site's page for a document shared view-only (/view?s=<token>, view/index.html): the embeddable viewer, hosted by the site
 // itself as satchel hosts it in a frame (one viewer, two hosts). The app sends a person here when they open a document shared with
 // them as a viewer (`openShared` in main.ts). The address is the share's own random token (`shares.view_token`), never the document's
 // id, and so is everything the page asks for (`/api/view/<token>`); the server answers it only for the person it was shared with, and
 // refuses them any change whatever the page does (see server/src/sharing.ts).
 //
-// A document's public link is the same page at /view/?p=<token> (`public_links.token`, read from `/api/public/<token>`): anyone may
+// A document's public link is the same page at /view?p=<token> (`public_links.token`, read from `/api/public/<token>`): anyone may
 // open it, signed in or not, and it has a Download button, which saves the document as the file its name says (the account keeps
-// a .wdoc: `toVaultFile` turns it into that file, in the vault's convert worker, started only when it is first clicked). Other sites embed it in a frame as /view/?p=<token>&embed, which shows the
+// a .wdoc: `toVaultFile` turns it into that file, in the vault's convert worker, started only when it is first clicked). Other sites embed it in a frame as /view?p=<token>&embed, which shows the
 // document's name alone in the bar.
 //
 // What it shows is the latest save, not each keystroke: it asks every half minute, and when the tab is looked at again, whether the
@@ -16,6 +16,8 @@
 
 import { loadLocale, pickLocale, t } from '../i18n/index.ts';
 import { h } from '../ui/dom.ts';
+import { FORMATS, kindFromName } from '../ui/formats.ts';
+import { saveFile } from '../ui/saveFile.ts';
 import { mountSignIn } from '../ui/signIn.ts';
 import { ConvertWorker, startConvertWorker } from '../desktop/convertClient.ts';
 import { checkOutcome } from './protocol.ts';
@@ -49,7 +51,7 @@ async function start(): Promise<void> {
   if (!/^[\w-]+$/.test(token)) return void say(gone);
   const api = `/api/${isPublic ? 'public' : 'view'}/${encodeURIComponent(token)}`;
   // Signing in comes straight back here.
-  const signInHere = (): void => void mountSignIn(say(t('viewer.signInToView')), `/view/?s=${encodeURIComponent(token)}`);
+  const signInHere = (): void => void mountSignIn(say(t('viewer.signInToView')), `/view?s=${encodeURIComponent(token)}`);
 
   let name: string;
   let file: Response;
@@ -79,9 +81,7 @@ async function start(): Promise<void> {
     try {
       converter ??= new ConvertWorker(startConvertWorker);
       const out = (await converter.toFile(stored, name)) ?? stored;
-      const url = URL.createObjectURL(new Blob([out as Uint8Array<ArrayBuffer>]));
-      h('a', { attrs: { href: url, download: name } }).click();
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      await saveFile(name, out, FORMATS[kindFromName(name)].mime);
     } catch (error) {
       console.error(error);
     }

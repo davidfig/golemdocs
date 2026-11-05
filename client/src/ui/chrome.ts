@@ -405,7 +405,7 @@ export class Chrome {
         checked: () => currentAppearance() === 'auto',
       },
     );
-    r.add({ id: 'tools.commandPalette', label: t('chrome.palette.label'), icon: 'commandPalette', shortcut: 'Mod+Shift+P', run: () => this.palette.toggle() });
+    r.add({ id: 'tools.commandPalette', label: t('chrome.palette.label'), icon: 'commandPalette', shortcut: 'Mod+Shift+P', run: () => this.palette.toggle(), takesKeyboard: true });
     r.add({ id: 'view.customizeToolbars', label: t('chrome.view.customizeToolbars'), run: () => this.customize() });
 
     // Insert
@@ -680,6 +680,7 @@ export class Chrome {
       cmd('edit.find'),
       cmd('edit.replace'),
       cmd('edit.searchAll'),
+      cmd('edit.copy'),
       cmd('edit.selectAll'),
       cmd('edit.pasteSpecial'),
       heading(t('chrome.menu.insert')),

@@ -237,7 +237,7 @@ test('a document is renamed from its menu, keeping its extension', async ({ app,
   await expect(row(page, 'first')).toHaveCount(1);
 });
 
-test('a long press with a finger opens a row\'s menu, and lifting the finger does not open the document', async ({ app, page }) => {
+test('a long press with a finger opens a row\'s menu, and lifting the finger does not open the document', { tag: '@heavy' }, async ({ app, page }) => {
   await app.goto('?doc=welcome');
   for (const file of [text('alpha.txt', 'the first'), text('beta.md', '# second')]) {
     await importFile(app, file);

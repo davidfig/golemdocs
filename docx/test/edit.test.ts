@@ -9,6 +9,7 @@ import {
   mergeParagraphs,
   paragraphLength,
   paragraphText,
+  plainText,
   removeBlock,
   splitParagraph,
   WordDocument,
@@ -45,6 +46,25 @@ test('model offsets count text units and one position per other item', () => {
   const p = para(run('ab'), { kind: 'run', properties: {}, attrs: {}, content: [{ kind: 'tab' }, { kind: 'text', text: 'c' }] });
   assert.equal(paragraphLength(p), 4);
   assert.equal(paragraphText(p), 'ab￼c');
+});
+
+test('text put at either end of a link stays out of it, in the link\'s font but not its style; text inside it stays in', () => {
+  const link = (): Inline => ({ kind: 'hyperlink', url: 'https://example.com', attrs: {}, children: [{ kind: 'run', properties: { style: 'Hyperlink', bold: true }, attrs: {}, content: [{ kind: 'text', text: 'link' }] }] } as unknown as Inline);
+  const p = para(link());
+  insertText(p, 4, ' after');
+  insertText(p, 0, 'before ');
+  insertText(p, 9, 'X');
+  assert.deepEqual(p.children.map((c) => c.kind), ['run', 'hyperlink', 'run']);
+  assert.equal(plainText(p), 'before liXnk after');
+  const [before, , after] = p.children as Run[];
+  assert.deepEqual(before.properties, { bold: true });
+  assert.deepEqual(after.properties, { bold: true });
+});
+
+test('plainText leaves out a page break, unless asked for what stands for it', () => {
+  const p = para(run('first'), { kind: 'run', properties: {}, attrs: {}, content: [{ kind: 'break', type: 'page' }] }, run('second'));
+  assert.equal(plainText(p), 'firstsecond');
+  assert.equal(plainText(p, 0, Infinity, '\n'), 'first\nsecond');
 });
 
 test('insertText takes the formatting of the text before it', () => {

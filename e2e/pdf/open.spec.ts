@@ -94,11 +94,12 @@ test.describe('the menus and toolbars of a PDF', () => {
     expect(items.join('|')).not.toMatch(/Picture|Table|Page Break/);
   });
 
-  test('Edit has no Cut, Copy or Paste for a PDF', async ({ app }) => {
+  test('Edit has Copy, but no Cut or Paste, for a PDF', async ({ app }) => {
     await openPdf(app, threePages());
     await app.menubar.getByRole('menuitem', { name: 'Edit', exact: true }).click();
     const items = (await app.page.getByRole('menu').first().getByRole('menuitem').allInnerTexts()).join('|');
     expect(items).toContain('Find');
+    expect(items).toContain('Copy');
     expect(items).not.toMatch(/Cut|Paste/);
   });
 });

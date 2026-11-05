@@ -84,7 +84,7 @@ Commit `a6d62c7a` ("Contain multiplayer") removed every second way to reach a ro
 | `client/src/layout/objectSync.ts` | Client side of object-list rooms |
 | `client/src/main.ts` | `roomStateChanged`, `networkRoom`, `joinTextRoom`, `sharedEdited`/`uploadShared`, `resumeAfterRoom`, `rejoinWhenBack` |
 | `client/src/ui/shareDialog.ts` | Owner shares by email as editor or viewer (Can edit / Can view, a `segmented` control) |
-| `client/src/viewer/share.ts` | The page a view-only share opens in (`/view/?s=<token>`, the share's own address) |
+| `client/src/viewer/share.ts` | The page a view-only share opens in (`/view?s=<token>`, the share's own address) |
 | `server/src/worker.ts` | Routes `/api/rooms/:id` (WebSocket), `/document`, `/media/:hash`; auth, origin check, access, owner sync |
 | `server/src/roomGate.ts` | The only door to the room |
 | `server/src/room.ts` | Durable Object `Room`: sockets, SQLite `log` and `kv` tables, `CloudFiles` |
@@ -117,7 +117,7 @@ Commit `a6d62c7a` ("Contain multiplayer") removed every second way to reach a ro
 
 - The Worker authenticates, checks `Origin` on the WebSocket handshake (cookies ride on cross-site handshakes), calls `resolveAccess`, and requires the **owner** to have sync (`requireOwnerSync`) because the room writes into the owner's storage, whoever joins.
 - The role travels to the room as `x-role`; the room never trusts the client. Viewers are accepted into the room but a viewer `submit` closes the connection (`badMessage`); in the worker `readOnly` also blocks local edits.
-- **A view-only share doesn't join the room at all.** The app sends someone who opens a document shared with them as a viewer to the read-only viewer page (`/view/?s=<token>`, the share's own random address; `src/viewer/share.ts`). It shows the last saved file and checks for a newer one every 30 s and when the tab is looked at again (`If-None-Match`, 304 while unchanged). A shared room snapshots within about 5 s of an edit, so it catches up within seconds of that. We chose this over watching the room live: it needs no room client, rendering of remote edits or handoff on the viewer's side, it works the same for every room kind (text, objects, PDFs), and it keeps the viewer one embeddable component. The room's viewer role stays for anyone who joins as one (a role changed while the document is open, say). See [Embeddable viewer](viewer.md).
+- **A view-only share doesn't join the room at all.** The app sends someone who opens a document shared with them as a viewer to the read-only viewer page (`/view?s=<token>`, the share's own random address; `src/viewer/share.ts`). It shows the last saved file and checks for a newer one every 30 s and when the tab is looked at again (`If-None-Match`, 304 while unchanged). A shared room snapshots within about 5 s of an edit, so it catches up within seconds of that. We chose this over watching the room live: it needs no room client, rendering of remote edits or handoff on the viewer's side, it works the same for every room kind (text, objects, PDFs), and it keeps the viewer one embeddable component. The room's viewer role stays for anyone who joins as one (a role changed while the document is open, say). See [Embeddable viewer](viewer.md).
 - Changing a role calls `rejoinRoom` (closes with `stale`, client reconnects with the new role). Removing someone calls `kickFromRoom` (closes with `revoked`). Deleting a document calls `endRooms` (revoked, then `store.wipe()`).
 - Presence `picture` comes from `pictureOf(env, userId)`, only on the WebSocket join.
 

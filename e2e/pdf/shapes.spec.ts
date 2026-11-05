@@ -173,9 +173,7 @@ test.describe('Edit PDF: objects already in the file', () => {
     await expect(app.page.getByRole('button', { name: 'Delete', exact: true })).toBeVisible();
   });
 
-  // The frame follows the drag and Undo is enabled, but the saved page keeps drawing the file's own rectangle at its old place
-  // (no `cm` is written around it), for content in one line or several, with or without q/Q.
-  test.fixme('it can be moved, and is then drawn somewhere else', async ({ app }) => {
+  test('it can be moved, and is then drawn somewhere else', async ({ app }) => {
     await pickFileRect(app);
     const scale = (await app.page.evaluate(() => (window as unknown as { camera: { zoom: number } }).camera.zoom)) * (96 / 72);
     const box = (await frame(app).boundingBox())!;
@@ -184,12 +182,13 @@ test.describe('Edit PDF: objects already in the file', () => {
     await app.page.mouse.down();
     await app.page.mouse.move(c.x + 100 * scale, c.y - 50 * scale, { steps: 5 });
     await app.page.mouse.up();
+    // Moved 100 right and 50 up (to within a screen pixel): a cm of the form 1 0 0 1 100 50 wraps the original rectangle.
     await expect
       .poll(async () => {
-        // Moved 100 right and 50 up: a cm of the form 1 0 0 1 100 50 wraps the original rectangle.
-        return /\b1 0 0 1 100(\.\d+)? 50(\.\d+)? cm\b/.test(await content(app));
+        const m = (await content(app)).match(/\b(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) cm\b/);
+        return m ? m.slice(1).map(Number) : [];
       })
-      .toBe(true);
+      .toEqual([expect.closeTo(1, 2), 0, 0, expect.closeTo(1, 2), expect.closeTo(100, 0), expect.closeTo(50, 0)]);
   });
 
   test('Delete takes it out of the saved PDF', async ({ app }) => {

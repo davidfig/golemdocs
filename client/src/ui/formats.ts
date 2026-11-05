@@ -491,10 +491,10 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       return profile.vectorTools;
     case 'sheet':
       return profile.sheetEditor;
-    // A PDF has no text selection to copy or select yet.
+    // Every document can be selected and copied from, a PDF's own pages too (which can't be cut from or pasted into: answered below).
     case 'copy':
     case 'selectAll':
-      return profile.kind !== 'pdf';
+      return true;
     case 'dialog':
       switch (action.name) {
         case 'find':

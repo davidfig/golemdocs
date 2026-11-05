@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { desktopBridge, fromBase64, isMissingCommand, ShellTooOldError, toBase64 } from '../src/desktop/bridge.ts';
+import { desktopBridge, fromBase64, isMissingCommand, macPrinter, ShellTooOldError, toBase64 } from '../src/desktop/bridge.ts';
 
 /** A shell with only the commands in `have`; any other call rejects the way Tauri does. */
 function shell(have: Record<string, unknown>, rejection = (command: string) => `Command ${command} not found`) {
@@ -93,4 +93,24 @@ test('a shell without the base64 commands is sent the raw bytes, and not asked f
 test('a real failure of the base64 commands comes through', async () => {
   recordingShell({ vault_write_base64: () => Promise.reject('No space left on device'), vault_write: () => 1 });
   await assert.rejects(desktopBridge()!.write('a.md', Uint8Array.of(1)), /No space left/);
+});
+
+test('printing in the Mac app sends the PDF as base64, and a shell without the command says it is too old', async (t) => {
+  t.mock.getter(navigator, 'platform', () => 'MacIntel');
+  const calls: unknown[] = [];
+  (globalThis as Record<string, unknown>).__TAURI__ = {
+    core: {
+      invoke: async (command: string, args: unknown) => {
+        calls.push([command, args]);
+      },
+    },
+  };
+  await macPrinter()!.open('Plan.pdf', new Uint8Array([37, 80, 68, 70]));
+  assert.deepEqual(calls, [['print_open_pdf', { name: 'Plan.pdf', data: 'JVBERg==' }]]);
+  shell({});
+  await assert.rejects(macPrinter()!.open('Plan.pdf', new Uint8Array(1)), ShellTooOldError);
+});
+
+test('there is no Mac printer in a browser', () => {
+  assert.equal(macPrinter(), null);
 });

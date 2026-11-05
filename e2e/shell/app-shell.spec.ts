@@ -172,7 +172,7 @@ test.describe('search-engine text and metadata', () => {
     expect(css).toEqual({ position: 'absolute', width: '1px', display: 'block', visibility: 'visible' });
   });
 
-  test('the home page has a title, description, canonical link, Open Graph tags and JSON-LD', async ({ page, app }) => {
+  test('the home page has a title, description, canonical link, Open Graph tags and JSON-LD', { tag: '@heavy' }, async ({ page, app }) => {
     await page.goto('/');
     await app.ready();
     await expect(page).toHaveTitle(/Golem Docs/);

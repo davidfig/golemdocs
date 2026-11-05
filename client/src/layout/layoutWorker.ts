@@ -1820,7 +1820,7 @@ class OpenDocument {
         const p = list[k];
         const from = selection && k === first ? start.offset : 0;
         const to = selection && k === last ? end.offset : Infinity;
-        texts.push(plainText(p, from, to));
+        texts.push(plainText(p, from, to, '\n')); // a page break parts words, as a line break does
       }
       // Lines and pages: those of the paragraphs counted, and (for a selection) that the selected text touches.
       const inRange = new Set(list.slice(first, last + 1));

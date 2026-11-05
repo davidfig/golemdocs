@@ -678,6 +678,62 @@ function movedDuringCreate(localId: string, seen: { folderId?: string | null }[]
   }) as typeof fetch;
 }
 
+/** The server has made the document but its answer is held back: what a listing sees in that moment. */
+function holdCreating(path: string, made: (name: string, size: number) => unknown): { answer(): void; sent: Promise<void> } {
+  const normal = globalThis.fetch;
+  let answer = () => {};
+  let isSent = () => {};
+  const held = new Promise<void>((resolve) => (answer = resolve));
+  const sent = new Promise<void>((resolve) => (isSent = resolve));
+  let listed: unknown[] = [];
+  globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: Uint8Array }) => {
+    const url = String(input);
+    if (init?.method === 'POST' && url.startsWith(path)) {
+      const response = await normal(input as string, init as RequestInit);
+      const body = (await response.clone().json()) as { results?: { document: unknown }[] };
+      listed = body.results ? body.results.map((r) => r.document) : [body];
+      isSent();
+      await held;
+      return response;
+    }
+    if ((init?.method ?? 'GET') === 'GET' && url === '/api/documents' && listed.length) return new Response(JSON.stringify(listed.map((d) => made((d as { name: string }).name, (d as { size: number }).size))), { headers: { 'content-type': 'application/json' } });
+    return normal(input as string, init as RequestInit);
+  }) as typeof fetch;
+  return { answer: () => answer(), sent };
+}
+
+const signedInAs = { id: 'u1', email: 'a@b.c', name: 'A' } as never;
+
+test('a document on its way to the account is listed once, however a listing lands', async () => {
+  const saved = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1, 2, 3), owner: 'u1' });
+  const now = Date.now();
+  const hold = holdCreating('/api/documents', (name) => ({ id: 'c1', name, size: 3, createdAt: now, updatedAt: now }));
+  const upload = uploadToCloud(saved.id);
+  await hold.sent;
+  assert.deepEqual((await loadLibrary(signedInAs, signedInAs)).entries.map((e) => e.key), [saved.id]);
+  hold.answer();
+  await upload;
+  const after = (await loadLibrary(signedInAs, signedInAs)).entries;
+  assert.deepEqual(after.map((e) => [e.key, e.cloud?.id]), [[saved.id, 'c1']]);
+});
+
+test('a document in a batch on its way to the account is listed once too', async () => {
+  const saved = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1, 2, 3), owner: 'u1' });
+  const now = Date.now();
+  const normal = globalThis.fetch;
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) =>
+    init?.method === 'POST' && String(input) === '/api/documents/batch'
+      ? new Response(JSON.stringify({ results: [{ document: { id: 'c1', name: 'Doc.docx', size: 3, createdAt: now, updatedAt: now } }] }), { status: 201, headers: { 'content-type': 'application/json' } })
+      : normal(input as string, init)) as typeof fetch;
+  const hold = holdCreating('/api/documents/batch', (name) => ({ id: 'c1', name, size: 3, createdAt: now, updatedAt: now }));
+  const upload = uploadNewToCloud([saved.id]);
+  await hold.sent;
+  assert.deepEqual((await loadLibrary(signedInAs, signedInAs)).entries.map((e) => e.key), [saved.id]);
+  hold.answer();
+  await upload;
+  assert.deepEqual((await loadLibrary(signedInAs, signedInAs)).entries.map((e) => e.key), [saved.id]);
+});
+
 test('a copy moved to another folder while it is first uploaded is moved in the account too', async () => {
   const info = await local.saveSaved({ name: 'Doc.docx', bytes: bytes(1, 2, 3), folderId: 'f1' });
   const seen: { folderId?: string | null }[] = [];

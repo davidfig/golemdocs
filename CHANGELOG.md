@@ -5,6 +5,7 @@
 ### Fixed
 
 - What you typed just before reloading, closing a tab or a tab crashing is no longer lost: it is there when the document opens again. This covers documents such as Word and Markdown, not yet text files, spreadsheets, PDFs or pictures.
+- A new document could show twice in the Files Sidebar and on the Documents screen for a moment while it was being uploaded. It now shows once.
 
 ## 0.33.2 - 2026-11-05
 

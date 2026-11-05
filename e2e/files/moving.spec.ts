@@ -3,7 +3,7 @@
 // part (dragDropEnabled, without which no drag reaches the page) can't run here: it is checked in client/test/desktopShell.test.ts.
 
 import { expect, test, webkit, type Browser, type Locator, type Page } from '@playwright/test';
-import { App } from '../fixtures';
+import { App, boxOf, dragOnto } from '../fixtures';
 import { signInAs, uniqueEmail } from '../collab/helpers';
 import { importFile, text } from './helpers';
 
@@ -70,13 +70,6 @@ async function newScreenFolder(page: Page, name: string): Promise<void> {
   await expect(folderCard(page, name)).toHaveCount(1);
 }
 
-/** Where `locator` is, asking again if the list was just being redrawn under it. */
-async function boxOf(locator: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
-  let box: Awaited<ReturnType<Locator['boundingBox']>> = null;
-  await expect.poll(async () => (box = await locator.boundingBox())).not.toBeNull();
-  return box!;
-}
-
 /** Waits for every document to be in the account and the page to know it, as a reload during an upload would send the document twice. */
 async function uploaded(page: Page, count: number): Promise<void> {
   await expect.poll(async () => ((await (await page.request.get('/api/documents')).json()) as unknown[]).length, { timeout: 20_000 }).toBe(count);
@@ -106,15 +99,15 @@ for (const engine of ['chromium', 'webkit'] as const) {
       await newSidebarFolder(page, 'Target');
       await newSidebarFolder(page, 'Inner');
 
-      await row(page, 'alpha').dragTo(folderRow(page, 'Target'));
+      await dragOnto(row(page, 'alpha'), folderRow(page, 'Target'));
       await expect(folderRow(page, 'Target')).toHaveAttribute('aria-expanded', 'true');
       await expect(row(page, 'alpha')).toHaveAttribute('aria-level', '2');
 
-      await folderRow(page, 'Inner').dragTo(folderRow(page, 'Target'));
+      await dragOnto(folderRow(page, 'Inner'), folderRow(page, 'Target'));
       await expect(folderRow(page, 'Inner')).toHaveAttribute('aria-level', '2');
 
       // Dropped on a document, it goes in the folder that document is in.
-      await row(page, 'beta').dragTo(row(page, 'alpha'));
+      await dragOnto(row(page, 'beta'), row(page, 'alpha'));
       await expect(row(page, 'beta')).toHaveAttribute('aria-level', '2');
 
       await uploaded(page, 2);
@@ -123,7 +116,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
       await expect(row(page, 'alpha')).toHaveAttribute('aria-level', '2');
       await expect(folderRow(page, 'Inner')).toHaveAttribute('aria-level', '2');
 
-      await row(page, 'alpha').dragTo(sidebar(page).locator('.wm-files-tree'), { targetPosition: { x: 100, y: 500 } });
+      await dragOnto(row(page, 'alpha'), sidebar(page).locator('.wm-files-tree'), { x: 100, y: 500 });
       await expect(row(page, 'alpha')).toHaveAttribute('aria-level', '1');
     });
 
@@ -131,10 +124,10 @@ for (const engine of ['chromium', 'webkit'] as const) {
       const { page } = await start(engine, browser, baseURL, []);
       await newSidebarFolder(page, 'Outer');
       await newSidebarFolder(page, 'Inner');
-      await folderRow(page, 'Inner').dragTo(folderRow(page, 'Outer'));
+      await dragOnto(folderRow(page, 'Inner'), folderRow(page, 'Outer'));
       await expect(folderRow(page, 'Inner')).toHaveAttribute('aria-level', '2');
 
-      await folderRow(page, 'Outer').dragTo(folderRow(page, 'Inner'));
+      await dragOnto(folderRow(page, 'Outer'), folderRow(page, 'Inner'));
       await page.waitForTimeout(300);
       await expect(folderRow(page, 'Outer')).toHaveAttribute('aria-level', '1');
       await expect(folderRow(page, 'Inner')).toHaveAttribute('aria-level', '2');
@@ -162,7 +155,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
       await expect(row(page, 'alpha')).toHaveCount(1);
       await expect.poll(() => uploadStarted, { timeout: 20_000 }).toBe(true);
 
-      await row(page, 'alpha').dragTo(folderRow(page, 'Target'));
+      await dragOnto(row(page, 'alpha'), folderRow(page, 'Target'));
       await expect(row(page, 'alpha')).toHaveAttribute('aria-level', '2');
 
       const inFolder = async () => ((await (await page.request.get('/api/documents')).json()) as { name: string; folderId: string | null }[]).find((d) => d.name === 'alpha.txt')?.folderId;
@@ -206,11 +199,11 @@ for (const engine of ['chromium', 'webkit'] as const) {
       await newScreenFolder(page, 'Target');
       await newScreenFolder(page, 'Inner');
 
-      await card(page, 'alpha').dragTo(folderCard(page, 'Target'));
+      await dragOnto(card(page, 'alpha'), folderCard(page, 'Target'));
       await expect(card(page, 'alpha')).toHaveCount(0);
       await expect(folderCard(page, 'Target').locator('.wm-card-meta')).toHaveText('1 item');
 
-      await folderCard(page, 'Inner').dragTo(folderCard(page, 'Target'));
+      await dragOnto(folderCard(page, 'Inner'), folderCard(page, 'Target'));
       await expect(folderCard(page, 'Inner')).toHaveCount(0);
       await expect(folderCard(page, 'Target').locator('.wm-card-meta')).toHaveText('2 items');
 
@@ -228,13 +221,56 @@ for (const engine of ['chromium', 'webkit'] as const) {
       const { page, app } = await start(engine, browser, baseURL, ['alpha.txt']);
       await app.menu('File', 'Open…');
       await newScreenFolder(page, 'Target');
-      await card(page, 'alpha').dragTo(folderCard(page, 'Target'));
+      await dragOnto(card(page, 'alpha'), folderCard(page, 'Target'));
       await expect(card(page, 'alpha')).toHaveCount(0);
 
       await folderCard(page, 'Target').getByRole('button', { name: 'Open folder Target' }).click();
       await expect(card(page, 'alpha')).toHaveCount(1);
-      await card(page, 'alpha').dragTo(screen(page).locator('.wm-dash-crumbs').getByRole('button').first());
+      await dragOnto(card(page, 'alpha'), screen(page).locator('.wm-dash-crumbs').getByRole('button').first());
       await expect(card(page, 'alpha')).toHaveCount(0);
+    });
+
+    test('a document whose upload has not answered yet shows once, and moving it meanwhile keeps it where it was put', async ({ browser, baseURL }) => {
+      const { page, app } = await start(engine, browser, baseURL, []);
+      // The account has the document, and the answer saying so is still on its way.
+      let answer = () => {};
+      const held = new Promise<void>((resolve) => (answer = resolve));
+      let sent = () => {};
+      const sending = new Promise<void>((resolve) => (sent = resolve));
+      await page.route(/\/api\/documents(\?.*)?$/, async (route) => {
+        if (route.request().method() !== 'POST') return route.continue();
+        const response = await route.fetch();
+        sent();
+        await held;
+        await route.fulfill({ response });
+      });
+      await importFile(app, text('alpha.txt', 'words'));
+      await sending;
+
+      await app.menu('File', 'Open…');
+      // Making a folder lists the account, which by now has the document.
+      const listed = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/documents' && r.request().method() === 'GET');
+      await newScreenFolder(page, 'Target');
+      await listed;
+      await expect.poll(async () => ((await (await page.request.get('/api/documents')).json()) as unknown[]).length).toBe(1);
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 100))));
+      await expect(card(page, 'alpha')).toHaveCount(1);
+      await expect(row(page, 'alpha')).toHaveCount(1);
+
+      await card(page, 'alpha').hover();
+      await card(page, 'alpha').getByRole('button', { name: 'Move…' }).click();
+      await page.getByRole('dialog', { name: 'Move “alpha.txt” to…' }).getByRole('button', { name: 'Target' }).click();
+      await expect(card(page, 'alpha')).toHaveCount(0);
+
+      answer();
+      await uploaded(page, 1);
+      await expect(folderCard(page, 'Target').locator('.wm-card-meta')).toHaveText('1 item');
+      await expect.poll(async () => ((await (await page.request.get('/api/documents')).json()) as { folderId: string | null }[])[0]!.folderId).not.toBeNull();
+      await page.unrouteAll();
+      await page.reload();
+      await app.ready();
+      await expect(row(page, 'alpha')).toHaveCount(1);
+      await expect(row(page, 'alpha')).toHaveAttribute('aria-level', '2');
     });
 
     test('Open screen: a listing that comes in mid-drag doesn\'t cancel the drag', async ({ browser, baseURL }) => {

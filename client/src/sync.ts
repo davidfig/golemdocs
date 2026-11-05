@@ -61,6 +61,38 @@ export function hasUnsentChanges(local: SavedInfo): boolean {
   return !local.cloudId || local.updatedAt > (local.cloudSyncedAt ?? 0);
 }
 
+/** This tab's copies being made in the account, by browser copy id: what was sent, and when. */
+const beingMade = new Map<string, { name: string; size: number; at: number }>();
+/** How much older than its upload a document can look, as the server's clock isn't this one. */
+const CLOCK_SKEW_MS = 60_000;
+
+/** A copy is being sent to the account for the first time: from here until `madeInAccount`, the document that makes is listed as that copy. */
+export function makingInAccount(localId: string, name: string, size: number): void {
+  beingMade.set(localId, { name, size, at: Date.now() });
+}
+
+/** The upload has answered (and its copy is linked to the document), or failed. */
+export function madeInAccount(localId: string): void {
+  beingMade.delete(localId);
+}
+
+/**
+ * The documents that are copies still being sent. The account has them before the copy knows their id, so a listing in that moment would
+ * show each one twice. Told apart by what was sent (the copy may have been edited or renamed since): the newest one like it, and only one each.
+ */
+function documentsBeingMade(cloud: readonly CloudDocument[], linked: ReadonlySet<string>): Set<string> {
+  const found = new Set<string>();
+  for (const sent of beingMade.values()) {
+    let newest: CloudDocument | null = null;
+    for (const d of cloud) {
+      if (linked.has(d.id) || found.has(d.id) || d.name !== sent.name || d.size !== sent.size || d.createdAt < sent.at - CLOCK_SKEW_MS) continue;
+      if (!newest || d.createdAt > newest.createdAt) newest = d;
+    }
+    if (newest) found.add(newest.id);
+  }
+  return found;
+}
+
 /** Pairs browser copies with cloud documents (`cloud` null: signed out or unreachable), newest first. */
 export function mergeLibrary(local: readonly SavedInfo[], cloud: readonly CloudDocument[] | null): LibraryEntry[] {
   const byCloudId = new Map((cloud ?? []).map((d) => [d.id, d]));
@@ -83,8 +115,9 @@ export function mergeLibrary(local: readonly SavedInfo[], cloud: readonly CloudD
       folderId: c ? (c.folderId ?? null) : (l.folderId ?? null),
     });
   }
+  const sending = beingMade.size && cloud ? documentsBeingMade(cloud, linked) : null;
   for (const c of cloud ?? []) {
-    if (linked.has(c.id)) continue;
+    if (linked.has(c.id) || sending?.has(c.id)) continue;
     entries.push({ key: c.id, name: c.name, size: c.size, updatedAt: c.updatedAt, local: null, cloud: c, state: 'cloud-only', folderId: c.folderId ?? null });
   }
   return entries.sort((a, b) => b.updatedAt - a.updatedAt || a.name.localeCompare(b.name) || a.key.localeCompare(b.key));

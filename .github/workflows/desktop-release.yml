@@ -4,8 +4,9 @@ name: Desktop release
 # Push the tag (git push origin vX.Y.Z) after the version bump; publish the draft once the installers are checked.
 # The Mac app is signed and notarized when the Apple secrets exist (docs/architecture/desktop-release.md);
 # without them the build still runs and makes an unsigned one.
-# The Windows installers are signed with Azure Artifact Signing; a pushed tag fails without its keys, so nothing unsigned
-# is released by accident, while a run from the Actions tab warns and builds unsigned. Linux builds are not code-signed.
+# The Windows installers are signed with Azure Artifact Signing; a build fails without its keys, so nothing unsigned is
+# released by accident. Only a test run from the Actions tab on a branch other than main warns and builds unsigned.
+# Linux builds are not code-signed.
 # Every build's update files are signed with the Tauri update key.
 
 on:
@@ -129,10 +130,10 @@ jobs:
           ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
           ACCOUNT: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
           PROFILE: ${{ vars.AZURE_ARTIFACT_SIGNING_CERTIFICATE_PROFILE }}
-          TAG_PUSH: ${{ github.event_name == 'push' }}
+          TEST_RUN: ${{ github.event_name == 'workflow_dispatch' && github.ref_type == 'branch' && github.ref_name != 'main' }}
         run: |
           if [ -z "$AZURE_TENANT_ID" ] || [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_CLIENT_SECRET" ] || [ -z "$ENDPOINT" ] || [ -z "$ACCOUNT" ] || [ -z "$PROFILE" ]; then
-            if [ "$TAG_PUSH" = true ]; then echo "::error::A release needs the Artifact Signing secrets and variables (docs/architecture/desktop-release.md)"; exit 1; fi
+            if [ "$TEST_RUN" != true ]; then echo "::error::A release needs the Artifact Signing secrets and variables (docs/architecture/desktop-release.md)"; exit 1; fi
             echo "::warning::Artifact Signing secrets or variables are missing: this Windows build will be unsigned."
             exit 0
           fi

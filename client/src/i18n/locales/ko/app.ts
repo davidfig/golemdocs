@@ -88,6 +88,7 @@ export const app: Partial<Messages> = {
   'app.opening': '“{name}”을(를) 여는 중…',
   'app.openingProgress': '“{name}”을(를) 여는 중… {percent}%',
   'app.openFailed': '문서를 열 수 없습니다: {message}',
+  'app.outOfDate': '이 Golem Docs 버전은 오래되어 문서를 열 수 없습니다. 새로 고침하거나 앱을 업데이트한 후 다시 시도하세요.',
   'app.openingShared': '공유 문서를 여는 중…',
   'app.openSharedFailed': '공유 문서를 열 수 없습니다: {message}',
   'app.localGone': '해당 문서는 더 이상 이 브라우저에 저장되어 있지 않습니다',

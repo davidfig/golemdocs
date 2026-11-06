@@ -27,6 +27,21 @@ export async function isOutOfDate(running: string, fetcher: typeof fetch = fetch
 }
 
 /**
+ * What each browser says when a script can't be loaded: WebKit, Chromium and Firefox for a page in place of a script (the single-page
+ * fallback answers a chunk that is gone with the page), and Vite for a chunk's stylesheet. A worker whose own script can't be loaded often says nothing at all.
+ */
+const SCRIPT_LOAD_FAILURE = /not a valid JavaScript MIME type|Importing a module script failed|dynamically imported module|Expected a JavaScript|disallowed MIME type|Unable to preload CSS/i;
+
+/**
+ * True when `message` is a script failing to load and the site has moved on from `running`: the page is asking for a chunk the deploy removed,
+ * and only the new version can help. The check of the site tells this from being offline, which reads the same in some browsers.
+ */
+export async function isChunkOfOldBuild(message: string, running: string, fetcher: typeof fetch = fetch): Promise<boolean> {
+  if (message !== '' && !SCRIPT_LOAD_FAILURE.test(message)) return false;
+  return isOutOfDate(running, fetcher);
+}
+
+/**
  * Whether to tell the person the site has been updated. The desktop app is the site inside a shell, and when a newer shell is on offer
  * its Software Update dialog covers this: restarting loads the current site, so the reload note would only be a second message
  * for the same update. `shellUpdateOnOffer` is absent in a browser. A shell that can't be asked is treated as having no update.

@@ -70,6 +70,7 @@ import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
 import { NewVersionNotice } from './ui/newVersionNotice.ts';
+import { isChunkOfOldBuild } from './buildCheck.ts';
 import { UpdateNotice } from './ui/updateNotice.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { WatchBanner } from './ui/watchBanner.ts';
@@ -395,6 +396,20 @@ function reportError(text: string): void {
   showToast(text);
 }
 
+/** The note offering a reload, once it is made. */
+let updateNotice: UpdateNotice | undefined;
+
+/**
+ * Something failed to load or open, and `message` is what the browser or a worker said. When that is a page out of date asking for a chunk the
+ * site no longer has, the person is told what to do about it instead. `say`: how to word any other failure.
+ */
+async function reportOpenFailure(message: string, say: (message: string) => string = (message) => t('app.openFailed', { message })): Promise<void> {
+  if (await isChunkOfOldBuild(message, __BUILD_ID__)) {
+    void updateNotice?.show();
+    reportError(t('app.outOfDate'));
+  } else reportError(say(message || t('app.workerFailed')));
+}
+
 /** Opens, and opens asked for: one that waits for something first (a download, say) doesn't replace a document opened since. */
 let openRequests = 0;
 
@@ -656,7 +671,7 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     error(message) {
       loaded = true;
       documentReady();
-      reportError(t('app.documentError', { name, message }));
+      void reportOpenFailure(message, (message) => t('app.documentError', { name, message }));
     },
     notice: (message) => reportError(message),
     vectorScene(state) {
@@ -2611,7 +2626,7 @@ async function openShared(id: string): Promise<void> {
     open({ kind: 'docx-url', name: doc.name, url: documentUrl(doc.id) }, { shared: doc });
   } catch (e) {
     if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `shared:${id}` }));
-    else reportError(t('app.openSharedFailed', { message: (e as Error).message }));
+    else void reportOpenFailure((e as Error).message, (message) => t('app.openSharedFailed', { message }));
   }
 }
 
@@ -2688,7 +2703,7 @@ async function openCloud(id: string): Promise<void> {
     window.setTimeout(() => void refreshLibrary(), 1000);
   } catch (e) {
     if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `cloud:${id}` }));
-    else reportError(t('app.openFailed', { message: (e as Error).message }));
+    else void reportOpenFailure((e as Error).message);
   }
 }
 
@@ -3147,7 +3162,7 @@ async function openLarge(name: string, bytes: Uint8Array, options: { localId?: s
   try {
     await textView.load();
   } catch (e) {
-    return reportError(t('app.openFailed', { message: (e as Error).message }));
+    return reportOpenFailure((e as Error).message);
   }
   if (!latest()) return;
   openRequests++;
@@ -3193,7 +3208,7 @@ async function openSheet(name: string, bytes: Uint8Array, options: OpenOptions =
     await sheetView.load();
     if (options.localId) image = await getImage(options.localId).catch(() => null);
   } catch (e) {
-    return reportError(t('app.openFailed', { message: (e as Error).message }));
+    return reportOpenFailure((e as Error).message);
   }
   if (!latest()) return;
   openRequests++;
@@ -5625,7 +5640,7 @@ const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clea
 // A new release: offer What's New (once per version, unless turned off).
 const newVersionNotice = new NewVersionNotice(document.body, () => openSource('changelog'));
 // The site updated while this page was open: offer a reload, once what is open is saved.
-new UpdateNotice(document.body, __BUILD_ID__, () => void reloadForUpdate(), updateService ? async () => (await updateService.check()) !== null : undefined);
+updateNotice = new UpdateNotice(document.body, __BUILD_ID__, () => void reloadForUpdate(), updateService ? async () => (await updateService.check()) !== null : undefined);
 
 // --- Searching every document ------------------------------------------------------------------
 // Each document has an index kept in this browser (see search/searchLibrary.ts); the panel searches
@@ -5773,6 +5788,7 @@ const sheetView: SheetEditor = new SheetEditor(document.getElementById('viewport
   render: () => requestRender(),
   viewKey: (e) => viewKey(e),
   notify: (message) => reportError(message),
+  openFailed: (message) => void reportOpenFailure(message),
   appKey: () => false,
   author: () => commentAuthor(),
 });

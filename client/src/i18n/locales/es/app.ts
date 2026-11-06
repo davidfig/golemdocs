@@ -91,6 +91,7 @@ export const app: Partial<Messages> = {
   'app.opening': 'Abriendo “{name}”…',
   'app.openingProgress': 'Abriendo “{name}”… {percent} %',
   'app.openFailed': 'No se pudo abrir el documento: {message}',
+  'app.outOfDate': 'Esta versión de Golem Docs está desactualizada y no puede abrir el documento. Recarga o actualiza la aplicación y vuelve a intentarlo.',
   'app.openingShared': 'Abriendo el documento compartido…',
   'app.openSharedFailed': 'No se pudo abrir el documento compartido: {message}',
   'app.localGone': 'Ese documento ya no está guardado en este navegador',

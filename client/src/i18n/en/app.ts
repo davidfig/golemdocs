@@ -91,6 +91,7 @@ export const app = {
   'app.opening': 'Opening “{name}”…',
   'app.openingProgress': 'Opening “{name}”… {percent}%',
   'app.openFailed': 'Couldn’t open the document: {message}',
+  'app.outOfDate': 'This version of Golem Docs is out of date, so it can’t open the document. Reload or update the app, then try again.',
   'app.openingShared': 'Opening the shared document…',
   'app.openSharedFailed': 'Couldn’t open the shared document: {message}',
   'app.localGone': 'That document is no longer saved in this browser',

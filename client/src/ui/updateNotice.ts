@@ -58,7 +58,7 @@ export class UpdateNotice {
   }
 
   /** The page knows it is out of date (a chunk is gone), so only the shell's own update can take the place of the note. */
-  private async show(): Promise<void> {
+  async show(): Promise<void> {
     try {
       if (this.shellUpdateOnOffer && (await this.shellUpdateOnOffer())) return;
     } catch {

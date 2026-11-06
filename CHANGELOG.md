@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.34.3 - Unreleased
+
+### Fixed
+
+- A document that can’t open because Golem Docs was updated while it was running now says to reload or update the app, instead of showing a technical error.
+
 ## 0.34.2 - 2026-11-06
 
 ### Fixed

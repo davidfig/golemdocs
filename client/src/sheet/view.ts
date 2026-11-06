@@ -63,6 +63,8 @@ export interface SheetEditorDeps {
   viewKey(e: KeyboardEvent): boolean;
   /** A message for the status line and a toast. */
   notify(message: string): void;
+  /** The workbook couldn't be opened; `message` says why (empty when its worker gave no reason). */
+  openFailed(message: string): void;
   /** The app's commands for a key it would run (Ctrl+S, Ctrl+F...); true if it ran one. */
   appKey(e: KeyboardEvent): boolean;
   /** The name a new note is signed with (the person signed in, or the guest's name). */
@@ -284,7 +286,7 @@ export class SheetEditorView {
         this.onImage?.(new Uint8Array(m.bytes), m.sha256);
         break;
       case 'failed':
-        this.deps.notify(t('app.openFailed', { message: m.message }));
+        this.deps.openFailed(m.message);
         break;
       case 'tiles':
         for (const tile of m.cells) this.renderer.putCells(tile);
@@ -313,7 +315,7 @@ export class SheetEditorView {
     this.lossNoted = false;
     this.worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (e: MessageEvent<FromWorker>) => this.receive(e.data);
-    this.worker.onerror = (e) => this.deps.notify(t('app.openFailed', { message: e.message }));
+    this.worker.onerror = (e) => this.deps.openFailed(e.message ?? '');
     const buffer = bytes.slice().buffer;
     const imageBuffer = image ? image.slice().buffer : null;
     this.send({ t: 'open', name, bytes: buffer, image: imageBuffer, format, layout }, imageBuffer ? [buffer, imageBuffer] : [buffer]);

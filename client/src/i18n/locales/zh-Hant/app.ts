@@ -88,6 +88,7 @@ export const app: Partial<Messages> = {
   'app.opening': '正在開啟「{name}」…',
   'app.openingProgress': '正在開啟「{name}」… {percent}%',
   'app.openFailed': '無法開啟文件：{message}',
+  'app.outOfDate': '此版本的 Golem Docs 已過時，無法開啟文件。請重新載入或更新應用程式，然後再試一次。',
   'app.openingShared': '正在開啟共用文件…',
   'app.openSharedFailed': '無法開啟共用文件：{message}',
   'app.localGone': '該文件已不再儲存於此瀏覽器中',

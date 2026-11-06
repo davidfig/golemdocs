@@ -46,6 +46,7 @@ export const app: Partial<Messages> = {
   'app.downloadAllNone': '沒有可下載的已儲存文件',
   'app.downloadAllName': 'documents.zip',
   'app.downloadedAll': '已下載所有已儲存的文件',
+  'app.downloadedAllSomeKept': '已下載所有已儲存的文件,但無法轉換 {names}。它們以 .wdoc 檔案的形式儲存在 ZIP 中,只有 Golem Docs 能開啟',
   'app.downloadFailed': '下載失敗：{message}',
   'app.importingZip': '正在匯入 {name}…',
   'app.deleting': '正在刪除…',

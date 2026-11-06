@@ -47,6 +47,7 @@ export const app = {
   'app.downloadAllNone': 'There are no saved documents to download',
   'app.downloadAllName': 'documents.zip',
   'app.downloadedAll': 'Downloaded all saved documents',
+  'app.downloadedAllSomeKept': 'Downloaded all saved documents, but {names} could not be converted. They are in the ZIP as .wdoc files, which only Golem Docs opens',
   'app.downloadFailed': 'Download failed: {message}',
   'app.importingZip': 'Importing {name}…',
   'app.deleting': 'Deleting…',

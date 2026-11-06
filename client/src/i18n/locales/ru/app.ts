@@ -49,6 +49,7 @@ export const app: Catalog = {
   'app.downloadAllNone': 'Нет сохранённых документов для скачивания',
   'app.downloadAllName': 'documents.zip',
   'app.downloadedAll': 'Все сохранённые документы скачаны',
+  'app.downloadedAllSomeKept': 'Все сохранённые документы скачаны, но преобразовать не удалось: {names}. Они находятся в ZIP-архиве в виде файлов .wdoc, которые открывает только Golem Docs',
   'app.downloadFailed': 'Не удалось скачать: {message}',
   'app.importingZip': 'Импорт {name}…',
   'app.deleting': 'Удаление…',

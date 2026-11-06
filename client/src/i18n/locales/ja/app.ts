@@ -46,6 +46,7 @@ export const app: Partial<Messages> = {
   'app.downloadAllNone': 'ダウンロードできる保存済みドキュメントがありません',
   'app.downloadAllName': 'documents.zip',
   'app.downloadedAll': '保存済みのドキュメントをすべてダウンロードしました',
+  'app.downloadedAllSomeKept': '保存済みのドキュメントをすべてダウンロードしましたが、{names} は変換できませんでした。ZIP には .wdoc ファイルとして入っており、Golem Docs でのみ開けます',
   'app.downloadFailed': 'ダウンロードに失敗しました：{message}',
   'app.importingZip': '{name} をインポートしています…',
   'app.deleting': '削除しています…',

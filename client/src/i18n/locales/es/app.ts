@@ -47,6 +47,7 @@ export const app: Partial<Messages> = {
   'app.downloadAllNone': 'No hay documentos guardados para descargar',
   'app.downloadAllName': 'documents.zip',
   'app.downloadedAll': 'Se descargaron todos los documentos guardados',
+  'app.downloadedAllSomeKept': 'Se han descargado todos los documentos guardados, pero no se ha podido convertir {names}. Están en el ZIP como archivos .wdoc, que solo Golem Docs puede abrir',
   'app.downloadFailed': 'Error al descargar: {message}',
   'app.importingZip': 'Importando {name}…',
   'app.deleting': 'Eliminando…',

@@ -46,6 +46,7 @@ export const app: Partial<Messages> = {
   'app.downloadAllNone': '다운로드할 저장된 문서가 없습니다',
   'app.downloadAllName': 'documents.zip',
   'app.downloadedAll': '저장된 모든 문서를 다운로드했습니다',
+  'app.downloadedAllSomeKept': '저장된 문서를 모두 다운로드했지만 {names}은(는) 변환하지 못했습니다. ZIP에 .wdoc 파일로 들어 있으며 Golem Docs에서만 열 수 있습니다',
   'app.downloadFailed': '다운로드하지 못했습니다: {message}',
   'app.importingZip': '{name} 가져오는 중…',
   'app.deleting': '삭제하는 중…',

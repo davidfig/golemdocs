@@ -7,7 +7,8 @@ import { currentUser, remembered, signOut as signOutOfCloud, type User } from '.
 import { createChromeHost } from './chromeHost.ts';
 import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, listTrash, purgeTrash, renameCloudDocument, restoreFromTrash, saveChunked, saveDocument, type CloudDocument } from './cloud.ts';
 import { CHUNK_MIN_FILE, chunkBytes } from './storage/chunker.ts';
-import { zipDocuments } from './storage/archive.ts';
+import { archiveFiles, zipDocuments } from './storage/archive.ts';
+import { ConvertWorker, startConvertWorker } from './desktop/convertClient.ts';
 import { EditJournal, hasJournal, holdPage, journalDocuments, journalsSupported, letPageGo, otherPages, pageId, planRecovery, readJournals, removeJournal, type RecoveryPlan } from './storage/editJournal.ts';
 import { droppedFromFiles, pickedFolder, takeDropped, type Dropped } from './storage/droppedFiles.ts';
 import { incomingBridge, watchIncoming } from './desktop/incoming.ts';
@@ -1904,17 +1905,19 @@ async function downloadAll(): Promise<void> {
     // Folder ids are unique, so the account's folders and this browser's can be looked up together.
     const folders = [...(account ? await listFolders().catch(() => []) : []), ...(await listLocalFolders().catch(() => []))];
     const placed = new Map(library.entries.filter((e) => e.local).map((e) => [e.local!.id, e.folderId]));
-    // A CSV or TSV file kept with its layout goes as the file: other programs must be able to read what is in the ZIP.
-    const plain = await Promise.all(docs.map(async (d) => (/\.(csv|tsv|tab)$/i.test(d.info.name) ? ((await (await import('./formats/wdocDelimited.ts')).delimitedFromWdoc(new Uint8Array(d.bytes)))?.bytes ?? d.bytes) : d.bytes)));
-    const bytes = await zipDocuments(
-      docs.map((d, i) => ({
+    // Other programs must be able to read what is in the ZIP: each document goes as a file, on another thread, as the vault writes it.
+    const converter = new ConvertWorker(startConvertWorker);
+    const files = await archiveFiles(
+      docs.map((d) => ({
         name: d.info.name,
-        bytes: plain[i],
+        bytes: d.bytes,
         folders: folderPath(folders, folderOf({ local: { folderId: placed.get(d.info.id) ?? null } }, folders)).map((f) => f.name),
       })),
-    );
+      (stored, name) => converter.toFile(stored, name),
+    ).finally(() => converter.stop());
+    const bytes = await zipDocuments(files.docs);
     const name = t('app.downloadAllName');
-    if (await saveFile(name, bytes, 'application/zip')) setStatus(t('app.downloadedAll', { count: docs.length }));
+    if (await saveFile(name, bytes, 'application/zip')) setStatus(files.kept.length ? t('app.downloadedAllSomeKept', { names: files.kept.join(', ') }) : t('app.downloadedAll', { count: docs.length }));
   } catch (e) {
     reportError(t('app.downloadFailed', { message: (e as Error).message }));
   }

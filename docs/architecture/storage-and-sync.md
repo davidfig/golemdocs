@@ -72,7 +72,7 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 | `client/src/storage/local.ts` | IndexedDB access: save/get/list/delete, chunk assembly, thumbnails, folders, ownership transitions, `markSynced`, `saveFromCloud` |
 | `client/src/history.ts`, `client/src/trash.ts` | the one list of kept versions (this browser's and the account's) and the one list of deleted documents, with restore; `ui/versionHistoryDialog.ts` and `ui/trashDialog.ts` show them |
 | `client/src/storage/chunker.ts` | content-defined chunking (`cdc1`), `CHUNK_MIN_FILE`, `assemble` |
-| `client/src/storage/archive.ts`, `zipImport.ts`, `droppedFiles.ts`, `uniqueName.ts` | Download All as ZIP, ZIP/folder import into folders, name de-duplication |
+| `client/src/storage/archive.ts`, `zipImport.ts`, `droppedFiles.ts`, `uniqueName.ts` | Download All as ZIP (each document as the file the vault would write, through `ConvertWorker`; one that can't be converted goes as a named `.wdoc`), ZIP/folder import into folders, name de-duplication |
 | `client/src/library.ts` | `uploadToCloud` (with `mergeWithCloud` and the `MergeHost` the page gives it), `uploadNewToCloud` (batches), `openFromCloud`, `prefetchFromCloud`, `conflictCopyName` |
 | `client/src/formats/merge.ts`, `ops/src/merge.ts` | `mergeStored` (a stored file's entries) and `mergeDocuments` (the document, by paragraphs): the three-way merge of a conflict |
 | `client/src/libraryStore.ts` | `LibraryStore`: the one observable copy of entries, folders, shared documents; `refresh`, `refreshSoon` (3 s debounce), `putLocal`, `putCloud`, `reset` |

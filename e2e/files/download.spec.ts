@@ -125,7 +125,7 @@ test('Download All zips every saved document', async ({ app }) => {
   const files = readZip(zip.bytes);
   expect(files.map((f) => f.name).sort()).toEqual(['Document1.docx', 'Document2.docx']);
   for (const f of files) expect(f.bytes.subarray(0, 2).toString()).toBe('PK');
-  // Each file opens again in the app (they are saved copies, in the app's own package).
+  // Each file opens again in the app.
   const first = files.find((f) => f.name === 'Document1.docx')!;
   await importFile(app, { name: 'restored-one.docx', buffer: first.bytes });
   expect(await app.text()).toBe('first body');
@@ -134,15 +134,21 @@ test('Download All zips every saved document', async ({ app }) => {
   expect(await app.text()).toBe('second body');
 });
 
-// Download All stores each document as it is saved in the browser: the app's own package (a ZIP
-// with a `mimetype` of application/x-golem-document), under the document's .docx name. Word
-// can't open that, so a user who unzips the archive gets .docx files that aren't Word documents.
-test.fixme('Download All: a file named .docx in the archive is a real Word document', async ({ app }) => {
+// What is saved in the browser is mostly the app's own package; what is in the ZIP must open in other programs.
+test('Download All: each file is what its name says, not the app\'s own package', async ({ app }) => {
   await blankWith(app, 'first body');
   await waitForSaved(app.page, 'Document1.docx');
+  await importFile(app, text('notes.md', '# Heading\n\nSome text\n'));
+  await app.press(`${MOD}+End`);
+  await app.type(' plus edit');
+  await waitForSaved(app.page, 'notes.md');
   const zip = await app.download(() => app.menu('File', 'Download All (ZIP)'));
-  const file = readZip(zip.bytes).find((f) => f.name === 'Document1.docx')!;
-  expect(readZip(file.bytes).map((e) => e.name)).toContain('word/document.xml');
+  const files = readZip(zip.bytes);
+  const word = files.find((f) => f.name === 'Document1.docx')!;
+  const xml = readZip(word.bytes).find((e) => e.name === 'word/document.xml')!;
+  expect(xml.bytes.toString()).toContain('first body');
+  expect(files.find((f) => f.name === 'notes.md')!.bytes.toString()).toBe('# Heading\n\nSome text plus edit\n');
+  await expect.poll(() => status(app.page)).toBe('Downloaded all saved documents');
 });
 
 test('Download All numbers documents that share a name, and keeps each in its own format', async ({ app }) => {

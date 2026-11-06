@@ -3,8 +3,52 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ZipArchive } from '@golemdocs/docx';
-import { archiveNames, zipDocuments } from '../src/storage/archive.ts';
+import { WordDocument, ZipArchive } from '@golemdocs/docx';
+import { toVaultFile } from '../src/desktop/vaultCodec.ts';
+import { writeWdoc, WDOC_VERSION } from '../src/formats/wdoc.ts';
+import { archiveFiles, archiveNames, zipDocuments } from '../src/storage/archive.ts';
+
+const container = async () =>
+  writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'docx', origin: 'docx', pagesCurrent: false }, document: await (await WordDocument.create()).write(), original: null, extensions: {} });
+
+test('a saved document goes in the ZIP as the file its name says, not the container', async () => {
+  const { docs, kept } = await archiveFiles([{ name: 'Report.docx', bytes: await container() }], toVaultFile);
+  assert.deepEqual(kept, []);
+  assert.equal(docs[0].name, 'Report.docx');
+  const zip = ZipArchive.read(docs[0].bytes as Uint8Array);
+  assert.ok(zip.entries.has('word/document.xml'));
+  assert.ok(!zip.entries.has('mimetype'));
+});
+
+test('a container that cannot be converted is kept, under a name that says what it is', async () => {
+  const stored = await container();
+  const { docs, kept } = await archiveFiles([{ name: 'Report.docx', bytes: stored, folders: ['Work'] }], () => Promise.reject(new Error('no')));
+  assert.deepEqual(kept, ['Report.docx']);
+  assert.deepEqual(docs, [{ name: 'Report.wdoc', bytes: stored, folders: ['Work'] }]);
+});
+
+test('a file stored as itself that cannot be converted goes as it is', async () => {
+  const stored = new TextEncoder().encode('plain');
+  const { docs, kept } = await archiveFiles([{ name: 'data.bin', bytes: stored }], async () => null);
+  assert.deepEqual(kept, []);
+  assert.deepEqual(docs, [{ name: 'data.bin', bytes: stored }]);
+});
+
+test('documents are converted one at a time: a conversion has a time limit from when it is asked for', async () => {
+  let running = 0;
+  let most = 0;
+  const { docs } = await archiveFiles(
+    ['a.txt', 'b.txt', 'c.txt'].map((name) => ({ name, bytes: new Uint8Array() })),
+    async (stored) => {
+      most = Math.max(most, ++running);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      running--;
+      return stored;
+    },
+  );
+  assert.equal(most, 1);
+  assert.deepEqual(docs.map((d) => d.name), ['a.txt', 'b.txt', 'c.txt']);
+});
 
 test('colliding names get a counter before the extension', () => {
   assert.deepEqual(archiveNames(['a.docx', 'b.docx', 'a.docx', 'A.docx', 'notes']), ['a.docx', 'b.docx', 'a (2).docx', 'A (3).docx', 'notes']);

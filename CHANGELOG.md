@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.34.2 - Unreleased
+
+### Fixed
+
+- File › Download All now gives real files. A `.docx` in the ZIP opens in Word, a `.md` is Markdown, and a PDF has its annotations written in, where before most files could only be opened again in Golem Docs.
+
 ## 0.34.1 - 2026-11-05
 
 ### Fixed

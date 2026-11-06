@@ -112,6 +112,7 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-04 | `e2e/collab/sync.spec.ts` › the save indicator when signed in › the account holds what was typed | Failed at 31 s in pass one of the 0.33.2 release run, passed its retry; alone, passed four times |
 | 2026-11-04 | `e2e/shell/view-options.spec.ts` › Full Screen › keeps the menu bar, and hides only the toolbars, when Options says so | Failed at 30.9 s in pass one of the 0.33.2 release run, passed its retry; alone, passed three times |
 | 2026-11-04 | `e2e/editing/link-popover.spec.ts` › Link form › Remove Link takes the link off and keeps its text | Failed at 25 s and again on its retry (1 min) in pass one of the 0.33.2 release run; alone, passed six times |
+| 2026-11-06 | `e2e/files/large-text-edit.spec.ts` › dragging selects text, and typing replaces it; undo and redo walk back and forth | The redo had not taken effect after 10 s (13 s in all) in pass one, passed on retry in 3.1 s; alone, passed three times in about 4 s. Why the redo was missed was not looked into |
 
 ## Performance traces (`golem:*`)
 

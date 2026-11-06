@@ -58,7 +58,7 @@ test('the arrow keys move the caret by character, line and word', async ({ app, 
   await expect.poll(async () => (await lineText(page, 1)) ?? '').toContain('^');
 });
 
-test('dragging selects text, and typing replaces it; undo and redo walk back and forth', async ({ app, page }) => {
+test('dragging selects text, and typing replaces it; undo and redo walk back and forth', { tag: '@heavy' }, async ({ app, page }) => {
   await open(app);
   await dragFrom(page, [0, 0], [0, 6]);
   await expect.poll(async () => (await state(page)).selected).toBe('Line 1');

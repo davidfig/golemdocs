@@ -2,6 +2,10 @@
 
 ## 0.34.3 - Unreleased
 
+### Changed
+
+- Open Sample is now in the Help menu, and the Admin menu no longer appears for people who aren’t admins.
+
 ### Fixed
 
 - A document that can’t open because Golem Docs was updated while it was running now says to reload or update the app, instead of showing a technical error.

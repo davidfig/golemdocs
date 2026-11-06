@@ -1136,7 +1136,22 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.help'),
-        items: [cmd('help.shortcuts'), cmd('help.feedback'), sep, cmd('help.changelog'), cmd('help.updates'), cmd('help.about'), cmd('help.website'), cmd('help.privacy'), cmd('help.terms')],
+        items: [
+          cmd('help.shortcuts'),
+          cmd('help.feedback'),
+          sub(t('chrome.file.openSample'), () => {
+            const samples = host.samples?.() ?? [];
+            if (!samples.length) return [{ type: 'item', label: t('chrome.none'), enabled: false, run: () => {} }];
+            return samples.map((s) => ({ type: 'item', label: s.label, run: () => r.perform({ kind: 'openSample', id: s.id }, s.label) }));
+          }),
+          sep,
+          cmd('help.changelog'),
+          cmd('help.updates'),
+          cmd('help.about'),
+          cmd('help.website'),
+          cmd('help.privacy'),
+          cmd('help.terms'),
+        ],
       },
       {
         // For admins only: the whole menu is left out for everyone else (see MenuBar.refresh).
@@ -1146,11 +1161,6 @@ export class Chrome {
           { type: 'item', label: t('chrome.admin.billing'), run: () => this.showBilling(), available: isAdmin },
           { type: 'item', label: t('chrome.admin.analytics'), run: () => this.showAnalytics(), available: isAdmin },
           { type: 'item', label: t('chrome.admin.feedback'), run: () => this.showFeedback(), available: isAdmin },
-          sub(t('chrome.file.openSample'), () => {
-            const samples = host.samples?.() ?? [];
-            if (!samples.length) return [{ type: 'item', label: t('chrome.none'), enabled: false, run: () => {} }];
-            return samples.map((s) => ({ type: 'item', label: s.label, run: () => r.perform({ kind: 'openSample', id: s.id }, s.label) }));
-          }),
         ],
       },
     ];

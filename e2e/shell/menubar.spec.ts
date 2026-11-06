@@ -137,18 +137,7 @@ test.describe('menu bar with the mouse', () => {
     await expect(menuTitle(app, 'Picture')).toBeHidden();
   });
 
-  test('the Admin menu offers no admin tools to people who are not admins', async ({ app, page }) => {
-    await app.goto('?doc=welcome');
-    await openMenu(app, 'Admin');
-    await expect(menuRow(page, 'Debug…')).toHaveCount(0);
-    await expect(menuRow(page, 'Cloudflare Billing…')).toHaveCount(0);
-    await expect(menuRow(page, 'Analytics…')).toHaveCount(0);
-    await expect(menuRow(page, 'Feedback…')).toHaveCount(0);
-  });
-
-  test.fixme('the whole Admin menu is left out for people who are not admins', async ({ app }) => {
-    // Suspected bug: chrome.ts says "the whole menu is left out for everyone else", but the Open Sample
-    // submenu (built on demand) counts as always available, so the empty-looking Admin title stays.
+  test('the whole Admin menu is left out for people who are not admins', async ({ app }) => {
     await app.goto('?doc=welcome');
     await expect(menuTitle(app, 'Admin')).toBeHidden();
   });

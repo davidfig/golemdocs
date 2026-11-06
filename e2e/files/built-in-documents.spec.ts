@@ -95,21 +95,21 @@ test('an edited built-in document is saved as a document of its own', async ({ a
   expect(await app.text()).toContain('Annotated');
 });
 
-test('a guest’s Admin menu holds only Open Sample (the admin tools are left out)', async ({ app }) => {
+test('a guest finds Open Sample in the Help menu', async ({ app }) => {
   await app.goto('?doc=welcome');
-  expect((await menuContents(app, 'Admin'))?.items).toEqual(['Open Sample']);
+  expect((await menuContents(app, 'Help'))?.items).toContain('Open Sample');
 });
 
 test('Open Sample opens each sample: Welcome, Fonts and War and Peace', async ({ app, page }) => {
   test.setTimeout(120_000);
   await app.goto('?doc=privacy');
-  await app.menu('Admin', 'Open Sample', 'Fonts');
+  await app.menu('Help', 'Open Sample', 'Fonts');
   await waitForOpen(app, 'Fonts');
   expect(await app.text()).toContain('Calibri');
-  await app.menu('Admin', 'Open Sample', 'Welcome to Golem Docs');
+  await app.menu('Help', 'Open Sample', 'Welcome to Golem Docs');
   await waitForOpen(app, 'Welcome to Golem Docs');
   expect(await app.text()).toContain('one editor that opens every kind of document');
-  await app.menu('Admin', 'Open Sample', 'War and Peace');
+  await app.menu('Help', 'Open Sample', 'War and Peace');
   await waitForOpen(app, 'War and Peace');
   await expect(page).toHaveTitle('War and Peace - Golem Docs');
   // A long document is laid out in batches, and Select All can land before the first one.

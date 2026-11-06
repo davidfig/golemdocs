@@ -16,7 +16,7 @@ const visibleTitles = (page: Page) => page.locator('[role=menubar] .wm-title:not
 
 test('a Word document has the full set of menus (Picture only for pictures)', async ({ app, page }) => {
   await app.blank();
-  expect(await visibleTitles(page)).toEqual(['File', 'Edit', 'View', 'Insert', 'Format', 'Tools', 'Table', 'Help', 'Admin']);
+  expect(await visibleTitles(page)).toEqual(['File', 'Edit', 'View', 'Insert', 'Format', 'Tools', 'Table', 'Help']);
 });
 
 test('a plain-text file drops the menus and items it cannot use', async ({ app, page }) => {

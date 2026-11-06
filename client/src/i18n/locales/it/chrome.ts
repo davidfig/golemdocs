@@ -174,7 +174,7 @@ export const chrome: Partial<Messages> = {
   'chrome.menu.table': 'T&abella',
   'chrome.menu.help': '&Guida',
   'chrome.menu.admin': 'A&dmin',
-  'chrome.file.openSample': 'Apri e&sempio',
+  'chrome.file.openSample': 'Apri ese&mpio',
   'chrome.file.openRecent': 'Apri &recente',
   'chrome.none': '(nessuno)',
   'chrome.file.convertTo': 'Con&verti in',

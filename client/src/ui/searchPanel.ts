@@ -42,10 +42,10 @@ export class SearchPanel {
       return;
     }
     const { host } = this;
-    const input = h('input', { class: 'wm-search-input', attrs: { type: 'text', placeholder: t('panels.search.placeholder'), 'aria-label': t('panels.search.placeholder'), autocomplete: 'off', spellcheck: 'false' } });
+    const input = h('input', { class: 'wm-input wm-search-input', attrs: { type: 'text', placeholder: t('panels.search.placeholder'), 'aria-label': t('panels.search.placeholder'), autocomplete: 'off', spellcheck: 'false' } });
     const status = h('div', { class: 'wm-search-status', attrs: { role: 'status', 'aria-live': 'polite' } });
     const list = h('div', { class: 'wm-search-list', attrs: { role: 'listbox' } });
-    const dialog = h('dialog', { class: 'wm-dialog wm-search' });
+    const dialog = h('dialog', { class: 'wm-dialog wm-search', attrs: { 'aria-label': t('panels.search.title') } });
     dialog.append(dialogTitleBar(t('panels.search.title'), () => dialog.close()), h('div', { class: 'wm-search-body' }, input, status, list));
     this.dialog = dialog;
 

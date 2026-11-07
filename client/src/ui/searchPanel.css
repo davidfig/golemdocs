@@ -13,17 +13,13 @@
 }
 
 .wm-search-input {
-  border: 1px solid var(--wm-field-border, #7f9db9);
-  background: var(--wm-field, #fff);
-  color: inherit;
-  font: inherit;
-  padding: 5px 7px;
+  flex: none;
+  margin: 0;
 }
 
 .wm-search-status {
   min-height: 1.3em;
-  color: var(--wm-disabled, #6b6b6b);
-  font-size: 12px;
+  color: var(--wm-muted);
 }
 
 .wm-search-list {
@@ -61,8 +57,7 @@
 }
 
 .wm-search-meta {
-  color: var(--wm-disabled, #6b6b6b);
-  font-size: 12px;
+  color: var(--wm-muted);
   white-space: nowrap;
 }
 

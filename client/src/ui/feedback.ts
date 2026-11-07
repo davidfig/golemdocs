@@ -3,7 +3,7 @@
 
 import { getLocale, t } from '../i18n/index.ts';
 import { CHEVRON_ICON, h, iconButton } from './dom.ts';
-import { showConfirm } from './popup.ts';
+import { dialogTitleBar, showConfirm } from './popup.ts';
 
 const MAX_CHARS = 5000;
 
@@ -20,7 +20,6 @@ export function showFeedbackDialog(): Promise<boolean> {
     const status = h('div', { class: 'wm-find-message', attrs: { role: 'alert' } });
     const send = h('button', { class: 'wm-button', text: t('panels.feedback.send'), attrs: { type: 'submit' } });
     const cancel = h('button', { class: 'wm-button', text: t('panels.feedback.cancel'), attrs: { type: 'button' } });
-    const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': t('panels.feedback.cancel') } });
     const form = h(
       'form',
       { attrs: { method: 'dialog' } },
@@ -28,7 +27,9 @@ export function showFeedbackDialog(): Promise<boolean> {
       h('div', { class: 'wm-dialog-buttons' }, send, cancel),
     );
     const title = t('panels.feedback.title');
-    const dialog = h('dialog', { class: 'wm-dialog wm-feedback-dialog', attrs: { 'aria-label': title } }, h('div', { class: 'wm-dialog-title' }, h('span', { text: title }), close), form);
+    const titleBar = dialogTitleBar(title, () => dialog.close());
+    const close = titleBar.querySelector('button')!;
+    const dialog = h('dialog', { class: 'wm-dialog wm-feedback-dialog', attrs: { 'aria-label': title } }, titleBar, form);
 
     let sent = false;
     let busy = false;
@@ -42,7 +43,6 @@ export function showFeedbackDialog(): Promise<boolean> {
     });
     // Keys stay in the dialog: the document's handlers listen on the window.
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
-    close.addEventListener('click', () => dialog.close());
     cancel.addEventListener('click', () => dialog.close());
     form.addEventListener('submit', (e) => {
       e.preventDefault();

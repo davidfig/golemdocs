@@ -2,7 +2,6 @@ import type { Messages } from '../../index.ts';
 
 export const columns: Partial<Messages> = {
   'columns.title': 'Spalten',
-  'columns.close': 'Schließen',
   'columns.presets': 'Voreinstellungen',
   'columns.one': 'Eine',
   'columns.two': 'Zwei',

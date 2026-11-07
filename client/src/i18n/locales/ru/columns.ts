@@ -2,7 +2,6 @@ import type { Catalog } from '../../index.ts';
 
 export const columns: Catalog = {
   'columns.title': 'Колонки',
-  'columns.close': 'Закрыть',
   'columns.presets': 'Шаблоны',
   'columns.one': 'Одна',
   'columns.two': 'Две',

@@ -62,6 +62,7 @@ export class TrashDialog {
     });
     document.body.append(dialog);
     dialog.showModal();
+    close.focus();
     void refresh();
   }
 

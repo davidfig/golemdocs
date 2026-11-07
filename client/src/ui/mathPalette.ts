@@ -37,7 +37,7 @@ const STRUCTURES: PaletteKey[] = [
   structure('(ⁿₖ)', '\\binom{§}{}', '\\binom'),
   structure('x̂', '\\hat{§}', '\\hat'),
   structure('x̄', '\\overline{§}', '\\overline'),
-  structure('x⃗', '\\vec{§}', '\\vec'),
+  structure('x→', '\\vec{§}', '\\vec'),
   structure('▦', '\\begin{pmatrix} § & \\\\ & \\end{pmatrix}', 'pmatrix'),
   structure('{ ▤', '\\begin{cases} § & \\\\ & \\end{cases}', 'cases'),
   structure('a=b', '\\begin{aligned} § &= \\\\ &= \\end{aligned}', 'aligned'),

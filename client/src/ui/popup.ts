@@ -147,7 +147,7 @@ export function showDialog(title: string, body: Node, onClose?: () => void): voi
 /** Asks before doing something that can't be undone. Resolves true only if `action` is clicked. */
 export function showConfirm(title: string, body: Node, action: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const dialog = h('dialog', { class: 'wm-dialog' });
+    const dialog = h('dialog', { class: 'wm-dialog', attrs: { 'aria-label': title } });
     const cancel = h('button', { class: 'wm-button', text: t('menus.dialog.cancel') });
     const confirm = h('button', { class: 'wm-button wm-primary', text: action });
     dialog.append(

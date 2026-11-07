@@ -2,7 +2,6 @@ import type { Messages } from '../../index.ts';
 
 export const columns: Partial<Messages> = {
   'columns.title': '分栏',
-  'columns.close': '关闭',
   'columns.presets': '预设',
   'columns.one': '一栏',
   'columns.two': '两栏',

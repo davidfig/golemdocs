@@ -31,7 +31,7 @@ export function openScenarioManager(deps: ScenarioManagerDeps): Promise<void> {
     const change = button(t('sheet.scenario.edit'));
     const remove = button(t('sheet.scenario.delete'));
     const summary = button(t('sheet.scenario.summary'));
-    const close = button(t('sheet.scenario.close'), true);
+    const close = button(t('sheet.scenario.close'));
     const render = () => {
       list.replaceChildren(
         ...scenarios.list.map((s, i) => {

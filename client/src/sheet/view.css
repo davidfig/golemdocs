@@ -320,6 +320,16 @@
   width: 100%;
 }
 
+@media (max-width: 560px) {
+  .wm-sheet-pivot-options .wm-sheet-pivot-row {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .wm-sheet-pivot-options .wm-sheet-pivot-name {
+    overflow: visible;
+  }
+}
+
 /* What-If › Scenario Manager: the list (with the chosen one's cells and comment under it) beside its buttons. */
 .wm-sheet-scenario {
   display: grid;

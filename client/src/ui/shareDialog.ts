@@ -7,7 +7,7 @@ import { addShare, listShares, publicLink, publicLinkUrl, removeShare, type Shar
 import { t } from '../i18n/index.ts';
 import { avatar } from './avatar.ts';
 import { writeClipboardText } from './clipboard.ts';
-import { h, segmented } from './dom.ts';
+import { CLOSE_ICON, h, iconButton, segmented } from './dom.ts';
 import { dialogTitleBar } from './popup.ts';
 
 /** Can edit | Can view: the shared segmented control, set to `value`, with `pick` told of a change. */
@@ -33,12 +33,21 @@ export interface ShareTarget {
   people: { id: string } | { unavailable: string };
 }
 
-const section = (heading: string, ...content: (HTMLElement | null)[]): HTMLElement => {
-  const title = h('h3', { text: heading });
-  title.style.cssText = 'margin:14px 0 6px;font-size:1em';
+const section = (heading: string, ...content: (HTMLElement | null)[]): HTMLElement =>
   // Named by its heading, so each section's status line can be told apart (People, Public link).
-  return h('section', { attrs: { 'aria-label': heading } }, title, ...content);
-};
+  h('section', { class: 'wm-share-section', attrs: { 'aria-label': heading } }, h('h3', { text: heading }), ...content);
+
+/** A section's status line, under what it reports on: it takes no room while it has nothing to say. */
+function statusLine(): { el: HTMLElement; say(text: string, error?: boolean): void } {
+  const el = h('div', { class: 'wm-find-message wm-share-status', attrs: { role: 'status' } });
+  return {
+    el,
+    say(text, error = false) {
+      el.textContent = text;
+      el.classList.toggle('wm-share-error', error);
+    },
+  };
+}
 
 /** The embed code for a public link: a frame of the viewer, sized like a page column. */
 export const embedCode = (url: string, title: string): string =>
@@ -48,28 +57,19 @@ export const embedCode = (url: string, title: string): string =>
 function publicSection(id: string, name: string): HTMLElement {
   const toggle = h('input', { attrs: { type: 'checkbox' } });
   const address = h('input', { class: 'wm-input', attrs: { type: 'text', readonly: '', 'aria-label': t('dialogs.share.publicLinkLabel') } });
-  address.style.cssText = 'flex:1;min-width:0;margin:0';
   address.addEventListener('focus', () => address.select());
   const copyLink = h('button', { class: 'wm-button', text: t('dialogs.share.copyLink'), attrs: { type: 'button' } });
   const copyEmbed = h('button', { class: 'wm-button', text: t('dialogs.share.copyEmbed'), attrs: { type: 'button' } });
   const reset = h('button', { class: 'wm-button', text: t('dialogs.share.resetLink'), attrs: { type: 'button', title: t('dialogs.share.resetNote') } });
-  const linkRow = h('div', {}, address, copyLink);
-  linkRow.style.cssText = 'display:flex;gap:6px;margin-top:8px';
-  const moreRow = h('div', {}, copyEmbed, reset);
-  moreRow.style.cssText = 'display:flex;gap:6px;margin-top:6px';
-  const message = h('p', { attrs: { role: 'status' } });
-  message.style.cssText = 'margin:8px 0 0;min-height:1.2em';
-  const say = (text: string, error = false) => {
-    message.textContent = text;
-    message.style.color = error ? 'var(--wm-error)' : 'inherit';
-  };
+  const linkRow = h('div', { class: 'wm-share-link' }, address, copyLink);
+  const moreRow = h('div', { class: 'wm-share-more' }, copyEmbed, reset);
+  const { el: message, say } = statusLine();
 
   let token: string | null = null;
   const show = (next: string | null) => {
     token = next;
     toggle.checked = !!token;
-    // Their inline `display: flex` would win over `hidden`.
-    for (const row of [linkRow, moreRow]) row.style.display = token ? 'flex' : 'none';
+    for (const row of [linkRow, moreRow]) row.hidden = !token;
     address.value = token ? publicLinkUrl(token) : '';
   };
   show(null);
@@ -96,39 +96,28 @@ function publicSection(id: string, name: string): HTMLElement {
   copyEmbed.addEventListener('click', () => token && void copy(embedCode(publicLinkUrl(token, true), t('dialogs.share.embedTitle', { name }))));
   publicLink(id).then(show, (error: Error) => say(error.message, true));
 
-  const note = h('p', { text: t('dialogs.share.publicNote') });
-  note.style.margin = '0 0 8px';
-  return section(t('dialogs.share.publicHeading'), note, h('label', { class: 'wm-find-case' }, toggle, t('dialogs.share.publicToggle')), linkRow, moreRow, message);
+  const note = h('p', { class: 'wm-hint', text: t('dialogs.share.publicNote') });
+  return section(t('dialogs.share.publicHeading'), h('label', { class: 'wm-find-case' }, toggle, t('dialogs.share.publicToggle')), note, linkRow, moreRow, message);
 }
 
 /** A modal for sharing the open document with people. */
 export function showShareDialog(target: ShareTarget): void {
-  const doc = { name: target.name };
-  const dialog = h('dialog', { class: 'wm-dialog wm-share', attrs: { 'aria-label': t('dialogs.share.label', { name: doc.name }) } });
-  dialog.style.width = 'min(460px, 90vw)';
+  const dialog = h('dialog', { class: 'wm-dialog wm-share', attrs: { 'aria-label': t('dialogs.share.label', { name: target.name }) } });
 
   const personId = 'id' in target.people ? target.people.id : '';
-  const people = h('div', { attrs: { role: 'list' } });
-  people.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin:12px 0';
-  const message = h('p', { attrs: { role: 'status' } });
-  message.style.cssText = 'margin:8px 0 0;min-height:1.2em';
+  const people = h('div', { class: 'wm-share-people', attrs: { role: 'list' } });
+  const { el: message, say } = statusLine();
 
   const email = h('input', { class: 'wm-input', attrs: { type: 'email', placeholder: t('dialogs.share.emailPlaceholder'), 'aria-label': t('dialogs.share.emailLabel'), autocomplete: 'off' } });
-  email.style.cssText = 'flex:1;min-width:0;margin:0';
   let role: ShareRole = 'editor';
   const roleFor = roleChoice(role, (next) => (role = next));
   const add = h('button', { class: 'wm-button', text: t('dialogs.share.share'), attrs: { type: 'submit' } });
-  const form = h('form', {}, email, roleFor.el, add);
-  form.style.cssText = 'display:flex;gap:6px';
-
-  const say = (text: string, error = false) => {
-    message.textContent = text;
-    message.style.color = error ? 'var(--wm-error)' : 'inherit';
-  };
+  const form = h('form', { class: 'wm-share-form' }, email, h('div', { class: 'wm-share-access' }, roleFor.el, add));
 
   const row = (share: Share): HTMLElement => {
-    const label = h('span', { text: share.name && share.email ? t('dialogs.share.person', { name: share.name, email: share.email }) : (share.email ?? share.name ?? t('dialogs.share.unknown')) });
-    label.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    // The name above the address, each cut short on its own if it has to be; the tooltip has both whole.
+    const lines = [share.name, share.email].filter((line): line is string => !!line);
+    const label = h('div', { class: 'wm-share-person', title: lines.join('\n') }, ...(lines.length ? lines : [t('dialogs.share.unknown')]).map((text) => h('span', { text })));
     const access = roleChoice(share.role, (next) => {
       if (!share.email) return access.set(share.role);
       addShare(personId, share.email, next).then(
@@ -143,7 +132,7 @@ export function showShareDialog(target: ShareTarget): void {
         },
       );
     });
-    const remove = h('button', { class: 'wm-button', text: t('dialogs.share.remove'), attrs: { type: 'button' } });
+    const remove = iconButton('wm-dialog-close', CLOSE_ICON, t('dialogs.share.remove'));
     remove.addEventListener('click', () => {
       remove.disabled = true;
       removeShare(personId, share.userId).then(
@@ -154,15 +143,13 @@ export function showShareDialog(target: ShareTarget): void {
         },
       );
     });
-    const el = h('div', { attrs: { role: 'listitem' } }, avatar(share.picture, share.name ?? share.email, 24), label, access.el, remove);
-    el.style.cssText = 'display:flex;gap:6px;align-items:center';
-    return el;
+    return h('div', { class: 'wm-share-row', attrs: { role: 'listitem' } }, avatar(share.picture, share.name ?? share.email, 24), label, h('div', { class: 'wm-share-access' }, access.el, remove));
   };
 
   async function refresh(): Promise<void> {
     try {
       const shares = await listShares(personId);
-      people.replaceChildren(...(shares.length ? shares.map(row) : [h('p', { text: t('dialogs.share.nobody') })]));
+      people.replaceChildren(...(shares.length ? shares.map(row) : [h('p', { class: 'wm-hint', text: t('dialogs.share.nobody') })]));
     } catch (error) {
       say((error as Error).message, true);
     }
@@ -184,23 +171,24 @@ export function showShareDialog(target: ShareTarget): void {
   });
 
   const done = h('button', { class: 'wm-button', text: t('dialogs.share.done'), attrs: { type: 'button' } });
-  done.style.marginTop = '16px';
   done.addEventListener('click', () => dialog.close());
-
-  const note = h('p', { text: t('dialogs.share.note') });
-  note.style.margin = '0';
 
   const peopleSection =
     'id' in target.people
-      ? section(t('dialogs.share.peopleHeading'), note, people, form, message)
+      ? section(t('dialogs.share.peopleHeading'), form, message, h('p', { class: 'wm-hint', text: t('dialogs.share.note') }), people)
       : section(t('dialogs.share.peopleHeading'), h('p', { text: target.people.unavailable }));
-  const body = h('div', { class: 'wm-dialog-body' }, peopleSection, 'id' in target.people ? publicSection(target.people.id, doc.name) : null, done);
-  body.style.paddingBottom = '14px';
-  dialog.append(dialogTitleBar(t('dialogs.share.title', { name: doc.name }), () => dialog.close()), body);
+  const body = h('div', { class: 'wm-dialog-body' }, peopleSection, 'id' in target.people ? publicSection(target.people.id, target.name) : null);
+  dialog.append(dialogTitleBar(t('dialogs.share.title', { name: target.name }), () => dialog.close()), body, h('div', { class: 'wm-dialog-buttons' }, done));
   // Keys stay in the dialog: the document's handlers listen on the window.
   dialog.addEventListener('keydown', (e) => e.stopPropagation());
   dialog.addEventListener('close', () => dialog.remove());
   document.body.append(dialog);
   dialog.showModal();
-  if ('id' in target.people) void refresh();
+  if ('id' in target.people) {
+    void refresh();
+    // Start in the address, except where that would bring up an on-screen keyboard over the dialog.
+    if (!matchMedia('(pointer: coarse)').matches) email.focus();
+  } else {
+    done.focus();
+  }
 }

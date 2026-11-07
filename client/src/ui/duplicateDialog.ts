@@ -15,7 +15,7 @@ export function askDuplicate(duplicate: Duplicate): Promise<DuplicateChoice> {
     const overwrite = button(t('app.importDuplicateOverwrite'));
     const rename = button(t('app.importDuplicateRename'));
     const skip = button(t('app.importDuplicateSkip'));
-    const dialog = h('dialog', { class: 'wm-dialog' });
+    const dialog = h('dialog', { class: 'wm-dialog', attrs: { 'aria-label': t('app.importDuplicateTitle') } });
     dialog.append(
       dialogTitleBar(t('app.importDuplicateTitle'), () => dialog.close()),
       h('div', { class: 'wm-dialog-body' }, h('p', { text: t('app.importDuplicateMessage', { name: path }) }), h('label', {}, all, h('span', { text: ` ${t('app.importDuplicateAll')}` }))),

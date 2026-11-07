@@ -20,6 +20,16 @@ async function select(page: Page, toolbar: string): Promise<void> {
 }
 
 test.describe('Customize Toolbars', () => {
+  test('the Toolbar and Category lists can be seen', async ({ app }) => {
+    await app.goto();
+    await open(app);
+    for (const list of [toolbarSelect(app.page), dialog(app.page).getByRole('combobox', { name: 'Category', exact: true })]) {
+      const look = await list.evaluate((el) => ({ opacity: getComputedStyle(el).opacity, width: el.getBoundingClientRect().width }));
+      expect(look.opacity).toBe('1');
+      expect(look.width).toBeGreaterThan(40);
+    }
+  });
+
   test('opens from View ▸ Toolbars and from Tools, and Close returns the keyboard to the document', async ({ app, page }) => {
     await app.blank();
     await open(app);

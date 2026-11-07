@@ -1,5 +1,23 @@
 # What’s New in Golem Docs
 
+## 0.34.4 - Unreleased
+
+### Changed
+
+- The File › Share dialog is tidier: people’s names and email addresses show in full, the explanations are quieter and come after the controls, and it fits a phone’s screen better.
+- Dialogs are more consistent: the same close button everywhere, Close no longer looks like the main action, and each dialog starts in its first useful field.
+- Background and Canvas Size show only the settings the chosen fill uses.
+
+### Fixed
+
+- View › Toolbars › Customize: the lists for choosing a toolbar and a category of commands were invisible, and long command names were cut off without a tooltip.
+- Trash: Close stays on the right when there is nothing to empty.
+- Keyboard Shortcuts: Restore Defaults no longer spills out of its button.
+- Resize Picture and Canvas Size: “pixels” now sits beside its field instead of below it.
+- Insert Equation: the vector button shows an arrow instead of an empty box.
+- On a phone, Find and Replace, Spelling and Grammar and Thesaurus are no longer cut off at the left edge, and PivotTable Fields shows its labels in full.
+- The desktop app now reopens its window at the size and position you left it, including on which monitor and whether it was maximized or full screen.
+
 ## 0.34.3 - 2026-11-06
 
 ### Changed

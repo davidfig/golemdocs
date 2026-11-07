@@ -1,6 +1,5 @@
 export const paragraph = {
   'paragraph.title': 'Paragraph',
-  'paragraph.close': 'Close',
   'paragraph.ok': 'OK',
   'paragraph.cancel': 'Cancel',
   'paragraph.tabIndents': 'Indents and Spacing',

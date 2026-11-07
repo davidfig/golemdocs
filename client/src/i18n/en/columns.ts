@@ -1,6 +1,5 @@
 export const columns = {
   'columns.title': 'Columns',
-  'columns.close': 'Close',
   'columns.presets': 'Presets',
   'columns.one': 'One',
   'columns.two': 'Two',

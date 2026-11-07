@@ -6,6 +6,7 @@
 import { getLocale, t } from '../i18n/index.ts';
 import type { Alignment, ParagraphChoice } from './actions.ts';
 import { h } from './dom.ts';
+import { dialogTitleBar } from './popup.ts';
 
 type LineKind = '' | 'single' | 'oneHalf' | 'double' | 'atLeast' | 'exactly' | 'multiple';
 
@@ -154,7 +155,6 @@ export function showParagraphDialog(current: ParagraphChoice): Promise<Paragraph
     const message = h('div', { class: 'wm-find-message', attrs: { role: 'alert' } });
     const ok = h('button', { class: 'wm-button', text: t('paragraph.ok'), attrs: { type: 'submit' } });
     const cancel = h('button', { class: 'wm-button', text: t('paragraph.cancel'), attrs: { type: 'button' } });
-    const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': t('paragraph.close') } });
     const form = h(
       'form',
       // A number box's step is how far its arrows go, not a limit on what can be typed (A4 is 8.27 in, line spacing can be 1.08): the submit handler below checks the values.
@@ -163,12 +163,11 @@ export function showParagraphDialog(current: ParagraphChoice): Promise<Paragraph
       h('div', { class: 'wm-dialog-body wm-link-body' }, indentsTab, breaksTab, message),
       h('div', { class: 'wm-dialog-buttons' }, h('span', { class: 'wm-link-actions' }, ok, cancel)),
     );
-    const dialog = h('dialog', { class: 'wm-dialog wm-link wm-pagesetup', attrs: { 'aria-label': t('paragraph.title') } }, h('div', { class: 'wm-dialog-title' }, h('span', { text: t('paragraph.title') }), close), form);
+    const dialog = h('dialog', { class: 'wm-dialog wm-link wm-pagesetup', attrs: { 'aria-label': t('paragraph.title') } }, dialogTitleBar(t('paragraph.title'), () => dialog.close()), form);
 
     let result: ParagraphChoice | undefined;
     // Keys stay in the dialog: the document's handlers listen on the window.
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
-    close.addEventListener('click', () => dialog.close());
     cancel.addEventListener('click', () => dialog.close());
     form.addEventListener('submit', (e) => {
       e.preventDefault();

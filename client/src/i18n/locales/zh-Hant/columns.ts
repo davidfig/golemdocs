@@ -2,7 +2,6 @@ import type { Messages } from '../../index.ts';
 
 export const columns: Partial<Messages> = {
   'columns.title': '欄',
-  'columns.close': '關閉',
   'columns.presets': '預設',
   'columns.one': '一欄',
   'columns.two': '兩欄',

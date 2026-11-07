@@ -2902,7 +2902,10 @@ html.wm-titlebar .wm-format {
 }
 
 .wm-palette-icon {
+  display: flex;
   flex: none;
+  align-items: center;
+  justify-content: center;
   width: 18px;
   height: 18px;
 }
@@ -2922,8 +2925,11 @@ html.wm-titlebar .wm-format {
 
 .wm-palette-meta {
   flex: none;
+  max-width: 45%;
+  overflow: hidden;
   font-size: 0.85em;
   color: var(--wm-muted);
+  text-overflow: ellipsis;
 }
 
 .wm-palette-empty {

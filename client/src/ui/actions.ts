@@ -441,6 +441,14 @@ export interface Sample {
   label: string;
 }
 
+/** A document the command palette can find. */
+export interface ListedDocument {
+  name: string;
+  /** The folders it is in, for telling documents of the same name apart ('' when in none). */
+  folder: string;
+  open(): void;
+}
+
 /** What the chrome needs from the application. */
 export interface ChromeHost {
   /** Whether the app implements this action (for any document). Unimplemented actions are disabled. */
@@ -458,6 +466,8 @@ export interface ChromeHost {
   samples?(): Sample[];
   /** The user's documents, for File ▸ Open Recent. */
   saved?(): Sample[];
+  /** Every document the user can open, their own and those shared with them, for the command palette. */
+  documents?(): ListedDocument[];
   /** Font families for the font box. */
   fonts?(): string[] | Promise<string[]>;
 }

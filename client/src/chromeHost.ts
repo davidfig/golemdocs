@@ -17,7 +17,7 @@ import type { GpuPage } from './webgl/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
 import type { FindTab } from './ui/findDialog.ts';
 import { blankSource, lastNewKind } from './ui/newKinds.ts';
-import { acceptList, worksWithoutDocument, type ImageOp, type SheetOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
+import { acceptList, worksWithoutDocument, type ImageOp, type SheetOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type ListedDocument, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
 import { t } from './i18n/index.ts';
 
 export interface AppHooks {
@@ -133,6 +133,8 @@ export interface AppHooks {
   importPicked(files: FileList): Promise<void>;
   /** The user's documents (ids are sources: `local:…` or `cloud:…`). */
   saved(): Sample[];
+  /** Every document the user can open, for the command palette. */
+  documents(): ListedDocument[];
   send(command: WireCommand): void;
   /** A PDF is shown as its own pages, which take markup annotations. */
   annotating(): boolean;
@@ -544,6 +546,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
     renameDocument: app.renameDocument,
     samples: app.samples,
     saved: app.saved,
+    documents: app.documents,
     vaultFolder: app.vaultFolder,
     fonts: app.fonts,
   };

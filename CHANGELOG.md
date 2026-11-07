@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.34.4 - Unreleased
+
+### Added
+
+- The command palette now also finds your documents by title: type part of a name and press Enter to open it.
+
 ## 0.34.3 - 2026-11-06
 
 ### Changed

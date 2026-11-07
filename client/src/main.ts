@@ -140,7 +140,7 @@ import { samplePicture } from './formats/imageSample.ts';
 import { DEFAULT_DRAW_STYLE, paintOf } from './formats/imageDraw.ts';
 import type { DrawStyle, Shape } from './formats/imageDraw.ts';
 import { applyImageEdit, type ImageEdit } from './formats/imageEdit.ts';
-import type { ChromeState, ImageOp } from './ui/actions.ts';
+import type { ChromeState, ImageOp, ListedDocument } from './ui/actions.ts';
 import { opensLink } from './ui/linkDialog.ts';
 import { LinkPopover, type LinkDraft } from './ui/linkPopover.ts';
 import { droppedDocumentKey, isDocumentDrag } from './ui/documentDrag.ts';
@@ -5123,6 +5123,7 @@ const chromeHost = createChromeHost({
   manageSubscription,
   clearLocalData,
   saved: () => library.entries.map((e) => ({ id: sourceOf(e), label: e.name.replace(/&/g, '&&') })),
+  documents: listedDocuments,
   send,
   annotating: () => annotating,
   setFormMode,
@@ -5668,6 +5669,23 @@ function goToHit(jump: { paragraph?: number; find: string }): void {
   if (textView.active) return textView.editor?.goToLine(jump.paragraph + 1);
   send({ kind: 'select', paragraph: jump.paragraph, from: 0, to: 0 });
   if (jump.find) send({ kind: 'find', text: jump.find, matchCase: false });
+}
+
+/** Every document the user can open (as for Search, what is shared with them too), for the command palette. */
+function listedDocuments(): ListedDocument[] {
+  const place = (e: LibraryEntry) => folderPath(library.folders, folderOf(e, library.folders)).map((f) => f.name).join(' / ');
+  const own = new Set(library.entries.flatMap((e) => (e.cloud ? [e.cloud.id] : [])));
+  // The one already open (or on its way) stays as it is: opening it again would only reload it.
+  const opening = (source: string, name: string, isOpen: boolean) => () => {
+    if (source === (wantedDocKey ?? viewDocKey) || isOpen) return;
+    newDocumentFolder = null;
+    showLoading(name);
+    openSource(source);
+  };
+  return [
+    ...library.entries.map((e) => ({ name: e.name, folder: place(e), open: opening(sourceOf(e), e.name, !!e.local && e.local.id === current.localId) })),
+    ...(signedIn ? library.shared : []).filter((d) => !own.has(d.id)).map((d) => ({ name: d.name, folder: '', open: opening(`shared:${d.id}`, d.name, false) })),
+  ];
 }
 
 /** Opens the document a search result is for, at the paragraph that matched. */

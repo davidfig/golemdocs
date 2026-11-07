@@ -53,7 +53,7 @@ test.describe('command palette', () => {
     await openPalette(app);
     await search(page).fill('qqqqzzzz');
     await expect(options(page)).toHaveCount(0);
-    await expect(palette(page).getByText('No matching commands')).toBeVisible();
+    await expect(palette(page).getByText('No matching commands or documents')).toBeVisible();
   });
 
   test('the first match is highlighted, arrows move the highlight and wrap, Enter runs it', async ({ app, page }) => {

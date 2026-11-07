@@ -1751,7 +1751,7 @@ export class Chrome {
     this.formatCombo = combo;
     this.syncButton = new SyncButton(this.options.host);
     this.accountButton = new AccountButton(this.options.host);
-    this.palette = new CommandPalette(this.registry, (command) => this.commandInfo(command, command.plainLabel));
+    this.palette = new CommandPalette(this.registry, (command) => this.commandInfo(command, command.plainLabel), () => this.options.host.documents?.() ?? []);
     return h(
       'div',
       { class: 'wm-format' },

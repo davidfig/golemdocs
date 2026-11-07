@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MAX_RECENT, filterEntries, pushRecent } from '../src/ui/commandPalette.ts';
+import { MAX_DOCUMENTS, MAX_RECENT, filterEntries, pushRecent, searchEntries } from '../src/ui/commandPalette.ts';
 
 test('pushRecent moves a repeated command to the front without duplicating it', () => {
   assert.deepEqual(pushRecent(['a', 'b', 'c'], 'b'), ['b', 'a', 'c']);
@@ -30,4 +30,20 @@ test('filterEntries requires every word and ranks label prefixes first', () => {
 
 test('filterEntries matches the category too', () => {
   assert.deepEqual(filterEntries(entries, 'format').map((e) => e.id), ['a']);
+});
+
+const doc = (id: string, label: string) => ({ id, label, category: '' });
+
+test('searchEntries finds documents by title, among the commands', () => {
+  const documents = [doc('d1', 'Insert Notes.docx'), doc('d2', 'Budget.xlsx'), doc('d3', 'To Insert.md')];
+  assert.deepEqual(searchEntries(entries, documents, 'budget').map((e) => e.id), ['d2']);
+  // Title prefixes first, and on equal terms the command.
+  assert.deepEqual(searchEntries(entries, documents, 'insert').map((e) => e.id), ['c', 'd1', 'b', 'd3']);
+});
+
+test('searchEntries lists only so many documents, the best matches', () => {
+  const many = Array.from({ length: MAX_DOCUMENTS + 10 }, (_, i) => doc(`d${i}`, `My Notes ${i}`));
+  const found = searchEntries(entries, [...many, doc('best', 'Notes')], 'notes');
+  assert.equal(found.length, MAX_DOCUMENTS);
+  assert.equal(found[0]!.id, 'best');
 });

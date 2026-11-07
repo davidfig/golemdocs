@@ -32,7 +32,7 @@ The editor itself is a WebGL canvas; everything around it (menus, toolbars, dial
 | `client/src/ui/commands.ts` | `CommandSpec`, `CommandRegistry` |
 | `client/src/ui/chrome.ts` | `Chrome` / `mountChrome`: command catalog, menu and toolbar contents |
 | `client/src/ui/menu.ts`, `toolbar.ts`, `toolbarLayout.ts`, `customize.ts` | Menu bar mechanics, toolbar controls, toolbar contents as data, Customize Toolbars (layout kept per device) |
-| `client/src/ui/commandPalette.ts`, `shortcuts.ts` | Searchable command list; `Mod+Shift+Z`-style shortcut parsing and user rebinding |
+| `client/src/ui/commandPalette.ts`, `shortcuts.ts` | Searchable command list, whose searches also find documents by title (`ChromeHost.documents`); `Mod+Shift+Z`-style shortcut parsing and user rebinding |
 | `client/src/ui/popup.ts`, `dropdown.ts`, `dom.ts` | One-at-a-time popups and dialogs; the drop-down list; DOM helpers (`h`, `iconButton`, `segmented`) |
 | `client/src/ui/layerTree.ts` + `layersPanel.ts`, `pictureLayersPanel.ts` | Shared layers panel and its two adapters |
 | `client/src/ui/cursors.ts` | Cursor drawings for vector and picture tools |

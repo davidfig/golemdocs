@@ -38,10 +38,10 @@ export function showCustomize(options: CustomizeOptions): void {
   const items = () => layout[current].items;
 
   // --- Controls ---
-  const toolbarSelect = h('select', { class: 'wm-select', attrs: { 'aria-label': t('menus.customize.toolbar') } });
+  const toolbarSelect = h('select', { class: 'wm-customize-select', attrs: { 'aria-label': t('menus.customize.toolbar') } });
   for (const [i, bar] of layout.entries()) toolbarSelect.append(new Option(toolbarTitle(bar.name), String(i)));
   const visible = h('input', { attrs: { type: 'checkbox' } });
-  const categorySelect = h('select', { class: 'wm-select', attrs: { 'aria-label': t('menus.customize.category') } });
+  const categorySelect = h('select', { class: 'wm-customize-select', attrs: { 'aria-label': t('menus.customize.category') } });
   for (const c of categories) categorySelect.append(new Option(c === ALL ? t('menus.customize.allCommands') : c, c));
   const catalogList = h('div', { class: 'wm-clist', attrs: { role: 'listbox', tabindex: '0', 'aria-label': t('menus.customize.commandsList') } });
   const toolbarList = h('div', { class: 'wm-clist', attrs: { role: 'listbox', tabindex: '0', 'aria-label': t('menus.customize.buttonsList') } });
@@ -108,7 +108,7 @@ export function showCustomize(options: CustomizeOptions): void {
   };
 
   // --- Rendering ---
-  const row = (id: string, text: string) => h('div', { class: 'wm-crow', attrs: { role: 'option' } }, id === SEPARATOR ? h('span', { class: 'wm-crow-sep' }) : options.icon(id), h('span', { text }));
+  const row = (id: string, text: string) => h('div', { class: 'wm-crow', title: text, attrs: { role: 'option' } }, id === SEPARATOR ? h('span', { class: 'wm-crow-sep' }) : options.icon(id), h('span', { text }));
 
   const renderCatalog = () => {
     catalogList.replaceChildren();
@@ -250,7 +250,7 @@ export function showCustomize(options: CustomizeOptions): void {
   });
 
   // --- Dialog ---
-  const dialog = h('dialog', { class: 'wm-dialog wm-customize' });
+  const dialog = h('dialog', { class: 'wm-dialog wm-customize', attrs: { 'aria-label': t('menus.customize.title') } });
   dialog.append(
     dialogTitleBar(t('menus.customize.title'), () => dialog.close()),
     h(

@@ -11,7 +11,7 @@ import type { EncodedPage, FaceDescriptor } from '@golemdocs/layout';
 import type { Format } from '../formats/convert.ts';
 import type { Shape } from '../formats/imageDraw.ts';
 import type { Scene } from '../vector/model.ts';
-import type { FormatState } from '../ui/actions.ts';
+import type { DocumentInfo, FormatState } from '../ui/actions.ts';
 import type { FormatAction } from './formatting.ts';
 import type { AutoCorrectOptions } from './autocorrect.ts';
 import type { PickedStyle } from './pdfAnnotator.ts';
@@ -130,6 +130,8 @@ export type WireCommand =
   | { kind: 'pasteHtml'; html: string; text: string }
   /** Ask for the document's properties (title, author…): the answer is `SelectionUpdate.docProperties`. */
   | { kind: 'getProperties' }
+  /** The answer is `SelectionUpdate.documentInfo`. `builtIn` are the style names the style box offers for this kind of document. */
+  | { kind: 'getDocumentInfo'; builtIn: readonly string[] }
   /** The pointer was released: with the Format Painter picked up, paint the selection (if there is one). */
   | { kind: 'applyPainter' }
   /**
@@ -363,6 +365,8 @@ export interface SelectionUpdate {
   spellMarks?: Float64Array;
   /** Set once after `getProperties`. */
   docProperties?: DocumentProperties;
+  /** Set once after `getDocumentInfo`. */
+  documentInfo?: DocumentInfo;
   /** Set once after `countWords`: the counts, or null when this document has none to give (a PDF shown as pages). */
   stats?: WordStats | null;
   /** Set once after a `countWords` the status bar asked for. */

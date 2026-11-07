@@ -67,6 +67,7 @@ export class VersionHistoryDialog {
     }
     document.body.append(dialog);
     dialog.showModal();
+    (dialog.querySelector<HTMLElement>('.wm-history-name input') ?? close).focus();
   }
 
   /** The row that keeps the document as it is now under a name. */

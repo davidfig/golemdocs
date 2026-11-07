@@ -2,11 +2,11 @@
 // Sections: columns and page setup.
 import { type Command } from './types.ts';
 
-import { type Paragraph, type SectionProperties } from '@golemdocs/docx';
+import { hasPageField, pageNumberParagraph, withoutPageFields, type Block, type HeaderFooter, type HeaderFooterReference, type Paragraph, type SectionProperties } from '@golemdocs/docx';
 import { type Operation, type Pos } from '@golemdocs/ops';
-import { EditorComments } from './comments.ts';
+import { EditorDocumentParts } from './documentParts.ts';
 
-export abstract class EditorSections extends EditorComments {
+export abstract class EditorSections extends EditorDocumentParts {
   /** Twips between the margins of the document's page (Word's default 6.5in when it says nothing). */
   protected textWidth(section: SectionProperties = this.doc.section): number {
     const { pageSize, margins } = section ?? {};
@@ -72,6 +72,124 @@ export abstract class EditorSections extends EditorComments {
       next.margins = { ...next.margins, top: c.top, bottom: c.bottom, left: c.left, right: c.right, gutter: c.gutter, header: c.header, footer: c.footer };
       return next;
     });
+  }
+
+  /** The first section: the one a document's headers and footers usually live on, for the others to inherit. */
+  private firstSection(): { section: SectionProperties; end: Paragraph | null } {
+    const end = this.paragraphs().find((p) => p.properties.section) ?? null;
+    return { section: end?.properties.section ?? this.doc.section, end };
+  }
+
+  /** What the document's pages show for page numbers, for the Page Numbers dialog. */
+  pageNumbers(): { position: 'top' | 'bottom' | null; align: 'left' | 'center' | 'right'; firstPage: boolean; format: string; start: number | null } {
+    const { section } = this.firstSection();
+    const numbered = (refs: HeaderFooterReference[], type: HeaderFooterReference['type']): Paragraph | undefined => {
+      const part = refs.find((r) => r.type === type)?.part;
+      const blocks = (part && this.doc.headersFooters.get(part)?.children) || [];
+      return blocks.find((b): b is Paragraph => b.kind === 'paragraph' && hasPageField(b));
+    };
+    const footer = numbered(section.footers, 'default');
+    const header = numbered(section.headers, 'default');
+    const shown = footer ?? header;
+    const align = shown?.properties.justification;
+    const firstPage = !section.titlePage || !!(footer ? numbered(section.footers, 'first') : header ? numbered(section.headers, 'first') : true);
+    return { position: footer ? 'bottom' : header ? 'top' : null, align: align === 'center' || align === 'right' ? align : shown ? 'left' : 'right', firstPage, format: section.pageNumbering?.fmt ?? 'decimal', start: section.pageNumbering?.start ?? null };
+  }
+
+  protected setPageNumbersOps(c: Extract<Command, { kind: 'setPageNumbers' }>): [Operation[], Pos] {
+    const ops: Operation[] = [];
+    const parts = new Map<string, HeaderFooter>();
+    const current = (part: string) => parts.get(part) ?? this.doc.headersFooters.get(part);
+    /** Takes the numbers out of a part; a paragraph left with nothing in it goes, but a part always keeps one. */
+    const strip = (part: string): void => {
+      const hf = current(part);
+      if (!hf) return;
+      let changed = false;
+      const children: Block[] = [];
+      for (const block of hf.children) {
+        if (block.kind !== 'paragraph') {
+          children.push(block);
+          continue;
+        }
+        const { found, paragraph } = withoutPageFields(block);
+        changed ||= found;
+        const empty = !paragraph.children.some((inline) => inline.kind !== 'run' || inline.content.some((item) => item.kind !== 'text' || item.text.trim()));
+        if (!found || !empty) children.push(paragraph);
+      }
+      if (!changed) return;
+      if (!children.length) children.push({ kind: 'paragraph', properties: {}, children: [], attrs: {} });
+      parts.set(part, { ...hf, children });
+    };
+    /** Numbers a part: its number moves to the new alignment, or goes in its first empty paragraph, or in a new one at its end. */
+    const number = (part: string): void => {
+      const hf = current(part)!;
+      const children = [...hf.children];
+      const has = children.findIndex((b) => b.kind === 'paragraph' && hasPageField(b));
+      const empty = children.findIndex((b) => b.kind === 'paragraph' && !b.children.length);
+      const fresh = pageNumberParagraph(c.align);
+      if (has >= 0) {
+        const old = children[has] as Paragraph;
+        children[has] = { ...old, properties: { ...old.properties, justification: c.align } };
+      } else if (empty >= 0) children[empty] = { ...(children[empty] as Paragraph), properties: { ...(children[empty] as Paragraph).properties, justification: c.align }, children: fresh.children };
+      else children.push(fresh);
+      parts.set(part, { ...hf, children });
+    };
+    const newPart = (kind: 'header' | 'footer'): string => {
+      // Random, so two people numbering at once don't collide.
+      let part: string;
+      do part = `word/${kind}${1000 + Math.floor(Math.random() * 1_000_000)}.xml`;
+      while (this.doc.headersFooters.has(part));
+      parts.set(part, { kind, part, children: [{ kind: 'paragraph', properties: {}, children: [], attrs: {} }], rootAttrs: { ...this.anyPartAttrs() } });
+      return part;
+    };
+
+    const sections = [...this.paragraphs().filter((p) => p.properties.section).map((p) => p.properties.section!), this.doc.section];
+    const kindOf = (position: 'top' | 'bottom'): 'headers' | 'footers' => (position === 'top' ? 'headers' : 'footers');
+    const first = this.firstSection().section;
+    const next = structuredClone(first);
+    // Every section's parts lose their numbers, then the ones wanted get them, so a move from top to bottom leaves nothing behind.
+    for (const section of sections) for (const ref of [...section.headers, ...section.footers]) strip(ref.part);
+    if (c.position) {
+      const kind = kindOf(c.position);
+      const refs = next[kind];
+      const add = (type: HeaderFooterReference['type']): string => {
+        let ref = refs.find((r) => r.type === type);
+        if (!ref) refs.push((ref = { type, part: newPart(c.position === 'top' ? 'header' : 'footer') }));
+        return ref.part;
+      };
+      number(add('default'));
+      // Sections with a header or footer of their own number theirs too; the others inherit the first's.
+      for (const section of sections) if (section !== first) for (const ref of section[kind]) if (ref.type === 'default') number(ref.part);
+      if (!c.firstPage) next.titlePage = true;
+      else if (next.titlePage) {
+        // A different first page that only hid the number goes; one with its own header or footer stays, and shows the number too.
+        if (next.headers.some((r) => r.type === 'first') || next.footers.some((r) => r.type === 'first')) number(add('first'));
+        else delete next.titlePage;
+      }
+    }
+    const numbering = (section: SectionProperties, start: number | null | undefined): SectionProperties => {
+      const out = structuredClone(section);
+      const { fmt: _fmt, start: _start, ...rest } = out.pageNumbering ?? {};
+      const pageNumbering = { ...rest, ...(c.format !== 'decimal' && { fmt: c.format }), ...(start !== null && start !== undefined && { start }) };
+      if (Object.keys(pageNumbering).length) out.pageNumbering = pageNumbering;
+      else delete out.pageNumbering;
+      return out;
+    };
+    for (const [part, value] of parts) ops.push({ type: 'setHeaderFooter', part, value });
+    for (const p of this.paragraphs()) {
+      const section = p.properties.section;
+      if (!section) continue;
+      const changed = section === first ? numbering(next, c.start) : numbering(section, section.pageNumbering?.start);
+      ops.push(this.setProperties(p, { section: changed }));
+    }
+    ops.push({ type: 'setDocumentSection', properties: this.doc.section === first ? numbering(next, c.start) : numbering(this.doc.section, this.doc.section.pageNumbering?.start) });
+    return [ops, this.selectionIds.focus];
+  }
+
+  /** The namespace declarations a new header or footer part is written with. */
+  private anyPartAttrs(): Record<string, string> {
+    for (const hf of this.doc.headersFooters.values()) return hf.rootAttrs;
+    return { 'xmlns:w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships' };
   }
 
   /**

@@ -40,7 +40,7 @@ Key points:
 
 `Operation` (`ops/src/types.ts`) addresses a paragraph by its **id** (Word's `w14:paraId`, stored in the file; `ids.ts` assigns missing ones deterministically on load via `DocumentIndex`) and a position by **model offset** (one per UTF-16 unit; tab, break, drawing and field characters count as one). Offsets never depend on fonts or layout, so an operation means the same on every client, on the server, and after a reload.
 
-Operation families: text (`insertText`, `insertItem`, `insertContent`, `delete`, `formatText`), structure (`split`, `merge`, `insertBlocks`, `removeBlocks`, `removeBetween`), tables (`insertRow`, `removeRow`, `insertCell`, `removeCell`, `setTableGrid`, `setCellProperties`), and document-level state (`setParagraphProperties`, `setStyle`, `setDocumentProperties`, `setDocumentSection`, comments). The full list is the `Operation` union.
+Operation families: text (`insertText`, `insertItem`, `insertContent`, `delete`, `formatText`), structure (`split`, `merge`, `insertBlocks`, `removeBlocks`, `removeBetween`), tables (`insertRow`, `removeRow`, `insertCell`, `removeCell`, `setTableGrid`, `setCellProperties`), and document-level state (`setParagraphProperties`, `setStyle`, `setDocumentProperties`, `setDocumentSection`, `setHeaderFooter`, comments). The full list is the `Operation` union.
 
 `Engine.apply(ops)` (`ops/src/engine.ts`) returns an `Applied`: per-step `inverse` operations and `PosMap`s, the `changed` paragraphs, and the `structural`/`styles` flags. Application is deterministic and forgiving: an operation whose target is gone does nothing, identically everywhere. Paragraphs are canonicalised with `normalizeInlines` (from `@golemdocs/docx`) so equal content has equal structure.
 

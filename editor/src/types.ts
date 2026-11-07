@@ -47,7 +47,7 @@ export type Command =
    */
   | { kind: 'formatText'; format: RunFormat | ((run: RunProperties, paragraph: Paragraph) => RunFormat | null); define?: Operation[] }
   /** Changes the properties of each paragraph the selection touches (null: leave it as is). */
-  | { kind: 'formatParagraphs'; change: (paragraph: Paragraph, index: number) => ParagraphFormat | null; define?: Operation[] }
+  | { kind: 'formatParagraphs'; change: (paragraph: Paragraph, index: number) => ParagraphFormat | null; define?: Operation[]; /** Asks about every paragraph in the document, not just the selected ones. */ all?: boolean }
   /** Changes the case of the selected text (or the word at the caret), keeping its formatting. */
   | { kind: 'changeCase'; change: (text: string) => string }
   | { kind: 'delete'; direction: 'backward' | 'forward'; unit?: 'character' | 'word' }
@@ -80,6 +80,17 @@ export type Command =
   | { kind: 'resolveComment'; id: string; resolved: boolean }
   /** Removes a comment, its replies and their markers from the text. */
   | { kind: 'deleteComment'; id: string }
+  /** Adds a bookmark over the selection (a bookmark of that name moves here, as in Word). */
+  | { kind: 'addBookmark'; name: string }
+  | { kind: 'deleteBookmark'; name: string }
+  /** Selects what a bookmark is on. */
+  | { kind: 'selectBookmark'; name: string }
+  /** Numbers the document's pages in its headers or footers (`position` null: no numbers). `start` null goes on from the page before. */
+  | { kind: 'setPageNumbers'; position: 'top' | 'bottom' | null; align: 'left' | 'center' | 'right'; firstPage: boolean; format: string; start: number | null }
+  /** Removes a style; what used it falls back to what the style was based on. */
+  | { kind: 'deleteStyle'; id: string }
+  /** Operations worked out elsewhere, as one undoable step that leaves the selection where it is. */
+  | { kind: 'operations'; ops: Operation[] }
   /** Selects the text a comment is on. */
   | { kind: 'selectComment'; id: string }
   /** Selects the next (or previous) match of `text` after the selection, wrapping around the document. */

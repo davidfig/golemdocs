@@ -34,6 +34,16 @@ async function matchEnd(app: App): Promise<number> {
 }
 
 test.describe('Find', () => {
+  test('at a phone\'s width the dialog stays on the screen', async ({ app, page }) => {
+    await app.blank();
+    await page.setViewportSize({ width: 390, height: 700 });
+    await page.keyboard.press(`${MOD}+f`);
+    await expect(find(app)).toBeVisible();
+    const box = (await find(app).boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+  });
+
   test('Ctrl/Cmd+F opens the dialog on the Find tab with the query focused and no Replace fields', async ({ app }) => {
     await withText(app);
     await openFind(app);

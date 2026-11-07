@@ -344,6 +344,14 @@ export class Engine {
         state.structural = true;
         return { inverse: [{ type: 'setDocumentSection', properties: clone(old) }], map: IDENTITY };
       }
+      case 'setHeaderFooter': {
+        const old = this.doc.headersFooters.get(op.part) ?? null;
+        if (!old && !op.value) return NOTHING;
+        if (op.value) this.doc.headersFooters.set(op.part, clone(op.value));
+        else this.doc.headersFooters.delete(op.part);
+        state.structural = true;
+        return { inverse: [{ type: 'setHeaderFooter', part: op.part, value: old && clone(old) }], map: IDENTITY };
+      }
       case 'setCellProperties': {
         const p = index.paragraph(op.paragraph);
         const at = p && index.locate(p);

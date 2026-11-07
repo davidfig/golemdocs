@@ -13,7 +13,7 @@
 // links > search > formatting > comments > sections > tables. This file adds `apply`, which
 // dispatches a command to them.
 
-import { commentRanges, inlinesLength, paragraphLength, paragraphText, type Drawing, type Paragraph } from '@golemdocs/docx';
+import { bookmarkRanges, commentRanges, inlinesLength, paragraphLength, paragraphText, type Drawing, type Paragraph } from '@golemdocs/docx';
 import { type Operation, type Pos } from '@golemdocs/ops';
 import { type Command, type CommandResult, NO_CHANGE, combine } from './types.ts';
 import { EditorTables } from './tables.ts';
@@ -106,7 +106,7 @@ export class Editor extends EditorTables {
         return this.formatText(command);
       case 'formatParagraphs': {
         const ops = [...(command.define ?? [])];
-        this.selectedParagraphs().forEach((p, i) => {
+        (command.all ? this.paragraphs() : this.selectedParagraphs()).forEach((p, i) => {
           const change = command.change(p, i);
           if (change && Object.keys(change).length) ops.push(this.setProperties(p, change));
         });
@@ -133,6 +133,21 @@ export class Editor extends EditorTables {
       }
       case 'deleteComment':
         return this.edit(this.deleteCommentOps(command.id));
+      case 'addBookmark':
+        return this.editInPlace(this.addBookmarkOps(command.name)?.[0] ?? []);
+      case 'deleteBookmark':
+        return this.editInPlace(this.deleteBookmarkOps(command.name)?.[0] ?? []);
+      case 'selectBookmark': {
+        const range = bookmarkRanges(this.paragraphs()).find((b) => b.name === command.name);
+        if (range) this.selection = { anchor: { ...range.start }, focus: { ...range.end } };
+        return NO_CHANGE;
+      }
+      case 'setPageNumbers':
+        return this.editInPlace(this.setPageNumbersOps(command)[0]);
+      case 'deleteStyle':
+        return this.editInPlace(this.deleteStyleOps(command.id)?.[0] ?? []);
+      case 'operations':
+        return this.editInPlace(command.ops);
       case 'selectComment': {
         const range = commentRanges(this.paragraphs()).get(command.id);
         if (range) this.selection = { anchor: { ...range.start }, focus: { ...range.end } };

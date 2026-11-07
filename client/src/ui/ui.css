@@ -1281,6 +1281,7 @@ html.wm-titlebar .wm-format {
   min-width: 72px;
   height: 28px;
   padding: 0 14px;
+  white-space: nowrap;
   border: 1px solid var(--wm-border);
   border-radius: 5px;
   background: var(--wm-field-bg);
@@ -1297,6 +1298,17 @@ html.wm-titlebar .wm-format {
 .wm-button:focus-visible {
   outline: 2px solid var(--wm-accent);
   outline-offset: 2px;
+}
+
+.wm-dialog-close:focus-visible,
+.wm-dialog .wm-dropdown:focus-visible,
+.wm-dialog .wm-list:focus-visible {
+  outline: 2px solid var(--wm-accent);
+  outline-offset: 1px;
+}
+
+.wm-dialog.wm-signin {
+  max-width: min(380px, calc(100vw - 32px));
 }
 
 .wm-scroll {
@@ -1361,6 +1373,10 @@ html.wm-titlebar .wm-format {
   font-style: italic;
 }
 
+.wm-shortcuts-footer .wm-button {
+  flex: none;
+}
+
 .wm-shortcuts-footer {
   display: flex;
   align-items: center;
@@ -1407,7 +1423,7 @@ html.wm-titlebar .wm-format {
   gap: 6px;
 }
 
-.wm-select {
+.wm-customize-select {
   font: 13px var(--wm-font);
   height: 22px;
   border: 1px solid var(--wm-field-border);
@@ -1461,6 +1477,12 @@ html.wm-titlebar .wm-format {
   cursor: default;
   white-space: nowrap;
   user-select: none;
+}
+
+.wm-crow > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .wm-crow:hover {
@@ -1531,6 +1553,11 @@ html.wm-titlebar .wm-format {
 
 .wm-dialog-buttons.spread {
   justify-content: space-between;
+}
+
+/* With nothing on the left (Trash with nothing to empty), the last button still ends on the right. */
+.wm-dialog-buttons.spread > :last-child {
+  margin-left: auto;
 }
 
 @media (max-width: 560px) {
@@ -1991,6 +2018,13 @@ html.wm-titlebar .wm-format {
   min-width: 0;
 }
 
+/* On a phone it fills the width, so the usual gap on the right would push it off the left edge. */
+@media (max-width: 720px) {
+  .wm-dialog.wm-find {
+    right: 7px;
+  }
+}
+
 .wm-find-tabs {
   display: flex;
   gap: 2px;
@@ -2067,6 +2101,11 @@ html.wm-titlebar .wm-format {
   color: var(--wm-muted);
 }
 
+/* A form's message only appears when something is wrong, so it keeps no empty line above the buttons. (Find keeps its line: it reports on every search.) */
+.wm-link .wm-find-message:empty {
+  min-height: 0;
+}
+
 .wm-goto-fields {
   flex: 1;
   min-width: 0;
@@ -2090,6 +2129,118 @@ html.wm-titlebar .wm-format {
 .wm-find .wm-hint {
   margin: 0 0 4px;
   color: var(--wm-muted);
+}
+
+/* --- Share --------------------------------------------------------------------------------- */
+
+.wm-dialog.wm-share {
+  width: 460px;
+}
+
+.wm-share-section {
+  padding: 8px 0 12px;
+}
+
+.wm-share-section + .wm-share-section {
+  padding-top: 12px;
+  border-top: 1px solid var(--wm-border);
+}
+
+.wm-share-section:last-child {
+  padding-bottom: 0;
+}
+
+.wm-share-section h3 {
+  margin: 0 0 8px;
+  font-size: inherit;
+}
+
+.wm-share .wm-hint {
+  margin: 8px 0 0;
+}
+
+.wm-share .wm-input {
+  flex: 1 1 160px;
+  min-width: 0;
+  margin: 0;
+}
+
+.wm-share .wm-find-case input {
+  margin-left: 0;
+}
+
+/* On a narrow window the controls drop below the address or name, together. */
+.wm-share-form,
+.wm-share-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.wm-share-access {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.wm-share-people {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.wm-share-people .wm-hint {
+  margin: 0;
+}
+
+.wm-share-person {
+  flex: 1 1 140px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.wm-share-person span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-share-person span + span {
+  color: var(--wm-muted);
+}
+
+.wm-share-link,
+.wm-share-more {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.wm-share-more {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.wm-share-link[hidden],
+.wm-share-more[hidden] {
+  display: none;
+}
+
+/* Kept in the page while empty, so a screen reader hears what is said in it, but it takes no room. */
+.wm-share-status {
+  min-height: 0;
+}
+
+.wm-share-status:not(:empty) {
+  margin-top: 8px;
+}
+
+.wm-share-error {
+  color: var(--wm-error);
 }
 
 /* --- Insert Hyperlink ------------------------------------------------------------------------ */

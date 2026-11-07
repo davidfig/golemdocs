@@ -37,12 +37,12 @@ export function showResizeDialog(width: number, height: number): Promise<{ width
     const body = h(
       'div',
       { class: 'wm-dialog-body wm-link-body' },
-      h('label', { text: t('picture.resize.width') }),
-      h('span', {}, w, ' ', t('picture.resize.pixels')),
-      h('label', { text: t('picture.resize.height') }),
-      h('span', {}, hh, ' ', t('picture.resize.pixels')),
-      h('label', { class: 'wm-picture-wide' }, keep, ' ', t('picture.resize.keep')),
       h('div', { class: 'wm-picture-wide', text: t('picture.resize.original', { width, height }) }),
+      h('label', { text: t('picture.resize.width') }),
+      h('span', { class: 'wm-picture-field' }, w, t('picture.resize.pixels')),
+      h('label', { text: t('picture.resize.height') }),
+      h('span', { class: 'wm-picture-field' }, hh, t('picture.resize.pixels')),
+      h('label', { class: 'wm-picture-wide' }, keep, ' ', t('picture.resize.keep')),
       message,
     );
     const ok = h('button', { class: 'wm-button', text: t('picture.ok'), attrs: { type: 'submit' } });
@@ -104,12 +104,6 @@ export function showAdjustDialog(bytes: Uint8Array): Promise<Adjustments | undef
       rows.push(h('label', { text: t(`picture.adjust.${key}`) }), h('span', { class: 'wm-picture-slider' }, range, readout));
     }
     const body = h('div', { class: 'wm-dialog-body wm-link-body' }, preview, ...rows);
-    // A grid of label, then slider and value.
-    body.querySelectorAll<HTMLElement>('.wm-picture-slider').forEach((el) => {
-      el.style.display = 'flex';
-      el.style.alignItems = 'center';
-      el.style.gap = '8px';
-    });
     const ok = h('button', { class: 'wm-button', text: t('picture.ok'), attrs: { type: 'submit' } });
     const reset = h('button', { class: 'wm-button', text: t('picture.adjust.reset'), attrs: { type: 'button' } });
     const { dialog, form } = dialogShell(t('picture.adjust.title'), body, ok, [reset]);
@@ -131,6 +125,7 @@ export function showAdjustDialog(bytes: Uint8Array): Promise<Adjustments | undef
     });
     document.body.append(dialog);
     dialog.showModal();
+    inputs[0].focus();
     // The preview is a copy of the picture at a size that stays quick to redraw.
     decodeImage(bytes).then((bitmap) => {
       const scale = Math.min(1, 320 / Math.max(bitmap.width, bitmap.height));
@@ -148,7 +143,7 @@ export function showAdjustDialog(bytes: Uint8Array): Promise<Adjustments | undef
 }
 
 /** The controls that make a background: solid, linear or radial, its colours and the angle, with a swatch showing the result. */
-function paintControls(initial: Background): { el: HTMLElement[]; value(): Background } {
+function paintControls(initial: Background): { el: HTMLElement[]; first: HTMLElement; value(): Background; show(on: boolean): void } {
   const type = h('select', { class: 'wm-input', attrs: { 'aria-label': t('picture.paint.type') } });
   for (const kind of ['solid', 'linear', 'radial'] as const) {
     const option = h('option', { text: t(`picture.paint.${kind}`) });
@@ -167,16 +162,30 @@ function paintControls(initial: Background): { el: HTMLElement[]; value(): Backg
   type.value = initial.gradient?.type ?? 'solid';
   const swatch = h('canvas', { class: 'wm-picture-preview wm-picture-wide', attrs: { width: '240', height: '60' } });
   const value = (): Background => (type.value === 'solid' ? { color: from.value } : { color: from.value, gradient: { type: type.value as 'linear' | 'radial', to: to.value, angle: Number(angle.value) || 0 } });
+  const toLabel = h('label', { text: t('picture.paint.to') });
+  const angleLabel = h('label', { text: t('picture.paint.angle') });
+  const el = [h('label', { text: t('picture.paint.type') }), type, h('label', { text: t('picture.paint.from') }), from, toLabel, to, angleLabel, angle, swatch];
+  let shown = true;
   const show = (): void => {
-    to.disabled = type.value === 'solid';
-    angle.disabled = type.value !== 'linear';
+    // Only what this kind of fill uses.
+    for (const part of el) part.hidden = !shown;
+    toLabel.hidden = to.hidden = !shown || type.value === 'solid';
+    angleLabel.hidden = angle.hidden = !shown || type.value !== 'linear';
     const ctx = swatch.getContext('2d')!;
     ctx.clearRect(0, 0, swatch.width, swatch.height);
     paintBackground(ctx, value(), swatch.width, swatch.height);
   };
   for (const input of [type, from, to, angle]) input.addEventListener('input', show);
   show();
-  return { el: [h('label', { text: t('picture.paint.type') }), type, h('label', { text: t('picture.paint.from') }), from, h('label', { text: t('picture.paint.to') }), to, h('label', { text: t('picture.paint.angle') }), angle, swatch], value };
+  return {
+    el,
+    first: type,
+    value,
+    show(on) {
+      shown = on;
+      show();
+    },
+  };
 }
 
 /** Asks for a colour or gradient to lay behind the picture (it shows where the picture is see-through): resolves with it, or `undefined` on Cancel. */
@@ -198,6 +207,7 @@ export function showBackgroundDialog(initial: Background): Promise<Background | 
     });
     document.body.append(dialog);
     dialog.showModal();
+    paint.first.focus();
   });
 }
 
@@ -233,15 +243,16 @@ export function showPictureCanvasDialog(width: number, height: number, paint: Ba
     const fill = h('input', { attrs: { type: 'checkbox' } });
     fill.checked = true;
     const controls = paintControls(paint);
+    fill.addEventListener('change', () => controls.show(fill.checked));
     const message = h('div', { class: 'wm-find-message wm-picture-wide', attrs: { role: 'alert' } });
     const body = h(
       'div',
       { class: 'wm-dialog-body wm-link-body' },
       h('div', { class: 'wm-picture-wide', text: t('picture.resize.original', { width, height }) }),
       h('label', { text: t('picture.resize.width') }),
-      h('span', {}, w, ' ', t('picture.resize.pixels')),
+      h('span', { class: 'wm-picture-field' }, w, t('picture.resize.pixels')),
       h('label', { text: t('picture.resize.height') }),
-      h('span', {}, hh, ' ', t('picture.resize.pixels')),
+      h('span', { class: 'wm-picture-field' }, hh, t('picture.resize.pixels')),
       h('label', { text: t('picture.canvas.anchor') }),
       grid,
       h('label', { class: 'wm-picture-wide' }, fill, ' ', t('picture.canvas.fillNew')),

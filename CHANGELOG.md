@@ -6,10 +6,31 @@
 
 - The command palette now also finds your documents by title: type part of a name and press Enter to open it.
 
+- Format › Font: set the font, style, size, color, underline, strikethrough, superscript, small caps and spacing between characters in one place, with a preview.
+- Format › Bullets and Numbering: choose from galleries of bullets and numbers, outline numbers too, and set the label, the starting number and the indents.
+- Format › Borders and Shading: put a box, or a line on any side, around paragraphs, in single or double lines of any width and color, and a color behind them. Neighboring paragraphs with the same borders share one box, as in Word, including in documents you open.
+- Format › Tabs: set tab stops with their alignment and dot, dash or line leaders.
+- Format › Styles: see every style, apply it, make your own and change or delete them.
+- Insert › Page Numbers: number the pages at the top or bottom, left, center or right, in numbers, letters or Roman numerals, from any starting number and with or without the first page.
+- Insert › Bookmark: name a place in a document and go back to it.
+
 ### Changed
 
+- The File › Share dialog is tidier: people’s names and email addresses show in full, the explanations are quieter and come after the controls, and it fits a phone’s screen better.
+- Dialogs are more consistent: the same close button everywhere, Close no longer looks like the main action, and each dialog starts in its first useful field.
+- Background and Canvas Size show only the settings the chosen fill uses.
 - When your sign-in expires, a note now says which account it was, that your documents are safe, and offers to sign in again, instead of your documents just disappearing from view.
 - You stay signed in as long as you use Golem Docs at least once every 90 days. Before, you were signed out 30 days after signing in, however often you used it.
+
+### Fixed
+
+- View › Toolbars › Customize: the lists for choosing a toolbar and a category of commands were invisible, and long command names were cut off without a tooltip.
+- Trash: Close stays on the right when there is nothing to empty.
+- Keyboard Shortcuts: Restore Defaults no longer spills out of its button.
+- Resize Picture and Canvas Size: “pixels” now sits beside its field instead of below it.
+- Insert Equation: the vector button shows an arrow instead of an empty box.
+- On a phone, Find and Replace, Spelling and Grammar and Thesaurus are no longer cut off at the left edge, and PivotTable Fields shows its labels in full.
+- The desktop app now reopens its window at the size and position you left it, including on which monitor and whether it was maximized or full screen.
 
 ## 0.34.3 - 2026-11-06
 

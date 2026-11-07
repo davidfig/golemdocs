@@ -38,6 +38,11 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 - Format ▸ Paragraph: two tabs like Word 2003. Indents and Spacing (alignment, left/right indent, first line or hanging, space before/after in points, line spacing single/1.5/double/at least/exactly/multiple) and Line and Page Breaks (widow/orphan, keep with next, keep lines together, page break before). Shows what the selected paragraphs share (a blank field where they differ, left as it is); one undo step. Inches, centimetres outside English
 - Bold, Italic, Underline, Strikethrough, Superscript, Subscript, Code
 - Font, Font Size, Grow/Shrink Font, Font Color, Highlight (also markup on a PDF)
+- Format ▸ Font (Cmd/Ctrl+D): font, style, size, color, underline and its color, strikethrough, super/subscript, small and all caps, hidden; Character Spacing tab (spacing, position); a preview. Blank where the selection mixes, and blank stays as it is
+- Format ▸ Bullets and Numbering: galleries of bullets and numbers, an outline list, none; character or number style, label, start, indents; restart numbering (takes the rest of the list along). Paragraphs in one list change that list's level, as in Word
+- Format ▸ Borders and Shading: None, Box or a side at a time; single or double, width, color, distance from the text; a fill. On paragraphs. Neighbouring paragraphs with the same borders and indents share one box, as in Word
+- Format ▸ Tabs: position, alignment, leader; set, clear, clear all
+- Format ▸ Styles: lists the document's styles and the style box's; apply, new, modify (through the Font, Paragraph, Borders and Shading and Tabs dialogs), delete your own (what used it falls back to what it was based on)
 - Change Case, Clear Formatting, Style
 - Format Painter: copies the look of the selection (and its paragraph style, alignment, spacing and indent when a whole paragraph is selected), then paints the next selection made with the mouse. One use; Esc cancels. Paints as two undo steps (text, then paragraph)
 - Alignment, Line Spacing, Bullets, Numbering, Indent/Outdent
@@ -45,6 +50,8 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 
 **Insert**
 - Line, Page and Column Break; text
+- Page Numbers: top or bottom of the page, alignment, number format, start, whether the first page shows it, remove. Makes the header or footer if there isn't one, keeps what else it holds
+- Bookmark: add over the selection, go to, delete, sorted by name or place; Word's hidden ones (`_Toc`) aren't listed
 - Hyperlink (Cmd/Ctrl+K): links the selection (keeping its formatting) or inserts a link, edits the link the caret is in, Remove Link. Cmd/Ctrl+click opens a link in a new tab. Addresses get `https://` or `mailto:` added; only http, https, mailto, tel and ftp are allowed
 - Table: the toolbar's grid picker, or Insert ▸ Table… (number of columns and rows). It goes after the paragraph with the caret (splitting it if the caret is mid-text; above it if the caret is at its start), with a paragraph after it where one is needed, and the caret lands in the first cell. Undoes in one step
 - Table menu (enabled with the caret in a table): Insert Rows Above/Below and Columns Left/Right (as many as are selected; a column that would push the table past the margins narrows them all), Delete Rows/Columns/Table (deleting every row or column deletes the table), Select Table. Each undoes in one step
@@ -80,7 +87,8 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 
 **Insert**
 - Hyperlink: a link can't span paragraphs; no "Place in this document" (bookmarks), e-mail or new-document targets; no tooltip or hover cursor
-- Section Breaks (next page, continuous), Page Numbers, Footnote, Bookmark, Text Box
+- Section Breaks (next page, continuous), Footnote, Text Box
+- Page Numbers: no inside or outside alignment, no chapter numbers, and the same number format throughout. Bookmark: not on Edit ▸ Go To's list, and a hyperlink can't point at one yet
 - Horizontal Line, Code Block
 - Date and Time
 
@@ -98,7 +106,11 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 - "Selected text" isn't an Apply to choice; "This point forward" is
 
 **Format**
-- Bullets and Numbering, Borders and Shading, Tabs, Styles dialogs
+- Font: no underline styles beyond single and double (the pages draw only those), no outline, shadow, emboss or character scale, no East Asian font of its own
+- Borders and Shading: on paragraphs only, not selected text, table cells or the page; single and double lines only (the pages draw only those); a shading has no pattern
+- Tabs: no bar tabs (the pages don't draw them); the default stop can be read but not changed
+- Bullets and Numbering: no picture bullets or a bullet's own font, level-by-level editing of an outline list
+- Styles: no table or list styles, no "Automatically update", Modify doesn't offer a list
 - Paragraph: no outline level, no tab stops button, no preview pane; the four Word "line and page breaks" extras (suppress line numbers, don't hyphenate) are missing
 - Format Painter: no double-click to keep it on, and it paints only after a mouse selection (not shift+arrows)
 

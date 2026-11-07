@@ -12,6 +12,7 @@ import { link } from './link.ts';
 import { math } from './math.ts';
 import { menus } from './menus.ts';
 import { panels } from './panels.ts';
+import { format } from './format.ts';
 import { paragraph } from './paragraph.ts';
 import { picture } from './picture.ts';
 import { spelling } from './spelling.ts';
@@ -24,4 +25,4 @@ import { pasteSpecial } from './pasteSpecial.ts';
 import { properties } from './properties.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Catalog = { ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...paragraph };
+export const messages: Catalog = { ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };

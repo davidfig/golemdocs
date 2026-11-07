@@ -164,14 +164,6 @@ test.describe('typing and deleting', () => {
     await expect.poll(() => app.text()).toBe('a©');
   });
 
-  test('Insert ▸ Page Numbers says it is not available yet and leaves the text alone', async ({ app }) => {
-    await app.blank();
-    await app.type('body');
-    await app.menu('Insert', 'Page Numbers');
-    await expect.poll(() => app.page.evaluate(() => (window as unknown as { status: string }).status)).toMatch(/isn.t available yet/);
-    await expect.poll(() => app.text()).toBe('body');
-  });
-
   test('Insert ▸ Break ▸ Page Break starts a new page', async ({ app }) => {
     await app.blank();
     await app.type('before');

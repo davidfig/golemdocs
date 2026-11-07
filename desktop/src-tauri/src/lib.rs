@@ -16,11 +16,34 @@ use tauri::Manager;
 #[cfg(desktop)]
 use tauri::Emitter;
 
+/// The window-state plugin only writes to disk on a clean quit, so a crash, a force-quit or a `tauri dev` restart forgets
+/// where the window was. Also save half a second after the window stops moving or resizing.
+#[cfg(desktop)]
+fn save_window_state_on_change(window: &tauri::WebviewWindow) {
+    use std::{sync::mpsc, thread, time::Duration};
+    use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+    let (changed, changes) = mpsc::channel();
+    window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) {
+            let _ = changed.send(());
+        }
+    });
+    let app = window.app_handle().clone();
+    thread::spawn(move || {
+        while changes.recv().is_ok() {
+            while changes.recv_timeout(Duration::from_millis(500)).is_ok() {}
+            let _ = app.save_window_state(StateFlags::all());
+        }
+    });
+}
+
 #[cfg(desktop)]
 fn builder() -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Reopen the window where and at the size the person last left it.
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(vault::Vault::default())
         // A click in the native menu bar goes to the page, which knows what each item does.
         .on_menu_event(|app, event| {
@@ -28,6 +51,9 @@ fn builder() -> tauri::Builder<tauri::Wry> {
         })
         .setup(|app| {
             app.state::<vault::Vault>().restore(app.handle());
+            if let Some(window) = app.get_webview_window("main") {
+                save_window_state_on_change(&window);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

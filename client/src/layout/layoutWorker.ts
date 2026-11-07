@@ -2,7 +2,7 @@
 // (as transferable GPU-ready buffers) and selection geometry to the page. Everything heavy
 // happens here, so the page keeps rendering and responding while a document lays out.
 
-import { isMathInline, paragraphLength, sha256Hex, sharedMediaHash, sharedMediaPart, paragraphText, plainText, type DocumentProperties, type Inline, type Paragraph, runPropertiesAt, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
+import { isMathInline, paragraphLength, sha256Hex, sharedMediaHash, sharedMediaPart, paragraphText, plainText, type DocumentProperties, type Inline, type Paragraph, runPropertiesAt, StyleResolver, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
 import { Editor, type Command } from '@golemdocs/editor';
 import { wordRange } from '@golemdocs/editor/textUnits';
 import { diffDocuments, Replica, ROOM_POLICY, type ClientMessage, type DocumentChange, type Pos, type Operation, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
@@ -76,11 +76,12 @@ import { CHANGE_MS } from '../webgl/overlayColors.ts';
 import { DICTIONARY_BASE, fontBaseOf, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireBox, type WireCommand, type WordStats, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
-import { formatCommand, type FormatAction } from './formatting.ts';
+import { bookmarksOf, stylesOf } from './dialogFormats.ts';
+import { builtInStyles, formatCommand, type FormatAction } from './formatting.ts';
 import { AUTOCORRECT_DEFAULTS, AUTOCORRECT_KEYS, autoCorrect, ordinalAt, urlAt } from './autocorrect.ts';
 import { blockShortcut, inlineShortcut, lineShortcut, linkShortcut, tagShortcut, wikiLinkShortcut, type LineContext } from './autoformat.ts';
 import { FORMATS, formatAllows } from '../ui/formats.ts';
-import type { Action, DocumentKind, Mark } from '../ui/actions.ts';
+import type { Action, DocumentInfo, DocumentKind, Mark } from '../ui/actions.ts';
 import { findIssues, type TextIssue } from '../spelling/check.ts';
 import { countText, tableShape } from './wordCount.ts';
 import { htmlToPaste } from '../formats/paste.ts';
@@ -439,6 +440,7 @@ class OpenDocument {
   private footerStats: SelectionUpdate['footerStats'] = undefined;
   /** The document's properties, asked for by File ▸ Properties, sent with the next selection. */
   private props: DocumentProperties | undefined = undefined;
+  private documentInfo: DocumentInfo | undefined = undefined;
   /** Formatting the Format Painter has picked up: the paragraph's only when a whole paragraph was copied. */
   private painter: { run: RunProperties; paragraph: ParagraphProperties | null } | null = null;
 
@@ -694,12 +696,14 @@ class OpenDocument {
       stats: this.stats,
       footerStats: this.footerStats,
       docProperties: this.props,
+      documentInfo: this.documentInfo,
     };
     this.search = null;
     this.spell = null;
     this.stats = undefined;
     this.footerStats = undefined;
     this.props = undefined;
+    this.documentInfo = undefined;
     this.reveal = false;
     this.commandAt = 0;
     this.sendPresence();
@@ -761,6 +765,7 @@ class OpenDocument {
       stats: this.stats,
       footerStats: this.footerStats,
       docProperties: this.props,
+      documentInfo: this.documentInfo,
       fields: annotator.fields.map((f) => this.wireField(f)).filter((f) => f !== null),
       pdfText: this.wirePicked(annotator),
       pdfObject: this.wireObject(annotator),
@@ -1780,6 +1785,12 @@ class OpenDocument {
     const fonts = new Set<string>();
     const command = formatCommand(action, editor, this.formats!.read(...editor.ordered(), editor.paragraphs(), editor.pending), fonts);
     if (!command) return;
+    // Go To: the place may be pages away.
+    if (action.kind === 'selectBookmark') {
+      editor.apply(command);
+      this.reveal = true;
+      return this.sendSelection();
+    }
     if (fonts.size) return session.ensureFonts(fonts).then(() => this.apply(command));
     this.apply(command);
   }
@@ -1846,6 +1857,21 @@ class OpenDocument {
   }
 
   /** Counts the words and the rest of the selection, or of the whole document if nothing is selected. */
+  private readDocumentInfo(builtIn: readonly string[]): DocumentInfo | undefined {
+    const { editor } = this;
+    if (!editor) return undefined;
+    const doc = editor.doc;
+    const resolver = new StyleResolver(doc.styles, doc.theme, doc.numbering);
+    const [start] = editor.ordered();
+    return {
+      styles: stylesOf(doc.styles, resolver, builtInStyles(builtIn)),
+      current: { paragraph: resolver.paragraph(start.paragraph.properties).style ?? resolver.chain(undefined, 'paragraph')[0]?.id, character: runPropertiesAt(start.paragraph, start.offset)?.style },
+      bookmarks: bookmarksOf(editor.paragraphs()),
+      pageNumbers: editor.pageNumbers(),
+      defaultTabStop: doc.settings.defaultTabStop,
+    };
+  }
+
   private countWords(whole: boolean, footer: boolean): void {
     const { editor, session } = this;
     let stats: WordStats | null = null;
@@ -2049,6 +2075,10 @@ class OpenDocument {
     if (wire.kind === 'pasteHtml') return this.pasteHtml(wire.html, wire.text);
     if (wire.kind === 'getProperties') {
       this.props = { ...this.document?.properties };
+      return this.sendSelection();
+    }
+    if (wire.kind === 'getDocumentInfo') {
+      this.documentInfo = this.readDocumentInfo(wire.builtIn);
       return this.sendSelection();
     }
     if (wire.kind === 'spellWords') return acceptSpelling(wire.words ?? []).then(() => this.sendSelection());

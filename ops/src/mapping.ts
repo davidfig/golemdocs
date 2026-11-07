@@ -176,6 +176,7 @@ export function mapOperation(op: Operation, mapping: Mapping, from = 0, to = map
       return paragraph ? [{ ...op, paragraph }] : [];
     }
     case 'setComment':
+    case 'setHeaderFooter':
     case 'setStyle':
     case 'setList':
     case 'setDocumentSection':

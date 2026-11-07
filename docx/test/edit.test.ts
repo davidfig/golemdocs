@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  bookmarkEnd,
+  bookmarkMarkerOffsets,
+  bookmarkRanges,
+  bookmarkStart,
+  fieldChar,
+  fieldContents,
+  hasPageField,
+  pageNumberParagraph,
+  validBookmarkName,
+  withoutPageFields,
   deleteText,
   findContainer,
   insertBlockAfter,
@@ -166,4 +176,74 @@ test('edited documents write and read back', async () => {
   const texts = reread.body.filter((b): b is Paragraph => b.kind === 'paragraph').map(paragraphText);
   assert.deepEqual(texts, ['Hello,', 'world  with spaces ']);
   assert.equal(findContainer(doc.body, second), doc.body);
+});
+
+// --- Bookmarks and page number fields ----------------------------------------------------------
+
+const inPara = (children: Paragraph['children']): Paragraph => ({ kind: 'paragraph', properties: {}, children, attrs: {} });
+const textRun = (s: string): Paragraph['children'][number] => ({ kind: 'run', properties: {}, content: [{ kind: 'text', text: s }], attrs: {} });
+
+test('bookmarks are found by their markers, in order, without Word’s hidden ones', () => {
+  const p = inPara([bookmarkStart('1', 'First'), textRun('abc'), bookmarkEnd('1'), bookmarkStart('2', '_Toc123'), bookmarkEnd('2')]);
+  const q = inPara([bookmarkStart('3', 'Open'), textRun('x')]);
+  const ranges = bookmarkRanges([p, q]);
+  assert.deepEqual(ranges.map((r) => r.name), ['First', 'Open']);
+  assert.equal(ranges[0].start.offset, 1);
+  assert.equal(ranges[0].end.offset, 4);
+  assert.equal(ranges[1].end.offset, 1, 'no end: it ends where it starts');
+});
+
+test('a bookmark across paragraphs, and where its markers are', () => {
+  const p = inPara([textRun('ab'), bookmarkStart('7', 'Span')]);
+  const q = inPara([textRun('cd'), bookmarkEnd('7')]);
+  const [range] = bookmarkRanges([p, q]);
+  assert.equal(range.start.paragraph, p);
+  assert.equal(range.end.paragraph, q);
+  assert.equal(range.end.offset, 2);
+  assert.deepEqual(bookmarkMarkerOffsets(p, '7'), [2]);
+  assert.deepEqual(bookmarkMarkerOffsets(q, '7'), [2]);
+  assert.deepEqual(bookmarkMarkerOffsets(q, 'other'), []);
+});
+
+test('bookmark names follow Word’s rules', () => {
+  for (const good of ['a', 'Chapter_1', 'été2', 'x'.repeat(40)]) assert.ok(validBookmarkName(good), good);
+  for (const bad of ['', '1st', '_hidden', 'two words', 'dash-ed', 'x'.repeat(41)]) assert.ok(!validBookmarkName(bad), bad);
+});
+
+test('a page number paragraph is a PAGE field, and can be taken out again', () => {
+  const p = pageNumberParagraph('center');
+  assert.equal(p.properties.justification, 'center');
+  assert.ok(hasPageField(p));
+  const { found, paragraph } = withoutPageFields(p);
+  assert.ok(found);
+  assert.equal(paragraph.children.length, 0);
+});
+
+test('taking out a page number leaves the words around it and other fields', () => {
+  const field = (name: string): Paragraph['children'][number] => ({ kind: 'run', properties: {}, content: fieldContents(name, [{ kind: 'text', text: '9' }]), attrs: {} });
+  const p = inPara([textRun('Page '), field('PAGE'), textRun(' of '), field('NUMPAGES')]);
+  const { found, paragraph } = withoutPageFields(p);
+  assert.ok(found);
+  const items = paragraph.children.flatMap((c) => (c.kind === 'run' ? c.content : []));
+  assert.deepEqual(items.filter((i) => i.kind === 'text').map((i) => (i as { text: string }).text), ['Page ', ' of ', '9']);
+  assert.ok(items.some((i) => i.kind === 'instrText' && i.text.includes('NUMPAGES')));
+  assert.ok(!hasPageField(paragraph));
+  assert.equal(withoutPageFields(inPara([textRun('plain')])).found, false);
+});
+
+test('a field split over runs, and a simple field, count too', () => {
+  const split = inPara([
+    { kind: 'run', properties: {}, content: [fieldChar('begin')], attrs: {} },
+    { kind: 'run', properties: {}, content: [{ kind: 'instrText', text: ' PA' }, { kind: 'instrText', text: 'GE ' }], attrs: {} },
+    { kind: 'run', properties: {}, content: [fieldChar('separate')], attrs: {} },
+    textRun('3'),
+    { kind: 'run', properties: {}, content: [fieldChar('end')], attrs: {} },
+    textRun('after'),
+  ]);
+  const out = withoutPageFields(split);
+  assert.ok(out.found);
+  assert.deepEqual(out.paragraph.children.flatMap((c) => (c.kind === 'run' ? c.content : [])).map((i) => (i as { text?: string }).text), ['after']);
+  const simple = inPara([{ kind: 'wrapper', shell: { name: 'w:fldSimple', attrs: { 'w:instr': 'PAGE' }, children: [] }, contentElement: null, children: [textRun('1')] }]);
+  assert.ok(hasPageField(simple));
+  assert.equal(withoutPageFields(simple).paragraph.children.length, 0);
 });

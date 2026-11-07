@@ -392,3 +392,93 @@ test('a tag (a link to tag:name) is drawn in the tag colour without the link und
   assert.equal(plainTag.underlines, 0);
   assert.ok(web.underlines > 0, 'a web link is underlined');
 });
+
+// --- Paragraph borders that join ----------------------------------------------------------------
+
+const RED = 'FF0000';
+const boxed = (text: string, extra: Paragraph['properties'] = {}): Paragraph =>
+  paragraph([run(text)], {
+    spacing: { after: 240 },
+    borders: Object.fromEntries((['top', 'left', 'bottom', 'right'] as const).map((side) => [side, { val: 'single', sz: 8, space: 4, color: RED }])),
+    ...extra,
+  });
+
+async function pagesOf(body: Paragraph[]) {
+  const doc = await WordDocument.create();
+  doc.body = body;
+  return (await layoutDocument(doc, fonts!)).pages;
+}
+
+/** The border lines on a page: long flat ones and tall thin ones, top to bottom. */
+function lines(page: { foreground: { count: number; rect(i: number): [number, number, number, number] } }) {
+  const flat: number[] = [];
+  const upright: [number, number][] = [];
+  for (let i = 0; i < page.foreground.count; i++) {
+    const [, y, w, h] = page.foreground.rect(i);
+    if (w > 100 && h <= 2) flat.push(y);
+    else if (w <= 2) upright.push([y, y + h]);
+  }
+  return { flat: flat.sort((a, b) => a - b), upright: upright.sort((a, b) => a[0] - b[0]) };
+}
+
+test('neighbouring paragraphs with the same borders share one box', skip, async () => {
+  const [page] = await pagesOf([boxed('one'), boxed('two'), boxed('three')]);
+  const { flat, upright } = lines(page);
+  assert.equal(flat.length, 2, 'a line above the first and below the last');
+  // The sides leave no gap from the top of the box to its bottom.
+  const left = upright.filter((_, i) => i % 2 === 0);
+  for (let i = 1; i < left.length; i++) assert.ok(left[i][0] <= left[i - 1][1] + 0.01, `a gap in the sides at ${left[i - 1][1]}`);
+  assert.ok(left[0][0] < flat[1] && left[left.length - 1][1] > flat[0]);
+});
+
+test('different borders, or different indents, make separate boxes', skip, async () => {
+  const other = { borders: { top: { val: 'single', sz: 12, space: 4, color: RED }, bottom: { val: 'single', sz: 12, space: 4, color: RED } } };
+  assert.equal(lines((await pagesOf([boxed('one'), boxed('two', other)]))[0]).flat.length, 4);
+  assert.equal(lines((await pagesOf([boxed('one'), boxed('two', { indent: { left: 720 } })]))[0]).flat.length, 4);
+});
+
+test('something between them ends the box', skip, async () => {
+  assert.equal(lines((await pagesOf([boxed('one'), paragraph([run('plain')]), boxed('two')]))[0]).flat.length, 4);
+});
+
+test('a box broken by a page closes on the one page and opens on the next', skip, async () => {
+  const body = Array.from({ length: 60 }, (_, i) => boxed(`line ${i}`));
+  const pages = await pagesOf(body);
+  assert.ok(pages.length > 1);
+  for (const page of pages) assert.equal(lines(page).flat.length, 2);
+});
+
+test('rules made of empty paragraphs stay separate lines', skip, async () => {
+  const rule = () => paragraph([], { spacing: { after: 240 }, borders: { bottom: { val: 'single', sz: 6, space: 1, color: RED } } });
+  assert.equal(lines((await pagesOf([rule(), rule()]))[0]).flat.length, 2);
+});
+
+test('a line between paragraphs of a box is drawn in the gap', skip, async () => {
+  const between = (text: string) => boxed(text, { borders: { top: { val: 'single', sz: 8, space: 4, color: RED }, bottom: { val: 'single', sz: 8, space: 4, color: RED }, between: { val: 'single', sz: 8, space: 4, color: RED } } });
+  assert.equal(lines((await pagesOf([between('one'), between('two')]))[0]).flat.length, 3);
+});
+
+test('the same fill carries across the gap, a different one doesn’t', skip, async () => {
+  const fill = (text: string, color: string) => paragraph([run(text)], { spacing: { after: 240 }, shading: { val: 'clear', fill: color } });
+  const wide = (page: { background: { count: number; rect(i: number): [number, number, number, number] } }) => {
+    const out: [number, number][] = [];
+    for (let i = 0; i < page.background.count; i++) {
+      const [, y, w, h] = page.background.rect(i);
+      if (w > 100) out.push([y, y + h]);
+    }
+    return out.sort((a, b) => a[0] - b[0]);
+  };
+  const same = wide((await pagesOf([fill('one', 'FFFF99'), fill('two', 'FFFF99')]))[0]);
+  for (let i = 1; i < same.length; i++) assert.ok(same[i][0] <= same[i - 1][1] + 0.01, 'no gap in the fill');
+  const different = wide((await pagesOf([fill('one', 'FFFF99'), fill('two', '99FFFF')]))[0]);
+  assert.ok(different.some((r, i) => i > 0 && r[0] > different[i - 1][1] + 1), 'a gap between different fills');
+});
+
+test('paragraphs in a table cell join too', skip, async () => {
+  const doc = await WordDocument.create();
+  const cell = { kind: 'cell' as const, properties: {}, children: [boxed('one'), boxed('two')], attrs: {} };
+  const table: Table = { kind: 'table', properties: {}, grid: [6000], rows: [{ kind: 'row', properties: {}, cells: [cell], attrs: {} }] };
+  doc.body = [table, paragraph([])];
+  const [page] = (await layoutDocument(doc, fonts!)).pages;
+  assert.equal(lines(page).flat.length, 2);
+});

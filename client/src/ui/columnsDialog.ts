@@ -3,6 +3,7 @@
 
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
+import { dialogTitleBar } from './popup.ts';
 
 const MAX_COLUMNS = 12;
 const MAX_SPACE_INCHES = 4;
@@ -73,7 +74,6 @@ export function showColumnsDialog(current: ColumnsState): Promise<ColumnsChoice 
 
     const ok = h('button', { class: 'wm-button', text: t('columns.ok'), attrs: { type: 'submit' } });
     const cancel = h('button', { class: 'wm-button', text: t('columns.cancel'), attrs: { type: 'button' } });
-    const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': t('columns.close') } });
     const form = h(
       'form',
       // A number box's step is how far its arrows go, not a limit on what can be typed (A4 is 8.27 in, line spacing can be 1.08): the submit handler below checks the values.
@@ -95,12 +95,11 @@ export function showColumnsDialog(current: ColumnsState): Promise<ColumnsChoice 
       ),
       h('div', { class: 'wm-dialog-buttons' }, h('span', { class: 'wm-link-actions' }, ok, cancel)),
     );
-    const dialog = h('dialog', { class: 'wm-dialog wm-link wm-columns', attrs: { 'aria-label': t('columns.title') } }, h('div', { class: 'wm-dialog-title' }, h('span', { text: t('columns.title') }), close), form);
+    const dialog = h('dialog', { class: 'wm-dialog wm-link wm-columns', attrs: { 'aria-label': t('columns.title') } }, dialogTitleBar(t('columns.title'), () => dialog.close()), form);
 
     let result: ColumnsChoice | undefined;
     // Keys stay in the dialog: the document's handlers listen on the window.
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
-    close.addEventListener('click', () => dialog.close());
     cancel.addEventListener('click', () => dialog.close());
     form.addEventListener('submit', (e) => {
       e.preventDefault();

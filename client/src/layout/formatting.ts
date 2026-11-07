@@ -7,10 +7,11 @@
 // at the selection, and hands the editor commands it can apply as one undoable step.
 
 import { paragraphLength, StyleResolver, type AbstractNumbering, type NumberingLevel, type Paragraph, type RunProperties, type Style, type WordDocument } from '@golemdocs/docx';
-import type { Command, Editor, ParagraphFormat, TableEdit } from '@golemdocs/editor';
+import type { Command, Editor, TableEdit } from '@golemdocs/editor';
 import type { Operation, RunFormat } from '@golemdocs/ops';
 import { styleFor, TASK_GLYPHS } from '../formats/markdownStyles.ts';
-import type { Action, CaseChange, FormatState, Mark } from '../ui/actions.ts';
+import type { Action, CaseChange, FormatState, ListFormat, Mark } from '../ui/actions.ts';
+import { bordersFormat, editedStyle, fontFormat, paragraphFormat, styleIdFor, tabsFormat, withListFormat } from './dialogFormats.ts';
 
 /** The actions that change formatting (the worker applies these; see WireCommand). */
 export type FormatAction = Extract<
@@ -35,6 +36,17 @@ export type FormatAction = Extract<
       | 'setAlignment'
       | 'setLineSpacing'
       | 'setParagraph'
+      | 'setFontDetails'
+      | 'setBorders'
+      | 'setTabs'
+      | 'setListFormat'
+      | 'setCharacterStyle'
+      | 'saveStyle'
+      | 'deleteStyle'
+      | 'addBookmark'
+      | 'deleteBookmark'
+      | 'selectBookmark'
+      | 'setPageNumbers'
       | 'toggleList'
       | 'indent';
   }
@@ -59,6 +71,17 @@ export const FORMAT_ACTIONS = new Set<FormatAction['kind']>([
   'setAlignment',
   'setLineSpacing',
   'setParagraph',
+  'setFontDetails',
+  'setBorders',
+  'setTabs',
+  'setListFormat',
+  'setCharacterStyle',
+  'saveStyle',
+  'deleteStyle',
+  'addBookmark',
+  'deleteBookmark',
+  'selectBookmark',
+  'setPageNumbers',
   'toggleList',
   'indent',
 ]);
@@ -243,6 +266,9 @@ function builtInStyle(name: string): Style | undefined {
   return undefined;
 }
 
+/** The definitions of those of these style names there are. */
+export const builtInStyles = (names: readonly string[]): Style[] => names.map(builtInStyle).filter((s): s is Style => !!s);
+
 /** Nine list levels, all bullets or all numbers, indented half an inch per level. */
 const GLYPHS: readonly string[] = Object.values(TASK_GLYPHS);
 
@@ -419,39 +445,36 @@ export function formatCommand(action: FormatAction, editor: Editor, format: Form
       return { kind: 'formatParagraphs', change: (p) => ({ spacing: { ...p.properties.spacing, line, lineRule: 'auto' } }) };
     }
     case 'setParagraph': {
-      const { kind: _kind, align, left, right, special, by, before, after, line, lineRule, ...flags } = action;
-      return {
-        kind: 'formatParagraphs',
-        change: (p) => {
-          const change: ParagraphFormat = {};
-          if (align) change.justification = align === 'justify' ? 'both' : align;
-          if (left !== undefined || right !== undefined || special) {
-            const indent = { ...p.properties.indent };
-            if (left !== undefined) indent.left = left;
-            if (right !== undefined) indent.right = right;
-            if (special) {
-              delete indent.firstLine;
-              delete indent.hanging;
-              if (special === 'firstLine') indent.firstLine = by ?? 0;
-              else if (special === 'hanging') indent.hanging = by ?? 0;
-            }
-            change.indent = indent;
-          }
-          if (before !== undefined || after !== undefined || line !== undefined) {
-            const spacing = { ...p.properties.spacing };
-            if (before !== undefined) spacing.before = before;
-            if (after !== undefined) spacing.after = after;
-            if (line !== undefined) {
-              spacing.line = line;
-              spacing.lineRule = lineRule ?? 'auto';
-            }
-            change.spacing = spacing;
-          }
-          for (const key of ['keepNext', 'keepLines', 'pageBreakBefore', 'widowControl'] as const) if (flags[key] !== undefined) change[key] = flags[key];
-          return change;
-        },
-      };
+      const { kind: _kind, ...choice } = action;
+      return { kind: 'formatParagraphs', change: (p) => paragraphFormat(p.properties, choice) };
     }
+    case 'setFontDetails': {
+      const { font } = action;
+      if (font.family) fonts.add(font.family);
+      return { kind: 'formatText', format: (run, p) => fontFormat(font, styles.run(styles.paragraph(p.properties).style, run.style ? { style: run.style } : {}), run) };
+    }
+    case 'setBorders':
+      return { kind: 'formatParagraphs', change: (p) => bordersFormat(p.properties, styles.paragraph({ style: p.properties.style }), action.borders) };
+    case 'setTabs':
+      return { kind: 'formatParagraphs', change: (p) => ({ tabs: tabsFormat(styles.paragraph({ style: p.properties.style }), action.tabs) }) };
+    case 'setListFormat':
+      return action.list ? listFormatCommand(action.list, !!action.restart, editor, styles) : listCommand(false, true, editor, styles);
+    case 'setCharacterStyle':
+      return { kind: 'formatText', format: { style: action.id } };
+    case 'saveStyle': {
+      const edit = action.style;
+      if (edit.font?.family) fonts.add(edit.font.family);
+      const known = edit.id ? (doc.styles.styles.find((s) => s.id === edit.id) ?? builtInStyle(edit.id)) : undefined;
+      const id = known?.id ?? styleIdFor(edit.name, new Set(doc.styles.styles.map((s) => s.id)));
+      const style = editedStyle(known, edit, id, styles);
+      return { kind: 'operations', ops: [...(style.basedOn ? defineStyle(doc, style.basedOn) : []), { type: 'setStyle', id, style }] };
+    }
+    case 'deleteStyle':
+    case 'addBookmark':
+    case 'deleteBookmark':
+    case 'selectBookmark':
+    case 'setPageNumbers':
+      return action as Command;
     case 'indent': {
       const increase = action.direction === 'increase';
       return {
@@ -487,6 +510,71 @@ function defineStyle(doc: WordDocument, id: string): Operation[] {
 function existingList(doc: WordDocument, glyph: string): number | undefined {
   const abstract = doc.numbering.abstracts.find((a) => a.levels[0]?.format === 'bullet' && a.levels[0].text === glyph);
   return abstract && doc.numbering.instances.find((n) => n.abstractId === abstract.id)?.id;
+}
+
+/** A list id no list has. Random, so two people starting lists at once don't collide. */
+function newListId(doc: WordDocument): number {
+  const taken = new Set([...doc.numbering.instances.map((n) => n.id), ...doc.numbering.abstracts.map((a) => a.id)]);
+  let id: number;
+  do id = 1000 + Math.floor(Math.random() * 1_000_000);
+  while (taken.has(id));
+  return id;
+}
+
+/** Nine levels for a new list of this format: the level being set takes it, the others stay as a list of that kind is. */
+function levelsFor(list: ListFormat, at: number): NumberingLevel[] {
+  const levels = listLevels(list.kind === 'bullet', undefined);
+  if (list.multilevel) {
+    return levels.map((level, l) => ({ ...level, format: 'decimal', text: Array.from({ length: l + 1 }, (_, i) => `%${i + 1}.`).join('') }));
+  }
+  levels[at] = withListFormat(levels[at], list);
+  return levels;
+}
+
+/**
+ * Format › Bullets and Numbering. Paragraphs all in one list change that list's level, as Word does, unless they are to restart: then they and
+ * the rest of that list go on a new one. Anything else starts a list, or goes on with the one just before it if that looks the same.
+ */
+function listFormatCommand(list: ListFormat, restart: boolean, editor: Editor, styles: StyleResolver): Command {
+  const doc = editor.doc;
+  const selected = editor.selectedParagraphs();
+  const all = editor.paragraphs();
+  const first = selected[0];
+  const at = first.properties.numbering?.id ? (first.properties.numbering.level ?? 0) : 0;
+  const shared = selected.every((p) => p.properties.numbering?.id && p.properties.numbering.id === first.properties.numbering?.id) ? first.properties.numbering!.id! : undefined;
+  const instance = shared === undefined ? undefined : doc.numbering.instances.find((n) => n.id === shared);
+  const abstract = instance && doc.numbering.abstracts.find((a) => a.id === instance.abstractId);
+  if (instance && abstract && !restart) {
+    const others = doc.numbering.instances.some((n) => n.id !== shared && n.abstractId === abstract.id);
+    const copy = structuredClone(abstract);
+    if (others) copy.id = newListId(doc);
+    copy.levels = list.multilevel ? levelsFor(list, at) : copy.levels.map((level) => (level.level === at ? withListFormat(level, list) : level));
+    return { kind: 'operations', ops: [{ type: 'setList', id: shared!, list: { instance: { ...structuredClone(instance), abstractId: copy.id }, abstract: copy } }] };
+  }
+  const define: Operation[] = [];
+  const before = all[all.indexOf(first) - 1];
+  const beforeId = before?.properties.numbering?.id;
+  const beforeLevel = beforeId ? styles.listLevel(beforeId, at) : undefined;
+  const looksTheSame = !!beforeLevel && (list.kind === 'bullet' ? beforeLevel.format === 'bullet' && beforeLevel.text === (list.glyph ?? '•') : beforeLevel.format === (list.format ?? 'decimal') && beforeLevel.text === (list.pattern ?? `%${at + 1}.`));
+  let id: number;
+  if (!restart && looksTheSame) id = beforeId!;
+  else {
+    id = newListId(doc);
+    const base = abstract && !list.multilevel ? structuredClone(abstract.levels).map((level) => (level.level === at ? withListFormat(level, list) : level)) : levelsFor(list, at);
+    define.push({ type: 'setList', id, list: { instance: { id, abstractId: id, overrides: [], attrs: {} }, abstract: { id, multiLevelType: list.multilevel ? 'multilevel' : 'hybridMultilevel', levels: base, attrs: {} } } });
+  }
+  define.push(...defineStyle(doc, 'ListParagraph'));
+  // Restarting part way through a list takes what follows along.
+  const from = all.indexOf(first);
+  return {
+    kind: 'formatParagraphs',
+    all: restart && shared !== undefined,
+    define,
+    change: (p) => {
+      if (restart && shared !== undefined && (all.indexOf(p) < from || p.properties.numbering?.id !== shared)) return null;
+      return { numbering: { id, level: p.properties.numbering?.id ? (p.properties.numbering.level ?? 0) : 0 }, ...(!p.properties.style && { style: 'ListParagraph' }) };
+    },
+  };
 }
 
 /** Bullets or numbering on the selected paragraphs, or off if they already have them. */

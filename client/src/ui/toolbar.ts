@@ -382,7 +382,7 @@ export function comboBox(spec: ComboSpec, getState: () => ChromeState, focusEdit
 // --- Color split button ------------------------------------------------------------------
 
 /** The classic 40-color palette, row by row. */
-const PALETTE = [
+export const PALETTE = [
   ['#000000', '#993300', '#333300', '#003300', '#003366', '#000080', '#333399', '#333333'],
   ['#800000', '#FF6600', '#808000', '#008000', '#008080', '#0000FF', '#666699', '#808080'],
   ['#FF0000', '#FF9900', '#99CC00', '#339966', '#33CCCC', '#3366FF', '#800080', '#969696'],
@@ -396,6 +396,39 @@ const HIGHLIGHTS = [
   ['#FF0000', '#000080', '#008080', '#008000', '#800080'],
   ['#800000', '#808000', '#808080', '#C0C0C0', '#000000'],
 ];
+
+/** The insides of a color popup: the "none" choice, the palette, the colors the document uses and More Colors. */
+export function paletteContents(o: { noneLabel: string; noneEmpty?: boolean; noneStyle?: string; color: string | null; rows: readonly (readonly string[])[]; used: readonly string[]; more: boolean; choose(color: string | null): void }): { nodes: HTMLElement[]; cells: HTMLElement[] } {
+  const cells: HTMLElement[] = [];
+  const nodes: HTMLElement[] = [];
+  const none = h('button', { class: 'wm-palette-wide', attrs: { type: 'button' } }, h('span', { class: o.noneEmpty ? 'wm-chip wm-chip-none' : 'wm-chip', attrs: o.noneStyle ? { style: o.noneStyle } : {} }), o.noneLabel);
+  none.addEventListener('click', () => o.choose(null));
+  nodes.push(none);
+  const gridOf = (colors: readonly string[]) => {
+    const grid = h('div', { class: 'wm-palette-grid' });
+    grid.style.setProperty('--palette-columns', String(o.rows[0].length));
+    for (const c of colors) {
+      const cell = h('button', { class: 'wm-swatch', title: c, attrs: { type: 'button', 'aria-label': c } });
+      cell.style.background = c;
+      if (o.color && c.toLowerCase() === o.color.toLowerCase()) cell.classList.add('current');
+      cell.addEventListener('click', () => o.choose(c));
+      cells.push(cell);
+      grid.append(cell);
+    }
+    return grid;
+  };
+  nodes.push(gridOf(o.rows.flat()));
+  if (o.used.length > 0) nodes.push(h('div', { class: 'wm-palette-label', text: t('menus.palette.document') }), gridOf(o.used));
+  if (o.more) {
+    const picker = h('input', { attrs: { type: 'color', value: o.color ?? '#000000', tabindex: '-1' } });
+    picker.className = 'wm-hidden-picker';
+    picker.addEventListener('change', () => o.choose(picker.value));
+    const more = h('button', { class: 'wm-palette-wide', text: t('menus.palette.more'), attrs: { type: 'button' } });
+    more.addEventListener('click', () => picker.click());
+    nodes.push(more, picker);
+  }
+  return { nodes, cells };
+}
 
 export interface ColorSpec {
   label: string;
@@ -471,46 +504,18 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
       mark();
       registry.perform(spec.action(c), spec.label);
     };
-    const none = h('button', { class: 'wm-palette-wide', attrs: { type: 'button' } }, h('span', { class: spec.emptyNone ? 'wm-chip wm-chip-none' : 'wm-chip', attrs: spec.emptyNone ? {} : { style: `background:${spec.palette === 'full' ? '#000' : 'transparent'}` } }), spec.noneLabel);
-    none.addEventListener('click', () => choose(null));
-    panel.append(none);
-    const rows = spec.palette === 'full' ? PALETTE : HIGHLIGHTS;
-    const grid = h('div', { class: 'wm-palette-grid' });
-    grid.style.setProperty('--palette-columns', String(rows[0].length));
-    for (const row of rows) {
-      for (const c of row) {
-        const cell = h('button', { class: 'wm-swatch', title: c, attrs: { type: 'button', 'aria-label': c } });
-        cell.style.background = c;
-        if (color && c.toLowerCase() === color.toLowerCase()) cell.classList.add('current');
-        cell.addEventListener('click', () => choose(c));
-        cells.push(cell);
-        grid.append(cell);
-      }
-    }
-    panel.append(grid);
-    const used = spec.documentColors?.(registry.state()) ?? [];
-    if (used.length > 0) {
-      panel.append(h('div', { class: 'wm-palette-label', text: t('menus.palette.document') }));
-      const usedGrid = h('div', { class: 'wm-palette-grid' });
-      usedGrid.style.setProperty('--palette-columns', String(rows[0].length));
-      for (const c of used) {
-        const cell = h('button', { class: 'wm-swatch', title: c, attrs: { type: 'button', 'aria-label': c } });
-        cell.style.background = c;
-        if (color && c.toLowerCase() === color.toLowerCase()) cell.classList.add('current');
-        cell.addEventListener('click', () => choose(c));
-        cells.push(cell);
-        usedGrid.append(cell);
-      }
-      panel.append(usedGrid);
-    }
-    if (spec.palette === 'full') {
-      const picker = h('input', { attrs: { type: 'color', value: color ?? '#000000', tabindex: '-1' } });
-      picker.className = 'wm-hidden-picker';
-      picker.addEventListener('change', () => choose(picker.value));
-      const more = h('button', { class: 'wm-palette-wide', text: t('menus.palette.more'), attrs: { type: 'button' } });
-      more.addEventListener('click', () => picker.click());
-      panel.append(more, picker);
-    }
+    const contents = paletteContents({
+      noneLabel: spec.noneLabel,
+      noneEmpty: spec.emptyNone,
+      noneStyle: spec.emptyNone ? undefined : `background:${spec.palette === 'full' ? '#000' : 'transparent'}`,
+      color,
+      rows: spec.palette === 'full' ? PALETTE : HIGHLIGHTS,
+      used: spec.documentColors?.(registry.state()) ?? [],
+      more: spec.palette === 'full',
+      choose,
+    });
+    cells.push(...contents.cells);
+    panel.append(...contents.nodes);
     openPopup(el, panel);
   });
 

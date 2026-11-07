@@ -257,6 +257,25 @@ export type Action =
   | { kind: 'setAlignment'; align: Alignment }
   | { kind: 'setLineSpacing'; lines: number }
   | ({ kind: 'setParagraph' } & ParagraphChoice)
+  /** Format › Font: what was changed. */
+  | { kind: 'setFontDetails'; font: FontChoice }
+  /** Format › Borders and Shading: what was changed. */
+  | { kind: 'setBorders'; borders: BordersChoice }
+  /** Format › Tabs: the selected paragraphs' tab stops, all of them. */
+  | { kind: 'setTabs'; tabs: TabChoice[] }
+  /** Format › Bullets and Numbering; null is no list. `restart` starts a new list from here rather than going on with one. */
+  | { kind: 'setListFormat'; list: ListFormat | null; restart?: boolean }
+  /** Format › Styles: a character style on the selection (null: none). */
+  | { kind: 'setCharacterStyle'; id: string | null }
+  /** Format › Styles: makes a style or changes one. */
+  | { kind: 'saveStyle'; style: StyleEdit }
+  | { kind: 'deleteStyle'; id: string }
+  /** Insert › Bookmark. */
+  | { kind: 'addBookmark'; name: string }
+  | { kind: 'deleteBookmark'; name: string }
+  | { kind: 'selectBookmark'; name: string }
+  /** Insert › Page Numbers. */
+  | ({ kind: 'setPageNumbers' } & PageNumbersChoice)
   | { kind: 'toggleList'; list: ListChoice; force?: boolean }
   | { kind: 'indent'; direction: 'increase' | 'decrease' }
   // Insert
@@ -325,8 +344,141 @@ export interface ParagraphChoice {
   widowControl?: boolean;
 }
 
+/** What the Font dialog shows and sets. In a state a field is left out when the selection mixes it; in a choice, when it is to stay as it is. */
+export interface FontChoice {
+  family?: string;
+  bold?: boolean;
+  italic?: boolean;
+  /** Points. */
+  size?: number;
+  /** #RRGGBB, or null for automatic. */
+  color?: string | null;
+  /** Word's underline style ('single', 'double'...), or 'none'. */
+  underline?: string;
+  underlineColor?: string | null;
+  strike?: boolean;
+  doubleStrike?: boolean;
+  superscript?: boolean;
+  subscript?: boolean;
+  smallCaps?: boolean;
+  caps?: boolean;
+  hidden?: boolean;
+  /** Between characters, twips (negative: condensed). */
+  spacing?: number;
+  /** Baseline shift, half-points (negative: lowered). */
+  position?: number;
+}
+
+export interface BorderSide {
+  style: string;
+  /** Eighths of a point. */
+  width: number;
+  /** #RRGGBB, or null for automatic. */
+  color: string | null;
+  /** Points from the text. */
+  space: number;
+}
+
+/** A side's border (null: none); left out, it stays as it is. */
+export interface BordersChoice {
+  top?: BorderSide | null;
+  left?: BorderSide | null;
+  bottom?: BorderSide | null;
+  right?: BorderSide | null;
+  /** The fill, #RRGGBB, or null for none. */
+  shading?: string | null;
+}
+
+export interface TabChoice {
+  /** From the left margin, twips. */
+  pos: number;
+  align: 'left' | 'center' | 'right' | 'decimal';
+  leader: 'none' | 'dot' | 'hyphen' | 'underscore';
+}
+
+export interface ListFormat {
+  kind: 'bullet' | 'number';
+  /** A bullet's character. */
+  glyph?: string;
+  /** A number's format (decimal, lowerLetter...). */
+  format?: string;
+  /** A number's label ("%1."). */
+  pattern?: string;
+  start?: number;
+  /** Twips, the text's indent and how far the label hangs left of it. */
+  left?: number;
+  hanging?: number;
+  /** In a state, which level of its list this is (0 is the first). */
+  level?: number;
+  /** Outline numbers: every level counts its parents (1.1.1). */
+  multilevel?: boolean;
+}
+
+export interface PageNumbersChoice {
+  /** Null: no page numbers. */
+  position: 'top' | 'bottom' | null;
+  align: 'left' | 'center' | 'right';
+  /** Show the number on the first page too. */
+  firstPage: boolean;
+  format: string;
+  /** Null: go on from the page before. */
+  start: number | null;
+}
+
+/** A style as the Styles dialog shows it: what it looks like with what it is based on. */
+export interface StyleInfo {
+  id: string;
+  name: string;
+  type: 'paragraph' | 'character';
+  basedOn?: string;
+  next?: string;
+  /** The person's own, rather than one of Word's. */
+  custom: boolean;
+  isDefault: boolean;
+  /** In the document already, rather than one it can have on first use. */
+  defined: boolean;
+  font: FontChoice;
+  paragraph: ParagraphChoice;
+  borders: BordersChoice;
+  tabs: TabChoice[];
+}
+
+/** A style to make (no `id`) or change. Only what is to change is given. */
+export interface StyleEdit {
+  id?: string;
+  name: string;
+  type: 'paragraph' | 'character';
+  /** Null: based on nothing. */
+  basedOn?: string | null;
+  next?: string | null;
+  font?: FontChoice;
+  paragraph?: ParagraphChoice;
+  borders?: BordersChoice;
+  tabs?: TabChoice[];
+}
+
+/** What only some dialogs need, asked for when one opens (`getDocumentInfo`). */
+export interface DocumentInfo {
+  styles: StyleInfo[];
+  /** The paragraph and character styles at the selection, by id. */
+  current: { paragraph?: string; character?: string };
+  /** In document order, with the text each is on. */
+  bookmarks: { name: string; text: string }[];
+  pageNumbers: PageNumbersChoice;
+  /** Twips. */
+  defaultTabStop: number;
+}
+
 export interface FormatState {
   paragraph?: ParagraphChoice;
+  /** For the Font dialog. */
+  character?: FontChoice;
+  /** For the Borders and Shading dialog; left out when the selected paragraphs differ. */
+  borders?: BordersChoice;
+  /** For the Tabs dialog; left out when the selected paragraphs differ. */
+  tabs?: TabChoice[];
+  /** For the Bullets and Numbering dialog: the first selected paragraph's level, null for none. */
+  listFormat?: ListFormat | null;
   marks?: Partial<Record<Mark, boolean>>;
   style?: string;
   font?: string;

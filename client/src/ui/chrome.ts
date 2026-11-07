@@ -1904,6 +1904,11 @@ export class Chrome {
     return items;
   }
 
+  /** The fonts on offer, for dialogs. */
+  fontNames(): readonly string[] {
+    return this.fonts;
+  }
+
   private customize(): void {
     this.menuBar.close(false);
     closePopup();

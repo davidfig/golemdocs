@@ -4,6 +4,7 @@ export * from './model/units.ts';
 export { StyleResolver, mergeProperties, type FormattingLayer } from './model/resolve.ts';
 export { CHECKBOX, ListCounter, formatNumber, type ListLabel, type ListState } from './model/lists.ts';
 export * from './edit/text.ts';
+export * from './edit/bookmarks.ts';
 export * from './edit/comments.ts';
 export * from './edit/fields.ts';
 export { isPlainText, paragraphSegments, textSegments, type Segment } from './edit/segments.ts';

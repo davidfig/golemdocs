@@ -67,6 +67,8 @@ Layout turns a document model (`WordDocument` from `@golemdocs/docx`) into posit
 | `client/src/layout/layoutClient.ts` | Page-side API and listener dispatch |
 | `client/src/layout/protocol.ts` | `ToWorker`, `FromWorker`, `LayoutUpdate`, `SelectionUpdate` |
 | `client/src/layout/formatting.ts`, `selectionFormat.ts` | Menu/toolbar formatting actions and toolbar state |
+| `layout/src/paragraph.ts` (`BorderBox`) | A paragraph's side borders and fill are in its cached lines; its top and bottom lines, and what joins it to a neighbour with the same borders and indents, are drawn as it is placed (`placeParagraph`, `layoutBox`), which is why a change to one paragraph never leaves a stale line on the next |
+| `client/src/layout/dialogFormats.ts` | What the Font, Borders and Shading, Tabs, Bullets and Numbering and Styles dialogs (`ui/formatDialogs/`, one lazily loaded chunk) read and store; stored is only what differs from the style underneath |
 | `client/src/layout/autoformat.ts`, `livePreview.ts` | Markdown shortcuts, source shown at the caret |
 | `client/src/layout/autocorrect.ts` | Autocorrect as you type: pure rules (what the text typed so far should become); the worker's `autoCorrected` applies one as a single undoable replacement that Backspace takes back |
 | `editor/src/` | `Editor`: commands, hit-testing (`navigation.ts`), selection geometry |

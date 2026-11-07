@@ -41,6 +41,21 @@ test.describe('opening a picture as a document', () => {
   });
 });
 
+test('Background shows only the settings its fill uses', async ({ app }) => {
+  await openPicture(app, makePng(20, 20));
+  await app.menu('Picture', 'Background');
+  const box = app.page.getByRole('dialog', { name: 'Background' });
+  await expect(box.getByLabel('Color:', { exact: true })).toBeVisible();
+  await expect(box.getByLabel('Second color:')).toBeHidden();
+  await expect(box.getByLabel('Angle:')).toBeHidden();
+  await box.getByLabel('Fill:').selectOption('linear');
+  await expect(box.getByLabel('Second color:')).toBeVisible();
+  await expect(box.getByLabel('Angle:')).toBeVisible();
+  await box.getByLabel('Fill:').selectOption('radial');
+  await expect(box.getByLabel('Second color:')).toBeVisible();
+  await expect(box.getByLabel('Angle:')).toBeHidden();
+});
+
 test.describe('rotating and flipping', () => {
   test('Rotate Right turns the picture a quarter clockwise: the red left edge becomes the top', async ({ app }) => {
     await openPicture(app, GRADIENT);

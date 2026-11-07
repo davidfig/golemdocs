@@ -2,7 +2,6 @@ import type { Messages } from '../../index.ts';
 
 export const columns: Partial<Messages> = {
   'columns.title': '단',
-  'columns.close': '닫기',
   'columns.presets': '기본 설정',
   'columns.one': '하나',
   'columns.two': '둘',

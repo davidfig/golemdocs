@@ -58,7 +58,7 @@ export const panels = {
   'panels.comments.replies': '{count} replies',
 
   // Search all documents (Edit > Search All Documents)
-  'panels.search.title': 'Search all documents',
+  'panels.search.title': 'Search All Documents',
   'panels.search.placeholder': 'Search words or #tags in every document',
   'panels.search.preparing': 'Getting your documents…',
   'panels.search.indexing': 'Indexing your documents: {done} of {total}',
@@ -160,7 +160,7 @@ export const panels = {
   'panels.forms.newChoice': 'Dropdown',
 
   // Feedback (Help > Send Feedback, Admin > Feedback)
-  'panels.feedback.title': 'Send feedback',
+  'panels.feedback.title': 'Send Feedback',
   'panels.feedback.prompt': 'Tell us what you think, what features you’d like to see, or what went wrong.',
   'panels.feedback.label': 'Feedback',
   'panels.feedback.send': 'Send',

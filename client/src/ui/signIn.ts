@@ -46,28 +46,30 @@ export const signInNote = (): string => (sellsSubscriptions() ? t('dialogs.signI
  */
 export function showSignInDialog(returnTo: string, options: { subscribe?: boolean } = {}): void {
   const dialog = document.createElement('dialog');
-  dialog.className = 'wm-dialog';
-  dialog.style.maxWidth = '380px';
+  dialog.className = 'wm-dialog wm-signin';
+  dialog.setAttribute('aria-label', t('dialogs.signIn.title'));
 
   const note = document.createElement('p');
   note.textContent = options.subscribe ? t('dialogs.signIn.subscribeNote') : signInNote();
-  note.style.cssText = 'margin:0 0 12px';
   const providers = document.createElement('div');
   const cancel = document.createElement('button');
   cancel.type = 'button';
+  cancel.className = 'wm-button';
   cancel.textContent = t('dialogs.signIn.notNow');
-  cancel.style.cssText = 'margin-top:12px;padding:6px 14px';
   cancel.addEventListener('click', () => dialog.close());
 
   const body = document.createElement('div');
   body.className = 'wm-dialog-body';
-  body.style.paddingBottom = '14px';
-  body.append(note, providers, cancel);
-  dialog.append(dialogTitleBar(t('dialogs.signIn.title'), () => dialog.close()), body);
+  body.append(note, providers);
+  const buttons = document.createElement('div');
+  buttons.className = 'wm-dialog-buttons';
+  buttons.append(cancel);
+  dialog.append(dialogTitleBar(t('dialogs.signIn.title'), () => dialog.close()), body, buttons);
   // Keys stay in the dialog: the document's handlers listen on the window.
   dialog.addEventListener('keydown', (e) => e.stopPropagation());
   dialog.addEventListener('close', () => dialog.remove());
   document.body.append(dialog);
   dialog.showModal();
+  cancel.focus();
   void mountSignIn(providers, returnTo);
 }

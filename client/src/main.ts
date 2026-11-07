@@ -141,7 +141,7 @@ import { samplePicture } from './formats/imageSample.ts';
 import { DEFAULT_DRAW_STYLE, paintOf } from './formats/imageDraw.ts';
 import type { DrawStyle, Shape } from './formats/imageDraw.ts';
 import { applyImageEdit, type ImageEdit } from './formats/imageEdit.ts';
-import type { ChromeState, ImageOp, ListedDocument } from './ui/actions.ts';
+import type { ChromeState, DocumentInfo, ImageOp, ListedDocument } from './ui/actions.ts';
 import { opensLink } from './ui/linkDialog.ts';
 import { LinkPopover, type LinkDraft } from './ui/linkPopover.ts';
 import { droppedDocumentKey, isDocumentDrag } from './ui/documentDrag.ts';
@@ -3608,6 +3608,16 @@ function pickPicture(): void {
 let caretOn = true;
 /** Formatting at the selection (from the worker), for the toolbar. */
 let selectionFormat: FormatState = {};
+/** What is asked for when a dialog needs it, and who is waiting for the answer. */
+const documentInfoWaiting: ((info: DocumentInfo | undefined) => void)[] = [];
+/** Twips, for the Tabs dialog. Word's default until the document has said. */
+let defaultTabStop = 720;
+const formatDialogs = () => import('./ui/formatDialogs/index.ts');
+const askDocumentInfo = (): Promise<DocumentInfo | undefined> =>
+  new Promise((resolve) => {
+    documentInfoWaiting.push(resolve);
+    send({ kind: 'getDocumentInfo', builtIn: FORMATS[current.kind].styles });
+  });
 /** The Format Painter is waiting for a selection to paint. */
 let painting = false;
 /** The selection is in a table cell. */
@@ -3785,6 +3795,10 @@ function applySelection(update: SelectionUpdate): void {
     propertiesDialog.reportStats(update.stats);
   }
   if (update.docProperties) propertiesDialog.reportProperties(update.docProperties);
+  if (update.documentInfo) {
+    defaultTabStop = update.documentInfo.defaultTabStop;
+    for (const answer of documentInfoWaiting.splice(0)) answer(update.documentInfo);
+  }
   if (update.footerStats !== undefined) {
     if (update.footerStats?.selection) footerSelection = update.footerStats;
     else footerWords = update.footerStats;
@@ -3838,7 +3852,7 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields', 'pdfText', 'pdfStyle', 'pdfMoveText', 'pdfMove', 'pdfShape', 'pdfAddShape', 'pdfAddImage', 'pdfAddText', 'pdfPageOp']);
 
 /** Commands the app sends by itself as a document opens (spelling, word counts): they say nothing about the user having touched it. */
-const BACKGROUND_COMMANDS = new Set<WireCommand['kind']>(['spellCheck', 'spellIgnored', 'spellWords', 'countWords', 'getProperties', 'autoFormat', 'autoCorrect']);
+const BACKGROUND_COMMANDS = new Set<WireCommand['kind']>(['spellCheck', 'spellIgnored', 'spellWords', 'countWords', 'getProperties', 'getDocumentInfo', 'autoFormat', 'autoCorrect']);
 
 onAutoFormat((on) => worker.command({ kind: 'autoFormat', on }));
 onAutoCorrect(() => worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() }));
@@ -5065,6 +5079,64 @@ const chromeHost = createChromeHost({
       if (choice && Object.keys(choice).length > 0) send({ kind: 'format', action: { kind: 'setParagraph', ...choice } });
       focusInput();
     });
+  },
+  showFontDialog: () => {
+    void formatDialogs().then((d) => d.showFontDialog(selectionFormat.character ?? {}, chrome.fontNames())).then((font) => {
+      if (font && Object.keys(font).length > 0) send({ kind: 'format', action: { kind: 'setFontDetails', font } });
+      focusInput();
+    });
+  },
+  showBordersDialog: () => {
+    void formatDialogs().then((d) => d.showBordersDialog(selectionFormat.borders)).then((borders) => {
+      if (borders && Object.keys(borders).length > 0) send({ kind: 'format', action: { kind: 'setBorders', borders } });
+      focusInput();
+    });
+  },
+  showTabsDialog: () => {
+    void formatDialogs().then((d) => d.showTabsDialog(selectionFormat.tabs, defaultTabStop)).then((tabs) => {
+      if (tabs && JSON.stringify(tabs) !== JSON.stringify(selectionFormat.tabs ?? [])) send({ kind: 'format', action: { kind: 'setTabs', tabs } });
+      focusInput();
+    });
+  },
+  showListDialog: () => {
+    void formatDialogs().then((d) => d.showListDialog(selectionFormat.listFormat, !!selectionFormat.listFormat)).then((answer) => {
+      if (answer) send({ kind: 'format', action: { kind: 'setListFormat', ...answer } });
+      focusInput();
+    });
+  },
+  showStylesDialog: () => {
+    void Promise.all([formatDialogs(), askDocumentInfo()]).then(([d, info]) => {
+      if (!info) return;
+      return d.showStylesDialog(info, {
+        fonts: chrome.fontNames(),
+        defaultTabStop,
+        apply: (style) => send({ kind: 'format', action: style.type === 'character' ? { kind: 'setCharacterStyle', id: style.id } : { kind: 'setStyle', style: style.defined ? style.id : style.name } }),
+        save: (style) => {
+          send({ kind: 'format', action: { kind: 'saveStyle', style } });
+          return askDocumentInfo();
+        },
+        remove: (id) => {
+          send({ kind: 'format', action: { kind: 'deleteStyle', id } });
+          return askDocumentInfo();
+        },
+      });
+    }).finally(focusInput);
+  },
+  showPageNumbersDialog: () => {
+    void Promise.all([formatDialogs(), askDocumentInfo()]).then(([d, info]) => (info ? d.showPageNumbersDialog(info.pageNumbers) : undefined)).then((choice) => {
+      if (choice) send({ kind: 'format', action: { kind: 'setPageNumbers', ...choice } });
+      focusInput();
+    });
+  },
+  showBookmarkDialog: () => {
+    void Promise.all([formatDialogs(), askDocumentInfo()]).then(([d, info]) => {
+      if (!info) return;
+      return d.showBookmarkDialog(info.bookmarks, {
+        add: (name) => send({ kind: 'format', action: { kind: 'addBookmark', name } }),
+        remove: (name) => send({ kind: 'format', action: { kind: 'deleteBookmark', name } }),
+        goTo: (name) => send({ kind: 'format', action: { kind: 'selectBookmark', name } }),
+      });
+    }).finally(focusInput);
   },
   showColumnsDialog: () => {
     void showColumnsDialog(sectionColumns ?? { count: 1, space: 720, sep: false, width: 9360 }).then((choice) => {

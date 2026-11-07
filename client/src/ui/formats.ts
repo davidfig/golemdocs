@@ -576,6 +576,23 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'setLineSpacing':
     case 'setParagraph':
       return profile.lineSpacing;
+    case 'setFontDetails':
+      return profile.fonts || profile.marks.length > 0;
+    case 'setBorders':
+      return profile.borders;
+    case 'setTabs':
+    case 'setPageNumbers':
+      return profile.pageLayout;
+    case 'setListFormat':
+      return profile.lists;
+    case 'setCharacterStyle':
+    case 'saveStyle':
+    case 'deleteStyle':
+      return profile.styles.length > 0;
+    case 'addBookmark':
+    case 'deleteBookmark':
+    case 'selectBookmark':
+      return profile.bookmarks;
     case 'toggleList':
       return profile.lists;
     case 'indent':

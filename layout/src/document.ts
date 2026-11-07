@@ -30,7 +30,7 @@ import { isCjk, type CjkLang } from './fonts/cjk.ts';
 import { addEmoji, MAYBE_EMOJI } from './fonts/emoji.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';
 import { REFLOW_SIDE, REFLOW_VERTICAL, reflowWidth } from './reflow.ts';
-import { emitLine, layoutParagraph, type CachedParagraph, type FloatSpec, type ParagraphLayout } from './paragraph.ts';
+import { emitLine, layoutParagraph, type CachedParagraph, type FloatSpec, type ParagraphLayout, emitBoxBottom, emitBoxJoin, emitBoxTop, sameBox, type BorderBox } from './paragraph.ts';
 import { clearTableStyles, cutBox, emitBox, emitRow, emitRowSlice, flattenBlocks, layoutBox, layoutTable, type BoxLayout, type TableLayout } from './table.ts';
 
 const twips = (v: number | undefined, fallback: number) => (v ?? fallback) / 20;
@@ -659,6 +659,9 @@ export class LayoutSession {
     if (options.structural) {
       restart = 0;
       this.noReuse = true;
+      // A header or footer may have come or gone (File's Page Numbers).
+      this.partsWithFields.clear();
+      for (const [part, hf] of this.doc.headersFooters) if (hasFields(hf.children)) this.partsWithFields.add(part);
     }
     for (const p of paragraphs) {
       this.dirty.add(p);
@@ -905,7 +908,25 @@ export class LayoutSession {
      * Continues at the top of the next column, or, after the last (or with `forcePage`, for a page
      * break or the start of a section), on a new page.
      */
+    // A paragraph's bottom border waits until what follows it is known: a next paragraph in the same box, on this page and in this column, carries on from it instead.
+    let openBox = null as { box: BorderBox; page: PageLayout; x: number; bottom: number } | null;
+    const closeBox = () => {
+      if (openBox) emitBoxBottom(openBox.page, openBox.box, openBox.x, openBox.bottom);
+      openBox = null;
+    };
+    const startBox = (p: ParagraphLayout) => {
+      const x = columnLeft();
+      if (openBox && p.box && sameBox(openBox.box, p.box) && openBox.page === page && openBox.x === x) {
+        emitBoxJoin(page, openBox.box, p.box, x, openBox.bottom, y);
+        openBox = null;
+        return;
+      }
+      closeBox();
+      if (p.box) emitBoxTop(page, p.box, x, y);
+    };
+
     const newPage = (natural: boolean, at: Resume, forcePage = false) => {
+      closeBox();
       if (!forcePage && column < section.columns - 1) {
         lowest = Math.max(lowest, y);
         column++;
@@ -1042,9 +1063,11 @@ export class LayoutSession {
             placeFloats(p.floats, y);
             floatsPlaced = true;
           }
+          if (i + k === 0) startBox(p);
           emitLine(page, p, line, columnLeft(), y, section.columns > 1 ? section.columnWidth : undefined);
           y += line.height;
           atTop = false;
+          if (i + k === lines.length - 1 && p.box) openBox = { box: p.box, page, x: columnLeft(), bottom: y };
         }
         i += fit;
         if (i < lines.length) newPage(!endsWithBreak, { blockIndex: index, line: i }, forcePage);
@@ -1213,6 +1236,7 @@ export class LayoutSession {
               y += atTop ? 0 : pendingAfter;
               pendingAfter = 0;
             }
+            closeBox();
             placeTable(block, i, resuming ? fromRow : 0, resuming && repeat);
             previous = null;
             pendingAfter = 0;
@@ -1220,6 +1244,7 @@ export class LayoutSession {
           blocks.release(i);
           if (onSlice && performance.now() - sliceStart >= sliceMs) await slice();
         }
+        closeBox();
       }
       closeColumns();
     } catch (e) {

@@ -80,6 +80,13 @@ export interface AppHooks {
   /** Ask for columns of text, then set them. */
   showColumnsDialog(): void;
   showParagraphDialog(): void;
+  showFontDialog(): void;
+  showListDialog(): void;
+  showBordersDialog(): void;
+  showTabsDialog(): void;
+  showStylesDialog(): void;
+  showPageNumbersDialog(): void;
+  showBookmarkDialog(): void;
   /** Show the Spelling and Grammar dialog and look for the first problem. */
   showSpelling(): void;
   showThesaurus(): void;
@@ -219,6 +226,7 @@ const SUPPORTED = new Set<ActionKind>([
   'convert',
   'insertComment',
   'insertLink',
+  'insertBookmark',
   'insertMath',
 ]);
 
@@ -338,7 +346,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
       if (action.kind === 'table') return TABLE_EDITS.has(action.op) && !app.annotating();
       if (FORMAT_ACTIONS.has(action.kind as FormatAction['kind'])) return !app.annotating();
       if (action.kind === 'setFormMode') return app.annotating();
-      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'thesaurus' || action.name === 'columns' || action.name === 'paragraph' || action.name === 'wordCount' || action.name === 'options' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'versionHistory' || action.name === 'trash' || action.name === 'vault' || action.name === 'updates' || action.name === 'pasteSpecial' || action.name === 'searchAll';
+      if (action.kind === 'dialog') return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'spelling' || action.name === 'thesaurus' || action.name === 'columns' || action.name === 'paragraph' || action.name === 'font' || action.name === 'bulletsAndNumbering' || action.name === 'bordersAndShading' || action.name === 'tabs' || action.name === 'styles' || action.name === 'pageNumbers' || action.name === 'wordCount' || action.name === 'options' || action.name === 'pageSetup' || action.name === 'properties' || action.name === 'versionHistory' || action.name === 'trash' || action.name === 'vault' || action.name === 'updates' || action.name === 'pasteSpecial' || action.name === 'searchAll';
       if (action.kind === 'convert') return CONVERTIBLE.has(action.to);
       if (action.kind === 'insertBreak') return action.break === 'line' || action.break === 'page' || action.break === 'column';
       if (action.kind === 'viewMode') return action.mode !== 'flow' || !(app.annotating() || app.isPicture());
@@ -386,6 +394,12 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           if (action.name === 'thesaurus') return app.showThesaurus();
           if (action.name === 'columns') return app.showColumnsDialog();
           if (action.name === 'paragraph') return app.showParagraphDialog();
+          if (action.name === 'font') return app.showFontDialog();
+          if (action.name === 'bulletsAndNumbering') return app.showListDialog();
+          if (action.name === 'bordersAndShading') return app.showBordersDialog();
+          if (action.name === 'tabs') return app.showTabsDialog();
+          if (action.name === 'styles') return app.showStylesDialog();
+          if (action.name === 'pageNumbers') return app.showPageNumbersDialog();
           if (action.name === 'wordCount') return app.showWordCount();
           if (action.name === 'options') return app.showOptions();
           if (action.name === 'pageSetup') return app.showPageSetup();
@@ -529,6 +543,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'insertTable':
           // Without a size, ask for one.
           return action.rows && action.columns ? app.send({ kind: 'format', action }) : app.showTableDialog();
+        case 'insertBookmark':
+          return app.showBookmarkDialog();
         case 'insertComment': {
           if (!app.annotating()) return app.startComment();
           const text = window.prompt(t('app.notePrompt'));

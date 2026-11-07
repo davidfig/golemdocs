@@ -4,6 +4,7 @@
 import { t, type MessageKey } from '../i18n/index.ts';
 import type { WireCommand, WordStats } from '../layout/protocol.ts';
 import { h } from './dom.ts';
+import { dialogTitleBar } from './popup.ts';
 
 const ROWS: { key: keyof Omit<WordStats, 'selection' | 'table'>; label: MessageKey }[] = [
   { key: 'pages', label: 'wordCount.pages' },
@@ -34,17 +35,16 @@ export class WordCountDialog {
       table.append(h('tr', {}, h('th', { text: t(label), attrs: { scope: 'row' } }), value));
     }
     this.note = h('div', { class: 'wm-find-message', attrs: { role: 'status' } });
-    const ok = h('button', { class: 'wm-button', text: t('wordCount.close'), attrs: { type: 'submit' } });
-    const close = h('button', { class: 'wm-dialog-close', text: '×', attrs: { type: 'button', 'aria-label': t('wordCount.close') } });
+    const ok = h('button', { class: 'wm-button', text: t('wordCount.close'), attrs: { type: 'button' } });
     const dialog = h(
       'dialog',
       { class: 'wm-dialog wm-link wm-wordcount', attrs: { 'aria-label': t('wordCount.title') } },
-      h('div', { class: 'wm-dialog-title' }, h('span', { text: t('wordCount.title') }), close),
+      dialogTitleBar(t('wordCount.title'), () => dialog.close()),
       h('form', { attrs: { method: 'dialog' } }, h('div', { class: 'wm-dialog-body wm-link-body' }, h('label', { text: t('wordCount.statistics') }), table, this.note), h('div', { class: 'wm-dialog-buttons' }, ok)),
     );
     // Keys stay in the dialog: the document's handlers listen on the window.
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
-    close.addEventListener('click', () => dialog.close());
+    ok.addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', () => {
       dialog.remove();
       this.dialog = null;

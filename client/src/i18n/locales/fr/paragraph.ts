@@ -2,7 +2,6 @@ import type { Messages } from '../../index.ts';
 
 export const paragraph: Partial<Messages> = {
   'paragraph.title': 'Paragraphe',
-  'paragraph.close': 'Fermer',
   'paragraph.ok': 'OK',
   'paragraph.cancel': 'Annuler',
   'paragraph.tabIndents': 'Retraits et espacement',

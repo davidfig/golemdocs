@@ -2,7 +2,6 @@ import type { Messages } from '../../index.ts';
 
 export const paragraph: Partial<Messages> = {
   'paragraph.title': '단락',
-  'paragraph.close': '닫기',
   'paragraph.ok': '확인',
   'paragraph.cancel': '취소',
   'paragraph.tabIndents': '들여쓰기 및 간격',

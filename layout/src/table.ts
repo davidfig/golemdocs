@@ -20,14 +20,14 @@ import {
 } from '@golemdocs/docx';
 import { parseHexColor, type PageLayout } from './display.ts';
 import { BLACK, type LayoutContext } from './context.ts';
-import { emitLine, layoutParagraph, type LineLayout, type ParagraphLayout } from './paragraph.ts';
+import { emitLine, layoutParagraph, type LineLayout, type ParagraphLayout, emitBoxBottom, emitBoxJoin, emitBoxTop, sameBox, type BorderBox } from './paragraph.ts';
 
 const twips = (v: number | undefined) => (v ?? 0) / 20;
 
 // --- Stacked block content (table cells, headers, footers) -------------------------------
 
 export type BoxItem =
-  | { kind: 'line'; y: number; paragraph: ParagraphLayout; line: LineLayout }
+  | { kind: 'line'; y: number; paragraph: ParagraphLayout; line: LineLayout; boxTop?: BorderBox; boxBottom?: BorderBox; boxJoin?: { a: BorderBox; b: BorderBox; gap: number } }
   | { kind: 'table'; y: number; table: TableLayout };
 
 export interface BoxLayout {
@@ -51,6 +51,7 @@ export function layoutBox(blocks: Block[], ctx: LayoutContext, width: number): B
   const box: BoxLayout = { height: 0, items: [], floats: [] };
   let y = 0;
   let previous: ParagraphLayout | undefined;
+  let previousLine: Extract<BoxItem, { kind: 'line' }> | undefined;
   let pendingAfter = 0;
   for (const block of flattenBlocks(blocks)) {
     if (block.kind === 'table') {
@@ -66,9 +67,20 @@ export function layoutBox(blocks: Block[], ctx: LayoutContext, width: number): B
     const sameStyle = previous && previous.styleId === p.styleId;
     let after = pendingAfter;
     if (sameStyle && previous!.contextualSpacing) after = 0;
+    const above = y;
     y += after + (sameStyle && p.contextualSpacing ? 0 : p.spaceBefore);
     if (p.floats.length) box.floats.push({ y, paragraph: p });
-    for (const line of p.lines) box.items.push({ kind: 'line', y: y + line.y, paragraph: p, line });
+    const added: Extract<BoxItem, { kind: 'line' }>[] = p.lines.map((line) => ({ kind: 'line', y: y + line.y, paragraph: p, line }));
+    box.items.push(...added);
+    // Paragraphs with the same borders share one box (as on a page, see placeParagraph).
+    if (added.length && p.box) {
+      if (previousLine && previous?.box && sameBox(previous.box, p.box)) {
+        delete previousLine.boxBottom;
+        added[0].boxJoin = { a: previous.box, b: p.box, gap: y - above };
+      } else added[0].boxTop = p.box;
+      added[added.length - 1].boxBottom = p.box;
+    }
+    previousLine = added[added.length - 1];
     y += p.height;
     pendingAfter = p.spaceAfter;
     previous = p;
@@ -81,8 +93,12 @@ export function emitBox(page: PageLayout, box: BoxLayout, x: number, y: number, 
   for (const item of box.items) {
     if (item.y < from - 0.01 || item.y >= to - 0.01) continue;
     const top = y + item.y - from;
-    if (item.kind === 'line') emitLine(page, item.paragraph, item.line, x, top);
-    else for (let r = 0; r < item.table.rows.length; r++) emitRow(page, item.table, r, x, top + item.table.rowTops[r]);
+    if (item.kind === 'line') {
+      if (item.boxTop) emitBoxTop(page, item.boxTop, x, top);
+      if (item.boxJoin) emitBoxJoin(page, item.boxJoin.a, item.boxJoin.b, x, top - item.boxJoin.gap, top);
+      emitLine(page, item.paragraph, item.line, x, top);
+      if (item.boxBottom) emitBoxBottom(page, item.boxBottom, x, top + item.line.height);
+    } else for (let r = 0; r < item.table.rows.length; r++) emitRow(page, item.table, r, x, top + item.table.rowTops[r]);
   }
 }
 

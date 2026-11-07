@@ -40,7 +40,7 @@ test.describe('the People section of the Share dialog', () => {
     await expect(dialog.getByRole('heading', { name: 'People' })).toBeVisible();
     await expect(dialog.getByText('People need to have signed in to Golem Docs once.')).toBeVisible();
     await expect(dialog.getByText('Not shared with anyone yet.')).toBeVisible();
-    await expect(dialog.getByLabel('Email address')).toBeVisible();
+    await expect(dialog.getByLabel('Email address')).toBeFocused();
     await expect(dialog.getByRole('button', { name: 'Share', exact: true })).toBeVisible();
     await owner.context.close();
   });
@@ -82,7 +82,8 @@ test.describe('the People section of the Share dialog', () => {
     await dialog.getByRole('button', { name: 'Share', exact: true }).click();
     const row = dialog.getByRole('listitem').filter({ hasText: guest.email });
     await expect(row).toBeVisible();
-    await expect(row).toContainText(`${guest.name} (${guest.email})`);
+    await expect(row).toContainText(guest.name);
+    await expect(row).toContainText(guest.email);
     const access = row.getByRole('group', { name: 'Access' });
     await expect(access.getByRole('button', { name: 'Can edit' })).toHaveAttribute('aria-pressed', 'true');
     await expect(dialog.getByLabel('Email address')).toHaveValue('');
@@ -105,6 +106,21 @@ test.describe('the People section of the Share dialog', () => {
     const dialog = await openShareDialog(owner.app);
     const row = dialog.getByRole('listitem').filter({ hasText: guest.email });
     await expect(row.getByRole('group', { name: 'Access' }).getByRole('button', { name: 'Can view' })).toHaveAttribute('aria-pressed', 'true');
+    await owner.context.close();
+    await guest.context.close();
+  });
+
+  test('on a narrow window the address and the controls each keep room, and nothing spills out', async ({ browser }) => {
+    const { owner, guest, doc } = await ownerAndGuest(browser);
+    await shareWith(owner.page, doc.id, guest.email, 'editor');
+    const dialog = await openShareDialog(owner.app);
+    await owner.page.setViewportSize({ width: 390, height: 844 });
+    const row = dialog.getByRole('listitem').filter({ hasText: guest.email });
+    await expect(row).toBeVisible();
+    const width = (await dialog.getByLabel('Email address').boundingBox())!.width;
+    expect(width).toBeGreaterThan(250);
+    expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await expect(dialog.getByRole('button', { name: 'Done' })).toBeInViewport();
     await owner.context.close();
     await guest.context.close();
   });

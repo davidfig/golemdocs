@@ -7,7 +7,7 @@
 // applied yields its inverse (for undo and for rebasing) and a position map (to move
 // selections, pending operations and undo history through it).
 
-import type { AbstractNumbering, Attributes, Block, Comment, Inline, NumberingInstance, DocumentProperties, ParagraphProperties, RunContent, RunProperties, SectionProperties, Style, TableCell, TableCellProperties, TableRow } from '@golemdocs/docx';
+import type { AbstractNumbering, Attributes, Block, Comment, Inline, NumberingInstance, DocumentProperties, HeaderFooter, ParagraphProperties, RunContent, RunProperties, SectionProperties, Style, TableCell, TableCellProperties, TableRow } from '@golemdocs/docx';
 
 /** Changes to run formatting, per property: a value to set, or null to remove it. */
 export type RunFormat = { [K in keyof RunProperties]?: RunProperties[K] | null };
@@ -64,7 +64,9 @@ export type Operation =
    */
   | { type: 'setList'; id: number; list: { instance: NumberingInstance; abstract: AbstractNumbering } | null }
   /** Adds, replaces (by id) or, with `comment` null, removes a comment's text and author. Its range is markers in the text. */
-  | { type: 'setComment'; id: string; comment: Comment | null };
+  | { type: 'setComment'; id: string; comment: Comment | null }
+  /** Adds, replaces or, with `value` null, removes a header or footer part. */
+  | { type: 'setHeaderFooter'; part: string; value: HeaderFooter | null };
 
 /** Every operation's `type` (a Record, so adding an operation without listing it here doesn't compile). */
 const OPERATION_TYPES: Record<Operation['type'], true> = {
@@ -90,6 +92,7 @@ const OPERATION_TYPES: Record<Operation['type'], true> = {
   setStyle: true,
   setList: true,
   setComment: true,
+  setHeaderFooter: true,
 };
 
 /** Whether something received (from another client, say) is at least an object naming an operation there is. */

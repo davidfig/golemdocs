@@ -10,8 +10,9 @@ import { FALLBACK_FAMILY } from '@golemdocs/layout';
 import { CHECKBOX, inlineLength, paragraphLength, StyleResolver, type Inline, type Paragraph, type Run, type RunProperties, type WordDocument } from '@golemdocs/docx';
 import { withFormat, type Position } from '@golemdocs/editor';
 import type { RunFormat } from '@golemdocs/ops';
+import { bordersOf, fontOf, listFormatOf, tabsOf } from './dialogFormats.ts';
 import { isCode } from './formatting.ts';
-import type { Alignment, FormatState, ListKind, Mark, ParagraphChoice } from '../ui/actions.ts';
+import type { Alignment, BordersChoice, FontChoice, FormatState, ListFormat, ListKind, Mark, ParagraphChoice, TabChoice } from '../ui/actions.ts';
 
 /** Most runs examined for one selection, so Select All in a huge document stays fast (a few ms).
  * Past it, marks reflect the runs examined. */
@@ -195,6 +196,13 @@ class Accumulator {
   /** One agreement per Paragraph dialog field. */
   private readonly para = new Map<keyof ParagraphChoice, Agreement<string | number | boolean>>();
 
+  /** One agreement per Font dialog field. */
+  private readonly char = new Map<keyof FontChoice, Agreement<string | number | boolean | null>>();
+  /** The whole of each, as text: they are lists or sets that only agree as a whole. */
+  private readonly borders = new Agreement<string>();
+  private readonly tabs = new Agreement<string>();
+  private listFormat: ListFormat | null | undefined;
+
   private agree(key: keyof ParagraphChoice, value: string | number | boolean): void {
     let agreement = this.para.get(key);
     if (!agreement) this.para.set(key, (agreement = new Agreement()));
@@ -215,6 +223,11 @@ class Accumulator {
     for (const mark of MARKS) if (!on[mark]) this.marks.set(mark, false);
     this.font.add(this.fontName(props));
     this.size.add((props.size ?? DEFAULT_HALF_POINTS) / 2);
+    for (const [key, value] of Object.entries(fontOf(props, this.fontName(props))) as [keyof FontChoice, string | number | boolean | null][]) {
+      let agreement = this.char.get(key);
+      if (!agreement) this.char.set(key, (agreement = new Agreement()));
+      agreement.add(value);
+    }
     const color = props.color?.val;
     this.color.add(color && color !== 'auto' ? `#${color.toUpperCase()}` : null);
     this.highlight.add(props.highlight && props.highlight !== 'none' ? props.highlight : null);
@@ -244,8 +257,11 @@ class Accumulator {
     this.agree('keepLines', !!props.keepLines);
     this.agree('pageBreakBefore', !!props.pageBreakBefore);
     this.agree('widowControl', props.widowControl !== false);
+    this.borders.add(props.borders || props.shading ? JSON.stringify(bordersOf(props)) : '');
+    this.tabs.add(props.tabs?.length ? JSON.stringify(tabsOf(props)) : '[]');
     const id = props.numbering?.id;
     const level = id ? styles.listLevel(id, props.numbering?.level ?? 0) : undefined;
+    if (this.listFormat === undefined) this.listFormat = listFormatOf(level);
     this.list.add(!level || level.format === 'none' ? null : level.format === 'bullet' ? (level.text === CHECKBOX.unchecked || level.text === CHECKBOX.checked ? 'task' : 'bullet') : 'number');
   }
 
@@ -254,10 +270,16 @@ class Accumulator {
     for (const mark of MARKS) marks[mark] = this.runs > 0 && this.marks.get(mark)!;
     const paragraph: Record<string, string | number | boolean> = {};
     for (const [key, agreement] of this.para) if (agreement.value !== undefined) paragraph[key] = agreement.value;
+    const character: Record<string, string | number | boolean | null> = {};
+    for (const [key, agreement] of this.char) if (agreement.value !== undefined) character[key] = agreement.value;
     const aligned = this.align.value;
     if (aligned) paragraph.align = aligned;
     return {
       paragraph: paragraph as ParagraphChoice,
+      character: character as FontChoice,
+      borders: this.borders.mixed ? undefined : this.borders.value ? (JSON.parse(this.borders.value) as BordersChoice) : { top: null, left: null, bottom: null, right: null, shading: null },
+      tabs: this.tabs.mixed ? undefined : (JSON.parse(this.tabs.value ?? '[]') as TabChoice[]),
+      listFormat: this.listFormat ?? null,
       marks,
       // Never blank: a mixed selection shows its start's font and size.
       font: this.font.value ?? this.font.first ?? FALLBACK_FAMILY,

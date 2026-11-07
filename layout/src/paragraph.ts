@@ -81,6 +81,8 @@ export interface FloatSpec {
 }
 
 export interface ParagraphLayout {
+  /** Its borders and shading where they meet what is next to it (the rest is in its lines); drawn when it is placed. */
+  box?: BorderBox;
   paragraph: Paragraph;
   properties: ParagraphProperties;
   lines: LineLayout[];
@@ -664,16 +666,18 @@ function layoutParagraphUncached(
     const borders = props.borders;
     if (borders) {
       const stroke = (b: Border | undefined) =>
-        b && b.val && b.val !== 'nil' && b.val !== 'none' ? { w: Math.max((b.sz ?? 4) / 8, 0.25), color: parseHexColor(b.color) ?? BLACK, space: b.space ?? 0 } : undefined;
+        b && b.val && b.val !== 'nil' && b.val !== 'none' ? { w: Math.max((b.sz ?? 4) / 8, 0.25), color: parseHexColor(b.color) ?? BLACK, space: b.space ?? 0, double: b.val === 'double' } : undefined;
+      // A double border is two lines with a gap as wide as one of them, the second further from the text.
+      const whole = (s: { w: number; double: boolean }) => (s.double ? s.w * 3 : s.w);
       const l = stroke(borders.left);
       const r = stroke(borders.right);
-      if (l) builder.rect(OVER, left - l.space - l.w, 0, l.w, height, l.color);
-      if (r) builder.rect(OVER, rightEdge + r.space, 0, r.w, height, r.color);
-      const t = first ? stroke(borders.top) : undefined;
-      if (t) builder.rect(OVER, left - (l ? l.space + l.w : 0), -t.space - t.w, rightEdge - left + (l ? l.space + l.w : 0) + (r ? r.space + r.w : 0), t.w, t.color);
-      if (lastLine) {
-        const b = stroke(borders.bottom);
-        if (b) builder.rect(OVER, left - (l ? l.space + l.w : 0), height + b.space, rightEdge - left + (l ? l.space + l.w : 0) + (r ? r.space + r.w : 0), b.w, b.color);
+      if (l) {
+        builder.rect(OVER, left - l.space - l.w, 0, l.w, height, l.color);
+        if (l.double) builder.rect(OVER, left - l.space - whole(l), 0, l.w, height, l.color);
+      }
+      if (r) {
+        builder.rect(OVER, rightEdge + r.space, 0, r.w, height, r.color);
+        if (r.double) builder.rect(OVER, rightEdge + r.space + r.w * 2, 0, r.w, height, r.color);
       }
     }
 
@@ -697,6 +701,7 @@ function layoutParagraphUncached(
 
   const spacing = props.spacing ?? {};
   return {
+    box: borderBox(props, left, rightEdge, n - labelLength === 0),
     paragraph,
     properties: props,
     lines,
@@ -716,6 +721,84 @@ function layoutParagraphUncached(
     spans,
     length: n - labelLength,
   };
+}
+
+/** What's drawn of a paragraph's box where it meets another paragraph, or doesn't. Lengths are from the column's left edge. */
+export interface BorderBox {
+  /** Paragraphs next to each other with the same key share one box, as in Word: the same borders, between the same indents. */
+  key: string | null;
+  /** Lines above the first line of text, by how far above it they start. */
+  top: { x: number; above: number; width: number; height: number; color: number }[];
+  /** Lines below the last line of text, by how far below it they start. */
+  bottom: { x: number; below: number; width: number; height: number; color: number }[];
+  /** The side lines, to carry across the gap to the next paragraph of the box. */
+  sides: { x: number; width: number; color: number }[];
+  /** The fill, carried across the gap to a next paragraph with the same one. */
+  fill?: { x: number; width: number; color: number };
+  /** The line drawn in the gap between two paragraphs of the box (w:between). */
+  between?: { x: number; width: number; height: number; color: number };
+}
+
+/** A paragraph's box, or undefined when it has no borders or shading. An empty paragraph with only a line under it is a horizontal rule, which stands alone. */
+function borderBox(props: ParagraphProperties, left: number, rightEdge: number, empty: boolean): BorderBox | undefined {
+  const fillValue = props.shading?.fill;
+  const fillColor = fillValue && fillValue !== 'auto' ? parseHexColor(fillValue) : undefined;
+  const borders = props.borders;
+  const stroke = (b: Border | undefined) =>
+    b && b.val && b.val !== 'nil' && b.val !== 'none' ? { w: Math.max((b.sz ?? 4) / 8, 0.25), color: parseHexColor(b.color) ?? BLACK, space: b.space ?? 0, double: b.val === 'double' } : undefined;
+  const [t, l, r, b, between] = [stroke(borders?.top), stroke(borders?.left), stroke(borders?.right), stroke(borders?.bottom), stroke(borders?.between)];
+  if (!t && !l && !r && !b && fillColor === undefined) return undefined;
+  const whole = (s: { w: number; double: boolean }) => (s.double ? s.w * 3 : s.w);
+  const from = left - (l ? l.space + whole(l) : 0);
+  const across = rightEdge - left + (l ? l.space + whole(l) : 0) + (r ? r.space + whole(r) : 0);
+  const box: BorderBox = {
+    key: empty && !t && !l && !r ? null : JSON.stringify([t, l, r, b, between, left, rightEdge]),
+    top: [],
+    bottom: [],
+    sides: [],
+    ...(fillColor !== undefined && { fill: { x: left, width: rightEdge - left, color: fillColor } }),
+    ...(between && { between: { x: from, width: across, height: between.w, color: between.color } }),
+  };
+  if (t) {
+    box.top.push({ x: from, above: t.space + t.w, width: across, height: t.w, color: t.color });
+    if (t.double) box.top.push({ x: from, above: t.space + whole(t), width: across, height: t.w, color: t.color });
+  }
+  if (b) {
+    box.bottom.push({ x: from, below: b.space, width: across, height: b.w, color: b.color });
+    if (b.double) box.bottom.push({ x: from, below: b.space + b.w * 2, width: across, height: b.w, color: b.color });
+  }
+  if (l) {
+    box.sides.push({ x: left - l.space - l.w, width: l.w, color: l.color });
+    if (l.double) box.sides.push({ x: left - l.space - whole(l), width: l.w, color: l.color });
+  }
+  if (r) {
+    box.sides.push({ x: rightEdge + r.space, width: r.w, color: r.color });
+    if (r.double) box.sides.push({ x: rightEdge + r.space + r.w * 2, width: r.w, color: r.color });
+  }
+  return box;
+}
+
+/** Draws the top lines of a box whose first line of text starts at `y`. */
+export function emitBoxTop(page: import('./display.ts').PageLayout, box: BorderBox, x: number, y: number): void {
+  for (const line of box.top) page.foreground.push(x + line.x, y - line.above, line.width, line.height, line.color);
+}
+
+/** Draws the bottom lines of a box whose last line of text ends at `y`. */
+export function emitBoxBottom(page: import('./display.ts').PageLayout, box: BorderBox, x: number, y: number): void {
+  for (const line of box.bottom) page.foreground.push(x + line.x, y + line.below, line.width, line.height, line.color);
+}
+
+/** Whether a paragraph goes on in the box of the one before it. */
+export const sameBox = (a: BorderBox | undefined, b: BorderBox | undefined): boolean => !!a && !!b && a.key !== null && a.key === b.key;
+
+/** Draws what joins two paragraphs of one box across the gap from `from` to `to`: its sides, its fill if both have it, a line between them if it has one. */
+export function emitBoxJoin(page: import('./display.ts').PageLayout, a: BorderBox, b: BorderBox, x: number, from: number, to: number): void {
+  const gap = to - from;
+  if (gap > 0) {
+    for (const side of a.sides) page.foreground.push(x + side.x, from, side.width, gap, side.color);
+    if (a.fill && b.fill && a.fill.color === b.fill.color) page.background.push(x + a.fill.x, from, a.fill.width, gap, a.fill.color);
+  }
+  if (a.between) page.foreground.push(x + a.between.x, from + (gap - a.between.height) / 2, a.between.width, a.between.height, a.between.color);
 }
 
 /** Draws a laid-out line onto a page at (x, y) = column left and line top, in page points. */

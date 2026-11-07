@@ -118,16 +118,6 @@ test.describe('bullets and numbering', () => {
     await expect(tool(app, 'Numbering')).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('the Format menu dialogs that are not built yet say so and change nothing', async ({ app }) => {
-    await app.blank();
-    await app.type('item');
-    for (const item of ['Font', 'Bullets and Numbering', 'Borders and Shading', 'Tabs', 'Styles']) {
-      await app.menu('Format', item);
-      await expect.poll(() => app.page.evaluate(() => (window as unknown as { status: string }).status), { message: item }).toBe(`${item} isn’t available yet`);
-    }
-    await expect.poll(() => app.text()).toBe('item');
-  });
-
   test('Enter in a list continues it; the list text stays separate paragraphs', async ({ app }) => {
     await app.blank();
     await tool(app, 'Numbering').click();

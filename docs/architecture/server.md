@@ -32,7 +32,7 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 - `providers.ts`: Google, Microsoft, Apple (OpenID Connect) and GitHub (OAuth 2), authorization-code flow with PKCE where honoured. A provider is offered only when all its secrets are set.
 - `authRoutes.ts`: `/api/auth/providers|start/:p|callback/:p|me|logout`. The flow state/nonce/verifier is kept in a short-lived cookie; the optional `?return=` path is the page to come back to. The `dev` provider (and `DEV_USER` shortcut in `auth.ts`) exist only when `ENVIRONMENT !== 'production'`.
 - `accounts.ts`: `userForProfile` maps (provider, subject) to a user. A new provider identity joins an existing user only when both vouch for the same *verified* email. `isAdmin` checks `ADMIN_EMAILS` against verified emails.
-- `session.ts`: the cookie holds a random token; D1 `sessions` holds only its SHA-256 (`SESSION_TTL_MS` 30 days). `__Host-` cookie prefix over HTTPS. Revoke by deleting the row.
+- `session.ts`: the cookie holds a random token; D1 `sessions` holds only its SHA-256. A session lasts `SESSION_TTL_MS` (90 days) from when it was last used: `sessionUser` extends `expires_at` at most once every `SESSION_RENEW_MS` (a day), and `worker.ts` sends the cookie again, same token, with that request's answer (`withRenewedSession`; not on a WebSocket handshake, whose next request catches up). `__Host-` cookie prefix over HTTPS. Revoke by deleting the row.
 - CSRF: non-GET requests must carry `Origin` equal to the request origin (checked once in `worker.ts`); WebSocket handshakes check it separately.
 
 ## Directory D1 vs per-user D1

@@ -13,6 +13,7 @@ import { handleRoomMedia } from './roomMedia.ts';
 import { handlePreferences } from './preferences.ts';
 import { Room } from './room.ts';
 import { joinRoom, roomHeaders } from './roomGate.ts';
+import { withRenewedSession } from './session.ts';
 import { handlePolarWebhook, hasSync, startCheckout, startPortal, subscriptionFor, subscriptionRequired } from './subscriptions.ts';
 import { CloudflareError } from './userDb.ts';
 
@@ -38,7 +39,7 @@ async function requireOwnerSync(env: Env, userId: string, ownerId: string): Prom
   throw new HttpError(403, 'the owner’s subscription has ended', 'subscription');
 }
 
-const handler: ExportedHandler = {
+const routes: ExportedHandler = {
   async fetch(request, env, ctx) {
     try {
       const url = publicUrl(request, env);
@@ -206,6 +207,12 @@ const handler: ExportedHandler = {
       }
       return json({ error: 'internal error' }, 500);
     }
+  },
+};
+
+const handler: ExportedHandler = {
+  async fetch(request, env, ctx) {
+    return withRenewedSession(request, await routes.fetch(request, env, ctx));
   },
 };
 

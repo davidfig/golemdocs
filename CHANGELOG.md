@@ -5,6 +5,7 @@
 ### Changed
 
 - When your sign-in expires, a note now says which account it was, that your documents are safe, and offers to sign in again, instead of your documents just disappearing from view.
+- You stay signed in as long as you use Golem Docs at least once every 90 days. Before, you were signed out 30 days after signing in, however often you used it.
 
 ## 0.34.4 - Unreleased
 

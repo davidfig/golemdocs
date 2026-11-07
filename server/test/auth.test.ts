@@ -11,6 +11,8 @@ import { authenticate } from '../src/auth.ts';
 import { handleAuth, safeReturnPath } from '../src/authRoutes.ts';
 import type { Env } from '../src/cf.ts';
 import { base64url, fromBase64url, pkceChallenge } from '../src/crypto.ts';
+import { SESSION_RENEW_MS, SESSION_TTL_MS } from '../src/session.ts';
+import worker from '../src/worker.ts';
 
 const ORIGIN = 'https://app.example.com';
 const KEYS = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
@@ -198,6 +200,95 @@ test('the same person signing in again gets the same user; sessions expire', asy
   assert.equal(await userOf(first.session), await userOf(second.session));
   (env.DIRECTORY as any).raw.exec('UPDATE sessions SET expires_at = 1');
   assert.equal(await userOf(first.session), null);
+});
+
+const viaWorker = (path: string, session: string | undefined) => {
+  const request = new Request(ORIGIN + path, { headers: { cookie: `__Host-session=${session}` } });
+  return worker.fetch(request, env);
+};
+const storedExpiry = () => (env.DIRECTORY as any).raw.prepare('SELECT expires_at FROM sessions').get().expires_at as number;
+/** Makes the only session look as if it was last extended this long ago. */
+const lastExtended = (ago: number) => (env.DIRECTORY as any).raw.prepare('UPDATE sessions SET expires_at = ?').run(Date.now() + SESSION_TTL_MS - ago);
+const googleProfile = { claims: { sub: 'g1', email: 'dev@example.com', email_verified: true } };
+
+test('a session just extended is not written again', async () => {
+  const { session } = await signIn('google', googleProfile);
+  const before = storedExpiry();
+  const response = await viaWorker('/api/auth/me', session);
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.headers.getSetCookie(), []);
+  assert.equal(storedExpiry(), before);
+});
+
+test('using a session extends it, keeping the same token', async () => {
+  const { session } = await signIn('google', googleProfile);
+  lastExtended(SESSION_RENEW_MS + 60_000);
+  const response = await viaWorker('/api/auth/me', session);
+  assert.equal(((await response.json()) as any).user.email, 'dev@example.com');
+  const cookies = response.headers.getSetCookie();
+  assert.equal(cookies.length, 1);
+  assert.match(cookies[0]!, new RegExp(`^__Host-session=${session}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_MS / 1000}; Secure$`));
+  assert.ok(storedExpiry() > Date.now() + SESSION_TTL_MS - 60_000);
+  // The next request has nothing to do.
+  assert.deepEqual((await viaWorker('/api/auth/me', session)).headers.getSetCookie(), []);
+});
+
+test('any signed-in request extends the session, not only /me, and keeps its own answer', async () => {
+  const { session } = await signIn('google', googleProfile);
+  lastExtended(SESSION_RENEW_MS + 60_000);
+  const response = await viaWorker('/api/no-such-route', session);
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: 'not found' });
+  assert.equal(response.headers.get('content-type'), 'application/json');
+  assert.equal(response.headers.getSetCookie().length, 1);
+});
+
+test('a session from when they lasted 30 days is extended like any other', async () => {
+  const { session } = await signIn('google', googleProfile);
+  (env.DIRECTORY as any).raw.prepare('UPDATE sessions SET expires_at = ?').run(Date.now() + 1000);
+  assert.equal((await viaWorker('/api/auth/me', session)).headers.getSetCookie().length, 1);
+  assert.ok(storedExpiry() > Date.now() + SESSION_TTL_MS - 60_000);
+});
+
+test('an expired session is not brought back', async () => {
+  const { session } = await signIn('google', googleProfile);
+  (env.DIRECTORY as any).raw.exec('UPDATE sessions SET expires_at = 1');
+  const me = await viaWorker('/api/auth/me', session);
+  assert.deepEqual(await me.json(), { user: null });
+  assert.deepEqual(me.headers.getSetCookie(), []);
+  assert.equal((await viaWorker('/api/documents', session)).status, 401);
+  assert.equal(storedExpiry(), 1);
+});
+
+test('a session that cannot be extended still signs the request in, and sends no cookie', async () => {
+  const { session } = await signIn('google', googleProfile);
+  lastExtended(SESSION_RENEW_MS + 60_000);
+  const real = env.DIRECTORY as any;
+  env.DIRECTORY = {
+    ...real,
+    prepare: (sql: string) => {
+      if (sql.startsWith('UPDATE sessions')) throw new Error('database is busy');
+      return real.prepare(sql);
+    },
+  };
+  const realError = console.error;
+  console.error = () => {};
+  try {
+    const response = await viaWorker('/api/auth/me', session);
+    assert.equal(((await response.json()) as any).user.email, 'dev@example.com');
+    assert.deepEqual(response.headers.getSetCookie(), []);
+  } finally {
+    console.error = realError;
+    env.DIRECTORY = real;
+  }
+});
+
+test('signing out ends a session for good, however recently it was extended', async () => {
+  const { session } = await signIn('google', googleProfile);
+  lastExtended(SESSION_RENEW_MS + 60_000);
+  await viaWorker('/api/auth/me', session);
+  await call('/api/auth/logout', { method: 'POST', headers: { cookie: `__Host-session=${session}`, origin: ORIGIN } });
+  assert.deepEqual(await (await viaWorker('/api/auth/me', session)).json(), { user: null });
 });
 
 test('verified emails link providers; unverified ones never do', async () => {

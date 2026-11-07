@@ -22,8 +22,12 @@ Then apply the directory migrations: `pnpm --filter @golemdocs/server cf:migrate
 - Authorization-code flow with PKCE, a `state` and a `nonce` bound to a short-lived HttpOnly cookie.
 - ID tokens are checked for issuer, audience, expiry and nonce. Their signatures aren't verified:
   they come straight from the provider's token endpoint over TLS, which OpenID Connect allows.
-- Sessions are random tokens in an HttpOnly, SameSite=Lax cookie (30 days). Only the SHA-256 of the
-  token is stored (`sessions` in the directory D1), so logout or deleting a row revokes it.
+- Sessions are random tokens in an HttpOnly, SameSite=Lax cookie. Only the SHA-256 of the token is
+  stored (`sessions` in the directory D1), so logout or deleting a row revokes it.
+- A session lasts 90 days from when it was last used, with no upper limit. Any signed-in request
+  extends it, at most once a day, and sends the cookie again with the same token. The provider isn't
+  asked again: its tokens are thrown away after sign-in, so nothing about staying signed in depends
+  on Google, Microsoft, GitHub or Apple.
 - One user can have several sign-in methods. A new provider joins an existing user only when both
   providers report the same **verified** email (Google, GitHub's verified primary, Apple). Microsoft
   never reports verification, so it never links by email.

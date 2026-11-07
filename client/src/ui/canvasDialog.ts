@@ -5,6 +5,7 @@ import { MAX_SIDE, MIN_SIDE } from '../vector/canvas.ts';
 import type { ResizeMode } from '../vector/canvas.ts';
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
+import { choiceButton } from './dropdown.ts';
 import './pictureTools.css';
 import { dialogTitleBar } from './popup.ts';
 
@@ -41,15 +42,19 @@ export function showCanvasDialog(host: CanvasHost): void {
   const height = number(t('vector.canvas.height'), now.height, MIN_SIDE, MAX_SIDE);
   const keep = h('input', { attrs: { type: 'checkbox' } });
   keep.checked = true;
-  const preset = h('select', { class: 'wm-input', attrs: { 'aria-label': t('vector.canvas.preset') } });
-  const custom = h('option', { text: t('vector.canvas.presetCustom') });
-  custom.value = '';
-  preset.append(custom);
-  for (const p of PRESETS) {
-    const option = h('option', { text: `${t(`vector.canvas.preset.${p.id}`)} (${p.width} × ${p.height})` });
-    option.value = p.id;
-    preset.append(option);
-  }
+  const presetName = (id: string): string => {
+    const p = PRESETS.find((x) => x.id === id);
+    return p ? `${t(`vector.canvas.preset.${p.id}`)} (${p.width} × ${p.height})` : t('vector.canvas.presetCustom');
+  };
+  const preset = choiceButton({ label: t('vector.canvas.preset'), fill: true, groups: () => [{ values: ['', ...PRESETS.map((p) => p.id)] }], name: presetName }, (id) => {
+    preset.set(id);
+    const p = PRESETS.find((x) => x.id === id);
+    if (!p) return;
+    width.value = String(p.width);
+    height.value = String(p.height);
+    keep.checked = false;
+  });
+  preset.set('');
   const radio = (value: ResizeMode, label: string, checked: boolean) => {
     const input = h('input', { attrs: { type: 'radio', name: 'wm-canvas-mode', value } });
     input.checked = checked;
@@ -69,19 +74,12 @@ export function showCanvasDialog(host: CanvasHost): void {
   const ratio = now.width / now.height;
   // One side follows the other while the proportions are kept.
   width.addEventListener('input', () => {
-    preset.value = '';
+    preset.set('');
     if (keep.checked && Number(width.value) > 0) height.value = String(Math.round((Number(width.value) / ratio) * 100) / 100);
   });
   height.addEventListener('input', () => {
-    preset.value = '';
+    preset.set('');
     if (keep.checked && Number(height.value) > 0) width.value = String(Math.round(Number(height.value) * ratio * 100) / 100);
-  });
-  preset.addEventListener('change', () => {
-    const p = PRESETS.find((x) => x.id === preset.value);
-    if (!p) return;
-    width.value = String(p.width);
-    height.value = String(p.height);
-    keep.checked = false;
   });
 
   const body = h(
@@ -89,7 +87,7 @@ export function showCanvasDialog(host: CanvasHost): void {
     { class: 'wm-dialog-body wm-link-body' },
     h('div', { class: 'wm-picture-wide', text: t('vector.canvas.current', { width: Math.round(now.width), height: Math.round(now.height) }) }),
     h('label', { text: t('vector.canvas.preset') }),
-    preset,
+    preset.el,
     h('label', { text: t('vector.canvas.width') }),
     h('span', { class: 'wm-picture-field' }, width, t('vector.canvas.pixels')),
     h('label', { text: t('vector.canvas.height') }),

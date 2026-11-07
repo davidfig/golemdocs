@@ -52,17 +52,20 @@ export interface ChoiceSpec {
   name(value: string): string;
   sample?(value: string): Node | null;
   width?: number;
+  /** As wide and tall as the fields of a dialog's form (`.wm-input`), rather than `width`. */
+  fill?: boolean;
 }
 
 /**
  * The drop-down list itself: a button showing the current choice, and the list of choices below it; `pick` is told the
- * choice picked. The toolbar's `dropdown` is this with a command; a dialog uses it as it is.
+ * choice picked. The toolbar's `dropdown` is this with a command; a dialog uses it as it is. Off a toolbar it takes the
+ * keyboard too: an arrow opens the list and moves along it, Enter or Space picks.
  */
 export function choiceButton(spec: ChoiceSpec, pick: (value: string) => void): { el: HTMLButtonElement; value: string; set(value: string): void } {
   const { label } = spec;
   const text = h('span', { class: 'wm-dropdown-name' });
   const sample = h('span', { class: 'wm-dropdown-sample' });
-  const button = h('button', { class: 'wm-dropdown', title: label, attrs: { type: 'button', 'aria-label': label, 'aria-haspopup': 'listbox', 'aria-expanded': 'false' } }, sample, text, h('span', { class: 'wm-dropdown-caret' }));
+  const button = h('button', { class: spec.fill ? 'wm-dropdown wm-dropdown-fill' : 'wm-dropdown', title: label, attrs: { type: 'button', 'aria-label': label, 'aria-haspopup': 'listbox', 'aria-expanded': 'false' } }, sample, text, h('span', { class: 'wm-dropdown-caret' }));
   if (spec.width) button.style.width = `${spec.width}px`;
   const control = {
     el: button,
@@ -74,8 +77,33 @@ export function choiceButton(spec: ChoiceSpec, pick: (value: string) => void): {
       sample.hidden = !spec.sample;
     },
   };
+  // The rows of the open list, and the one the arrow keys are on.
+  let rows: HTMLElement[] = [];
+  let active = -1;
+  const highlight = (index: number) => {
+    rows[active]?.classList.remove('active');
+    active = index;
+    rows[active]?.classList.add('active');
+    rows[active]?.scrollIntoView({ block: 'nearest' });
+  };
+  button.addEventListener('keydown', (e) => {
+    if (button.tabIndex < 0) return;
+    const open = popupOpenFor(button);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (open) highlight(Math.max(0, Math.min(rows.length - 1, active + (e.key === 'ArrowDown' ? 1 : -1))));
+      else button.click();
+    } else if (open && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      rows[active]?.click();
+    } else if (open && e.key === 'Tab') {
+      closePopup();
+    }
+  });
   button.addEventListener('click', () => {
     if (popupOpenFor(button)) return closePopup();
+    rows = [];
+    active = -1;
     const list = h('div', { class: 'wm-list wm-dropdown-list', attrs: { role: 'listbox', 'aria-label': label } });
     let chosenRow: HTMLElement | null = null;
     for (const group of spec.groups(control.value)) {
@@ -84,7 +112,11 @@ export function choiceButton(spec: ChoiceSpec, pick: (value: string) => void): {
         const chosen = value === control.value;
         const picture = spec.sample?.(value);
         const row = h('div', { class: chosen ? 'wm-option wm-dropdown-row chosen' : 'wm-option wm-dropdown-row', attrs: { role: 'option', 'aria-selected': String(chosen) } }, ...(picture ? [h('span', { class: 'wm-dropdown-sample' }, picture)] : []), h('span', { text: spec.name(value) }));
-        if (chosen) chosenRow = row;
+        if (chosen) {
+          chosenRow = row;
+          active = rows.length;
+        }
+        rows.push(row);
         row.addEventListener('click', () => {
           closePopup();
           pick(value);

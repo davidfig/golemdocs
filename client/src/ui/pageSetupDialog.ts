@@ -4,6 +4,7 @@
 
 import { getLocale, t } from '../i18n/index.ts';
 import { h } from './dom.ts';
+import { choiceButton } from './dropdown.ts';
 import { dialogTitleBar } from './popup.ts';
 
 /** Twips, and how the page is oriented, as the editor keeps them. */
@@ -82,41 +83,36 @@ export function showPageSetupDialog(current: PageState): Promise<PageChoice | un
     );
 
     // Paper.
-    const size = h('select', { class: 'wm-input', attrs: { 'aria-label': t('pageSetup.paperSize') } });
-    for (const [name] of PAPER) size.append(Object.assign(h('option', { text: name }), { value: name }));
-    size.append(Object.assign(h('option', { text: t('pageSetup.custom') }), { value: CUSTOM }));
+    const size = choiceButton({ label: t('pageSetup.paperSize'), fill: true, groups: () => [{ values: [...PAPER.map(([name]) => name), CUSTOM] }], name: (v) => (v === CUSTOM ? t('pageSetup.custom') : v) }, (v) => {
+      size.set(v);
+      const paper = PAPER.find(([name]) => name === v);
+      if (!paper) return;
+      const tall = !landscape.input.checked;
+      numbers.get('width')!.value = show(tall ? paper[1] : paper[2]);
+      numbers.get('height')!.value = show(tall ? paper[2] : paper[1]);
+    });
     const paperTab = h(
       'div',
       { class: 'wm-page-tab', attrs: { role: 'tabpanel' } },
       h('label', { text: t('pageSetup.paperSize') }),
-      size,
+      size.el,
       h('div', { class: 'wm-page-grid' }, field('width', t('pageSetup.width'), current.width), field('height', t('pageSetup.height'), current.height)),
     );
 
-    const scope = h('select', { class: 'wm-input', attrs: { 'aria-label': t('pageSetup.apply') } });
-    for (const [value, label] of [
-      ['section', t('pageSetup.applySection')],
-      ['document', t('pageSetup.applyDocument')],
-      ['forward', t('pageSetup.applyForward')],
-    ] as const) scope.append(Object.assign(h('option', { text: label }), { value }));
+    const scopes = { section: t('pageSetup.applySection'), document: t('pageSetup.applyDocument'), forward: t('pageSetup.applyForward') };
+    const scope = choiceButton({ label: t('pageSetup.apply'), fill: true, groups: () => [{ values: Object.keys(scopes) }], name: (v) => scopes[v as PageChoice['scope']] }, (v) => scope.set(v));
+    scope.set('section');
     const message = h('div', { class: 'wm-find-message', attrs: { role: 'alert' } });
 
     const twips = (id: string): number => Math.round(Number(numbers.get(id)!.value) * perUnit());
     /** The paper size that the width and height fields say (either way up), or custom. */
     const syncSize = () => {
       const [w, h2] = [twips('width'), twips('height')].sort((a, b) => a - b);
-      size.value = PAPER.find(([, pw, ph]) => Math.abs(pw - w) <= SAME_PAPER && Math.abs(ph - h2) <= SAME_PAPER)?.[0] ?? CUSTOM;
+      size.set(PAPER.find(([, pw, ph]) => Math.abs(pw - w) <= SAME_PAPER && Math.abs(ph - h2) <= SAME_PAPER)?.[0] ?? CUSTOM);
     };
     syncSize();
     numbers.get('width')!.addEventListener('input', syncSize);
     numbers.get('height')!.addEventListener('input', syncSize);
-    size.addEventListener('change', () => {
-      const paper = PAPER.find(([name]) => name === size.value);
-      if (!paper) return;
-      const tall = !landscape.input.checked;
-      numbers.get('width')!.value = show(tall ? paper[1] : paper[2]);
-      numbers.get('height')!.value = show(tall ? paper[2] : paper[1]);
-    });
     // Turning the page on its side swaps its width and height.
     for (const { input } of [portrait, landscape]) {
       input.addEventListener('change', () => {
@@ -148,7 +144,7 @@ export function showPageSetupDialog(current: PageState): Promise<PageChoice | un
       // A number box's step is how far its arrows go, not a limit on what can be typed (A4 is 8.27 in, line spacing can be 1.08): the submit handler below checks the values.
       { attrs: { method: 'dialog', novalidate: '' } },
       tabs,
-      h('div', { class: 'wm-dialog-body wm-link-body' }, marginsTab, paperTab, h('label', { text: t('pageSetup.apply') }), scope, message),
+      h('div', { class: 'wm-dialog-body wm-link-body' }, marginsTab, paperTab, h('label', { text: t('pageSetup.apply') }), scope.el, message),
       h('div', { class: 'wm-dialog-buttons' }, h('span', { class: 'wm-link-actions' }, ok, cancel)),
     );
     const dialog = h('dialog', { class: 'wm-dialog wm-link wm-pagesetup', attrs: { 'aria-label': t('pageSetup.title') } }, dialogTitleBar(t('pageSetup.title'), () => dialog.close()), form);

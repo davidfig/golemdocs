@@ -1,4 +1,4 @@
-import { expect, test } from '../fixtures';
+import { expect, pickChoice, test } from '../fixtures';
 import { importFile } from '../files/helpers';
 import { pageBoxes, penStroke } from './helpers';
 import type { App } from '../fixtures';
@@ -530,7 +530,7 @@ test.describe('free drawing', () => {
     const select = options.getByRole('checkbox', { name: 'Select a pencil stroke when it is finished' });
     await expect(select).toBeChecked();
     await expect(options.getByRole('checkbox', { name: /Switch back to the Select tool/ })).toBeChecked();
-    await expect(options.getByRole('combobox', { name: 'Pencil smoothing' })).toHaveValue('medium');
+    await expect(options.getByRole('button', { name: 'Pencil smoothing' })).toHaveText('Medium');
     await select.uncheck();
     await options.getByRole('button', { name: 'OK' }).click();
     await expect(options).toHaveCount(0);
@@ -640,6 +640,14 @@ test.describe('the canvas', () => {
     await expect(dialog).toContainText('Now 400 × 200 pixels');
     await dialog.getByRole('spinbutton', { name: 'Width' }).fill('800');
     await expect(dialog.getByRole('spinbutton', { name: 'Height' })).toHaveValue('400');
+    // A preset fills in its size, and typing a size makes it custom again.
+    const preset = dialog.getByRole('button', { name: 'Preset' });
+    await pickChoice(preset, 'Icon (512 × 512)');
+    await expect(dialog.getByRole('spinbutton', { name: 'Width' })).toHaveValue('512');
+    await expect(dialog.getByRole('spinbutton', { name: 'Height' })).toHaveValue('512');
+    await dialog.getByRole('spinbutton', { name: 'Height' }).fill('400');
+    await expect(preset).not.toHaveText('Icon (512 × 512)');
+    await dialog.getByRole('spinbutton', { name: 'Width' }).fill('800');
     await dialog.getByRole('button', { name: 'OK' }).click();
     await expect.poll(async () => (await currentSvg(app)).includes('width="800" height="400"'), { timeout: 15_000 }).toBe(true);
     expect(await pageBoxes(app.page)).toEqual([{ width: 600, height: 300 }]);

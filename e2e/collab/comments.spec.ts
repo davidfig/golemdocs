@@ -249,7 +249,7 @@ test.describe('Edit > Go To > Comment', () => {
   async function openGoToComment(app: App) {
     await app.menu('Edit', 'Go To');
     const dialog = app.page.getByRole('dialog', { name: 'Find and Replace' });
-    await dialog.getByLabel('Go to what').selectOption('comment');
+    await dialog.getByLabel('Go to what').getByRole('option', { name: 'Comment' }).click();
     return dialog;
   }
 

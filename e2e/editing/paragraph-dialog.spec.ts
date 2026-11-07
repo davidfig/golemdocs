@@ -1,4 +1,4 @@
-import { test, expect, type App } from '../fixtures';
+import { test, expect, pickChoice, type App } from '../fixtures';
 import { MOD, dialog, downloadDocumentXml, paragraphProps, paragraphsOf, tool } from './helpers';
 
 const pPr = async (app: App, index = 0) => paragraphProps(paragraphsOf(await downloadDocumentXml(app))[index]).raw;
@@ -22,12 +22,12 @@ test.describe('Format ▸ Paragraph', () => {
     await app.type('text');
     const box = await open(app);
     await expect(box.getByRole('tab', { name: 'Indents and Spacing' })).toHaveAttribute('aria-selected', 'true');
-    await expect(box.getByRole('combobox', { name: 'Alignment' })).toHaveValue('left');
-    await expect(box.getByRole('combobox', { name: 'Special' })).toHaveValue('none');
+    await expect(box.getByRole('button', { name: 'Alignment' })).toHaveText('Align Left');
+    await expect(box.getByRole('button', { name: 'Special' })).toHaveText('(none)');
     await expect(box.getByRole('spinbutton', { name: 'Left' })).toHaveValue('0');
     await expect(box.getByRole('spinbutton', { name: 'After' })).toHaveValue('8');
     // A new document's paragraphs are at 1.08 lines ("Multiple").
-    await expect(box.getByRole('combobox', { name: 'Line spacing' })).toHaveValue('multiple');
+    await expect(box.getByRole('button', { name: 'Line spacing' })).toHaveText('Multiple');
     await expect(box.getByRole('spinbutton', { name: 'At' })).toHaveValue('1.08');
     await expect(box.getByRole('spinbutton', { name: 'By' })).toBeDisabled();
     await box.getByRole('button', { name: 'Cancel' }).click();
@@ -39,7 +39,7 @@ test.describe('Format ▸ Paragraph', () => {
     await app.press(`${MOD}+e`);
     await expect(tool(app, 'Center')).toHaveAttribute('aria-pressed', 'true');
     const box = await open(app);
-    await expect(box.getByRole('combobox', { name: 'Alignment' })).toHaveValue('center');
+    await expect(box.getByRole('button', { name: 'Alignment' })).toHaveText('Center');
     await box.getByRole('button', { name: 'Cancel' }).click();
   });
 
@@ -47,15 +47,15 @@ test.describe('Format ▸ Paragraph', () => {
     await app.blank();
     await app.type('text');
     const box = await open(app);
-    await box.getByRole('combobox', { name: 'Alignment' }).selectOption('right');
+    await pickChoice(box.getByRole('button', { name: 'Alignment' }), 'Align Right');
     await box.getByRole('spinbutton', { name: 'Left' }).fill('0.5');
     await box.getByRole('spinbutton', { name: 'Right' }).fill('0.25');
-    await box.getByRole('combobox', { name: 'Special' }).selectOption('firstLine');
+    await pickChoice(box.getByRole('button', { name: 'Special' }), 'First line');
     await expect(box.getByRole('spinbutton', { name: 'By' })).toBeEnabled();
     await box.getByRole('spinbutton', { name: 'By' }).fill('0.3');
     await box.getByRole('spinbutton', { name: 'Before' }).fill('6');
     await box.getByRole('spinbutton', { name: 'After' }).fill('12');
-    await box.getByRole('combobox', { name: 'Line spacing' }).selectOption('double');
+    await pickChoice(box.getByRole('button', { name: 'Line spacing' }), 'Double');
     await box.getByRole('button', { name: 'OK' }).click();
     await expect(box).toHaveCount(0);
     await expect(tool(app, 'Align Right')).toHaveAttribute('aria-pressed', 'true');
@@ -69,11 +69,38 @@ test.describe('Format ▸ Paragraph', () => {
     expect(raw).toMatch(/w:spacing [^>]*w:line="480"/);
   });
 
+  test('the drop-down lists work from the keyboard', async ({ app }) => {
+    await app.blank();
+    await app.type('text');
+    const box = await open(app);
+    const alignment = box.getByRole('button', { name: 'Alignment' });
+    await expect(alignment).toBeFocused();
+    // An arrow opens the list on the current choice; Enter picks the row the arrows are on.
+    await app.page.keyboard.press('ArrowDown');
+    const list = box.locator('.wm-dropdown-list');
+    await expect(list).toBeVisible();
+    await app.page.keyboard.press('ArrowDown');
+    await app.page.keyboard.press('Enter');
+    await expect(list).toHaveCount(0);
+    await expect(alignment).toHaveText('Center');
+    // Space picks too, and Escape closes only the list.
+    await app.page.keyboard.press('ArrowDown');
+    await app.page.keyboard.press('ArrowDown');
+    await app.page.keyboard.press(' ');
+    await expect(list).toHaveCount(0);
+    await expect(alignment).toHaveText('Align Right');
+    await app.page.keyboard.press('ArrowDown');
+    await app.page.keyboard.press('Escape');
+    await expect(list).toHaveCount(0);
+    await expect(box).toBeVisible();
+    await box.getByRole('button', { name: 'Cancel' }).click();
+  });
+
   test('a hanging indent is written as hanging', async ({ app }) => {
     await app.blank();
     await app.type('text');
     const box = await open(app);
-    await box.getByRole('combobox', { name: 'Special' }).selectOption('hanging');
+    await pickChoice(box.getByRole('button', { name: 'Special' }), 'Hanging');
     await box.getByRole('spinbutton', { name: 'By' }).fill('0.5');
     await box.getByRole('button', { name: 'OK' }).click();
     await expect.poll(async () => pPr(app)).toMatch(/w:hanging="720"/);
@@ -83,12 +110,12 @@ test.describe('Format ▸ Paragraph', () => {
     await app.blank();
     await app.type('text');
     for (const [kind, at, rule, line] of [
-      ['exactly', '18', 'exact', '360'],
-      ['atLeast', '20', 'atLeast', '400'],
-      ['multiple', '1.3', 'auto', '312'],
+      ['Exactly', '18', 'exact', '360'],
+      ['At least', '20', 'atLeast', '400'],
+      ['Multiple', '1.3', 'auto', '312'],
     ] as const) {
       const box = await open(app);
-      await box.getByRole('combobox', { name: 'Line spacing' }).selectOption(kind);
+      await pickChoice(box.getByRole('button', { name: 'Line spacing' }), kind);
       await expect(box.getByRole('spinbutton', { name: 'At' })).toBeEnabled();
       await box.getByRole('spinbutton', { name: 'At' }).fill(at);
       await box.getByRole('button', { name: 'OK' }).click();
@@ -101,7 +128,7 @@ test.describe('Format ▸ Paragraph', () => {
     await app.blank();
     await app.type('text');
     const box = await open(app);
-    await box.getByRole('combobox', { name: 'Line spacing' }).selectOption('exactly');
+    await pickChoice(box.getByRole('button', { name: 'Line spacing' }), 'Exactly');
     await box.getByRole('spinbutton', { name: 'At' }).fill('0.5');
     await box.getByRole('button', { name: 'OK' }).click();
     await expect(box).toBeVisible();
@@ -115,12 +142,12 @@ test.describe('Format ▸ Paragraph', () => {
     await app.type('text');
     for (const close of ['Cancel', 'Close'] as const) {
       const box = await open(app);
-      await box.getByRole('combobox', { name: 'Alignment' }).selectOption('center');
+      await pickChoice(box.getByRole('button', { name: 'Alignment' }), 'Center');
       await box.getByRole('button', { name: close, exact: true }).click();
       await expect(box).toHaveCount(0);
     }
     const box = await open(app);
-    await box.getByRole('combobox', { name: 'Alignment' }).selectOption('center');
+    await pickChoice(box.getByRole('button', { name: 'Alignment' }), 'Center');
     await app.page.keyboard.press('Escape');
     await expect(box).toHaveCount(0);
     await expect(tool(app, 'Align Left')).toHaveAttribute('aria-pressed', 'true');
@@ -180,7 +207,7 @@ test.describe('Format ▸ Paragraph', () => {
     await app.type('two');
     await app.press(`${MOD}+a`);
     const box = await open(app);
-    await expect(box.getByRole('combobox', { name: 'Alignment' })).toHaveValue('');
+    await expect(box.getByRole('button', { name: 'Alignment' })).toHaveText('');
     await box.getByRole('spinbutton', { name: 'Left' }).fill('1');
     await box.getByRole('button', { name: 'OK' }).click();
     const xml = await downloadDocumentXml(app);
@@ -197,7 +224,7 @@ test.describe('Format ▸ Paragraph', () => {
     await app.type('b');
     await app.press(`${MOD}+a`);
     const box = await open(app);
-    await box.getByRole('combobox', { name: 'Alignment' }).selectOption('justify');
+    await pickChoice(box.getByRole('button', { name: 'Alignment' }), 'Justify');
     await box.getByRole('button', { name: 'OK' }).click();
     const ps = paragraphsOf(await downloadDocumentXml(app));
     expect(ps).toHaveLength(2);
@@ -209,7 +236,7 @@ test.describe('Format ▸ Paragraph', () => {
     await app.type('text');
     await expect.poll(() => app.text()).toBe('text');
     const box = await open(app);
-    await box.getByRole('combobox', { name: 'Alignment' }).selectOption('center');
+    await pickChoice(box.getByRole('button', { name: 'Alignment' }), 'Center');
     await box.getByRole('spinbutton', { name: 'Left' }).fill('1');
     await box.getByRole('spinbutton', { name: 'Before' }).fill('10');
     await box.getByRole('button', { name: 'OK' }).click();

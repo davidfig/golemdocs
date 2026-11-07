@@ -7,6 +7,7 @@
 - The File › Share dialog is tidier: people’s names and email addresses show in full, the explanations are quieter and come after the controls, and it fits a phone’s screen better.
 - Dialogs are more consistent: the same close button everywhere, Close no longer looks like the main action, and each dialog starts in its first useful field.
 - Background and Canvas Size show only the settings the chosen fill uses.
+- The lists in Page Setup, Paragraph, Columns, Options, Customize Toolbars, Background, Canvas Size and Go To look and work like the rest of the app’s.
 
 ### Fixed
 

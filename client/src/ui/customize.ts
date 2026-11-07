@@ -3,6 +3,7 @@
 
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
+import { choiceButton } from './dropdown.ts';
 import { dialogTitleBar } from './popup.ts';
 import { SEPARATOR, cloneLayout, toolbarTitle, type ToolbarLayout } from './toolbarLayout.ts';
 
@@ -38,11 +39,21 @@ export function showCustomize(options: CustomizeOptions): void {
   const items = () => layout[current].items;
 
   // --- Controls ---
-  const toolbarSelect = h('select', { class: 'wm-customize-select', attrs: { 'aria-label': t('menus.customize.toolbar') } });
-  for (const [i, bar] of layout.entries()) toolbarSelect.append(new Option(toolbarTitle(bar.name), String(i)));
+  const toolbarSelect = choiceButton({ label: t('menus.customize.toolbar'), groups: () => [{ values: layout.map((_, i) => String(i)) }], name: (v) => toolbarTitle(layout[Number(v)].name), width: 180 }, (v) => {
+    toolbarSelect.set(v);
+    current = Number(v);
+    toolbarSelection = -1;
+    render();
+  });
+  toolbarSelect.set('0');
   const visible = h('input', { attrs: { type: 'checkbox' } });
-  const categorySelect = h('select', { class: 'wm-customize-select', attrs: { 'aria-label': t('menus.customize.category') } });
-  for (const c of categories) categorySelect.append(new Option(c === ALL ? t('menus.customize.allCommands') : c, c));
+  const categorySelect = choiceButton({ label: t('menus.customize.category'), groups: () => [{ values: categories }], name: (v) => (v === ALL ? t('menus.customize.allCommands') : v), width: 180 }, (v) => {
+    categorySelect.set(v);
+    category = v;
+    catalogList.scrollTop = 0;
+    render();
+  });
+  categorySelect.set(ALL);
   const catalogList = h('div', { class: 'wm-clist', attrs: { role: 'listbox', tabindex: '0', 'aria-label': t('menus.customize.commandsList') } });
   const toolbarList = h('div', { class: 'wm-clist', attrs: { role: 'listbox', tabindex: '0', 'aria-label': t('menus.customize.buttonsList') } });
 
@@ -208,19 +219,9 @@ export function showCustomize(options: CustomizeOptions): void {
     drag = null;
   });
 
-  toolbarSelect.addEventListener('change', () => {
-    current = Number(toolbarSelect.value);
-    toolbarSelection = -1;
-    render();
-  });
   visible.addEventListener('change', () => {
     layout[current].visible = visible.checked;
     commit();
-  });
-  categorySelect.addEventListener('change', () => {
-    category = categorySelect.value;
-    catalogList.scrollTop = 0;
-    render();
   });
 
   // Arrow keys move the selection in whichever list has focus; Delete removes.
@@ -256,11 +257,11 @@ export function showCustomize(options: CustomizeOptions): void {
     h(
       'div',
       { class: 'wm-dialog-body' },
-      h('div', { class: 'wm-customize-top' }, h('label', {}, t('menus.customize.toolbarField'), toolbarSelect), h('label', {}, visible, t('menus.customize.showToolbar'))),
+      h('div', { class: 'wm-customize-top' }, h('label', {}, t('menus.customize.toolbarField'), toolbarSelect.el), h('label', {}, visible, t('menus.customize.showToolbar'))),
       h(
         'div',
         { class: 'wm-customize-lists' },
-        h('div', { class: 'wm-customize-pane' }, h('label', {}, t('menus.customize.commandsField'), categorySelect), catalogList),
+        h('div', { class: 'wm-customize-pane' }, h('label', {}, t('menus.customize.commandsField'), categorySelect.el), catalogList),
         h('div', { class: 'wm-customize-buttons' }, addButton, removeButton, h('span', { class: 'wm-gap' }), upButton, downButton, separatorButton),
         h('div', { class: 'wm-customize-pane' }, h('div', { class: 'wm-pane-title', text: t('menus.customize.onToolbar') }), toolbarList),
       ),

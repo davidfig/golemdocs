@@ -1,4 +1,4 @@
-import { expect, test } from '../fixtures';
+import { expect, pickChoice, test } from '../fixtures';
 import { currentPicture, dialog, expectPicture, makePng, openPicture, pageBoxes, pixelAt, pngSize, type Rgba } from './helpers';
 
 /** Red on the left to blue on the right (120 × 60). */
@@ -48,10 +48,10 @@ test('Background shows only the settings its fill uses', async ({ app }) => {
   await expect(box.getByLabel('Color:', { exact: true })).toBeVisible();
   await expect(box.getByLabel('Second color:')).toBeHidden();
   await expect(box.getByLabel('Angle:')).toBeHidden();
-  await box.getByLabel('Fill:').selectOption('linear');
+  await pickChoice(box.getByLabel('Fill:'), 'Linear gradient');
   await expect(box.getByLabel('Second color:')).toBeVisible();
   await expect(box.getByLabel('Angle:')).toBeVisible();
-  await box.getByLabel('Fill:').selectOption('radial');
+  await pickChoice(box.getByLabel('Fill:'), 'Radial gradient');
   await expect(box.getByLabel('Second color:')).toBeVisible();
   await expect(box.getByLabel('Angle:')).toBeHidden();
 });

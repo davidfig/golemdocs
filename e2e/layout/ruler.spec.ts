@@ -44,7 +44,7 @@ test.describe('Ruler markers', () => {
     await page.mouse.up();
     await app.menu('Format', 'Paragraph…');
     const dlg = page.getByRole('dialog', { name: 'Paragraph' });
-    await expect(dlg.getByRole('combobox', { name: 'Special' })).toHaveValue('firstLine');
+    await expect(dlg.getByRole('button', { name: 'Special', exact: true })).toContainText('First line');
     await expect(dlg.getByRole('spinbutton', { name: 'By' })).toHaveValue('0.5');
   });
 });

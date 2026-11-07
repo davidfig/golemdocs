@@ -1,6 +1,6 @@
 # What’s New in Golem Docs
 
-## 0.34.4 - Unreleased
+## 0.35.0 - Unreleased
 
 ### Added
 

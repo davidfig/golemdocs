@@ -26,10 +26,18 @@ export function showFontDialog(current: FontChoice, fonts: readonly string[]): P
     () => preview(),
   );
   const size = numberInput(t('format.font.size'), current.size === undefined ? '' : round(current.size), '0.5', '1');
-  const color = colorField(t('format.font.color'), t('format.automatic'), current.color, () => preview());
+  // A color is only sent once picked: a selection that mixes colors shows one, and must keep its own.
+  const picked = { color: false, underlineColor: false };
+  const color = colorField(t('format.font.color'), t('format.automatic'), current.color, () => {
+    picked.color = true;
+    preview();
+  });
   const lines = UNDERLINES.map((u) => [u, t(`format.font.underline.${u}`)] as const);
   const underline = choice(t('format.font.underline'), lines, current.underline, () => preview());
-  const underlineColor = colorField(t('format.font.underlineColor'), t('format.automatic'), current.underlineColor, () => preview());
+  const underlineColor = colorField(t('format.font.underlineColor'), t('format.automatic'), current.underlineColor, () => {
+    picked.underlineColor = true;
+    preview();
+  });
   const strike = check(t('format.font.strike'), current.strike);
   const doubleStrike = check(t('format.font.doubleStrike'), current.doubleStrike);
   const superscript = check(t('format.font.superscript'), current.superscript);
@@ -95,9 +103,9 @@ export function showFontDialog(current: FontChoice, fonts: readonly string[]): P
       out.italic = style.value === 'italic' || style.value === 'boldItalic';
     }
     if (size.value.trim() !== '') out.size = Number(size.value);
-    out.color = color.value;
+    if (picked.color) out.color = color.value;
     if (underline.value) out.underline = underline.value;
-    out.underlineColor = underlineColor.value;
+    if (picked.underlineColor) out.underlineColor = underlineColor.value;
     const flag = (key: 'strike' | 'doubleStrike' | 'superscript' | 'subscript' | 'smallCaps' | 'caps' | 'hidden', box: { input: HTMLInputElement }) => {
       if (!box.input.indeterminate) out[key] = box.input.checked;
     };

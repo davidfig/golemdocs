@@ -76,6 +76,26 @@ test.describe('Format › Font', () => {
     expect(xml).not.toMatch(/<w:i\/>/);
   });
 
+  test('a selection of mixed colors keeps them when only the size is changed', async ({ app }) => {
+    await app.blank();
+    await app.type('red blue');
+    await app.page.keyboard.press('Home');
+    await app.page.keyboard.press('Shift+ArrowRight');
+    await app.page.keyboard.press('Shift+ArrowRight');
+    await app.page.keyboard.press('Shift+ArrowRight');
+    await app.toolbarButton('Font Color options').click();
+    await app.page.getByRole('button', { name: '#FF0000', exact: true }).click();
+    await app.focus();
+    await app.page.keyboard.press(`${MOD}+a`);
+    await app.menu('Format', 'Font');
+    const box = dialog(app, 'Font');
+    await box.getByRole('spinbutton', { name: 'Size' }).fill('14');
+    await box.getByRole('button', { name: 'OK' }).click();
+    const xml = await documentXml(app);
+    expect(xml).toContain('<w:color w:val="FF0000"/>');
+    expect(xml).not.toContain('w:val="auto"');
+  });
+
   test('superscript and subscript are one or the other', async ({ app }) => {
     await start(app);
     await app.menu('Format', 'Font');

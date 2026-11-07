@@ -2,7 +2,11 @@
 
 import { deflateSync, inflateRawSync, inflateSync } from 'node:zlib';
 import { expect, type Locator, type Page } from '@playwright/test';
-import type { App } from '../fixtures';
+import { pickChoice, type App } from '../fixtures';
+
+/** What each Apply to choice is called. */
+const APPLY = { section: 'This section', document: 'Whole document', forward: 'This point forward' } as const;
+const CUSTOM_PAPER = 'Custom size';
 
 // --- What the page hooks say --------------------------------------------------------------
 
@@ -107,11 +111,11 @@ export async function pageSetup(app: App, values: PageSetupValues, ok = true): P
   if (values.orientation) await dlg.getByRole('radio', { name: values.orientation === 'landscape' ? 'Landscape' : 'Portrait' }).check();
   if (values.paper || values.width !== undefined || values.height !== undefined) {
     await dlg.getByRole('tab', { name: 'Paper' }).click();
-    if (values.paper) await dlg.getByRole('combobox', { name: /Paper size/ }).selectOption(values.paper);
+    if (values.paper) await pickChoice(dlg.getByRole('button', { name: /Paper size/ }), values.paper === 'custom' ? CUSTOM_PAPER : values.paper);
     if (values.width !== undefined) await setField(dlg, 'Width', values.width);
     if (values.height !== undefined) await setField(dlg, 'Height', values.height);
   }
-  if (values.apply) await dlg.getByRole('combobox', { name: /Apply to/ }).selectOption(values.apply);
+  if (values.apply) await pickChoice(dlg.getByRole('button', { name: /Apply to/ }), APPLY[values.apply]);
   if (ok) {
     await dlg.getByRole('button', { name: 'OK' }).click();
     await dlg.waitFor({ state: 'detached' });
@@ -133,7 +137,8 @@ export async function readPageSetup(app: App): Promise<Record<string, number | s
   await dlg.getByRole('tab', { name: 'Paper' }).click();
   out.width = Number(await dlg.getByRole('spinbutton', { name: 'Width', exact: true }).inputValue());
   out.height = Number(await dlg.getByRole('spinbutton', { name: 'Height', exact: true }).inputValue());
-  out.paper = await dlg.getByRole('combobox', { name: /Paper size/ }).inputValue();
+  const paper = (await dlg.getByRole('button', { name: /Paper size/ }).textContent()) ?? '';
+  out.paper = paper === CUSTOM_PAPER ? 'custom' : paper;
   await dlg.getByRole('button', { name: 'Cancel' }).click();
   await dlg.waitFor({ state: 'detached' });
   return out;
@@ -156,7 +161,7 @@ export async function columns(app: App, values: ColumnsValues, ok = true): Promi
   if (values.count !== undefined) await dlg.getByRole('spinbutton', { name: 'Number of columns', exact: true }).fill(String(values.count));
   if (values.spacing !== undefined) await dlg.getByRole('spinbutton', { name: /Spacing between columns/ }).fill(String(values.spacing));
   if (values.line !== undefined) await dlg.getByRole('checkbox', { name: 'Line between' }).setChecked(values.line);
-  if (values.apply) await dlg.getByRole('combobox', { name: /Apply to/ }).selectOption(values.apply);
+  if (values.apply) await pickChoice(dlg.getByRole('button', { name: /Apply to/ }), APPLY[values.apply]);
   if (ok) {
     await dlg.getByRole('button', { name: 'OK' }).click();
     await dlg.waitFor({ state: 'detached' });

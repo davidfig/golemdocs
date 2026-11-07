@@ -321,7 +321,7 @@ test.describe('Go To', () => {
     await twoPages(app);
     await openFind(app, 'g');
     await expect(find(app).getByRole('tab', { name: 'Go To' })).toHaveAttribute('aria-selected', 'true');
-    await expect(find(app).getByRole('listbox', { name: 'Go to what' })).toHaveValue('page');
+    await expect(find(app).getByRole('listbox', { name: 'Go to what' }).getByRole('option', { name: 'Page' })).toHaveAttribute('aria-selected', 'true');
     await expect(goToTab(app)).toBeFocused();
     await expect(find(app).getByText('Enter page number:')).toBeVisible();
   });
@@ -382,10 +382,20 @@ test.describe('Go To', () => {
     await expect.poll(() => cameraY(app)).toBeGreaterThan(1000);
   });
 
+  test('the arrow keys pick what to go to', async ({ app }) => {
+    await twoPages(app);
+    await openFind(app, 'g');
+    await find(app).getByRole('listbox', { name: 'Go to what' }).focus();
+    await app.page.keyboard.press('ArrowDown');
+    await expect(find(app).getByText('Enter comment number:')).toBeVisible();
+    await app.page.keyboard.press('ArrowUp');
+    await expect(find(app).getByText('Enter page number:')).toBeVisible();
+  });
+
   test('Comment: a document with no comments says so', async ({ app }) => {
     await twoPages(app);
     await openFind(app, 'g');
-    await find(app).getByRole('listbox', { name: 'Go to what' }).selectOption('comment');
+    await find(app).getByRole('listbox', { name: 'Go to what' }).getByRole('option', { name: 'Comment' }).click();
     await expect(find(app).getByText('Enter comment number:')).toBeVisible();
     await goToTab(app).fill('1');
     await goToTab(app).press('Enter');

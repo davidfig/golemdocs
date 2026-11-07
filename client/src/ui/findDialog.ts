@@ -4,6 +4,7 @@
 
 import { t } from '../i18n/index.ts';
 import { h, makeDraggable } from './dom.ts';
+import { listBox, type ListBox } from './listBox.ts';
 import { dialogTitleBar } from './popup.ts';
 
 export type FindTab = 'find' | 'replace' | 'goTo';
@@ -69,7 +70,7 @@ export class FindDialog {
   private readonly replaceFields: HTMLElement[];
   private readonly replaceButtons: HTMLElement[];
   private readonly findMessage: HTMLElement;
-  private readonly what: HTMLSelectElement;
+  private readonly what: ListBox;
   private readonly entry: HTMLInputElement;
   private readonly entryLabel: HTMLElement;
   private readonly goToMessage: HTMLElement;
@@ -126,14 +127,16 @@ export class FindDialog {
     );
 
     // Go To: what to go to, and where.
-    this.what = h('select', { class: 'wm-input wm-goto-what', attrs: { size: '6', 'aria-label': t('dialogs.find.goToWhatLabel') } });
     const targetList = targets();
-    for (const { target, label } of targetList) {
-      const option = h('option', { text: label });
-      option.value = target;
-      this.what.append(option);
-    }
-    this.what.value = 'page';
+    // Enter goes to it through the dialog's own keys, below.
+    this.what = listBox(t('dialogs.find.goToWhatLabel'), {
+      rows: 6,
+      onPick: () => {
+        this.entryLabel.textContent = targets()[this.what.index].entry;
+        this.goToMessage.textContent = '';
+      },
+    });
+    this.what.set(targetList.map((x) => x.label));
     this.entryLabel = h('label', { text: targetList[0].entry });
     this.entry = field(t('dialogs.find.itemNumber'));
     this.goToMessage = h('div', { class: 'wm-find-message', attrs: { role: 'status' } });
@@ -143,7 +146,7 @@ export class FindDialog {
       h(
         'div',
         { class: 'wm-goto-fields' },
-        h('div', { class: 'wm-goto-column' }, h('label', { text: t('dialogs.find.goToWhatField') }), this.what),
+        h('div', { class: 'wm-goto-column' }, h('label', { text: t('dialogs.find.goToWhatField') }), this.what.el),
         h(
           'div',
           { class: 'wm-goto-column' },
@@ -207,10 +210,6 @@ export class FindDialog {
       this.findMessage.textContent = '';
       if (this.query.value) this.host.find(this.queryNow(), false);
     });
-    this.what.addEventListener('change', () => {
-      this.entryLabel.textContent = targets().find((x) => x.target === this.what.value)?.entry ?? '';
-      this.goToMessage.textContent = '';
-    });
   }
 
   /** Opens the dialog on a tab, searching for the selected text if it is one line. */
@@ -269,7 +268,7 @@ export class FindDialog {
   // --- Go To -------------------------------------------------------------------------------
 
   private get target(): Target {
-    return this.what.value as Target;
+    return targets()[this.what.index].target;
   }
 
   /** Go To: the entered number, or (for comments) the next one when nothing is entered. */

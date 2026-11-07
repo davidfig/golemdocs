@@ -35,6 +35,20 @@ export async function dragOnto(from: Locator, to: Locator, at?: { x: number; y: 
   await page.mouse.up();
 }
 
+/** Picks from a drop-down list (`choiceButton`, in ui/dropdown.ts): opens it with its button and presses the row. */
+export async function pickChoice(button: Locator, option: string): Promise<void> {
+  await button.click();
+  await button.page().locator('.wm-dropdown-list').getByRole('option', { name: option, exact: true }).click();
+}
+
+/** What a drop-down list (`choiceButton`) offers: opens it, reads the rows and closes it again. */
+export async function choices(button: Locator): Promise<string[]> {
+  await button.click();
+  const rows = await button.page().locator('.wm-dropdown-list').getByRole('option').allTextContents();
+  await button.page().keyboard.press('Escape');
+  return rows;
+}
+
 export class App {
   constructor(readonly page: Page) {}
 

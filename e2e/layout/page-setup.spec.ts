@@ -1,4 +1,4 @@
-import { expect, test } from '../fixtures';
+import { expect, pickChoice, test } from '../fixtures';
 import { attrs, caretOf, count, dialog, docx, pageBoxes, pageCount, pageSetup, readPageSetup, setField } from './helpers';
 
 test.describe('Page Setup dialog', () => {
@@ -65,17 +65,17 @@ test.describe('Page Setup dialog', () => {
     await app.menu('File', 'Page Setup…');
     const dlg = dialog(app, 'Page Setup');
     await dlg.getByRole('tab', { name: 'Paper' }).click();
-    await dlg.getByRole('combobox', { name: /Paper size/ }).selectOption('A4');
+    await pickChoice(dlg.getByRole('button', { name: /Paper size/ }), 'A4');
     await expect(dlg.getByRole('spinbutton', { name: 'Width', exact: true })).toHaveValue('8.27');
     await expect(dlg.getByRole('spinbutton', { name: 'Height', exact: true })).toHaveValue('11.69');
-    await dlg.getByRole('combobox', { name: /Paper size/ }).selectOption('Legal');
+    await pickChoice(dlg.getByRole('button', { name: /Paper size/ }), 'Legal');
     await expect(dlg.getByRole('spinbutton', { name: 'Height', exact: true })).toHaveValue('14');
     await setField(dlg, 'Width', 5);
-    await expect(dlg.getByRole('combobox', { name: /Paper size/ })).toHaveValue('custom');
+    await expect(dlg.getByRole('button', { name: /Paper size/ })).toHaveText('Custom size');
     // Typing a known size back selects it.
     await setField(dlg, 'Width', 8.5);
     await setField(dlg, 'Height', 11);
-    await expect(dlg.getByRole('combobox', { name: /Paper size/ })).toHaveValue('Letter');
+    await expect(dlg.getByRole('button', { name: /Paper size/ })).toHaveText('Letter');
     await dlg.getByRole('button', { name: 'Cancel' }).click();
   });
 

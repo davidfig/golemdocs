@@ -3,6 +3,7 @@
 
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
+import { choiceButton } from './dropdown.ts';
 import { dialogTitleBar } from './popup.ts';
 
 const MAX_COLUMNS = 12;
@@ -37,16 +38,9 @@ export function showColumnsDialog(current: ColumnsState): Promise<ColumnsChoice 
     space.value = inches(current.space);
     const line = h('input', { attrs: { type: 'checkbox' } });
     line.checked = current.sep;
-    const scope = h('select', { class: 'wm-input', attrs: { 'aria-label': t('columns.apply') } });
-    for (const [value, label] of [
-      ['section', t('columns.applySection')],
-      ['document', t('columns.applyDocument')],
-      ['forward', t('columns.applyForward')],
-    ] as const) {
-      const option = h('option', { text: label });
-      option.value = value;
-      scope.append(option);
-    }
+    const scopes = { section: t('columns.applySection'), document: t('columns.applyDocument'), forward: t('columns.applyForward') };
+    const scope = choiceButton({ label: t('columns.apply'), fill: true, groups: () => [{ values: Object.keys(scopes) }], name: (v) => scopes[v as ColumnsChoice['scope']] }, (v) => scope.set(v));
+    scope.set('section');
     const width = h('div', { class: 'wm-columns-width' });
     const message = h('div', { class: 'wm-find-message', attrs: { role: 'alert' } });
 
@@ -90,7 +84,7 @@ export function showColumnsDialog(current: ColumnsState): Promise<ColumnsChoice 
         width,
         h('label', { class: 'wm-find-case' }, line, t('columns.line')),
         h('label', { text: t('columns.apply') }),
-        scope,
+        scope.el,
         message,
       ),
       h('div', { class: 'wm-dialog-buttons' }, h('span', { class: 'wm-link-actions' }, ok, cancel)),

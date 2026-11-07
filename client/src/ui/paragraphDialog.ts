@@ -6,6 +6,7 @@
 import { getLocale, t } from '../i18n/index.ts';
 import type { Alignment, ParagraphChoice } from './actions.ts';
 import { h } from './dom.ts';
+import { choiceButton } from './dropdown.ts';
 import { dialogTitleBar } from './popup.ts';
 
 type LineKind = '' | 'single' | 'oneHalf' | 'double' | 'atLeast' | 'exactly' | 'multiple';
@@ -39,12 +40,15 @@ export function showParagraphDialog(current: ParagraphChoice): Promise<Paragraph
     };
     const field = (label: string, input: HTMLInputElement, suffix: string): HTMLElement =>
       h('label', { class: 'wm-page-field' }, h('span', { text: label }), input, h('span', { class: 'wm-page-unit', text: suffix }));
-    const select = (label: string, options: readonly (readonly [string, string])[], value: string | undefined): HTMLSelectElement => {
-      const box = h('select', { class: 'wm-input', attrs: { 'aria-label': label.replace(/[:：]$/, '') } });
-      // A blank choice stands for "the paragraphs differ".
-      if (value === undefined || value === '') box.append(Object.assign(h('option', { text: '' }), { value: '' }));
-      for (const [v, text] of options) box.append(Object.assign(h('option', { text }), { value: v }));
-      box.value = value ?? '';
+    const select = (label: string, options: readonly (readonly [string, string])[], value: string | undefined, onPick?: () => void) => {
+      // A blank choice stands for "the paragraphs differ" (a no-break space, so that its row has a height).
+      const values = [...(value === undefined || value === '' ? [''] : []), ...options.map(([v]) => v)];
+      const names = new Map(options);
+      const box = choiceButton({ label: label.replace(/[:：]$/, ''), fill: true, groups: () => [{ values }], name: (v) => names.get(v) ?? '\u00a0' }, (v) => {
+        box.set(v);
+        onPick?.();
+      });
+      box.set(value ?? '');
       return box;
     };
 
@@ -69,6 +73,10 @@ export function showParagraphDialog(current: ParagraphChoice): Promise<Paragraph
         ['hanging', t('paragraph.specialHanging')],
       ],
       current.special,
+      () => {
+        by.value = '';
+        syncBy();
+      },
     );
     const by = number(current.special === 'none' ? undefined : inches(current.by), t('paragraph.by'), '0.05', '0');
     const before = number(current.before === undefined ? undefined : current.before / 20, t('paragraph.before'), '1', '0');
@@ -85,6 +93,10 @@ export function showParagraphDialog(current: ParagraphChoice): Promise<Paragraph
         ['multiple', t('paragraph.lineMultiple')],
       ],
       kind,
+      () => {
+        at.value = '';
+        syncAt();
+      },
     );
     const at = number(undefined, t('paragraph.at'), '0.1', '0');
     at.value = at0;
@@ -93,33 +105,25 @@ export function showParagraphDialog(current: ParagraphChoice): Promise<Paragraph
       if (at.disabled) at.value = '';
       else if (at.value === '') at.value = spacing.value === 'multiple' ? '1.1' : '12';
     };
-    spacing.addEventListener('change', () => {
-      at.value = '';
-      syncAt();
-    });
     syncAt();
     const syncBy = () => {
       by.disabled = special.value === 'none';
       if (by.disabled) by.value = '';
       else if (by.value === '') by.value = round(720 / perUnit());
     };
-    special.addEventListener('change', () => {
-      by.value = '';
-      syncBy();
-    });
     syncBy();
 
     const indentsTab = h(
       'div',
       { class: 'wm-page-tab', attrs: { role: 'tabpanel' } },
       h('label', { text: t('paragraph.alignment') }),
-      align,
+      align.el,
       h('label', { text: t('paragraph.indentation') }),
       h('div', { class: 'wm-page-grid' }, field(t('paragraph.left'), left, unit), field(t('paragraph.right'), right, unit)),
-      h('div', { class: 'wm-page-grid' }, h('label', { class: 'wm-page-field' }, h('span', { text: t('paragraph.special') }), special), field(t('paragraph.by'), by, unit)),
+      h('div', { class: 'wm-page-grid' }, h('label', { class: 'wm-page-field' }, h('span', { text: t('paragraph.special') }), special.el), field(t('paragraph.by'), by, unit)),
       h('label', { text: t('paragraph.spacing') }),
       h('div', { class: 'wm-page-grid' }, field(t('paragraph.before'), before, t('paragraph.pt')), field(t('paragraph.after'), after, t('paragraph.pt'))),
-      h('div', { class: 'wm-page-grid' }, h('label', { class: 'wm-page-field' }, h('span', { text: t('paragraph.lineSpacing') }), spacing), h('label', { class: 'wm-page-field' }, h('span', { text: t('paragraph.at') }), at)),
+      h('div', { class: 'wm-page-grid' }, h('label', { class: 'wm-page-field' }, h('span', { text: t('paragraph.lineSpacing') }), spacing.el), h('label', { class: 'wm-page-field' }, h('span', { text: t('paragraph.at') }), at)),
     );
 
     const flag = (label: string, value: boolean | undefined): { input: HTMLInputElement; label: HTMLElement } => {
@@ -229,6 +233,6 @@ export function showParagraphDialog(current: ParagraphChoice): Promise<Paragraph
     });
     document.body.append(dialog);
     dialog.showModal();
-    align.focus();
+    align.el.focus();
   });
 }

@@ -6,6 +6,7 @@ import { SMOOTHING_LEVELS, lockGuidesOn, penPressureOn, pencilSmoothing, returnT
 import { AUTOCORRECT_KEYS } from '../layout/autocorrect.ts';
 import { autoCorrectOptions, setAutoCorrect } from './autoCorrect.ts';
 import { h } from './dom.ts';
+import { choiceButton } from './dropdown.ts';
 import { desktopMenu } from '../desktop/bridge.ts';
 import { IS_MAC } from './shortcuts.ts';
 import { inAppMenuOnMac, keepMenuInFullScreen, setInAppMenuOnMac, setKeepMenuInFullScreen } from './fullScreen.ts';
@@ -22,10 +23,11 @@ function check(label: string, on: boolean, set: (value: boolean) => void): HTMLE
 
 /** The body of the dialog. */
 export function optionsPanel(): HTMLElement {
-  const smoothing = h('select', { attrs: { 'aria-label': t('dialogs.options.pencilSmoothing') } });
-  for (const level of SMOOTHING_LEVELS) smoothing.append(h('option', { text: t(`dialogs.options.${level}`), attrs: { value: level } }));
-  smoothing.value = pencilSmoothing();
-  smoothing.addEventListener('change', () => setPencilSmoothing(smoothing.value as Smoothing));
+  const smoothing = choiceButton({ label: t('dialogs.options.pencilSmoothing'), groups: () => [{ values: SMOOTHING_LEVELS }], name: (v) => t(`dialogs.options.${v as Smoothing}`), width: 120 }, (v) => {
+    smoothing.set(v);
+    setPencilSmoothing(v as Smoothing);
+  });
+  smoothing.set(pencilSmoothing());
   const editList = h('button', { class: 'wm-button', text: t('dialogs.options.editReplacements'), attrs: { type: 'button' } });
   editList.addEventListener('click', () => showReplacements());
   return h(
@@ -39,7 +41,7 @@ export function optionsPanel(): HTMLElement {
       h('legend', { text: t('dialogs.options.drawing') }),
       check(t('dialogs.options.selectAfterPencil'), selectAfterPencilOn(), setSelectAfterPencil),
       check(t('dialogs.options.returnToSelect'), returnToSelectOn(), setReturnToSelect),
-      h('label', {}, t('dialogs.options.pencilSmoothing'), smoothing),
+      h('label', {}, t('dialogs.options.pencilSmoothing'), smoothing.el),
       check(t('dialogs.options.penPressure'), penPressureOn(), setPenPressure),
     ),
     h(

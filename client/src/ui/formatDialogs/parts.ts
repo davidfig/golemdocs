@@ -28,6 +28,7 @@ export function choice(label: string, options: readonly (readonly [string, strin
   const control = choiceButton(
     {
       label: label.replace(/[:：]$/, ''),
+      fill: true,
       groups: (current) => [{ values: current === '' || values.includes(current) ? values : [current, ...values] }],
       name: (v) => names.get(v) ?? v,
     },

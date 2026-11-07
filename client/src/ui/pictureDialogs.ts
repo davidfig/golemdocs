@@ -8,6 +8,7 @@ import { ANCHORS, MAX_SIDE, NO_ADJUSTMENTS, adjustPixels, isNeutral, resizedTo }
 import type { Adjustments, Anchor } from '../formats/imagePixels.ts';
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
+import { choiceButton } from './dropdown.ts';
 import './pictureTools.css';
 import { dialogTitleBar } from './popup.ts';
 
@@ -144,12 +145,10 @@ export function showAdjustDialog(bytes: Uint8Array): Promise<Adjustments | undef
 
 /** The controls that make a background: solid, linear or radial, its colours and the angle, with a swatch showing the result. */
 function paintControls(initial: Background): { el: HTMLElement[]; first: HTMLElement; value(): Background; show(on: boolean): void } {
-  const type = h('select', { class: 'wm-input', attrs: { 'aria-label': t('picture.paint.type') } });
-  for (const kind of ['solid', 'linear', 'radial'] as const) {
-    const option = h('option', { text: t(`picture.paint.${kind}`) });
-    option.value = kind;
-    type.append(option);
-  }
+  const type = choiceButton({ label: t('picture.paint.type'), fill: true, groups: () => [{ values: ['solid', 'linear', 'radial'] }], name: (v) => t(`picture.paint.${v as 'solid' | 'linear' | 'radial'}`) }, (v) => {
+    type.set(v);
+    show();
+  });
   const color = (label: string, value: string) => {
     const el = h('input', { attrs: { type: 'color', 'aria-label': label } });
     el.value = /^#[0-9a-f]{6}$/i.test(value) ? value : '#ffffff';
@@ -159,12 +158,12 @@ function paintControls(initial: Background): { el: HTMLElement[]; first: HTMLEle
   const to = color(t('picture.paint.to'), initial.gradient?.to ?? '#ffffff');
   const angle = h('input', { class: 'wm-input', attrs: { type: 'number', min: '0', max: '360', step: '1', 'aria-label': t('picture.paint.angle') } });
   angle.value = String(initial.gradient?.angle ?? 90);
-  type.value = initial.gradient?.type ?? 'solid';
+  type.set(initial.gradient?.type ?? 'solid');
   const swatch = h('canvas', { class: 'wm-picture-preview wm-picture-wide', attrs: { width: '240', height: '60' } });
   const value = (): Background => (type.value === 'solid' ? { color: from.value } : { color: from.value, gradient: { type: type.value as 'linear' | 'radial', to: to.value, angle: Number(angle.value) || 0 } });
   const toLabel = h('label', { text: t('picture.paint.to') });
   const angleLabel = h('label', { text: t('picture.paint.angle') });
-  const el = [h('label', { text: t('picture.paint.type') }), type, h('label', { text: t('picture.paint.from') }), from, toLabel, to, angleLabel, angle, swatch];
+  const el = [h('label', { text: t('picture.paint.type') }), type.el, h('label', { text: t('picture.paint.from') }), from, toLabel, to, angleLabel, angle, swatch];
   let shown = true;
   const show = (): void => {
     // Only what this kind of fill uses.
@@ -175,11 +174,11 @@ function paintControls(initial: Background): { el: HTMLElement[]; first: HTMLEle
     ctx.clearRect(0, 0, swatch.width, swatch.height);
     paintBackground(ctx, value(), swatch.width, swatch.height);
   };
-  for (const input of [type, from, to, angle]) input.addEventListener('input', show);
+  for (const input of [from, to, angle]) input.addEventListener('input', show);
   show();
   return {
     el,
-    first: type,
+    first: type.el,
     value,
     show(on) {
       shown = on;

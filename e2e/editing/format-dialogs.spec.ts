@@ -1,7 +1,7 @@
 // The Format and Insert dialogs that set what a document stores: Font, Borders and Shading, Tabs, Bullets and Numbering, Styles, Page Numbers
 // and Bookmark. Each is driven as a person would, and what it did is read back from the .docx the document downloads as.
 
-import { test, expect, MOD, type App } from '../fixtures';
+import { test, expect, MOD, pickChoice, type App } from '../fixtures';
 import { readZip } from '../files/helpers';
 import type { Locator } from '@playwright/test';
 
@@ -275,7 +275,7 @@ test.describe('Format › Styles', () => {
     const modify = dialog(app, 'Modify Style');
     await modify.getByRole('button', { name: 'Paragraph…' }).click();
     const paragraph = dialog(app, 'Paragraph');
-    await paragraph.getByRole('combobox', { name: 'Alignment' }).selectOption('center');
+    await pickChoice(paragraph.getByRole('button', { name: 'Alignment' }), 'Center');
     await paragraph.getByRole('button', { name: 'OK' }).click();
     await modify.getByRole('button', { name: 'OK' }).click();
     await expect(modify).toBeHidden();

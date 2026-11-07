@@ -1423,15 +1423,6 @@ html.wm-titlebar .wm-format {
   gap: 6px;
 }
 
-.wm-customize-select {
-  font: 13px var(--wm-font);
-  height: 22px;
-  border: 1px solid var(--wm-field-border);
-  border-radius: 4px;
-  color: var(--wm-text);
-  background: var(--wm-field-bg);
-}
-
 .wm-customize-lists {
   display: flex;
   gap: 10px;
@@ -1886,8 +1877,8 @@ html.wm-titlebar .wm-format {
   margin: 0;
 }
 
-.wm-options select {
-  margin-left: auto;
+.wm-options .wm-dropdown {
+  margin: 0 0 0 auto;
 }
 
 /* --- Tools > Options > Edit List (see replacementsDialog.ts) --------------------------------------- */
@@ -2119,11 +2110,6 @@ html.wm-titlebar .wm-format {
   display: flex;
   flex-direction: column;
   gap: 3px;
-}
-
-.wm-goto-what {
-  height: auto;
-  padding: 1px;
 }
 
 .wm-find .wm-hint {
@@ -2701,7 +2687,8 @@ html.wm-titlebar .wm-format {
   min-width: 64px;
 }
 
-.wm-page-field .wm-input {
+.wm-page-field .wm-input,
+.wm-page-field .wm-dropdown-fill {
   flex: 1;
   min-width: 0;
   margin-bottom: 0;
@@ -2755,6 +2742,16 @@ html.wm-titlebar .wm-format {
 
 .wm-dropdown:disabled {
   color: var(--wm-disabled);
+}
+
+/* In a dialog's form: the same size as the fields around it (`.wm-input`). */
+.wm-dropdown-fill {
+  width: 100%;
+  height: 28px;
+  margin: 0 0 5px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font: 13px var(--wm-font);
 }
 
 .wm-dropdown-sample[hidden] {

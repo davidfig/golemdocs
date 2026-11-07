@@ -5,7 +5,6 @@
 ### Added
 
 - The command palette now also finds your documents by title: type part of a name and press Enter to open it.
-
 - Format › Font: set the font, style, size, color, underline, strikethrough, superscript, small caps and spacing between characters in one place, with a preview.
 - Format › Bullets and Numbering: choose from galleries of bullets and numbers, outline numbers too, and set the label, the starting number and the indents.
 - Format › Borders and Shading: put a box, or a line on any side, around paragraphs, in single or double lines of any width and color, and a color behind them. Neighboring paragraphs with the same borders share one box, as in Word, including in documents you open.
@@ -21,6 +20,7 @@
 - Background and Canvas Size show only the settings the chosen fill uses.
 - When your sign-in expires, a note now says which account it was, that your documents are safe, and offers to sign in again, instead of your documents just disappearing from view.
 - You stay signed in as long as you use Golem Docs at least once every 90 days. Before, you were signed out 30 days after signing in, however often you used it.
+- The lists in Page Setup, Paragraph, Columns, Options, Customize Toolbars, Background, Canvas Size and Go To look and work like the rest of the app’s.
 
 ### Fixed
 

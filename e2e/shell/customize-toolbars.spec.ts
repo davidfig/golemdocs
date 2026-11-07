@@ -1,10 +1,11 @@
 import type { Locator, Page } from '@playwright/test';
-import { expect, test, type App } from '../fixtures';
+import { choices, expect, pickChoice, test, type App } from '../fixtures';
 import { choose, stored } from './helpers';
 
 const dialog = (page: Page) => page.locator('dialog.wm-customize');
 const onToolbar = (page: Page) => dialog(page).getByRole('listbox', { name: 'Toolbar buttons' }).getByRole('option');
-const toolbarSelect = (page: Page) => dialog(page).getByRole('combobox', { name: 'Toolbar', exact: true });
+const toolbarSelect = (page: Page) => dialog(page).getByRole('button', { name: 'Toolbar', exact: true });
+const categorySelect = (page: Page) => dialog(page).getByRole('button', { name: 'Category', exact: true });
 const closeButton = (page: Page) => dialog(page).locator('.wm-dialog-buttons').getByRole('button', { name: 'Close' });
 const commands = (page: Page) => dialog(page).getByRole('listbox', { name: 'Commands' });
 const standard = (page: Page) => page.getByRole('toolbar', { name: 'Standard' });
@@ -16,14 +17,14 @@ async function open(app: App): Promise<void> {
 }
 
 async function select(page: Page, toolbar: string): Promise<void> {
-  await toolbarSelect(page).selectOption({ label: toolbar });
+  await pickChoice(toolbarSelect(page), toolbar);
 }
 
 test.describe('Customize Toolbars', () => {
   test('the Toolbar and Category lists can be seen', async ({ app }) => {
     await app.goto();
     await open(app);
-    for (const list of [toolbarSelect(app.page), dialog(app.page).getByRole('combobox', { name: 'Category', exact: true })]) {
+    for (const list of [toolbarSelect(app.page), categorySelect(app.page)]) {
       const look = await list.evaluate((el) => ({ opacity: getComputedStyle(el).opacity, width: el.getBoundingClientRect().width }));
       expect(look.opacity).toBe('1');
       expect(look.width).toBeGreaterThan(40);
@@ -46,7 +47,7 @@ test.describe('Customize Toolbars', () => {
   test('lists the toolbars and shows the buttons on the selected one', async ({ app, page }) => {
     await app.blank();
     await open(app);
-    const toolbars = await toolbarSelect(page).locator('option').allTextContents();
+    const toolbars = await choices(toolbarSelect(page));
     expect(toolbars).toEqual(['Standard', 'Formatting', 'Sheet', 'Picture', 'Draw', 'Drawing']);
     await expect(onToolbar(page).first()).toContainText('New');
     await select(page, 'Formatting');
@@ -96,7 +97,7 @@ test.describe('Customize Toolbars', () => {
     await app.blank();
     await open(app);
     const all = await commands(page).getByRole('option').count();
-    await dialog(page).getByRole('combobox', { name: 'Category', exact: true }).selectOption({ label: 'Table' });
+    await pickChoice(categorySelect(page), 'Table');
     const table = await commands(page).getByRole('option').count();
     expect(table).toBeGreaterThan(0);
     expect(table).toBeLessThan(all);

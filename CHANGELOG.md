@@ -2,17 +2,14 @@
 
 ## 0.34.4 - Unreleased
 
+### Added
+
+- The command palette now also finds your documents by title: type part of a name and press Enter to open it.
+
 ### Changed
 
 - When your sign-in expires, a note now says which account it was, that your documents are safe, and offers to sign in again, instead of your documents just disappearing from view.
 - You stay signed in as long as you use Golem Docs at least once every 90 days. Before, you were signed out 30 days after signing in, however often you used it.
-- You stay signed in as long as you use Golem Docs at least once every 90 days. Before, you were signed out 30 days after signing in, however often you used it.
-
-## 0.34.4 - Unreleased
-
-### Added
-
-- The command palette now also finds your documents by title: type part of a name and press Enter to open it.
 
 ## 0.34.3 - 2026-11-06
 

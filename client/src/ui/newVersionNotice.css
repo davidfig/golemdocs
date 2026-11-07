@@ -22,6 +22,14 @@
   display: none;
 }
 
+/* The expired sign-in note (see signInExpiredNotice.ts): in the bottom right, clear of the two centered notes above. */
+.wm-signin-notice {
+  left: auto;
+  right: 16px;
+  transform: none;
+  z-index: 6;
+}
+
 .wm-version-notice p {
   margin: 0 18px 8px 0;
 }

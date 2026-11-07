@@ -93,6 +93,12 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sharedDevice.dismiss': '닫기',
   'dialogs.sharedDevice.message': '문서가 이 브라우저에 저장되어 있습니다. 공용 컴퓨터에서는 사용을 마친 후 삭제하십시오.',
 
+  // Expired sign-in notice
+  'dialogs.signInExpired.label': '로그인 만료됨',
+  'dialogs.signInExpired.message': '로그인이 만료되었습니다. 문서는 안전합니다. 문서를 보려면 다시 로그인하세요.',
+  'dialogs.signInExpired.messageFor': '{account}의 로그인이 만료되었습니다. 문서는 안전합니다. 문서를 보려면 다시 로그인하세요.',
+  'dialogs.signInExpired.close': '닫기',
+
   // Sync button and panel
   'dialogs.account.label': '계정',
   'dialogs.account.guest.title': '로그인하지 않음',

@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
-import { currentUser } from '../src/auth.ts';
+import { currentUser, forgetLapsedAccount, lapsedAccount, signOut } from '../src/auth.ts';
 
 const store = new Map<string, string>();
 const realFetch = globalThis.fetch;
@@ -44,6 +44,52 @@ test('an answer that is not the server’s (a captive portal’s page) counts as
   await currentUser();
   serve(() => new Response('<html>Log in to the Wi-Fi</html>', { status: 200, headers: { 'content-type': 'text/html' } }));
   assert.deepEqual(await currentUser(), ann);
+});
+
+test('a sign-in that runs out names the account, over reloads, until someone signs in again', async () => {
+  serve(() => Response.json({ user: ann }));
+  await currentUser();
+  assert.equal(lapsedAccount(), null);
+  serve(() => Response.json({ user: null }));
+  assert.equal(await currentUser(), null);
+  assert.deepEqual(lapsedAccount(), ann);
+  assert.equal(await currentUser(), null);
+  assert.deepEqual(lapsedAccount(), ann, 'still known on the next load, when the account is no longer remembered');
+  serve(() => Response.json({ user: ann }));
+  await currentUser();
+  assert.equal(lapsedAccount(), null);
+});
+
+test('closing the note about a lapsed sign-in ends it', async () => {
+  serve(() => Response.json({ user: ann }));
+  await currentUser();
+  serve(() => Response.json({ user: null }));
+  await currentUser();
+  forgetLapsedAccount();
+  await currentUser();
+  assert.equal(lapsedAccount(), null);
+});
+
+test('no lapse for a guest, offline, or after signing out', async () => {
+  serve(() => Response.json({ user: null }));
+  await currentUser();
+  assert.equal(lapsedAccount(), null, 'never signed in');
+
+  serve(() => Response.json({ user: ann }));
+  await currentUser();
+  globalThis.fetch = (async () => {
+    throw new TypeError('offline');
+  }) as typeof fetch;
+  await currentUser();
+  serve(() => new Response('down', { status: 503 }));
+  await currentUser();
+  assert.equal(lapsedAccount(), null, 'the server could not be asked');
+
+  serve(() => Response.json({ ok: true }));
+  await signOut();
+  serve(() => Response.json({ user: null }));
+  await currentUser();
+  assert.equal(lapsedAccount(), null, 'signed out on purpose');
 });
 
 test('signed out is remembered too', async () => {

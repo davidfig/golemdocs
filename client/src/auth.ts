@@ -50,6 +50,34 @@ function remember(user: User | null): void {
   }
 }
 
+const LAPSED_KEY = 'golem.account.lapsed';
+
+/**
+ * The account whose sign-in ran out here without anyone signing out, so that the page can say why its documents
+ * are out of view. It lasts over reloads, until someone signs in or signs out or the note about it is closed.
+ */
+export function lapsedAccount(): User | null {
+  try {
+    return JSON.parse(localStorage.getItem(LAPSED_KEY) ?? 'null') as User | null;
+  } catch {
+    return null;
+  }
+}
+
+function setLapsed(user: User | null): void {
+  try {
+    if (user) localStorage.setItem(LAPSED_KEY, JSON.stringify(user));
+    else localStorage.removeItem(LAPSED_KEY);
+  } catch {
+    // storage blocked: the note shows for this visit at most
+  }
+}
+
+/** The person has read the note about their lapsed sign-in. */
+export function forgetLapsedAccount(): void {
+  setLapsed(null);
+}
+
 /** Who is signed in. When the server can't be asked (offline), whoever was last time. */
 export async function currentUser(): Promise<User | null> {
   let response: Response;
@@ -68,6 +96,9 @@ export async function currentUser(): Promise<User | null> {
       return remembered();
     }
   }
+  // Signing out forgets the account first, so one still remembered here has lapsed.
+  if (user) setLapsed(null);
+  else if (remembered()) setLapsed(remembered());
   remember(user);
   return user;
 }
@@ -82,6 +113,7 @@ export async function signOut(): Promise<void> {
   const response = await fetch('/api/auth/logout', { method: 'POST' });
   if (!response.ok) throw new Error(t('app.signOutRequestFailed', { status: response.status }));
   remember(null);
+  setLapsed(null);
 }
 
 /** Why the last sign-in attempt failed, if the server sent us back with `?auth_error=`. */

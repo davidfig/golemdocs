@@ -3,7 +3,7 @@ import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import { replacementFor } from '@golemdocs/editor/pattern';
 import { deskColor, onThemeChange, pagesDark, rereadTheme } from './ui/theme.ts';
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
-import { currentUser, remembered, signOut as signOutOfCloud, type User } from './auth.ts';
+import { currentUser, forgetLapsedAccount, lapsedAccount, remembered, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
 import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, listTrash, purgeTrash, renameCloudDocument, restoreFromTrash, saveChunked, saveDocument, type CloudDocument } from './cloud.ts';
 import { CHUNK_MIN_FILE, chunkBytes } from './storage/chunker.ts';
@@ -73,6 +73,7 @@ import { NewVersionNotice } from './ui/newVersionNotice.ts';
 import { isChunkOfOldBuild } from './buildCheck.ts';
 import { UpdateNotice } from './ui/updateNotice.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
+import { SignInExpiredNotice } from './ui/signInExpiredNotice.ts';
 import { WatchBanner } from './ui/watchBanner.ts';
 import { IndexWorker } from './search/indexClient.ts';
 import { SearchLibrary, type SearchHit } from './search/searchLibrary.ts';
@@ -1517,7 +1518,8 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   markAccountKnown();
   // Signed in but no sync (never subscribed, or it ended): what they made here stays in view as this browser's own.
   if (signedIn && !account) await releaseToGuest(signedIn.id).catch(() => {});
-  sharedDeviceNotice.update({ signedIn: signedIn !== null });
+  // Told its sign-in ran out, a lapsed account isn't also told it is a guest on a shared computer.
+  sharedDeviceNotice.update({ signedIn: signedIn !== null || lapsedAccount() !== null });
   // Interface settings follow the account, and what comes from it shows at once; see settingsSync.ts.
   if (account) void syncSettings(account.id, { applied: showSettingsFromAccount });
   else stopSettingsSync();
@@ -1730,6 +1732,8 @@ function syncStatus(): SyncStatus {
 function showSync(): void {
   filesPanel.mark();
   chrome.update({ sync: syncStatus() });
+  // Found out on load (auth.ts), or by the account refusing a listing or an upload while this page is open.
+  signInExpiredNotice.update(lapsedAccount() ?? (uploads.signedOut ? signedIn : null));
 }
 
 /** Uploads a browser copy once editing has paused. */
@@ -5637,6 +5641,11 @@ const dashboard = new Dashboard(document.body, {
 
 // Signed out, documents live only in this browser: offer to clear them (for shared computers).
 const sharedDeviceNotice = new SharedDeviceNotice(document.body, () => void clearLocalData());
+// A sign-in that ran out: says the documents are safe, and offers to sign in again.
+const signInExpiredNotice = new SignInExpiredNotice(document.body, () => void signIn(), () => {
+  forgetLapsedAccount();
+  sharedDeviceNotice.update({ signedIn: signedIn !== null });
+});
 
 // A new release: offer What's New (once per version, unless turned off).
 const newVersionNotice = new NewVersionNotice(document.body, () => openSource('changelog'));

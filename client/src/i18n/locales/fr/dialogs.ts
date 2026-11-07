@@ -93,6 +93,12 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sharedDevice.dismiss': 'Ignorer',
   'dialogs.sharedDevice.message': 'Vos documents sont enregistrés dans ce navigateur. Sur un ordinateur partagé, effacez-les lorsque vous avez terminé.',
 
+  // Expired sign-in notice
+  'dialogs.signInExpired.label': 'Session expirée',
+  'dialogs.signInExpired.message': 'Votre session a expiré. Vos documents sont en sécurité. Reconnectez-vous pour les voir.',
+  'dialogs.signInExpired.messageFor': 'Votre session pour {account} a expiré. Vos documents sont en sécurité. Reconnectez-vous pour les voir.',
+  'dialogs.signInExpired.close': 'Fermer',
+
   // Sync button and panel
   'dialogs.account.label': 'Compte',
   'dialogs.account.guest.title': 'Non connecté',

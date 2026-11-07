@@ -93,6 +93,12 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sharedDevice.dismiss': 'Chiudi',
   'dialogs.sharedDevice.message': 'I documenti vengono salvati in questo browser. Su un computer condiviso, cancellali al termine.',
 
+  // Expired sign-in notice
+  'dialogs.signInExpired.label': 'Accesso scaduto',
+  'dialogs.signInExpired.message': 'Il tuo accesso è scaduto. I tuoi documenti sono al sicuro. Accedi di nuovo per vederli.',
+  'dialogs.signInExpired.messageFor': 'Il tuo accesso per {account} è scaduto. I tuoi documenti sono al sicuro. Accedi di nuovo per vederli.',
+  'dialogs.signInExpired.close': 'Chiudi',
+
   // Sync button and panel
   'dialogs.account.label': 'Account',
   'dialogs.account.guest.title': 'Accesso non effettuato',

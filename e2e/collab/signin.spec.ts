@@ -3,7 +3,7 @@
 // browser is made against the dev server.
 
 import { test, expect, App } from '../fixtures';
-import { newPerson, signedOutContext, statusLine, waitSaved, waitForCloudDoc } from './helpers';
+import { newPerson, signedOutContext, signOutContext, statusLine, waitSaved, waitForCloudDoc } from './helpers';
 import { waitForSaved } from '../files/helpers';
 import type { Page } from '@playwright/test';
 
@@ -339,6 +339,69 @@ test.describe('Clear Local Data', () => {
     await person.app.ready();
     await expect.poll(() => person.app.text()).toContain('Welcome to Golem Docs');
     expect(await me(person.page)).toBeNull();
+    await person.context.close();
+  });
+});
+
+test.describe('a sign-in that runs out', () => {
+  const notice = (page: Page) => page.getByRole('status', { name: 'Sign-in expired' });
+  /** The session ends with nobody signing out, as when it reaches its age limit. */
+  const expire = async (person: Awaited<ReturnType<typeof newPerson>>) => {
+    await person.context.clearCookies({ name: 'session' });
+    await signOutContext(person.context);
+  };
+
+  test('on load, a note names the account and says its documents are safe, until it is closed', async ({ browser }) => {
+    const person = await newPerson(browser, 'lapsed');
+    await person.app.blank();
+    await expect(notice(person.page)).toBeHidden();
+    await expire(person);
+    await person.page.reload();
+    await person.app.ready();
+    await expect(notice(person.page)).toContainText(person.email);
+    await expect(notice(person.page)).toContainText('Your documents are safe.');
+    await expect(person.page.locator('.wm-shared-notice')).toBeHidden();
+
+    await person.page.reload();
+    await person.app.ready();
+    await expect(notice(person.page)).toBeVisible();
+
+    await notice(person.page).getByRole('button', { name: 'Sign in…' }).click();
+    const dialog = signInDialog(person.page);
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Not now' }).click();
+
+    await notice(person.page).getByRole('button', { name: 'Close' }).click();
+    await expect(notice(person.page)).toBeHidden();
+    await person.page.reload();
+    await person.app.ready();
+    await expect(person.page.locator('.wm-account')).toHaveAttribute('data-signed-in', 'false');
+    await expect(notice(person.page)).toBeHidden();
+    await person.context.close();
+  });
+
+  test('while the page is open, the note shows when the account refuses a save', async ({ browser }) => {
+    const person = await newPerson(browser, 'lapsed-open');
+    await person.app.blank();
+    await person.app.type('first');
+    await waitForCloudDoc(person.page);
+    await person.page.route('**/api/documents**', (route) => route.fulfill({ status: 401, json: { error: 'not signed in' } }));
+    await person.app.type(' more');
+    await expect(notice(person.page)).toContainText(person.email, { timeout: 15_000 });
+    await person.context.close();
+  });
+
+  test('signing out on purpose shows no note', async ({ browser }) => {
+    const person = await newPerson(browser, 'left');
+    await person.app.blank();
+    await person.app.type('kept in the account');
+    await waitForCloudDoc(person.page);
+    const panel = await openAccountPanel(person.page);
+    await panel.getByRole('button', { name: 'Sign out' }).click();
+    await person.page.waitForURL((u) => u.search === '');
+    await person.app.ready();
+    await expect(person.page.locator('.wm-account')).toHaveAttribute('data-signed-in', 'false');
+    await expect(notice(person.page)).toBeHidden();
     await person.context.close();
   });
 });

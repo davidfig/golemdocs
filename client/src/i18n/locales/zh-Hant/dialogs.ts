@@ -93,6 +93,12 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sharedDevice.dismiss': '關閉',
   'dialogs.sharedDevice.message': '您的文件儲存在此瀏覽器中。若使用共用電腦,請在用完後清除這些資料。',
 
+  // Expired sign-in notice
+  'dialogs.signInExpired.label': '登入已過期',
+  'dialogs.signInExpired.message': '你的登入已過期。你的文件很安全。請重新登入以查看。',
+  'dialogs.signInExpired.messageFor': '{account} 的登入已過期。你的文件很安全。請重新登入以查看。',
+  'dialogs.signInExpired.close': '關閉',
+
   // Sync button and panel
   'dialogs.account.label': '帳戶',
   'dialogs.account.guest.title': '未登入',

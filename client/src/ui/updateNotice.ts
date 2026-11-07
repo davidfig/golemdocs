@@ -5,7 +5,7 @@
 
 import { CHECK_EVERY_MS, CHECK_MIN_GAP_MS, shouldOfferReload } from '../buildCheck.ts';
 import { t } from '../i18n/index.ts';
-import { CLOSE_ICON, h, iconButton } from './dom.ts';
+import { CLOSE_ICON, h, iconButton, keepAboveFooter } from './dom.ts';
 import './newVersionNotice.css';
 
 export class UpdateNotice {
@@ -41,8 +41,7 @@ export class UpdateNotice {
     window.addEventListener('online', () => void this.check());
     // A lazily loaded chunk (a format, a font page) that the new deploy removed can't be fetched by the old page: the page is out of date, whatever build.json says.
     window.addEventListener('vite:preloadError', () => void this.show());
-    const footer = document.getElementById('footer');
-    if (footer) new ResizeObserver(() => this.el.style.setProperty('--wm-footer-clearance', `${footer.offsetHeight}px`)).observe(footer);
+    keepAboveFooter(this.el);
   }
 
   private async check(): Promise<void> {

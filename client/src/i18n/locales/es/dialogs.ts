@@ -93,6 +93,12 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sharedDevice.dismiss': 'Descartar',
   'dialogs.sharedDevice.message': 'Sus documentos se guardan en este explorador. En un equipo compartido, bórrelos al terminar.',
 
+  // Expired sign-in notice
+  'dialogs.signInExpired.label': 'Sesión caducada',
+  'dialogs.signInExpired.message': 'Tu sesión ha caducado. Tus documentos están a salvo. Vuelve a iniciar sesión para verlos.',
+  'dialogs.signInExpired.messageFor': 'Tu sesión de {account} ha caducado. Tus documentos están a salvo. Vuelve a iniciar sesión para verlos.',
+  'dialogs.signInExpired.close': 'Cerrar',
+
   // Sync button and panel
   'dialogs.account.label': 'Cuenta',
   'dialogs.account.guest.title': 'Sin iniciar sesión',

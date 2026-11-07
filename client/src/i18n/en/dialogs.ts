@@ -91,6 +91,12 @@ export const dialogs = {
   'dialogs.sharedDevice.dismiss': 'Dismiss',
   'dialogs.sharedDevice.message': 'Your documents are saved in this browser. On a shared computer, clear them when you’re done.',
 
+  // Expired sign-in notice
+  'dialogs.signInExpired.label': 'Sign-in expired',
+  'dialogs.signInExpired.message': 'Your sign-in has expired. Your documents are safe. Sign in again to see them.',
+  'dialogs.signInExpired.messageFor': 'Your sign-in for {account} has expired. Your documents are safe. Sign in again to see them.',
+  'dialogs.signInExpired.close': 'Close',
+
   // Sync button and panel
   'dialogs.account.label': 'Account',
   'dialogs.account.guest.title': 'Not signed in',

@@ -93,6 +93,12 @@ export const dialogs: Catalog = {
   'dialogs.sharedDevice.dismiss': 'Закрыть',
   'dialogs.sharedDevice.message': 'Ваши документы сохранены в этом браузере. На общем компьютере очистите их, когда закончите работу.',
 
+  // Expired sign-in notice
+  'dialogs.signInExpired.label': 'Срок входа истёк',
+  'dialogs.signInExpired.message': 'Срок действия входа истёк. Ваши документы в безопасности. Войдите снова, чтобы увидеть их.',
+  'dialogs.signInExpired.messageFor': 'Срок действия входа для {account} истёк. Ваши документы в безопасности. Войдите снова, чтобы увидеть их.',
+  'dialogs.signInExpired.close': 'Закрыть',
+
   // Sync button and panel
   'dialogs.account.label': 'Аккаунт',
   'dialogs.account.guest.title': 'Вход не выполнен',

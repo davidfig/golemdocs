@@ -93,6 +93,12 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sharedDevice.dismiss': 'Ausblenden',
   'dialogs.sharedDevice.message': 'Ihre Dokumente werden in diesem Browser gespeichert. Löschen Sie sie auf einem gemeinsam genutzten Computer, wenn Sie fertig sind.',
 
+  // Expired sign-in notice
+  'dialogs.signInExpired.label': 'Anmeldung abgelaufen',
+  'dialogs.signInExpired.message': 'Ihre Anmeldung ist abgelaufen. Ihre Dokumente sind sicher. Melden Sie sich erneut an, um sie zu sehen.',
+  'dialogs.signInExpired.messageFor': 'Ihre Anmeldung für {account} ist abgelaufen. Ihre Dokumente sind sicher. Melden Sie sich erneut an, um sie zu sehen.',
+  'dialogs.signInExpired.close': 'Schließen',
+
   // Sync button and panel
   'dialogs.account.label': 'Konto',
   'dialogs.account.guest.title': 'Nicht angemeldet',

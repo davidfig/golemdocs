@@ -93,6 +93,12 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sharedDevice.dismiss': '关闭',
   'dialogs.sharedDevice.message': '你的文档保存在此浏览器中。若使用公用电脑，请在用完后清除这些数据。',
 
+  // Expired sign-in notice
+  'dialogs.signInExpired.label': '登录已过期',
+  'dialogs.signInExpired.message': '你的登录已过期。你的文档很安全。请重新登录以查看它们。',
+  'dialogs.signInExpired.messageFor': '{account} 的登录已过期。你的文档很安全。请重新登录以查看它们。',
+  'dialogs.signInExpired.close': '关闭',
+
   // Sync button and panel
   'dialogs.account.label': '账户',
   'dialogs.account.guest.title': '未登录',

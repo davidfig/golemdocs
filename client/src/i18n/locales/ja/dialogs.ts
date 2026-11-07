@@ -93,6 +93,12 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sharedDevice.dismiss': '閉じる',
   'dialogs.sharedDevice.message': 'ドキュメントはこのブラウザーに保存されています。共有コンピューターでは、作業が終わったら消去してください。',
 
+  // Expired sign-in notice
+  'dialogs.signInExpired.label': 'サインインの期限切れ',
+  'dialogs.signInExpired.message': 'サインインの有効期限が切れました。ドキュメントは安全です。表示するには、もう一度サインインしてください。',
+  'dialogs.signInExpired.messageFor': '{account} のサインインの有効期限が切れました。ドキュメントは安全です。表示するには、もう一度サインインしてください。',
+  'dialogs.signInExpired.close': '閉じる',
+
   // Sync button and panel
   'dialogs.account.label': 'アカウント',
   'dialogs.account.guest.title': 'サインインしていません',

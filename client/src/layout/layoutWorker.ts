@@ -31,6 +31,7 @@ import type { Scene } from '../vector/model.ts';
 import { PictureLayers } from './pictureLayers.ts';
 import type { Shape } from '../formats/imageDraw.ts';
 import { ObjectSync } from './objectSync.ts';
+import { withSiteLinks } from '../site.ts';
 import { isWdoc, readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../formats/wdoc.ts';
 import type { FormField } from '@golemdocs/pdf';
 import type { PdfAnnotator } from './pdfAnnotator.ts';
@@ -301,7 +302,7 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
       return flowing('Fonts', await fontShowcase(fonts));
     case 'welcome': {
       // Written in Markdown for easy editing, then opened as an ordinary (Word) document.
-      const { document, extensions } = await importDocument('md', new TextEncoder().encode(await welcomeText()));
+      const { document, extensions } = await importDocument('md', new TextEncoder().encode(withSiteLinks(await welcomeText(), source.links ?? {})));
       await addWelcomeIcon(document);
       return flowing(t('app.welcomeName'), document, 'docx', extensions);
     }

@@ -105,6 +105,7 @@ export const app: Partial<Messages> = {
   'app.signOutRequestFailed': 'error al cerrar sesión ({status})',
   'app.authCancelled': 'Se canceló el inicio de sesión.',
   'app.authFailed': 'Error al iniciar sesión. Inténtalo de nuevo.',
+  'app.authNotAllowed': 'Este servidor solo está abierto a las personas que su propietario ha añadido. Pídele que añada tu dirección de correo electrónico.',
   'app.signOutTitle': 'Cerrar sesión',
   'app.signOutAnyway': 'Cerrar sesión de todos modos',
   'app.signOutLoss.one': '“{name}” tiene cambios que aún no se han guardado en tu cuenta. Al cerrar sesión se eliminan tus documentos de este navegador, por lo que esos cambios se perderían.',

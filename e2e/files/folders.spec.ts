@@ -161,7 +161,7 @@ test('a file dropped from the computer on a folder opens, filed in that folder',
   await expect(dashboard(page).getByRole('navigation', { name: 'Location' })).toContainText('Reports');
 });
 
-test('a file dropped elsewhere on the dashboard goes in the folder being looked at', async ({ app, page }) => {
+test('a file dropped elsewhere on the dashboard goes in the folder being looked at', { tag: '@heavy' }, async ({ app, page }) => {
   await twoDocuments(app);
   await makeFolder(page, 'Reports');
   await folder(page, 'Reports').getByRole('button', { name: 'Open folder Reports' }).click();
@@ -174,7 +174,7 @@ test('a file dropped elsewhere on the dashboard goes in the folder being looked 
   await expectNames(cards(page), ['alpha.txt', 'beta.md']);
 });
 
-test('deleting a folder deletes the folders inside it too', async ({ app, page }) => {
+test('deleting a folder deletes the folders inside it too', { tag: '@heavy' }, async ({ app, page }) => {
   await twoDocuments(app);
   await makeFolder(page, 'Outer');
   await folder(page, 'Outer').getByRole('button', { name: 'Open folder Outer' }).click();

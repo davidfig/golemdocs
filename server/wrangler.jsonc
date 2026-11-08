@@ -3,11 +3,12 @@
 	"name": "golemdocs",
 	"main": "src/worker.ts",
 	"compatibility_date": "2026-09-01",
-	// Production is served at golemdocs.com (the zone is on this Cloudflare account). Deploying
-	// creates the DNS record and certificate for it.
+	// Production is served at the domain in wrangler.local.json's DOMAIN (golemdocs.com for Golem Docs;
+	// the zone must be on the same Cloudflare account). Deploying creates the DNS record and certificate
+	// for it. DOMAIN "workers.dev" serves it at <name>.<account>.workers.dev instead (docs/self-hosting.md).
 	"routes": [
 		{
-			"pattern": "golemdocs.com",
+			"pattern": "REPLACE_DOMAIN",
 			"custom_domain": true
 		}
 	],
@@ -49,6 +50,7 @@
 	],
 	// Control-plane database: maps each user to their own per-user D1 database (see src/userDb.ts).
 	// Create it with `pnpm --filter @golemdocs/server cf:setup`, then put its id in wrangler.local.json (see README).
+	// A self-hosted server keeps every user's catalogue here too (SINGLE_DATABASE, see docs/self-hosting.md).
 	"d1_databases": [
 		{
 			"binding": "DIRECTORY",
@@ -173,8 +175,11 @@
 		}
 	}
 	// Secrets (not committed), set with `pnpm exec wrangler secret put <NAME> --env=""`:
-	//   CF_API_TOKEN, a token with "D1 Edit" and "Billing Read" permission
+	//   CF_API_TOKEN, a token with "D1 Edit" and "Billing Read" permission (not needed with SINGLE_DATABASE)
 	//   ADMIN_EMAILS, comma-separated emails of admins (who see the Cloudflare billing panel)
+	//   ALLOWED_EMAILS, comma-separated emails or @domains allowed to sign in (unset: anyone)
+	//   SINGLE_DATABASE, "true" to keep every catalogue in the directory database (a self-hosted server)
+	//   LINK_WEBSITE LINK_PRICING LINK_SUPPORT LINK_PRIVACY LINK_TERMS, where the app's links go (src/site.ts)
 	//   POLAR_WEBHOOK_SECRET, from the Polar webhook endpoint (https://<host>/api/webhooks/polar)
 	//   POLAR_ACCESS_TOKEN, an organization access token with checkouts:write and customer_sessions:write
 	//   POLAR_PRODUCT_ID, the monthly sync product's id (not secret, but set the same way)

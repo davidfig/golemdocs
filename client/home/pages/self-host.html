@@ -1,0 +1,99 @@
+      <article class="page">
+        <p class="kicker">{{self-host.kicker}}</p>
+        <h1>{{self-host.h1}}</h1>
+        <p class="lede">{{self-host.lede}}</p>
+        <div class="cta">
+          <a class="btn primary big" href="https://github.com/davidfig/golemdocs/blob/main/docs/self-hosting.md">{{self-host.guide}}</a>
+          <a class="btn big" href="{{base}}/pricing">{{self-host.pricing}}</a>
+        </div>
+
+        <h2>{{self-host.how.h}}</h2>
+        <p class="text">{{self-host.how.p}}</p>
+        <table class="rules-table">
+          <tbody>
+            <tr><th>Workers</th><td>{{self-host.how.1}}</td></tr>
+            <tr><th>D1</th><td>{{self-host.how.2}}</td></tr>
+            <tr><th>R2</th><td>{{self-host.how.3}}</td></tr>
+            <tr><th>Durable Objects</th><td>{{self-host.how.4}}</td></tr>
+          </tbody>
+        </table>
+        <p class="text">{{self-host.only.p}}</p>
+
+        <h2>{{self-host.cost.h}}</h2>
+        <p class="text">{{self-host.cost.p}}</p>
+
+        <h2>{{self-host.need.h}}</h2>
+        <ul class="plain-list">
+          <li>{{self-host.need.1}}</li>
+          <li>{{self-host.need.2}}</li>
+          <li>{{self-host.need.3}}</li>
+        </ul>
+
+        <h2>{{self-host.steps.h}}</h2>
+        <p class="text">{{self-host.steps.p}}</p>
+
+        <h3>{{self-host.step1.h}}</h3>
+        <p class="text">{{self-host.step1.p}}</p>
+<pre class="code">git clone https://github.com/davidfig/golemdocs.git
+cd golemdocs
+pnpm install
+pnpm --filter @golemdocs/server exec wrangler login</pre>
+
+        <h3>{{self-host.step2.h}}</h3>
+        <p class="text">{{self-host.step2.p}}</p>
+<pre class="code">pnpm --filter @golemdocs/server cf:setup</pre>
+
+        <h3>{{self-host.step3.h}}</h3>
+        <p class="text">{{self-host.step3.p}}</p>
+<pre class="code">{
+  "ACCOUNT_ID": "…",
+  "DIRECTORY_ID": "…",
+  "DIRECTORY_DEV_ID": "",
+  "DOMAIN": "docs.example.com"
+}</pre>
+
+        <h3>{{self-host.step4.h}}</h3>
+        <p class="text">{{self-host.step4.p}}</p>
+<pre class="code">pnpm --filter @golemdocs/server cf:migrate
+pnpm --filter @golemdocs/server deploy:prod</pre>
+
+        <h3>{{self-host.step5.h}}</h3>
+        <p class="text">{{self-host.step5.p}}</p>
+
+        <h3>{{self-host.step6.h}}</h3>
+        <p class="text">{{self-host.step6.p}}</p>
+<pre class="code">cd server
+pnpm exec wrangler secret put SINGLE_DATABASE --env=""
+pnpm exec wrangler secret put ALLOWED_EMAILS --env=""
+pnpm exec wrangler secret put ADMIN_EMAILS --env=""
+pnpm exec wrangler secret put GITHUB_CLIENT_ID --env=""
+pnpm exec wrangler secret put GITHUB_CLIENT_SECRET --env=""</pre>
+        <table class="rules-table">
+          <tbody>
+            <tr><th><code>SINGLE_DATABASE</code></th><td>{{self-host.set.single}}</td></tr>
+            <tr><th><code>ALLOWED_EMAILS</code></th><td>{{self-host.set.allowed}}</td></tr>
+            <tr><th><code>ADMIN_EMAILS</code></th><td>{{self-host.set.admin}}</td></tr>
+            <tr><th><code>LINK_WEBSITE</code>, <code>LINK_SUPPORT</code>…</th><td>{{self-host.set.links}}</td></tr>
+          </tbody>
+        </table>
+
+        <h3>{{self-host.step7.h}}</h3>
+        <p class="text">{{self-host.step7.p}}</p>
+
+        <h2>{{self-host.update.h}}</h2>
+        <p class="text">{{self-host.update.p}}</p>
+<pre class="code">git pull
+pnpm install
+pnpm --filter @golemdocs/server cf:migrate
+pnpm --filter @golemdocs/server deploy:prod</pre>
+
+        <h2>{{self-host.diff.h}}</h2>
+        <ul class="plain-list">
+          <li>{{self-host.diff.1}}</li>
+          <li>{{self-host.diff.2}}</li>
+          <li>{{self-host.diff.3}}</li>
+          <li>{{self-host.diff.4}}</li>
+        </ul>
+
+        <p class="note-small">{{self-host.legal}}</p>
+      </article>

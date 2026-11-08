@@ -8,7 +8,7 @@
 //
 // With DEV_USER set (local development), a "dev" provider signs in as that user with no round trip.
 
-import { describeUser, userForProfile } from './accounts.ts';
+import { describeUser, mayUseServer, userForProfile } from './accounts.ts';
 import { DEV_SIGNED_OUT, authenticate, userIdFor } from './auth.ts';
 import type { Env } from './cf.ts';
 import { json } from './http.ts';
@@ -136,6 +136,8 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
 
     try {
       const profile = await provider.profile(env, { code, redirectUri, verifier: flow.verifier, nonce: flow.nonce, form });
+      // A server open only to some people (ALLOWED_EMAILS) records nothing about anyone else.
+      if (!mayUseServer(env, profile)) return fail([clear], 'not-allowed');
       const userId = await userForProfile(env, provider.id, profile);
       const session = await createSession(env, url, userId);
       return redirect(safeReturnPath(flow.returnTo), 303, [session, clear]);

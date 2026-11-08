@@ -33,6 +33,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [spreadsheets.md](spreadsheets.md) | Plan for `.xlsx`: column-major model, memory-image cache, formula engine, hashed tile pyramid zoomable to under 1% |
 | [localization.md](localization.md) | Strings, languages, spelling dictionaries, adding a language |
 | [../server/AUTH.md](../server/AUTH.md) | Sign-in provider setup |
+| [self-hosting.md](self-hosting.md) | Running your own server on your own Cloudflare account: setup, settings (`SINGLE_DATABASE`, `ALLOWED_EMAILS`, `LINK_*`), updates, limits |
 
 ## Package READMEs
 

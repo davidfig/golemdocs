@@ -2,14 +2,15 @@
 // the server for where to send the user: to Polar's checkout to pay, or to its portal to manage it.
 import { isMobileApp } from './desktop/bridge.ts';
 import { t } from './i18n/index.ts';
+import { site } from './site.ts';
 
 /**
  * Whether this page may sell the subscription or send the user to manage it. The phone apps may not:
  * the App Store and Google Play require their own in-app purchase for a digital subscription, and
  * forbid pointing to another way to pay. There a plan bought on the website simply works, and
- * nothing offers, links to or asks for one.
+ * nothing offers, links to or asks for one. Nor does a server that sells none (a self-hosted one, see site.ts).
  */
-export const sellsSubscriptions = (): boolean => !isMobileApp();
+export const sellsSubscriptions = (): boolean => !isMobileApp() && site().sells;
 
 export interface Subscription {
   /** Polar's status (`active`, `canceled`, `none`…). */

@@ -102,6 +102,7 @@ export const app: Partial<Messages> = {
   'app.signOutRequestFailed': 'サインアウトに失敗しました({status})',
   'app.authCancelled': 'サインインがキャンセルされました。',
   'app.authFailed': 'サインインに失敗しました。もう一度お試しください。',
+  'app.authNotAllowed': 'このサーバーは、所有者が追加したユーザーだけが利用できます。メール アドレスを追加するよう所有者に依頼してください。',
   'app.signOutTitle': 'サインアウト',
   'app.signOutAnyway': 'このままサインアウト',
   'app.signOutLoss': '{count} 件のドキュメントに、アカウントにまだ保存されていない変更があります。サインアウトするとこのブラウザーからドキュメントが削除されるため、それらの変更は失われます。',

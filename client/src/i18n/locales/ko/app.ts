@@ -102,6 +102,7 @@ export const app: Partial<Messages> = {
   'app.signOutRequestFailed': '로그아웃 실패({status})',
   'app.authCancelled': '로그인이 취소되었습니다.',
   'app.authFailed': '로그인하지 못했습니다. 다시 시도하십시오.',
+  'app.authNotAllowed': '이 서버는 소유자가 추가한 사람만 사용할 수 있습니다. 소유자에게 이메일 주소를 추가해 달라고 요청하십시오.',
   'app.signOutTitle': '로그아웃',
   'app.signOutAnyway': '그래도 로그아웃',
   'app.signOutLoss': '{count}개 문서에 아직 계정에 저장되지 않은 변경 사항이 있습니다. 로그아웃하면 이 브라우저에서 문서가 삭제되므로 해당 변경 사항이 손실됩니다.',

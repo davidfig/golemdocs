@@ -61,8 +61,8 @@ export interface World {
   restore(): void;
 }
 
-/** `local`: as `pnpm dev --local` runs it, with no Cloudflare API to call (any call to it fails the test). `background`: gives the worker an execution context, so what it defers runs after the response, as in production. */
-export function world(options: { local?: boolean; background?: boolean } = {}): World {
+/** `local`: as `pnpm dev --local` runs it, with no Cloudflare API to call (any call to it fails the test). `singleDatabase`: a self-hosted server (`SINGLE_DATABASE=true`), with no API token either (ENVIRONMENT is left unset, so the dev sign-in works). `background`: gives the worker an execution context, so what it defers runs after the response, as in production. */
+export function world(options: { local?: boolean; singleDatabase?: boolean; background?: boolean } = {}): World {
   const background: Promise<unknown>[] = [];
   const objects: World['objects'] = new Map();
   const userDatabases = new Map<string, DatabaseSync>();
@@ -107,14 +107,16 @@ export function world(options: { local?: boolean; background?: boolean } = {}): 
       },
     }),
   };
-  const env: Env = options.local
+  const env: Env = options.singleDatabase
+    ? { DIRECTORY: directory.binding, FILES: bucket, ROOMS: rooms, SINGLE_DATABASE: 'true', CF_ACCOUNT_ID: 'REPLACE_ACCOUNT_ID', CF_API_TOKEN: '' }
+    : options.local
     ? { DIRECTORY: directory.binding, FILES: bucket, ROOMS: rooms, ENVIRONMENT: 'local', CF_ACCOUNT_ID: '', CF_API_TOKEN: '' }
     : { DIRECTORY: directory.binding, FILES: bucket, ROOMS: rooms, CF_ACCOUNT_ID: 'acct', CF_API_TOKEN: 'tok' };
 
   // Cloudflare's REST API: create a database, run a query in one.
   globalThis.fetch = (async (input: unknown, init?: { body?: string }) => {
     const url = new URL(String(input));
-    if (options.local) throw new Error(`local mode must not call ${url}`);
+    if (options.local || options.singleDatabase) throw new Error(`${options.local ? 'local' : 'single-database'} mode must not call ${url}`);
     const body = init?.body ? JSON.parse(init.body) : {};
     const ok = (result: unknown) => new Response(JSON.stringify({ success: true, errors: [], result }));
     if (url.pathname.endsWith('/d1/database')) {

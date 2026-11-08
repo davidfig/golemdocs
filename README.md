@@ -35,6 +35,10 @@ pnpm workspace:
 
 Fonts, spelling dictionaries and the PDF font metrics keep their own licenses: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The Golem Docs name and logo aren't covered by these licenses: see [TRADEMARKS.md](TRADEMARKS.md). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Run your own server
+
+The server runs on your own Cloudflare account too, so sync, sharing and live editing keep your files in your own storage. See [how it works](https://golemdocs.com/home/self-host) and the [step-by-step guide](docs/self-hosting.md).
+
 ## Run it locally
 
 Requirements: Node 22.13 or newer, and pnpm (`corepack enable` gets you one).
@@ -105,12 +109,12 @@ pnpm test
 
 One Worker serves both the API and the built client. The steps, in order:
 
-1. `pnpm --filter @golemdocs/server cf:setup` creates the `golemdocs-directory` D1 database and the `golemdocs-files` R2 bucket. Put the printed database id and your account id in `server/wrangler.local.json` as `DIRECTORY_ID` and `ACCOUNT_ID` (production).
+1. `pnpm --filter @golemdocs/server cf:setup` creates the `golemdocs-directory` D1 database and the `golemdocs-files` R2 bucket. Put the printed database id and your account id in `server/wrangler.local.json` as `DIRECTORY_ID` and `ACCOUNT_ID` (production), and the production domain as `DOMAIN` (`golemdocs.com`, or `workers.dev` for none).
 2. Set secrets with `pnpm --filter @golemdocs/server exec wrangler secret put <NAME> --env=""`: `CF_API_TOKEN` (D1 Edit) plus each sign-in provider's values ([server/AUTH.md](server/AUTH.md)).
 3. `pnpm --filter @golemdocs/server cf:migrate` applies the directory migrations to the remote database.
 4. `pnpm --filter @golemdocs/server deploy:prod` builds the client and deploys.
 
-The `--env=""` in the scripts selects the production (top-level) config. Never set `DEV_USER` in production.
+The `--env=""` in the scripts selects the production (top-level) config. Never set `DEV_USER` in production. To run a server of your own rather than golemdocs.com's, follow [Self-hosting on Cloudflare](docs/self-hosting.md) instead: it needs no API token.
 
 ## Troubleshooting
 

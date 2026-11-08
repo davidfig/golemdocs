@@ -105,6 +105,7 @@ export const app: Partial<Messages> = {
   'app.signOutRequestFailed': 'falha ao sair ({status})',
   'app.authCancelled': 'A entrada foi cancelada.',
   'app.authFailed': 'Falha ao entrar. Tente novamente.',
+  'app.authNotAllowed': 'Este servidor está aberto apenas para as pessoas que o proprietário adicionou. Peça a ele que adicione o seu endereço de e-mail.',
   'app.signOutTitle': 'Sair',
   'app.signOutAnyway': 'Sair mesmo assim',
   'app.signOutLoss.one': '“{name}” tem alterações que ainda não foram salvas na sua conta. Ao sair, seus documentos são removidos deste navegador, e essas alterações seriam perdidas.',

@@ -43,6 +43,25 @@ export async function userForProfile(env: Env, provider: ProviderId, profile: Pr
   return row.user_id;
 }
 
+/** The comma-separated entries of a list setting, trimmed and lowercased. */
+const entries = (value: string | undefined): string[] => (value ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+
+/**
+ * Whether this sign-in may use the server. Anyone may unless `ALLOWED_EMAILS` is set (a self-hosted
+ * server, say): then only a *verified* email it lists, either whole (`me@example.com`) or by domain
+ * (`@example.com`), and the admins in `ADMIN_EMAILS`. Checked at every sign-in, so taking someone
+ * off the list keeps them out from their next one (their sessions last until then; delete their rows
+ * in `sessions` to end them now).
+ */
+export function mayUseServer(env: Env, profile: Profile): boolean {
+  const allowed = entries(env.ALLOWED_EMAILS);
+  if (!allowed.length) return true;
+  const email = profile.email?.trim().toLowerCase();
+  if (!email || !profile.emailVerified) return false;
+  const domain = email.slice(email.lastIndexOf('@'));
+  return allowed.includes(email) || allowed.includes(domain) || entries(env.ADMIN_EMAILS).includes(email);
+}
+
 export interface Me {
   id: string;
   email: string | null;
@@ -54,7 +73,7 @@ export interface Me {
 
 /** Whether the user has a verified email listed in ADMIN_EMAILS (or is the local DEV_USER listed there). */
 export async function isAdmin(env: Env, userId: string): Promise<boolean> {
-  const admins = (env.ADMIN_EMAILS ?? '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  const admins = entries(env.ADMIN_EMAILS);
   if (!admins.length) return false;
   const { results } = await env.DIRECTORY.prepare('SELECT email FROM identities WHERE user_id = ? AND email_verified = 1').bind(userId).all<{ email: string | null }>();
   if (results.some((r) => r.email && admins.includes(r.email.toLowerCase()))) return true;

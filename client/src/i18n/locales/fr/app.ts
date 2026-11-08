@@ -105,6 +105,7 @@ export const app: Partial<Messages> = {
   'app.signOutRequestFailed': 'échec de la déconnexion ({status})',
   'app.authCancelled': 'La connexion a été annulée.',
   'app.authFailed': 'La connexion a échoué. Veuillez réessayer.',
+  'app.authNotAllowed': 'Ce serveur est réservé aux personnes que son propriétaire a ajoutées. Demandez-lui d’ajouter votre adresse e-mail.',
   'app.signOutTitle': 'Se déconnecter',
   'app.signOutAnyway': 'Se déconnecter quand même',
   'app.signOutLoss.one': '« {name} » contient des modifications qui n’ont pas encore été enregistrées dans votre compte. La déconnexion supprime vos documents de ce navigateur, ces modifications seraient donc perdues.',

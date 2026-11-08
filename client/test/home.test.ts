@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
-  LANGS, PAGES, SOURCE, allPaths, journalHtml, latestHtml, pageFile, pagePath, parseChangelog, parseJournalNotes, readLayout, readPage,
+  LANGS, MENU_PAGES, PAGES, SOURCE, allPaths, journalHtml, latestHtml, pageFile, pagePath, parseChangelog, parseJournalNotes, readLayout, readPage,
   readSources, readStrings, renderAll, renderPage, route,
 } from '../home/build.ts';
 
@@ -21,7 +21,7 @@ test('the site has a translation of every string for every app language', () => 
       assert.equal(slots(value), slots(english[key]), `${lang} ${key} placeholders differ from English`);
     }
     // Each menu name has one access key, and no two share one.
-    const keys = PAGES.map((page) => {
+    const keys = MENU_PAGES.map((page) => {
       const marks = strings[`nav.${page}`].match(/&(.)/g) ?? [];
       assert.equal(marks.length, 1, `${lang} nav.${page} has one access key`);
       return marks[0].slice(1).toLowerCase();

@@ -102,6 +102,7 @@ export const app: Partial<Messages> = {
   'app.signOutRequestFailed': '退出登录失败（{status}）',
   'app.authCancelled': '已取消登录。',
   'app.authFailed': '登录失败。请再试一次。',
+  'app.authNotAllowed': '此服务器仅向所有者添加的用户开放。请让所有者添加你的电子邮件地址。',
   'app.signOutTitle': '退出登录',
   'app.signOutAnyway': '仍要退出登录',
   'app.signOutLoss': '有 {count} 份文档的更改尚未保存至你的账户。退出登录会将你的文档从此浏览器中移除，这些更改将会丢失。',

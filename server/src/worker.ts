@@ -12,10 +12,11 @@ import { handleFolders } from './folders.ts';
 import { handleRoomMedia } from './roomMedia.ts';
 import { handlePreferences } from './preferences.ts';
 import { Room } from './room.ts';
+import { handleSite } from './site.ts';
 import { joinRoom, roomHeaders } from './roomGate.ts';
 import { withRenewedSession } from './session.ts';
 import { handlePolarWebhook, hasSync, startCheckout, startPortal, subscriptionFor, subscriptionRequired } from './subscriptions.ts';
-import { CloudflareError } from './userDb.ts';
+import { CloudflareError, cloudStorageConfigured } from './userDb.ts';
 
 /**
  * The request's URL as the browser sees it. In development the client's Vite server proxies
@@ -57,6 +58,8 @@ const routes: ExportedHandler = {
       }
 
       if (request.method === 'GET' && path === '/api/health') return json({ ok: true });
+      // This server's links and whether it sells the subscription (site.ts), asked before anyone signs in.
+      if (request.method === 'GET' && path === '/api/site') return handleSite(env);
 
       // The desktop app's installers are public: they are downloaded before there is an account (downloads.ts).
       if (path === '/api/downloads' || path.startsWith('/api/downloads/')) return await handleDownloads(request, env, path);
@@ -164,7 +167,7 @@ const routes: ExportedHandler = {
 
       // GET/PUT /api/preferences: the user's interface settings, kept in their account (preferences.ts).
       if (path === '/api/preferences') {
-        if (env.ENVIRONMENT !== 'local' && (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.CF_ACCOUNT_ID.startsWith('REPLACE'))) {
+        if (!cloudStorageConfigured(env)) {
           throw new HttpError(503, 'cloud storage is not configured');
         }
         const { syncing, ownDb } = await ownStorage(env, userId, request.method);
@@ -187,8 +190,8 @@ const routes: ExportedHandler = {
       if (collection === 'trash' && sub !== undefined) throw new HttpError(404, 'not found');
       if (action0 !== undefined && sub0 !== 'versions') throw new HttpError(404, 'not found');
 
-      // Locally, catalogues live in the simulated directory database (see userDb.ts).
-      if (env.ENVIRONMENT !== 'local' && (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.CF_ACCOUNT_ID.startsWith('REPLACE'))) {
+      // Locally and on a self-hosted server, catalogues live in the directory database (see userDb.ts).
+      if (!cloudStorageConfigured(env)) {
         throw new HttpError(503, 'cloud storage is not configured');
       }
       if (collection === 'folders') {

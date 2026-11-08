@@ -105,6 +105,7 @@ export const app: Partial<Messages> = {
   'app.signOutRequestFailed': 'disconnessione non riuscita ({status})',
   'app.authCancelled': 'L’accesso è stato annullato.',
   'app.authFailed': 'Accesso non riuscito. Riprova.',
+  'app.authNotAllowed': 'Questo server è aperto solo alle persone aggiunte dal suo proprietario. Chiedigli di aggiungere il tuo indirizzo email.',
   'app.signOutTitle': 'Esci',
   'app.signOutAnyway': 'Esci comunque',
   'app.signOutLoss.one': '“{name}” contiene modifiche non ancora salvate nel tuo account. Uscendo, i tuoi documenti vengono rimossi da questo browser, quindi queste modifiche andrebbero perse.',

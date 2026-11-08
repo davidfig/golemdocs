@@ -105,6 +105,7 @@ export const app = {
   'app.signOutRequestFailed': 'sign-out failed ({status})',
   'app.authCancelled': 'Sign-in was cancelled.',
   'app.authFailed': 'Sign-in failed. Please try again.',
+  'app.authNotAllowed': 'This server is open only to the people its owner has added. Ask them to add your email address.',
   'app.signOutTitle': 'Sign Out',
   'app.signOutAnyway': 'Sign Out Anyway',
   'app.signOutLoss.one': '“{name}” has changes that haven’t been saved to your account yet. Signing out removes your documents from this browser, so those changes would be lost.',

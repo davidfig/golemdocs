@@ -95,6 +95,25 @@ export interface Env {
   /** Comma-separated emails of admins (verified sign-in emails, or DEV_USER locally). Admins see the billing panel. */
   ADMIN_EMAILS?: string;
   /**
+   * Comma-separated emails (`me@example.com`) or domains (`@example.com`) allowed to sign in, checked
+   * against verified emails; admins always may. Unset: anyone may. For a server only some people use.
+   */
+  ALLOWED_EMAILS?: string;
+  /**
+   * `true` keeps every user's catalogue in the DIRECTORY database instead of a database each, so
+   * the server needs no Cloudflare API token (a self-hosted server; see docs/self-hosting.md).
+   */
+  SINGLE_DATABASE?: string;
+  /**
+   * Where the app's links go, for a server that isn't golemdocs.com (each optional; see site.ts):
+   * the website, the pricing page, the support email, and the privacy policy and terms of service.
+   */
+  LINK_WEBSITE?: string;
+  LINK_PRICING?: string;
+  LINK_SUPPORT?: string;
+  LINK_PRIVACY?: string;
+  LINK_TERMS?: string;
+  /**
    * `true` requires a subscription (or being an admin) for cloud documents, sharing and rooms.
    * Anything else leaves them free for every signed-in user.
    */

@@ -105,6 +105,7 @@ export const app: Partial<Messages> = {
   'app.signOutRequestFailed': 'Abmeldung fehlgeschlagen ({status})',
   'app.authCancelled': 'Die Anmeldung wurde abgebrochen.',
   'app.authFailed': 'Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.',
+  'app.authNotAllowed': 'Dieser Server steht nur den Personen offen, die sein Inhaber hinzugefügt hat. Bitten Sie ihn, Ihre E-Mail-Adresse hinzuzufügen.',
   'app.signOutTitle': 'Abmelden',
   'app.signOutAnyway': 'Trotzdem abmelden',
   'app.signOutLoss.one': '„{name}“ enthält Änderungen, die noch nicht in Ihrem Konto gespeichert wurden. Beim Abmelden werden Ihre Dokumente aus diesem Browser entfernt, sodass diese Änderungen verloren gingen.',

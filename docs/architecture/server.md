@@ -33,6 +33,7 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 - `authRoutes.ts`: `/api/auth/providers|start/:p|callback/:p|me|logout`. The flow state/nonce/verifier is kept in a short-lived cookie; the optional `?return=` path is the page to come back to. The `dev` provider (and `DEV_USER` shortcut in `auth.ts`) exist only when `ENVIRONMENT !== 'production'`.
 - `accounts.ts`: `userForProfile` maps (provider, subject) to a user. A new provider identity joins an existing user only when both vouch for the same *verified* email. `isAdmin` checks `ADMIN_EMAILS` against verified emails.
 - `session.ts`: the cookie holds a random token; D1 `sessions` holds only its SHA-256. A session lasts `SESSION_TTL_MS` (90 days) from when it was last used: `sessionUser` extends `expires_at` at most once every `SESSION_RENEW_MS` (a day), and `worker.ts` sends the cookie again, same token, with that request's answer (`withRenewedSession`; not on a WebSocket handshake, whose next request catches up). `__Host-` cookie prefix over HTTPS. Revoke by deleting the row.
+- **Allowlist**: with `ALLOWED_EMAILS` set (comma-separated addresses or `@domain`s), `mayUseServer` (`accounts.ts`) lets a sign-in through only for a verified email on it or in `ADMIN_EMAILS`; anyone else goes back to the page with `auth_error=not-allowed`, and nothing is recorded about them. Checked at sign-in only, so existing sessions last until they end.
 - CSRF: non-GET requests must carry `Origin` equal to the request origin (checked once in `worker.ts`); WebSocket handshakes check it separately.
 
 ## Directory D1 vs per-user D1
@@ -40,7 +41,7 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 - **Directory** (binding `DIRECTORY`, SQL in `server/migrations/directory/0001..0013`): applied with `wrangler d1 migrations apply` (`cf:migrate*` scripts). Never edit an applied file; add a numbered one.
 - **Per-user databases** (`userDb.ts`, `schema.ts`): D1 bindings are fixed at deploy time, so each user's database (`golemdocs-user-<id>` in production, `golemdocs-dev-user-<id>` otherwise) is created and queried over `api.cloudflare.com` with `CF_API_TOKEN`; the `users` directory row records `database_id` and `schema_version`. `USER_MIGRATIONS` (an array of statement lists, append only) are applied at provisioning and when `schema_version` is behind on the user's next request. Each query is an HTTP round trip: keep it to catalogue-sized work. A database is made on the first *write* by a user with sync, not the first look (`ownStorage` in `documents.ts`).
 - **Catalogue cache** (`catalogue_cache`, migrations 0009/0012): listing documents/folders reads a copy in the directory D1 (native, fast) instead of the REST API. Any write through `UserDb.run/runAll` bumps a change counter (row `kind = ''`); a cached list is used only if its `version` matches and it is under the TTL. The counter replaced timestamps because server clocks differ.
-- **`ENVIRONMENT=local`**: no per-user databases. `LocalUserDb` runs the same SQL in the simulated directory D1 with table names prefixed `local_<userId>_`.
+- **Catalogues in the directory** (`cataloguesInDirectory`): with `ENVIRONMENT=local`, or `SINGLE_DATABASE=true` on a [self-hosted server](../self-hosting.md), there are no per-user databases. `DirectoryUserDb` runs the same SQL in the directory D1 with table names prefixed `local_<userId>_` (locally, statements one at a time) or `user_<userId>_` (self-hosted, batches as D1 transactions), and no `CF_API_TOKEN` is needed. `cloudStorageConfigured` is the one check for whether cloud documents can be stored at all.
 
 ## Documents, files, folders
 
@@ -62,6 +63,10 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 
 **Public links.** A document may have one link that anyone may open read-only, signed in or not: `public_links` (migration `0015_public_links.sql`), one random token per document (`makePublicLink`, `publicLinkOf`, `dropPublicLink`, `publicShare` in `sharing.ts`). The owner manages it at `/api/documents/:id/link` (GET `{ token }`, PUT makes one or keeps the one there is, POST replaces it so old copies die, DELETE turns it off; others get 403). `GET /api/public/:token` and `/api/public/:token/file` (`handlePublic` in `documents.ts`) are routed before the session check and answer as the viewer routes do, with `cache-control: public, max-age=60`. An unknown, reset or dropped token, a deleted document (`forgetDocuments` drops its link) and an owner without sync all get 404. Only the owner, with sync, may make one. See [Embeddable viewer](viewer.md#public-links-and-embedding).
 
+## Site settings
+
+`site.ts`: `GET /api/site` (no session, cached 5 minutes) tells the page this server's links (`LINK_WEBSITE`, `LINK_PRICING`, `LINK_SUPPORT`, `LINK_PRIVACY`, `LINK_TERMS`, each only http(s) or mailto, a bare email becoming `mailto:`) and `sells`: whether it sells the subscription (Polar configured, or any non-production environment). golemdocs.com sets no links. The page's side is `client/src/site.ts`: remembered in `localStorage`, read by the Help menu, `sellsSubscriptions` and the welcome document (`withSiteLinks`). See [Self-hosting](../self-hosting.md).
+
 ## Subscriptions and billing
 
 - `subscriptions.ts`: Polar (merchant of record). A signed webhook (`/api/webhooks/polar`, Standard Webhooks scheme, 5-minute tolerance) upserts the latest state per user into `subscriptions`; the user is linked by the `external_customer_id` set to our user id at checkout, never by email. `hasSync` is true for subscribers (trial counts), admins, everyone when `REQUIRE_SUBSCRIPTION !== 'true'` (the rollout switch, currently `false` in `wrangler.jsonc`), and always when `local`. `subscriptionRequired()` is the 402 refusal.
@@ -74,7 +79,7 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 
 ## Wrangler environments
 
-`wrangler.jsonc` top level is production (custom domain golemdocs.com). `env.dev` (real dev D1/R2, `remote: true`, no routes) and `env.local` (everything simulated) list their own bindings because bindings are not inherited. `scripts/wrangler-config.ts` merges `server/wrangler.local.json` (git-ignored: database ids, account id) into `wrangler.generated.jsonc`, which the scripts pass to wrangler. `pnpm dev` uses `dev` once set up, else `local`; see the root [README](../../README.md) for setup, secrets (`CF_API_TOKEN`, `ADMIN_EMAILS`, `POLAR_*`, provider keys) and deploy steps. `.dev.vars` `DEV_USER` signs you in locally.
+`wrangler.jsonc` top level is production (custom domain `REPLACE_DOMAIN`, filled from `DOMAIN` in `wrangler.local.json`: golemdocs.com, or `workers.dev` to drop the route and serve at the workers.dev address). `env.dev` (real dev D1/R2, `remote: true`, no routes) and `env.local` (everything simulated) list their own bindings because bindings are not inherited. `scripts/wrangler-config.ts` merges `server/wrangler.local.json` (git-ignored: database ids, account id, domain) into `wrangler.generated.jsonc`, which the scripts pass to wrangler. `pnpm dev` uses `dev` once set up, else `local`; see the root [README](../../README.md) for setup, secrets (`CF_API_TOKEN`, `ADMIN_EMAILS`, `POLAR_*`, provider keys) and deploy steps. `.dev.vars` `DEV_USER` signs you in locally.
 
 ## Rooms (Durable Objects)
 
@@ -92,6 +97,7 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 | `server/src/sharing.ts`, `roomGate.ts`, `room.ts`, `roomCore.ts`, `roomMedia.ts`, `snapshot.ts` | access rules and rooms |
 | `server/src/subscriptions.ts`, `billing.ts`, `analytics.ts`, `feedback.ts` | payments and admin |
 | `server/src/storage.ts` | the account storage limit |
+| `server/src/site.ts` | `/api/site`: the server's links and whether it sells the subscription |
 | `server/src/docIndex.ts` | Full-text search index |
 | `server/src/cf.ts`, `http.ts` | hand-declared Cloudflare types (no `@cloudflare/workers-types`), `HttpError`, id/name validators |
 | `server/migrations/directory/`, `server/wrangler.jsonc`, `server/test/` | schema, bindings, tests (`harness.ts` fakes the bindings; run `pnpm --filter @golemdocs/server test`) |
@@ -102,7 +108,7 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 - Anything that writes a document's file must first ask `roomAllowsSave`, and should give `checkpoint` (`versions.ts`) the file it is about to replace.
 - Never delete a chunk by listing a document's prefix and keeping a set unless the set includes `retainedChunks`: a checkpoint's chunks are not in the live manifest.
 - Append-only: `USER_MIGRATIONS` entries and directory migrations. A migration that fails midway must be safe to rerun (`migrate` records the version in the same batch).
-- Local mode differs: no subscription checks, table-prefix user DB.
+- Local mode differs: no subscription checks, table-prefix user DB (as `SINGLE_DATABASE` does in production).
 - The comment above the `local` env in `wrangler.jsonc` ("cloud documents are switched off") is out of date; the README and `LocalUserDb` say they work locally.
 
 ## Related docs

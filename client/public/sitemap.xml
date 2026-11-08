@@ -10,6 +10,7 @@
   <url><loc>https://golemdocs.com/home/open-source</loc></url>
   <url><loc>https://golemdocs.com/home/developers</loc></url>
   <url><loc>https://golemdocs.com/home/download</loc></url>
+  <url><loc>https://golemdocs.com/home/self-host</loc></url>
   <url><loc>https://golemdocs.com/home/es</loc></url>
   <url><loc>https://golemdocs.com/home/es/ai</loc></url>
   <url><loc>https://golemdocs.com/home/es/formats</loc></url>
@@ -19,6 +20,7 @@
   <url><loc>https://golemdocs.com/home/es/open-source</loc></url>
   <url><loc>https://golemdocs.com/home/es/developers</loc></url>
   <url><loc>https://golemdocs.com/home/es/download</loc></url>
+  <url><loc>https://golemdocs.com/home/es/self-host</loc></url>
   <url><loc>https://golemdocs.com/home/ru</loc></url>
   <url><loc>https://golemdocs.com/home/ru/ai</loc></url>
   <url><loc>https://golemdocs.com/home/ru/formats</loc></url>
@@ -28,6 +30,7 @@
   <url><loc>https://golemdocs.com/home/ru/open-source</loc></url>
   <url><loc>https://golemdocs.com/home/ru/developers</loc></url>
   <url><loc>https://golemdocs.com/home/ru/download</loc></url>
+  <url><loc>https://golemdocs.com/home/ru/self-host</loc></url>
   <url><loc>https://golemdocs.com/home/de</loc></url>
   <url><loc>https://golemdocs.com/home/de/ai</loc></url>
   <url><loc>https://golemdocs.com/home/de/formats</loc></url>
@@ -37,6 +40,7 @@
   <url><loc>https://golemdocs.com/home/de/open-source</loc></url>
   <url><loc>https://golemdocs.com/home/de/developers</loc></url>
   <url><loc>https://golemdocs.com/home/de/download</loc></url>
+  <url><loc>https://golemdocs.com/home/de/self-host</loc></url>
   <url><loc>https://golemdocs.com/home/fr</loc></url>
   <url><loc>https://golemdocs.com/home/fr/ai</loc></url>
   <url><loc>https://golemdocs.com/home/fr/formats</loc></url>
@@ -46,6 +50,7 @@
   <url><loc>https://golemdocs.com/home/fr/open-source</loc></url>
   <url><loc>https://golemdocs.com/home/fr/developers</loc></url>
   <url><loc>https://golemdocs.com/home/fr/download</loc></url>
+  <url><loc>https://golemdocs.com/home/fr/self-host</loc></url>
   <url><loc>https://golemdocs.com/home/ja</loc></url>
   <url><loc>https://golemdocs.com/home/ja/ai</loc></url>
   <url><loc>https://golemdocs.com/home/ja/formats</loc></url>
@@ -55,6 +60,7 @@
   <url><loc>https://golemdocs.com/home/ja/open-source</loc></url>
   <url><loc>https://golemdocs.com/home/ja/developers</loc></url>
   <url><loc>https://golemdocs.com/home/ja/download</loc></url>
+  <url><loc>https://golemdocs.com/home/ja/self-host</loc></url>
   <url><loc>https://golemdocs.com/home/pt-BR</loc></url>
   <url><loc>https://golemdocs.com/home/pt-BR/ai</loc></url>
   <url><loc>https://golemdocs.com/home/pt-BR/formats</loc></url>
@@ -64,6 +70,7 @@
   <url><loc>https://golemdocs.com/home/pt-BR/open-source</loc></url>
   <url><loc>https://golemdocs.com/home/pt-BR/developers</loc></url>
   <url><loc>https://golemdocs.com/home/pt-BR/download</loc></url>
+  <url><loc>https://golemdocs.com/home/pt-BR/self-host</loc></url>
   <url><loc>https://golemdocs.com/home/zh-Hant</loc></url>
   <url><loc>https://golemdocs.com/home/zh-Hant/ai</loc></url>
   <url><loc>https://golemdocs.com/home/zh-Hant/formats</loc></url>
@@ -73,6 +80,7 @@
   <url><loc>https://golemdocs.com/home/zh-Hant/open-source</loc></url>
   <url><loc>https://golemdocs.com/home/zh-Hant/developers</loc></url>
   <url><loc>https://golemdocs.com/home/zh-Hant/download</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hant/self-host</loc></url>
   <url><loc>https://golemdocs.com/home/zh-Hans</loc></url>
   <url><loc>https://golemdocs.com/home/zh-Hans/ai</loc></url>
   <url><loc>https://golemdocs.com/home/zh-Hans/formats</loc></url>
@@ -82,6 +90,7 @@
   <url><loc>https://golemdocs.com/home/zh-Hans/open-source</loc></url>
   <url><loc>https://golemdocs.com/home/zh-Hans/developers</loc></url>
   <url><loc>https://golemdocs.com/home/zh-Hans/download</loc></url>
+  <url><loc>https://golemdocs.com/home/zh-Hans/self-host</loc></url>
   <url><loc>https://golemdocs.com/home/it</loc></url>
   <url><loc>https://golemdocs.com/home/it/ai</loc></url>
   <url><loc>https://golemdocs.com/home/it/formats</loc></url>
@@ -91,6 +100,7 @@
   <url><loc>https://golemdocs.com/home/it/open-source</loc></url>
   <url><loc>https://golemdocs.com/home/it/developers</loc></url>
   <url><loc>https://golemdocs.com/home/it/download</loc></url>
+  <url><loc>https://golemdocs.com/home/it/self-host</loc></url>
   <url><loc>https://golemdocs.com/home/ko</loc></url>
   <url><loc>https://golemdocs.com/home/ko/ai</loc></url>
   <url><loc>https://golemdocs.com/home/ko/formats</loc></url>
@@ -100,6 +110,7 @@
   <url><loc>https://golemdocs.com/home/ko/open-source</loc></url>
   <url><loc>https://golemdocs.com/home/ko/developers</loc></url>
   <url><loc>https://golemdocs.com/home/ko/download</loc></url>
+  <url><loc>https://golemdocs.com/home/ko/self-host</loc></url>
   <url><loc>https://golemdocs.com/home/convert</loc></url>
   <url><loc>https://golemdocs.com/home/pdf</loc></url>
   <url><loc>https://golemdocs.com/home/images</loc></url>

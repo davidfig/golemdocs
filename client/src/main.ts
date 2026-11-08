@@ -65,6 +65,7 @@ import { inCaseOf, synonymsOf } from './spelling/thesaurus.ts';
 import { PictureDetourBar } from './ui/pictureDetourBar.ts';
 import { showShareDialog } from './ui/shareDialog.ts';
 import { showSignInDialog } from './ui/signIn.ts';
+import { loadSite, site, siteUnknown } from './site.ts';
 import { checkoutUrl, fetchSubscription, portalUrl, sellsSubscriptions, SubscriptionError, waitForSubscription, type Subscription } from './subscription.ts';
 import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
@@ -171,6 +172,10 @@ initTooltips();
 const localeReady = initLocale();
 // Who is signed in decides whether a saved document joins its room, so ask straight away too.
 const accountLookup = currentUser().catch(() => null);
+// This server's links and whether it sells the subscription (site.ts): remembered from last time until it answers.
+void loadSite();
+/** How long the welcome document waits to hear this server's links on a first visit before opening with golemdocs.com's. */
+const SITE_WAIT_MS = 1000;
 
 const PAGE_GAP = 18;
 const CARET_BLINK_MS = 530;
@@ -1231,7 +1236,12 @@ function openSource(source: string, step: 'push' | 'replace' | 'none' = 'push'):
   } else if (source.startsWith('shared:')) {
     void openShared(source.slice(7));
   } else if (source === 'welcome') {
-    open({ kind: 'welcome' });
+    // Its links are this server's (a self-hosted one's, see site.ts). Only a first visit to such a server waits a moment to hear them.
+    if (!siteUnknown()) open({ kind: 'welcome', links: site().links });
+    else
+      void Promise.race([loadSite(), new Promise<void>((resolve) => setTimeout(resolve, SITE_WAIT_MS)).then(site)]).then(({ links }) => {
+        if (wantedDocKey === 'welcome') open({ kind: 'welcome', links });
+      });
   } else if (source === 'privacy' || source === 'terms') {
     open({ kind: 'legal', page: source });
   } else if (source === 'changelog') {

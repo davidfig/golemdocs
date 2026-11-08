@@ -124,5 +124,5 @@ export function takeAuthError(): string | null {
   params.delete('auth_error');
   const query = params.toString();
   history.replaceState(null, '', location.pathname + (query ? `?${query}` : ''));
-  return reason === 'denied' ? t('app.authCancelled') : t('app.authFailed');
+  return reason === 'denied' ? t('app.authCancelled') : reason === 'not-allowed' ? t('app.authNotAllowed') : t('app.authFailed');
 }

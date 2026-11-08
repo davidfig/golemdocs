@@ -173,39 +173,59 @@ async function migrate(db: UserDb): Promise<number> {
 }
 
 /**
- * Local development (`ENVIRONMENT=local`): a user's catalogue lives in the simulated DIRECTORY
- * database instead of a database of their own, because Cloudflare's REST API for creating one
- * doesn't exist offline. The same SQL runs; the per-user tables just get a per-user name.
+ * Whether users' catalogues live in the DIRECTORY database (per-user tables) rather than a database
+ * each: in local development (`ENVIRONMENT=local`), where Cloudflare's REST API for creating one
+ * doesn't exist, and on a self-hosted server (`SINGLE_DATABASE=true`), where one database is simpler
+ * and needs no API token.
  */
-class LocalUserDb extends UserDb {
+export const cataloguesInDirectory = (env: Env): boolean => env.ENVIRONMENT === 'local' || env.SINGLE_DATABASE === 'true';
+
+/** Whether cloud documents can be stored: in the directory, or with what per-user databases need. */
+export const cloudStorageConfigured = (env: Env): boolean =>
+  cataloguesInDirectory(env) || (!!env.CF_API_TOKEN && !!env.CF_ACCOUNT_ID && !env.CF_ACCOUNT_ID.startsWith('REPLACE'));
+
+/**
+ * A user's catalogue in the DIRECTORY database (`cataloguesInDirectory`). The same SQL runs; the
+ * per-user tables just get a per-user name (`local_<id>_` locally, `user_<id>_` on a self-hosted server).
+ */
+class DirectoryUserDb extends UserDb {
   private readonly prefix: string;
 
   constructor(
     private readonly directory: Env['DIRECTORY'],
     userId: string,
     env: Env,
+    /** Run a batch as one transaction (D1's `batch`); locally they run one at a time, as before. */
+    private readonly atomic: boolean,
   ) {
     super(env, 'local');
     if (!/^[0-9a-f]+$/.test(userId)) throw new Error('unexpected user id');
-    this.prefix = `local_${userId}_`;
+    this.prefix = `${atomic ? 'user' : 'local'}_${userId}_`;
     this.cacheKey = this.prefix;
   }
 
   protected override async batch(statements: { sql: string; params: unknown[] }[]): Promise<void> {
+    if (this.atomic) {
+      await this.directory.batch(statements.map(({ sql, params }) => this.directory.prepare(this.rewrite(sql)).bind(...params)));
+      return;
+    }
     for (const { sql, params } of statements) await this.all(sql, params);
   }
 
+  /** Table and index names are the only identifiers the per-user schema uses (see schema.ts). */
+  private rewrite(sql: string): string {
+    return sql.replace(/\b(documents_updated|documents|folders|preferences|versions|trash|_migrations)\b/g, `${this.prefix}$1`);
+  }
+
   override async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-    // Table and index names are the only identifiers the per-user schema uses (see schema.ts).
-    const rewritten = sql.replace(/\b(documents_updated|documents|folders|preferences|versions|trash|_migrations)\b/g, `${this.prefix}$1`);
-    return (await this.directory.prepare(rewritten).bind(...params).all<T>()).results;
+    return (await this.directory.prepare(this.rewrite(sql)).bind(...params).all<T>()).results;
   }
 }
 
 /**
- * Local users' migrations, per simulated directory database: one per user and process, shared by
- * requests that arrive together (locally a migration's statements run one at a time, not as one
- * transaction, so two at once would both make the same tables).
+ * Migrations of catalogues kept in the directory, per directory database: one per user and process,
+ * shared by requests that arrive together (locally a migration's statements run one at a time, not as
+ * one transaction, so two at once would both make the same tables).
  */
 const migratedLocally = new WeakMap<object, Map<string, Promise<number>>>();
 
@@ -230,7 +250,7 @@ interface DirectoryRow {
 
 /** The user's database if they have one already; never creates one (people without sync get none). */
 export async function existingUserDb(env: Env, userId: string): Promise<UserDb | null> {
-  if (env.ENVIRONMENT !== 'local') {
+  if (!cataloguesInDirectory(env)) {
     const row = await env.DIRECTORY.prepare('SELECT 1 AS found FROM users WHERE user_id = ?').bind(userId).first<{ found: number }>();
     if (!row) return null;
   }
@@ -239,8 +259,8 @@ export async function existingUserDb(env: Env, userId: string): Promise<UserDb |
 
 /** The user's database, created and migrated on first use. */
 export async function userDb(env: Env, userId: string): Promise<UserDb> {
-  if (env.ENVIRONMENT === 'local') {
-    const local = new LocalUserDb(env.DIRECTORY, userId, env);
+  if (cataloguesInDirectory(env)) {
+    const local = new DirectoryUserDb(env.DIRECTORY, userId, env, env.ENVIRONMENT !== 'local');
     // Once per process: migrating on every request cost several queries (and dropped the cached lists each time).
     const started = migratedLocally.get(env.DIRECTORY) ?? new Map<string, Promise<number>>();
     migratedLocally.set(env.DIRECTORY, started);

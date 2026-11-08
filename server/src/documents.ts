@@ -15,7 +15,7 @@ import { accessFor, canWrite, dropPublicLink, forgetDocuments, makePublicLink, p
 import { endRooms, kickFromRoom, rejoinRoom, roomAllowsSave, roomSaved } from './roomGate.ts';
 import { requireRoom } from './storage.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
-import { existingUserDb, userDb, type UserDb } from './userDb.ts';
+import { cloudStorageConfigured, existingUserDb, userDb, type UserDb } from './userDb.ts';
 
 const MAX_BYTES = 50 * 1024 * 1024;
 const MAX_THUMB_BYTES = 512 * 1024;
@@ -228,7 +228,7 @@ export async function resolveAccess(env: Env, userId: string, docId: string, kno
   const access = await (early ?? accessFor(env, userId, docId));
   if (access) return access;
   if (knownDb === null) return null; // no database of their own, so nothing to claim
-  if (env.ENVIRONMENT !== 'local' && !env.CF_API_TOKEN) return null;
+  if (!cloudStorageConfigured(env)) return null;
   const db = knownDb ?? (await userDb(env, userId));
   if (!(await db.first('SELECT 1 FROM documents WHERE id = ?', [docId]))) return null;
   await registerOwner(env, docId, userId);

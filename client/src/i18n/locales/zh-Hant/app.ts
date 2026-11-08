@@ -102,6 +102,7 @@ export const app: Partial<Messages> = {
   'app.signOutRequestFailed': '登出失敗（{status}）',
   'app.authCancelled': '已取消登入。',
   'app.authFailed': '登入失敗。請再試一次。',
+  'app.authNotAllowed': '這部伺服器只開放給擁有者新增的使用者。請要求擁有者新增您的電子郵件地址。',
   'app.signOutTitle': '登出',
   'app.signOutAnyway': '仍要登出',
   'app.signOutLoss': '有 {count} 份文件的變更尚未儲存至你的帳號。登出會將你的文件從此瀏覽器中移除，這些變更將會遺失。',

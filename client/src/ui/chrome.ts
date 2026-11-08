@@ -23,6 +23,7 @@ import { sameValue } from './sameValue.ts';
 import { format, getLocale, setLocale, t, type MessageKey } from '../i18n/index.ts';
 import { LOCALES } from '../i18n/locales.ts';
 import { sellsSubscriptions } from '../subscription.ts';
+import { site, siteLink } from '../site.ts';
 import { BRUSH_GROUPS, BRUSH_PRESETS, DASHES } from '../vector/brushPresets.ts';
 import { brushPreview } from './brushPreview.ts';
 import { dropdown, lineSample } from './dropdown.ts';
@@ -625,13 +626,21 @@ export class Chrome {
       // The welcome document says what the app is and where its name comes from.
       { id: 'help.feedback', label: t('chrome.help.feedback'), run: () => this.sendFeedback() },
       a('help.about', t('chrome.help.about', { name: this.options.appName ?? 'Golem Docs' }), { kind: 'openSample', id: 'welcome' }),
-      // The marketing site (public/home), a page of its own outside the app.
-      { id: 'help.website', label: t('chrome.help.website', { name: this.options.appName ?? 'Golem Docs' }), run: () => void window.open('/home', '_blank', 'noopener') },
-      a('help.privacy', t('chrome.help.privacy'), { kind: 'openSample', id: 'privacy' }),
-      a('help.terms', t('chrome.help.terms'), { kind: 'openSample', id: 'terms' }),
+      // The marketing site (public/home), a page of its own outside the app, unless this server names its own (site.ts).
+      { id: 'help.website', label: t('chrome.help.website', { name: this.options.appName ?? 'Golem Docs' }), run: () => void window.open(siteLink('website', '/home'), '_blank', 'noopener') },
+      // The built-in documents, or this server's own pages when it names them.
+      { id: 'help.privacy', label: t('chrome.help.privacy'), run: () => this.openLegal('privacy', t('chrome.help.privacy')) },
+      { id: 'help.terms', label: t('chrome.help.terms'), run: () => this.openLegal('terms', t('chrome.help.terms')) },
       a('help.changelog', t('chrome.help.changelog'), { kind: 'openSample', id: 'changelog' }),
       dialog('help.updates', t('update.menu'), 'updates', { visible: () => isDesktopApp() }),
     );
+  }
+
+  /** The privacy policy or terms: this server's page if it names one (site.ts), else the built-in document. */
+  private openLegal(page: 'privacy' | 'terms', label: string): void {
+    const link = site().links[page];
+    if (link) window.open(link, '_blank', 'noopener');
+    else this.registry.perform({ kind: 'openSample', id: page }, label);
   }
 
   private openRecentItem(): MenuItem {

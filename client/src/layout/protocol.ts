@@ -16,6 +16,7 @@ import type { FormatAction } from './formatting.ts';
 import type { AutoCorrectOptions } from './autocorrect.ts';
 import type { PickedStyle } from './pdfAnnotator.ts';
 import type { LookUp } from '../spelling/thesaurus.ts';
+import type { SiteLinks } from '../site.ts';
 
 export type DocumentSource =
   /** A .docx file's bytes (transferred to the worker). */
@@ -84,8 +85,8 @@ export type DocumentSource =
   | { kind: 'blank'; name: string }
   /** Every font we ship, as a sample document. */
   | { kind: 'fonts' }
-  /** What Golem Docs is: shown when there are no documents yet. */
-  | { kind: 'welcome' }
+  /** What Golem Docs is: shown when there are no documents yet. `links`: this server's, in place of golemdocs.com's (../site.ts). */
+  | { kind: 'welcome'; links?: SiteLinks }
   /** The privacy policy or the terms of service, written as documents like the welcome one. */
   | { kind: 'legal'; page: LegalPage }
   /** What's New: the repository's CHANGELOG.md, opened as a document. */

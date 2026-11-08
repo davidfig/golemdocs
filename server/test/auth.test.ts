@@ -411,3 +411,21 @@ test('DEV_USER: signing out sticks until signing in with the dev provider', asyn
   const none = (await (await call('/api/auth/providers')).json()) as { id: string }[];
   assert.ok(!none.some((p) => p.id === 'dev'));
 });
+
+test('ALLOWED_EMAILS: only listed verified emails, listed domains and admins may sign in, and nothing is recorded for others', async () => {
+  env.ALLOWED_EMAILS = ' Friend@Example.com, @family.example ';
+  env.ADMIN_EMAILS = 'owner@example.com';
+  const google = (sub: string, email: string, verified = true) => signIn('google', { claims: { sub, email, email_verified: verified } });
+
+  const stranger = await google('g1', 'stranger@example.com');
+  assert.equal(stranger.callback.headers.get('location'), '/?auth_error=not-allowed');
+  assert.equal(stranger.session, undefined);
+  assert.equal((env.DIRECTORY as any).raw.prepare('SELECT COUNT(*) AS n FROM identities').get().n, 0);
+  // A listed address the provider hasn't verified could be anyone's.
+  assert.equal((await google('g2', 'friend@example.com', false)).session, undefined);
+
+  assert.ok((await google('g3', 'friend@example.com')).session);
+  assert.ok((await google('g4', 'cousin@family.example')).session);
+  assert.equal((await google('g5', 'cousin@notfamily.example')).session, undefined);
+  assert.ok((await google('g6', 'owner@example.com')).session);
+});

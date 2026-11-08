@@ -1,5 +1,12 @@
 # What’s New in Golem Docs
 
+## 0.36.0 - Unreleased
+
+### Added
+
+- Run Golem Docs on your own server: put it on your own Cloudflare account to get sync, sharing and live editing with your files in your own storage. A new Self-hosting page on the website explains how it works and walks through setting it up.
+- A server of your own can be open only to the people you choose, and can point Help › Website, Privacy Policy, Terms of Service and the welcome document's links at its own pages.
+
 ## 0.35.0 - 2026-11-07
 
 ### Added

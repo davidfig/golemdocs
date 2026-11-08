@@ -1,5 +1,6 @@
 // Writes server/wrangler.generated.jsonc: server/wrangler.jsonc with the REPLACE_… placeholders filled
-// in from server/wrangler.local.json (git-ignored; see wrangler.local.example.json). The committed config
+// in from server/wrangler.local.json (git-ignored; see wrangler.local.example.json): the account, the
+// directory databases, and the production DOMAIN (or "workers.dev" for none, see docs/self-hosting.md). The committed config
 // carries no account-specific ids; the server's wrangler scripts run `--config wrangler.generated.jsonc`.
 // Without a local file the placeholders stay, and `pnpm dev` falls back to the offline mode; a production deploy cannot
 // go ahead (`missingForProduction`).
@@ -18,8 +19,22 @@ export function filledWranglerConfig(): string {
   const localFile = path.join(server, 'wrangler.local.json');
   if (existsSync(localFile)) {
     const values = JSON.parse(readFileSync(localFile, 'utf8')) as Record<string, string>;
-    for (const [name, value] of Object.entries(values)) if (value) text = text.split(`REPLACE_${name}`).join(value);
+    text = fillWranglerConfig(text, values);
   }
+  return text;
+}
+
+/** Sentinel DOMAIN: no custom domain, served at the Worker's own workers.dev address. */
+export const WORKERS_DEV = 'workers.dev';
+
+/** `text` with each `REPLACE_<name>` replaced by its value from `values` (empty values are left as placeholders). */
+export function fillWranglerConfig(text: string, values: Record<string, string>): string {
+  if (values.DOMAIN?.trim() === WORKERS_DEV) {
+    const routes = /"routes":\s*\[\s*\{\s*"pattern":\s*"REPLACE_DOMAIN",\s*"custom_domain":\s*true\s*\}\s*\]/;
+    if (!routes.test(text)) throw new Error('wrangler.jsonc: could not find the production route to replace with workers.dev');
+    text = text.replace(routes, '"routes": [],\n\t"workers_dev": true');
+  }
+  for (const [name, value] of Object.entries(values)) if (value) text = text.split(`REPLACE_${name}`).join(value.trim());
   return text;
 }
 

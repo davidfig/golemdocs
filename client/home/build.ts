@@ -19,9 +19,14 @@ export const SOURCE = 'en';
 /** Where the stylesheet, script and clip are served, whatever the language. */
 export const ASSET_BASE = '/home';
 
-/** The pages, in menu order. */
-export const PAGES = ['home', 'ai', 'formats', 'pricing', 'journal', 'about', 'open-source', 'developers', 'download'] as const;
+/** The pages, in menu order (those in MENU_PARENT come last and are not in the menu). */
+export const PAGES = ['home', 'ai', 'formats', 'pricing', 'journal', 'about', 'open-source', 'developers', 'download', 'self-host'] as const;
 export type PageName = (typeof PAGES)[number];
+
+/** Pages reached from another page rather than from the menu bar, which marks that page while they are open. */
+export const MENU_PARENT: Partial<Record<PageName, PageName>> = { 'self-host': 'pricing' };
+/** The menu bar's pages. */
+export const MENU_PAGES = PAGES.filter((page) => !MENU_PARENT[page]);
 
 export const LANGS = Object.keys(LOCALES);
 
@@ -158,9 +163,10 @@ export function latestHtml(releases: Release[], notes: Map<string, JournalNote>,
 
 /** The menu bar: `&` in a name marks its access key, drawn underlined as Word does. */
 function menuHtml(lang: string, current: PageName | null, strings: Strings): string {
-  return PAGES.map((page) => {
+  const marked = current && (MENU_PARENT[current] ?? current);
+  return MENU_PAGES.map((page) => {
     const name = strings[`nav.${page}`].replace(/&(.)/, '<u>$1</u>');
-    const here = page === current ? ' aria-current="page"' : '';
+    const here = page === marked ? ' aria-current="page"' : '';
     return `<a href="${pagePath(lang, page)}"${here}>${name}</a>`;
   }).join('\n          ');
 }

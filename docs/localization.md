@@ -174,5 +174,5 @@ access key.
   catalogs. Each `nav.*` name marks one access key with `&`, unique within the language (CJK: `ホーム(&H)`).
 - The Journal's entries are `CHANGELOG.md`, which is English; other languages say so under the page's heading.
 - **Adding a language:** after the steps above, copy `en.json` to `client/home/locales/<tag>.json` and translate it,
-  add its eight pages to `client/public/sitemap.xml`, and add the tag to `OG_LOCALE` in `client/home/build.ts`.
+  add its pages (every one in `PAGES`) to `client/public/sitemap.xml`, and add the tag to `OG_LOCALE` in `client/home/build.ts`.
 - The guide and legal pages under `/home/` (Convert, PDF, Privacy…) are English only; they use the same frame.

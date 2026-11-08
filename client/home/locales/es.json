@@ -169,7 +169,7 @@
   "home.p.everything.link": "Todos los formatos ›",
   "home.bill.label": "Lo que cuesta Golem Docs",
   "home.p.free.h": "Gratis.",
-  "home.p.free.p": "Por 3 $ al mes añades sincronización y uso compartido, y pagas la factura de mi servidor. O ejecuta tu propio servidor en Cloudflare.",
+  "home.p.free.p": "Por 3 $ al mes añades sincronización y uso compartido, y pagas la factura de mi servidor. <a href=\"{{base}}/self-host\">O ejecuta tu propio servidor en Cloudflare</a>.",
   "home.p.free.link": "Precios ›",
   "home.byline": "Soy David, y hice Golem Docs porque quería un solo editor para todo.",
   "home.why": "Por qué lo hice ›",

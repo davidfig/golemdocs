@@ -169,7 +169,7 @@
   "home.p.everything.link": "すべての形式 ›",
   "home.bill.label": "Golem Docs の料金",
   "home.p.free.h": "無料で使えます。",
-  "home.p.free.p": "月額 $3 で同期と共有が加わり、私のサーバー代になります。Cloudflare で自分のサーバーを動かすこともできます。",
+  "home.p.free.p": "月額 $3 で同期と共有が加わり、私のサーバー代になります。<a href=\"{{base}}/self-host\">Cloudflare で自分のサーバーを動かすこともできます</a>。",
   "home.p.free.link": "料金 ›",
   "home.byline": "David といいます。あらゆるものを扱えるエディターがひとつ欲しくて、Golem Docs を作りました。",
   "home.why": "作った理由 ›",

@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.36.1 - Unreleased
+
+### Changed
+
+- The home page's "Or run your own server on Cloudflare" now links to the Self-hosting page.
+
 ## 0.36.0 - 2026-11-08
 
 ### Added

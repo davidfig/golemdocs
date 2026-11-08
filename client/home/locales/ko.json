@@ -169,7 +169,7 @@
   "home.p.everything.link": "모든 형식 ›",
   "home.bill.label": "Golem Docs의 요금",
   "home.p.free.h": "무료로 쓰세요.",
-  "home.p.free.p": "월 3달러를 내면 동기화와 공유가 추가되고, 제 서버 비용을 댑니다. Cloudflare에서 직접 서버를 운영할 수도 있습니다.",
+  "home.p.free.p": "월 3달러를 내면 동기화와 공유가 추가되고, 제 서버 비용을 댑니다. <a href=\"{{base}}/self-host\">Cloudflare에서 직접 서버를 운영할 수도 있습니다</a>.",
   "home.p.free.link": "요금 ›",
   "home.byline": "David입니다. 모든 것을 다루는 편집기가 하나 갖고 싶어서 Golem Docs를 만들었습니다.",
   "home.why": "만든 이유 ›",

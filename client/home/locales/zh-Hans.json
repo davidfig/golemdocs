@@ -169,7 +169,7 @@
   "home.p.everything.link": "所有格式 ›",
   "home.bill.label": "Golem Docs 的费用",
   "home.p.free.h": "免费使用。",
-  "home.p.free.p": "每月 3 美元可增加同步和共享，也用来支付我的服务器费用。也可以在 Cloudflare 上运行你自己的服务器。",
+  "home.p.free.p": "每月 3 美元可增加同步和共享，也用来支付我的服务器费用。<a href=\"{{base}}/self-host\">也可以在 Cloudflare 上运行你自己的服务器</a>。",
   "home.p.free.link": "价格 ›",
   "home.byline": "我是 David，我做 Golem Docs，是因为我想要一个什么都能编辑的编辑器。",
   "home.why": "我为什么做它 ›",

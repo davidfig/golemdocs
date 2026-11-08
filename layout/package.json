@@ -2,7 +2,7 @@
   "name": "@golemdocs/layout",
   "private": true,
   "description": "Text layout, font metrics and pagination (private workspace package, not on npm)",
-  "version": "0.35.0",
+  "version": "0.36.0",
   "license": "MIT",
   "type": "module",
   "exports": {

@@ -17,6 +17,8 @@ export interface FooterInfo {
   page: { current: number; count: number } | null;
   /** 1 = 100%. */
   zoom: number;
+  /** A book: how much of it has been read, in percent. */
+  progress?: number;
   /** The counts of the whole document, and of the selection (null with no selection); null when the document has none. */
   words: WordStats | null;
   selection: WordStats | null;
@@ -80,6 +82,7 @@ export function footerSegments(info: FooterInfo): FooterSegment[] {
     const table = info.words?.table;
     if (table) out.push({ key: 'panels.footer.table', params: { rows: table.rows, columns: table.columns } });
     if (info.page) out.push({ key: 'panels.footer.page', params: info.page });
+    if (info.progress !== undefined) out.push({ key: 'panels.footer.progress', params: { percent: info.progress } });
     // A PDF shown as pages has no text counts; neither does a document before the first count arrives.
     // A spreadsheet's size says more than its word count.
     const total = table ? null : info.words;

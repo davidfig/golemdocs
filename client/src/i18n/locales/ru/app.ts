@@ -97,6 +97,8 @@ export const app: Catalog = {
   'app.opening': 'Открывается «{name}»…',
   'app.openingProgress': 'Открывается «{name}»… {percent}%',
   'app.openFailed': 'Не удалось открыть документ: {message}',
+  'app.readingElsewhere': 'Продолжено с места, где вы остановились на другом устройстве ({percent} %).',
+  'app.bookCopied': 'Создан «{name}» для редактирования. Сама книга не изменилась.',
   'app.outOfDate': 'Эта версия Golem Docs устарела и не может открыть документ. Перезагрузите или обновите приложение, затем повторите попытку.',
   'app.openingShared': 'Открывается общий документ…',
   'app.openSharedFailed': 'Не удалось открыть общий документ: {message}',

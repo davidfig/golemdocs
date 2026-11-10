@@ -66,4 +66,14 @@ export const USER_MIGRATIONS: string[][] = [
        deleted_at INTEGER NOT NULL
      )`,
   ],
+  // 6: where the person is in each book they read (an EPUB), so every device opens it there. `book` is the hash of the book's
+  // text (the same book on every device), `place` what the client keeps (see client/src/reading.ts), `read_at` when it was read
+  // there (the server's clock; a device says how long ago it read): the latest reading wins.
+  [
+    `CREATE TABLE reading_places (
+       book       TEXT PRIMARY KEY,
+       place      TEXT NOT NULL,
+       read_at    INTEGER NOT NULL
+     )`,
+  ],
 ];

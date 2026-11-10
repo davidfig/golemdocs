@@ -43,3 +43,14 @@ test('footer: a plain text file says its lines, where the view is and what is be
   assert.deepEqual(footerSegments({ ...base, text }), [{ key: null, text: '150,000 lines · 9.2 MB' }, { key: null, text: 'Line 1,200' }, { key: 'panels.footer.zoom', params: { percent: 125 } }]);
   assert.deepEqual(footerSegments({ ...base, text: { ...text, progress: 'Indexing… 40%' } }).map((s) => s.text ?? s.key), ['150,000 lines · 9.2 MB', 'Line 1,200', 'Indexing… 40%', 'panels.footer.zoom']);
 });
+
+test('footer: a book says its page and how much of it has been read, not its words', () => {
+  const info: FooterInfo = { ...base, kind: 'epub', words: null, progress: 42 };
+  assert.deepEqual(footerSegments(info), [
+    { key: 'panels.footer.page', params: { current: 2, count: 5 } },
+    { key: 'panels.footer.progress', params: { percent: 42 } },
+    { key: 'panels.footer.zoom', params: { percent: 125 } },
+  ]);
+  // In Flow there are no pages, but there is still how far in it is.
+  assert.deepEqual(keys({ ...info, page: null }), ['panels.footer.progress', 'panels.footer.zoom']);
+});

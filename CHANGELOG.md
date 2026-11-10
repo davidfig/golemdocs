@@ -1,5 +1,18 @@
 # What’s New in Golem Docs
 
+## 0.37.0 - Unreleased
+
+### Added
+
+- EPUB books open where you left off, on every device: read a few chapters on your phone and your computer picks up at the same place (signed in, with sync). Going back to reread on one device moves the others back too.
+- Turn a book's pages with Page Down and Page Up, Space and Shift+Space, or the arrow keys. The status bar shows how much of the book you've read.
+- On a phone or tablet, tap the right or left side of a book's page, or swipe sideways, to turn the page. Tapping a book no longer brings up the keyboard.
+- A long book you were partway through opens straight at your page, instead of showing its first page and then jumping.
+
+### Changed
+
+- EPUB books open read-only, like a book: they can't be changed by accident or saved over. To edit one, use Convert To, which now makes a new document next to the book and leaves the book as it was.
+
 ## 0.36.1 - 2026-11-08
 
 ### Changed

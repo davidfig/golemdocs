@@ -14,6 +14,7 @@ export const panels: Catalog = {
 
   // Status bar (View > Status Bar)
   'panels.footer.page': 'Страница {current} из {count}',
+  'panels.footer.progress': 'Прочитано {percent} %',
   'panels.footer.words.one': '{n} слово',
   'panels.footer.words.few': '{n} слова',
   'panels.footer.words.many': '{n} слов',

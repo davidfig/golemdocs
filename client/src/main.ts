@@ -25,6 +25,7 @@ import {
   deleteOwnedBy,
   deleteSaved,
   getSaved,
+  getSavedManifest,
   getThumbnail, getImage, saveImage,
   listLocalFolders,
   listSaved,
@@ -52,6 +53,7 @@ import { QuietRunner, traced } from './quietRunner.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage, textThumbnail } from './thumbnail.ts';
 import { CommentsPanel } from './ui/commentsPanel.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
+import { BookReading, type ReadingPlace } from './reading.ts';
 import { FilesPanel } from './ui/filesPanel.ts';
 import { PagesPanel } from './ui/pagesPanel.ts';
 import { FormLayer } from './ui/formLayer.ts';
@@ -375,6 +377,185 @@ function rememberView(): void {
   if (view.camera || view.selection) saveView(key, view);
 }
 
+// --- Reading a book --------------------------------------------------------------------
+// An EPUB is read, not edited: it opens where it was left, on this device or another (see reading.ts), and the place is
+// kept as the person reads. A place is the text at the top of the view, which means the same on every screen.
+
+/** The book open now, and where it is being read. */
+let reading: BookReading | null = null;
+let readingTimer: number | undefined;
+/** A place is being brought to the top of the view (the layout updates' `keep`), and where the view was put for it: the person moving it lets it go. */
+let readingHold: { y: number | null } | null = null;
+/** The view when the place was last looked up: the same view is the same place. */
+let readingView = '';
+/** Where the view was put for the place kept (`camera` x/y/zoom), until the place there is looked up: the view not moved since is that reading. */
+let readingLanded = '';
+/** The account has answered (or the wait for it is over): until then the place isn't tracked, so a slow answer isn't lost to a reading taken here first. */
+let readingAsked = false;
+/** How long the account may take to answer before the place is tracked anyway. */
+const ACCOUNT_WAIT_MS = 10_000;
+/** How far below the top of the view the place is looked for (CSS px): below the gap above a page, inside its top margin. */
+const READING_TOP_PX = 24;
+
+const isBook = (): boolean => reading !== null && current.kind === 'epub';
+
+/** A book is being opened at its place, which isn't laid out yet. */
+const restoringBook = (): boolean => readingHold !== null && readingHold.y === null && !loaded;
+
+/** How long a book may take to reach its place, its pages hidden, before the loading screen says it is still coming. */
+const RESTORE_COVER_MS = 600;
+let restoreCover: number | undefined;
+/** The loading screen is up because a book's place is still coming (and only then is it this code's to take down). */
+let coveredForPlace = false;
+
+/**
+ * While a book opens at its place, its pages are hidden, so its first page doesn't show and then jump away; a long book
+ * (on a phone, the place far in) gets the loading screen after a moment. `on` false: the place is shown, or given up on.
+ */
+function hidePagesForPlace(on: boolean): void {
+  window.clearTimeout(restoreCover);
+  canvas.style.visibility = on ? 'hidden' : '';
+  if (on) {
+    const name = current.name;
+    restoreCover = window.setTimeout(() => {
+      if (!restoringBook()) return;
+      showLoading(name);
+      coveredForPlace = true;
+    }, RESTORE_COVER_MS);
+  } else if (coveredForPlace) {
+    coveredForPlace = false;
+    loadingScreen.hide();
+  }
+}
+
+/** A book opened: brought to where it was left here, then to where it was read last anywhere when that is later. */
+function startBook(key: string): void {
+  closeBook();
+  const book = new BookReading(key, () => account !== null);
+  reading = book;
+  // Nothing is typed in a book: a tap must not bring up the on-screen keyboard (a hardware keyboard still turns pages).
+  input.inputMode = 'none';
+  if (book.current) goToReading(book.current);
+  readingAsked = false;
+  const asked = (): void => {
+    if (reading === book) readingAsked = true;
+  };
+  window.setTimeout(asked, ACCOUNT_WAIT_MS);
+  void book.fromAccount().then((theirs) => {
+    if (theirs && reading === book) {
+      goToReading(theirs);
+      showToast(t('app.readingElsewhere', { percent: readingPercent(theirs) }));
+    }
+    asked();
+  }, asked);
+  readingTimer = window.setInterval(trackReading, 1000);
+}
+
+/** The book is put away: its last place goes to the account. */
+function closeBook(): void {
+  window.clearInterval(readingTimer);
+  reading?.close();
+  reading = null;
+  input.removeAttribute('inputmode');
+  readingHold = null;
+  readingLanded = '';
+  hidePagesForPlace(false);
+  readingView = '';
+}
+
+const readingPercent = (place: ReadingPlace): number => (place.pages ? Math.round((place.page / place.pages) * 100) : 0);
+
+/** Brings a reading place to the top of the view, page by page in Print layout (the worker answers through `keep` as the pages up to it are laid out). */
+function goToReading(place: ReadingPlace): void {
+  readingHold = { y: null };
+  if (!loaded) hidePagesForPlace(true);
+  worker.goTo(place.place);
+  // In case the place is never laid out (another edition of the book): reading carries on from wherever the view is.
+  const hold = readingHold;
+  const letGo = (): void => {
+    if (readingHold !== hold) return;
+    if (loaded) {
+      readingHold = null;
+      hidePagesForPlace(false);
+    }
+    else window.setTimeout(letGo, 1000); // a long book still being laid out: the place may yet come
+  };
+  window.setTimeout(letGo, 5000);
+}
+
+/** The worker says where the text being brought into view is: a page, and a point on it. */
+function showReadingPlace(page: GpuPage, y: number): void {
+  const hold = readingHold;
+  if (!hold) return;
+  // Moved since the view was last put there: the person is reading somewhere else now.
+  if (hold.y !== null && Math.abs(camera.y - hold.y) > 1) {
+    readingHold = null;
+    return;
+  }
+  if (wordView()) goToPage(pages.indexOf(page));
+  else camera.y = page.y + y - READING_TOP_PX / (camera.zoom * CSS_PX_PER_POINT);
+  hold.y = camera.y;
+  readingLanded = `${camera.x}/${camera.y}/${camera.zoom}`;
+  hidePagesForPlace(false);
+  // Laid out: it stays where it is now.
+  if (loaded) readingHold = null;
+  requestRender();
+}
+
+/** Keeps the place being read: the text at the top of the view, once the view has moved and settled. */
+function trackReading(): void {
+  const book = reading;
+  if (!book || !loaded || readingHold || !readingAsked || document.hidden || !pages.length || grid) return;
+  const view = `${camera.x}/${camera.y}/${camera.zoom}/${pages.length}/${reflowing()}`;
+  if (view === readingView) return;
+  const top = pageAt(canvas.clientWidth / 2, READING_TOP_PX);
+  if (!top) return;
+  readingView = view;
+  const landed = readingLanded === `${camera.x}/${camera.y}/${camera.zoom}`;
+  readingLanded = '';
+  const page = pages.indexOf(top.page) + 1;
+  const count = pages.length;
+  void worker.textAt(top.page.id, top.x, top.y).then((place) => {
+    if (place && reading === book && !readingHold) book.read({ place, page, pages: count }, Date.now(), landed);
+  });
+}
+
+/** How much of the book has been read: down to the bottom of the view, as a share of all of it. */
+function bookProgress(): number {
+  if (!bounds.height) return 0;
+  const bottom = camera.y + canvas.clientHeight / (camera.zoom * CSS_PX_PER_POINT);
+  return Math.round(Math.min(Math.max((bottom - bounds.y) / bounds.height, 0), 1) * 100);
+}
+
+/** Turning a page of a book: the next or previous page in Print layout, a screen less a line in Flow. */
+function turnPage(by: 1 | -1): void {
+  if (wordView() && pages.length) {
+    const center = camera.toDocument(canvas.clientWidth / 2, READING_TOP_PX);
+    const here = nearestPage(pages, center.x, center.y);
+    const index = here ? pages.indexOf(here) : 0;
+    goToPage(Math.min(Math.max(index + by, 0), pages.length - 1));
+    return;
+  }
+  const viewHeight = canvas.clientHeight / (camera.zoom * CSS_PX_PER_POINT);
+  camera.y += by * (viewHeight - 2 * READING_TOP_PX / (camera.zoom * CSS_PX_PER_POINT));
+  userMoved = true;
+  requestRender();
+}
+
+/** Back to a book after a while away (another window, another device): it moves to where it was read since, if that was elsewhere. */
+let lastReadingLook = 0;
+function lookForLaterReading(): void {
+  const book = reading;
+  if (!book || Date.now() - lastReadingLook < 10_000) return;
+  lastReadingLook = Date.now();
+  void book.fromAccount().then((theirs) => {
+    if (!theirs || reading !== book) return;
+    goToReading(theirs);
+    showToast(t('app.readingElsewhere', { percent: readingPercent(theirs) }));
+  });
+}
+window.addEventListener('focus', lookForLaterReading);
+
 /**
  * The format a source is opened as (everything but PDF, Markdown and text is a Word document).
  * A .wdoc says for itself once the worker has read it; until then, its name's extension.
@@ -439,6 +620,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   const name = 'name' in source ? source.name : source.kind === 'welcome' ? t('app.welcomeName') : source.kind === 'legal' ? t(source.page === 'privacy' ? 'app.privacyName' : 'app.termsName') : source.kind === 'changelog' ? t('app.changelogName') : t('app.fontsName');
   saveIfEdited(); // the worker is asked for the bytes now, before it switches documents
   rememberView();
+  closeBook();
   viewDocKey = wantedDocKey;
   wantedDocKey = null;
   const key = viewMemoryKey(options.localId, viewDocKey);
@@ -593,12 +775,21 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       if (!firstPage && update.pages.length) firstPage = performance.now() - start;
       applyLayout(update);
       // The first pages are the document: the rest is laid out behind them while they are looked at (the status bar counts them).
-      if (loadingScreen.visible && update.pages.length && pages.length) loadingScreen.hide();
+      // A book reopened at its place stays behind the loading screen until that place is laid out, rather than showing its first page and then jumping.
+      if (loadingScreen.visible && update.pages.length && pages.length && !restoringBook()) loadingScreen.hide();
       if (update.selection) applySelection(update.selection);
       if (!loaded && !opening.none) setStatus(t('app.layingOutPages', { name, count: pages.length, pages: pages.length.toLocaleString(getLocale()) }));
     },
     done(count, times) {
       loaded = true;
+      // A book's place should have come with the last pages (or just after, when it was asked for late): if it hasn't, there is none to show.
+      const hold = readingHold;
+      if (hold?.y === null)
+        window.setTimeout(() => {
+          if (readingHold !== hold || hold.y !== null) return;
+          readingHold = null;
+          hidePagesForPlace(false);
+        }, 500);
       if (isDrawing()) void showDrawing();
       documentReady();
       loadingScreen.hide();
@@ -642,6 +833,9 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     },
     selection(update) {
       applySelection(update);
+    },
+    book(key) {
+      if (opening === current) startBook(key);
     },
     selectionHtml(text, html) {
       selectionHtml = { text, html };
@@ -1056,6 +1250,7 @@ const sharedLive = (): boolean => current.room?.mode === 'shared';
 
 window.addEventListener('pagehide', () => {
   rememberView();
+  void reading?.send(true);
   saveIfEdited();
   worker.leave();
   letPageGo();
@@ -1089,9 +1284,10 @@ function applyLayout(update: LayoutUpdate): void {
   }
   pagesPanel.setPages(pages);
   arrange();
-  // The file changed outside the app: the text that was at the top of the view stays there.
+  // The file changed outside the app: the text that was at the top of the view stays there. In a book, the place being read is brought there.
   const kept = update.keep && pagesById.get(update.keep.page);
-  if (kept) camera.y = kept.y + update.keep!.y;
+  if (kept && isBook() && readingHold) showReadingPlace(kept, update.keep!.y);
+  else if (kept) camera.y = kept.y + update.keep!.y;
   if (newDrawingSince) {
     for (const page of pages) {
       const added = page.images.find((i) => i.svg && !newDrawingSince!.has(i.svg));
@@ -1398,7 +1594,8 @@ async function uploadShared(): Promise<void> {
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'hidden') return;
+  if (document.visibilityState !== 'hidden') return lookForLaterReading();
+  void reading?.send(true);
   rememberView();
   saveIfEdited();
   void saving.then(() => flushUploads()); // the page may be closing: don't wait for the pause
@@ -1427,6 +1624,11 @@ function bringBackEdits(info: SavedInfo, source: DocumentSource, plan: RecoveryP
   for (const session of plan.discard) removeJournal(localStorage, info.id, session);
   // A kept journal is of a document, and those open in the worker: not one that has since become something else (a workbook, a big text file).
   const inWorker = !textView.active && !sheetView.active && source.kind !== 'xlsx' && source.kind !== 'csv' && source.kind !== 'tsv' && source.kind !== 'txt' && !/\.(csv|tsv|tab)$/i.test(info.name);
+  // A book takes no edits (one may have been kept from before books were read-only): they are let go.
+  if (source.kind === 'epub') {
+    for (const session of [...plan.absorb, ...plan.conflicted]) removeJournal(localStorage, info.id, session);
+    return;
+  }
   if (plan.replay.length && inWorker) {
     worker.replayJournal(plan.replay);
     doc.absorbing = plan.absorb;
@@ -2824,6 +3026,13 @@ async function convertTo(to: DocumentKind): Promise<void> {
   }
   setStatus(t('app.switching', { label: FORMATS[to].label }));
   const latest = openTicket();
+  // A book is kept as it is: what is made from it to edit is a new document, next to it in its folder. One just added is kept first.
+  const keepBook = from === 'epub';
+  if (keepBook && (!current.localId || current.unsavedSince)) {
+    await saveNow();
+    // Another document opened while the book was saved: it is not the one to convert.
+    if (!latest()) return;
+  }
   // Saved now, as the format to edit it as, in place of the document's last save.
   clearTimeout(autosaveTimer);
   const doc = current;
@@ -2833,16 +3042,20 @@ async function convertTo(to: DocumentKind): Promise<void> {
   const toWorkbook = !inGrid && to === 'xlsx';
   const bytes = inGrid ?? (toWorkbook ? worker.convert('xlsx') : worker.save(to));
   bytes.catch(() => {});
-  const done = saving.then(async () => saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner: account?.id }));
+  const done = saving.then(async () => {
+    const kept = keepBook && doc.localId ? ((await getSavedManifest(doc.localId).catch(() => null)) ?? (await getSaved(doc.localId).catch(() => null))) : null;
+    const folderId = kept?.info.folderId;
+    return saveSaved({ id: keepBook ? undefined : (doc.localId ?? undefined), name, bytes: await bytes, owner: account?.id, folderId });
+  });
   saving = done.catch(() => null);
   let info: SavedInfo;
   try {
     info = await done;
   } catch (e) {
-    doc.unsavedSince = performance.now();
+    if (!keepBook) doc.unsavedSince = performance.now();
     throw e;
   }
-  doc.localId = info.id;
+  if (!keepBook) doc.localId = info.id;
   void refreshLibrary();
   if (account) scheduleUpload(info.id, 0);
   // Another document opened meanwhile: the converted one is saved, in the library, but not opened over it.
@@ -2853,7 +3066,7 @@ async function convertTo(to: DocumentKind): Promise<void> {
   open(source, { grid, localId: info.id });
   rememberInUrl(`local:${info.id}`);
   chrome.update({ documentName: current.name, kind: current.kind });
-  pendingNotice = toWorkbook ? t('app.switchedXlsx') : switchedNotice(to);
+  pendingNotice = keepBook ? t('app.bookCopied', { name }) : toWorkbook ? t('app.switchedXlsx') : switchedNotice(to);
 }
 
 /**
@@ -4344,6 +4557,24 @@ function pinchState(): { distance: number; x: number; y: number } {
   return { distance: Math.hypot(a.x - b.x, a.y - b.y) || 1, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
+/**
+ * In a book, a finger that sets off sideways is turning a page, not panning (while the page fits the window's width, so
+ * there is nothing to pan to sideways): where it started, and whether it went sideways (null until it has moved).
+ */
+let bookSwipe: { x: number; y: number; sideways: boolean | null } | null = null;
+/** How far a finger goes sideways to turn a page (CSS px). */
+const SWIPE_PX = 40;
+
+/** The page fits across the window: a sideways swipe can only mean turning it. */
+const pageFitsWidth = (): boolean => !!pages.length && pages[0].width * camera.zoom * CSS_PX_PER_POINT <= canvas.clientWidth + 1;
+
+/** A tap at the left or right third of a book turns its page back or forward (the middle is an ordinary tap: a link, a selection). */
+function bookTapTurn(x: number): 1 | -1 | null {
+  if (!isBook()) return null;
+  const width = canvas.clientWidth;
+  return x > width * (2 / 3) ? 1 : x < width / 3 ? -1 : null;
+}
+
 // A one-finger drag keeps gliding after release, slowing exponentially (velocity in CSS px per ms).
 const FLING_MIN_SPEED = 0.05;
 const FLING_DECAY_PER_MS = 0.004;
@@ -4382,6 +4613,7 @@ function touchDown(e: PointerEvent): void {
   if (touches.size > 1) touchMulti = true;
   clearTimeout(longPressTimer);
   if (touchSelecting) return;
+  bookSwipe = touches.size === 1 && !touchMulti && isBook() && pageFitsWidth() ? { x: e.clientX, y: e.clientY, sideways: null } : null;
   if (touches.size === 1 && !touchMulti) {
     const tap: Press = { offsetX: e.offsetX, offsetY: e.offsetY, clientX: e.clientX, clientY: e.clientY, timeStamp: e.timeStamp, shiftKey: false, metaKey: false, ctrlKey: false, touch: true };
     const handle = selectionHandles.hit(e.offsetX, e.offsetY);
@@ -4467,6 +4699,17 @@ function touchMove(e: PointerEvent): void {
     }
     return;
   }
+  if (bookSwipe && touches.size === 1) {
+    const sx = e.clientX - bookSwipe.x;
+    const sy = e.clientY - bookSwipe.y;
+    if (bookSwipe.sideways === null && Math.hypot(sx, sy) > TOUCH_SLOP_PX) bookSwipe.sideways = Math.abs(sx) > Math.abs(sy) * 1.2;
+    // Turning a page: the view stays until the finger lifts.
+    if (bookSwipe.sideways) {
+      touchTap = null;
+      clearTimeout(longPressTimer);
+      return;
+    }
+  } else bookSwipe = null;
   if (touchTap) return;
   userMoved = true;
   const rect = canvas.getBoundingClientRect();
@@ -4514,6 +4757,24 @@ function touchUp(e: PointerEvent): void {
     return;
   }
   pinch = touches.size === 2 ? pinchState() : null;
+  const swipe = bookSwipe;
+  if (touches.size === 0) bookSwipe = null;
+  if (swipe?.sideways && touches.size === 0) {
+    const sx = e.clientX - swipe.x;
+    // Right to left goes on, as a page is turned.
+    if (e.type === 'pointerup' && Math.abs(sx) >= SWIPE_PX) turnPage(sx < 0 ? 1 : -1);
+    touchTap = null;
+    touchMulti = false;
+    return;
+  }
+  const turn = touchTap && !touchMulti && touches.size === 0 && e.type === 'pointerup' ? bookTapTurn(touchTap.offsetX) : null;
+  if (turn) {
+    touchTap = null;
+    touchMulti = false;
+    tappedAt = performance.now();
+    turnPage(turn);
+    return;
+  }
   if (touches.size === 0 && !touchTap && e.type === 'pointerup' && e.timeStamp - lastMoveAt < 80 && Math.hypot(flingVelocity.x, flingVelocity.y) > FLING_MIN_SPEED) startFling();
   if (touchTap && !touchMulti && touches.size === 0 && e.type === 'pointerup') {
     tappedAt = performance.now();
@@ -4915,6 +5176,19 @@ function viewKey(e: KeyboardEvent): boolean {
   const cx = canvas.clientWidth / 2;
   const cy = canvas.clientHeight / 2;
   const viewHeight = canvas.clientHeight / (camera.zoom * CSS_PX_PER_POINT);
+  // A book's pages are turned: Page Down, Space, the right and down arrows go on; Page Up, Shift+Space, left and up go back.
+  // Only with the keyboard on the document itself: a focused button, menu or list keeps its keys.
+  const onDocument = e.target === input || e.target === canvas || e.target === document.body;
+  if (isBook() && onDocument && !mod && !e.altKey && !modalOpen()) {
+    // Shift with an arrow selects text (to copy from the book), as anywhere.
+    const arrow = !e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0);
+    const forward = e.key === 'PageDown' || arrow === 1 || (e.key === ' ' && !e.shiftKey);
+    const back = e.key === 'PageUp' || arrow === -1 || (e.key === ' ' && e.shiftKey);
+    if (forward || back) {
+      turnPage(forward ? 1 : -1);
+      return true;
+    }
+  }
   if (mod && (e.key === '=' || e.key === '+')) camera.zoomAt(cx, cy, 1.25);
   else if (mod && e.key === '-') camera.zoomAt(cx, cy, 0.8);
   else if (mod && e.key === '0') camera.zoomAt(cx, cy, 1 / camera.zoom);
@@ -6353,7 +6627,9 @@ function updateFooter(): void {
     kind: current.kind,
     page: here ? { current: pages.indexOf(here) + 1, count: pages.length } : null,
     zoom: camera.zoom,
-    words: footerWords,
+    // A book says how far through it the reader is, not how many words it has.
+    words: isBook() ? null : footerWords,
+    ...(isBook() && loaded && { progress: bookProgress() }),
     selection: selection.text.length > 0 ? footerSelection : null,
     picture,
     view: grid ? 'grid' : reflowing() ? 'flow' : 'print',

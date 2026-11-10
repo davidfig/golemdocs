@@ -14,6 +14,7 @@ export const panels: Partial<Messages> = {
 
   // Status bar (View > Status Bar)
   'panels.footer.page': 'Página {current} de {count}',
+  'panels.footer.progress': '{percent} % leído',
   'panels.footer.words.one': '{n} palabra',
   'panels.footer.words': '{n} palabras',
   'panels.footer.selection.one': '{selected} de {n} palabra',

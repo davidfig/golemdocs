@@ -282,6 +282,10 @@ export type ToWorker =
   | { type: 'media'; doc: number; request: number; part: string }
   /** The address of the link under a page point (for the hover tip). */
   | { type: 'linkAt'; doc: number; request: number; page: number; x: number; y: number }
+  /** The text at a page point (the top of the view, where a book is being read): answered with `textAt`. */
+  | { type: 'textAt'; doc: number; request: number; page: number; x: number; y: number }
+  /** Brings a place in the text (paragraph index, offset) to the top of the view, through the layout updates' `keep`, while the pages up to it are laid out. */
+  | { type: 'goTo'; doc: number; place: [number, number] }
   | { type: 'command'; doc: number; command: WireCommand }
   /** Puts a picture in the document at the caret (its bytes go into the document; its size is in EMUs). */
   | { type: 'replacePicture'; doc: number; bytes: ArrayBuffer; ext: string; aspect: number }
@@ -424,6 +428,8 @@ export type FromWorker =
    * pages are the original's, and the text has been edited since (as Word, Markdown...).
    */
   | { type: 'opened'; doc: number; name: string; format: Format; annotating: boolean; outdated: boolean }
+  /** The open document is a book (an EPUB): `key` is what its reading place is kept under (see src/reading.ts). */
+  | { type: 'book'; doc: number; key: string }
   | ({ type: 'layout'; doc: number } & LayoutUpdate)
   /** The first full layout finished. */
   | { type: 'done'; doc: number; pages: number; timings: LayoutTimings }
@@ -456,6 +462,8 @@ export type FromWorker =
   /** A Markdown document being opened embeds a picture or note (`![[title]]`): the stored document of that title, as `embedFile`. */
   | { type: 'embed'; request: number; title: string }
   | { type: 'linkAt'; request: number; url: string | null; text: string; checkbox: boolean }
+  /** The text at the point a `textAt` asked about: paragraph index and offset, or null (no text there, or no document). */
+  | { type: 'textAt'; request: number; place: [number, number] | null }
   /** `seq`: the last edit (see `journal`) the bytes hold. */
   | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string; seq?: number }
   /** An edit made here, in order, for the page to keep until a save holds it; `ops` null when what was done can't be replayed (see storage/editJournal.ts). */

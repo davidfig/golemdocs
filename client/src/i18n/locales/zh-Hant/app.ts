@@ -88,6 +88,8 @@ export const app: Partial<Messages> = {
   'app.opening': '正在開啟「{name}」…',
   'app.openingProgress': '正在開啟「{name}」… {percent}%',
   'app.openFailed': '無法開啟文件：{message}',
+  'app.readingElsewhere': '已從你在另一部裝置上讀到的位置繼續（{percent}%）。',
+  'app.bookCopied': '已建立「{name}」供編輯。書本身未變更。',
   'app.outOfDate': '此版本的 Golem Docs 已過時，無法開啟文件。請重新載入或更新應用程式，然後再試一次。',
   'app.openingShared': '正在開啟共用文件…',
   'app.openSharedFailed': '無法開啟共用文件：{message}',

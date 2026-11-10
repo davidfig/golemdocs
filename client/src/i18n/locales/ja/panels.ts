@@ -14,6 +14,7 @@ export const panels: Partial<Messages> = {
 
   // Status bar (View > Status Bar)
   'panels.footer.page': '{current} / {count} ページ',
+  'panels.footer.progress': '{percent}% 読了',
   'panels.footer.words.one': '{n} 語',
   'panels.footer.words': '{n} 語',
   'panels.footer.selection.one': '{selected} / {n} 語',

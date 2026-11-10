@@ -13,6 +13,8 @@ export interface DocumentListener {
   /** `format`: what the document is edited as; `annotating`: a PDF's own pages, which take markup annotations. */
   opened(name: string, format: Format, annotating: boolean, outdated: boolean): void;
   layout(update: LayoutUpdate): void;
+  /** The document is a book: `key` is what its reading place is kept under. */
+  book?(key: string): void;
   /** The first full layout finished. */
   done(pages: number, timings: LayoutTimings): void;
   /** An edit made, for the page to keep until a save holds it (see storage/editJournal.ts). */
@@ -53,6 +55,7 @@ export class LayoutClient {
   private readonly savedSeqs = new Map<number, number>();
   private readonly thesaurusRequests = new Map<number, (answer: { result: LookUp | null; failed?: boolean }) => void>();
   private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
+  private readonly textRequests = new Map<number, (place: [number, number] | null) => void>();
   private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
   private readonly refreshRequests = new Map<number, (done: boolean | 'typed') => void>();
 
@@ -207,6 +210,20 @@ export class LayoutClient {
     });
   }
 
+  /** The text at a point on a page (the top of the view, where a book is being read): its paragraph's index among the document's, and the offset in it. */
+  textAt(page: number, x: number, y: number): Promise<[number, number] | null> {
+    const request = this.nextRequest++;
+    return new Promise((resolve) => {
+      this.textRequests.set(request, resolve);
+      this.send({ type: 'textAt', doc: this.doc, request, page, x, y });
+    });
+  }
+
+  /** Brings a place in the text (`textAt`'s) to the top of the view, through the layout updates' `keep`, as the pages up to it are laid out. */
+  goTo(place: [number, number]): void {
+    this.send({ type: 'goTo', doc: this.doc, place });
+  }
+
   /** The meanings of a word in the thesaurus, or null when it doesn't have the word. Rejects when the thesaurus could not be loaded (it is tried again next time). */
   thesaurus(word: string): Promise<LookUp | null> {
     const request = this.nextRequest++;
@@ -294,6 +311,11 @@ export class LayoutClient {
       (this.embeds?.(message.title) ?? Promise.resolve(null)).then(reply, () => reply(null));
       return;
     }
+    if (message.type === 'textAt') {
+      this.textRequests.get(message.request)?.(message.place);
+      this.textRequests.delete(message.request);
+      return;
+    }
     if (message.type === 'linkAt') {
       this.linkRequests.get(message.request)?.({ url: message.url, text: message.text, checkbox: message.checkbox });
       this.linkRequests.delete(message.request);
@@ -326,6 +348,9 @@ export class LayoutClient {
     switch (message.type) {
       case 'opened':
         this.listener.opened(message.name, message.format, message.annotating, message.outdated);
+        break;
+      case 'book':
+        this.listener.book?.(message.key);
         break;
       case 'layout':
         this.listener.layout(message);

@@ -29,7 +29,7 @@ test.describe('comments persist', () => {
     await person.context.close();
   });
 
-  test('a reply and a resolved state survive a reload', async ({ browser }) => {
+  test('a reply and a resolved state survive a reload', { tag: '@heavy' }, async ({ browser }) => {
     const person = await newPerson(browser, 'persist');
     await richDocument(person.app);
     await waitForCloudComments(person.page, (await waitForCloudDoc(person.page)).id, ['note on alpha', 'note on gamma', 'a reply'], { resolved: true });

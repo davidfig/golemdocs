@@ -45,6 +45,7 @@ The editor itself is a WebGL canvas; everything around it (menus, toolbars, dial
 | `client/src/ui/scrollOptions.ts` | Tools › Options: scroll half a screen past the end (`Camera.scrollPastEnd`; synced, on by default) |
 | `client/src/viewMemory.ts` | Per-document scroll, zoom, caret and selection (device-local) |
 | `client/src/settingsSync.ts` | Account-synced preferences |
+| `client/src/reading.ts` | Where each book (EPUB) is being read: kept here and in the account, so it opens there on every device (`BookReading`) |
 | `client/src/spelling/` | `dictionary.ts` (Hunspell reader), `check.ts`, `grammar.ts`, `languages.ts`, `appWords.ts` |
 | `client/src/i18n/` | `t()`, `en/` catalog, `locales.ts`, `locales/` translations |
 | `client/home/`, `client/public/home/`, `client/site/`, `client/seo.ts` | Marketing site generation |

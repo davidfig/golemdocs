@@ -28,6 +28,7 @@ export const panels = {
 
   // Status bar (View > Status Bar)
   'panels.footer.page': 'Page {current} of {count}',
+  'panels.footer.progress': '{percent}% read',
   'panels.footer.words.one': '{n} word',
   'panels.footer.words': '{n} words',
   'panels.footer.selection.one': '{selected} of {n} word',

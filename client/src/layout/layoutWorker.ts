@@ -336,6 +336,9 @@ function applySettings(wire: WireCommand): void {
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
 const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'select', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'spellAt', 'countWords', 'getProperties', 'selectWord']);
 
+/** A book's key: the hash of its paragraphs' text, so the same book finds its reading place on every device, and its places are the same paragraphs. */
+const bookKey = (paragraphs: string[]): Promise<string> => sha256Hex(new TextEncoder().encode(paragraphs.join('\n')));
+
 /** Faces the page already has (it keeps them across documents). */
 const sentFaces = new Set<string>();
 
@@ -1250,9 +1253,38 @@ class OpenDocument {
   /** Opened read-only (the embeddable viewer): it can be looked at, selected, searched and copied, never changed. */
   viewOnly = false;
 
-  /** Viewers, anyone whose connection to the room is gone, and anyone watching while someone else holds the document can look but not edit. */
+  /** Viewers, anyone whose connection to the room is gone, and anyone watching while someone else holds the document can look but not edit; a book is read, never edited. */
   get readOnly(): boolean {
-    return this.viewOnly || (this.net !== null && (!this.net.canEdit || this.net.watching || this.net.catchingUp));
+    return this.viewOnly || this.book || (this.net !== null && (!this.net.canEdit || this.net.watching || this.net.catchingUp));
+  }
+
+  /** A book (an EPUB): read as it is, never edited or written back (Convert To makes something to edit). */
+  get book(): boolean {
+    return this.format === 'epub';
+  }
+
+  /** The text at a point of a page (the top of the view: where a book is being read), as its paragraph's index among the document's and an offset in it. */
+  textAt(pageId: number, x: number, y: number): [number, number] | null {
+    const { editor, session } = this;
+    if (!editor || !session || this.closed) return null;
+    const page = session.displayPages.find((p) => p.id === pageId);
+    const at = page && editor.hitTest(page, x, y);
+    if (!at) return null;
+    const index = editor.paragraphs().indexOf(at.paragraph);
+    return index < 0 ? null : [index, at.offset];
+  }
+
+  /** Brings a place in the text (`textAt`'s) to the top of the view, and keeps it there while the pages before it are laid out (a book opened where it was left). */
+  goTo(place: [number, number]): void {
+    if (!this.isSetUp) return this.later(() => this.setUp.then(() => this.goTo(place)));
+    const { editor, session, replica } = this;
+    if (!editor || !session || !replica || this.closed) return;
+    const paragraphs = editor.paragraphs();
+    const paragraph = paragraphs[Math.min(place[0], paragraphs.length - 1)];
+    if (!paragraph) return;
+    // An offset past the paragraph's end (a different edition of the book) is its end: see the editor's `position`.
+    this.keepView = { pos: { paragraph: replica.id(paragraph), offset: place[1] }, dy: 0 };
+    this.flush();
   }
 
   private postPointers(): void {
@@ -1921,7 +1953,7 @@ class OpenDocument {
   /** The squiggles for the pages shown: red under misspelled words, green under grammar mistakes. */
   private spellMarks(editor: Editor): Float64Array {
     // Nothing can be corrected in a document opened read-only, so nothing is underlined (and no dictionary is fetched).
-    if ((!live.spelling && !live.grammar) || !this.firstLayoutDone || this.viewOnly) return new Float64Array(0);
+    if ((!live.spelling && !live.grammar) || !this.firstLayoutDone || this.viewOnly || this.book) return new Float64Array(0);
     const [start, end] = editor.ordered();
     const typing = start.paragraph === end.paragraph && start.offset === end.offset ? start : null;
     // Typing along: the word just finished (and the space or mark after it) is not underlined until a pause, so a squiggle doesn't flash under every word as it is typed.
@@ -2672,6 +2704,13 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     if (start) entry.net!.ready(start);
     // Opened again in place of itself (watching, it was saved): the room may let it be changed now.
     if (carried) entry.net?.refreshed(version);
+    // A book: what its reading place is kept under (the same text on every device, whatever file it came in). Told before
+    // any page is sent, so the page can open the book at its place rather than at its first page.
+    if (entry.book) {
+      const key = await bookKey(entry.editor.paragraphs().map(paragraphText));
+      if (entry.closed) return;
+      post({ type: 'book', doc, key });
+    }
     post({ type: 'opened', doc, name, format: entry.format, annotating: false, outdated: false });
     if (entry.layers) entry.postShapes();
     // The drawing's nodes have ids of their own now: the editor is given them, so that what it changes is named as the room names it.
@@ -2989,6 +3028,12 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
           post({ type: 'thesaurus', request: message.request, result: null, failed: true });
         },
       );
+      break;
+    case 'textAt':
+      post({ type: 'textAt', request: message.request, place: current?.doc === message.doc ? current.textAt(message.page, message.x, message.y) : null });
+      break;
+    case 'goTo':
+      if (current?.doc === message.doc) current.goTo(message.place);
       break;
     case 'linkAt':
       post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, text: '', checkbox: false }) });

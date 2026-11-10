@@ -159,6 +159,30 @@ export interface Upload {
   mimeType?: string;
 }
 
+const EPUB_SENTENCE = 'The river ran on past the mill and the old stone bridge, and nobody in the village could say where it went. ';
+
+/** A three-chapter EPUB, long enough for a good many pages. */
+export function buildEpub(): Upload {
+  const chapter = (n: number) =>
+    `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Chapter ${n}</title></head><body>` +
+    `<h1>Chapter ${n}</h1>${Array.from({ length: 40 }, (_, i) => `<p>Chapter ${n}, paragraph ${i + 1}. ${EPUB_SENTENCE.repeat(3)}</p>`).join('')}</body></html>`;
+  const buffer = buildZip([
+    { name: 'mimetype', data: 'application/epub+zip', store: true },
+    { name: 'META-INF/container.xml', data: '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>' },
+    {
+      name: 'OEBPS/content.opf',
+      data:
+        '<?xml version="1.0" encoding="utf-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">urn:uuid:river</dc:identifier><dc:title>The River</dc:title></metadata>' +
+        '<manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/><item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/><item id="c3" href="c3.xhtml" media-type="application/xhtml+xml"/></manifest>' +
+        '<spine><itemref idref="c1"/><itemref idref="c2"/><itemref idref="c3"/></spine></package>',
+    },
+    { name: 'OEBPS/c1.xhtml', data: chapter(1) },
+    { name: 'OEBPS/c2.xhtml', data: chapter(2) },
+    { name: 'OEBPS/c3.xhtml', data: chapter(3) },
+  ]);
+  return { name: 'The River.epub', buffer };
+}
+
 export const text = (name: string, content: string): Upload => ({ name, buffer: Buffer.from(content, 'utf8'), mimeType: 'application/octet-stream' });
 
 /** A fixture from client/test/fixtures. */

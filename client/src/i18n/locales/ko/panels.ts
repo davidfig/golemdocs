@@ -14,6 +14,7 @@ export const panels: Partial<Messages> = {
 
   // Status bar (View > Status Bar)
   'panels.footer.page': '{current} / {count} 페이지',
+  'panels.footer.progress': '{percent}% 읽음',
   'panels.footer.words.one': '{n}단어',
   'panels.footer.words': '{n}단어',
   'panels.footer.selection.one': '{selected} / {n}단어',

@@ -11,14 +11,14 @@
       /api/rooms/:id[/document|/media/:hash] -> sharing.resolveAccess -> roomGate -> Durable Object `Room`
       /api/subscription|checkout|portal      -> subscriptions.ts
       /api/admin/*  (isAdmin, checked once for the prefix) -> billing, analytics, feedback
-      /api/feedback, /api/preferences
+      /api/feedback, /api/preferences, /api/reading
       /api/folders, /api/documents, /api/shared -> folders.ts, documents.ts
 
  Storage
    D1  DIRECTORY (migrations/directory)  users->database_id, identities, sessions, document_owners, shares,
                                           subscriptions, feedback, catalogue_cache
                                           (assistant_usage, doc_index: left from the removed assistant, unused)
-   D1  one database per user (schema.ts)  documents, folders, preferences, versions, trash   (created via Cloudflare REST API)
+   D1  one database per user (schema.ts)  documents, folders, preferences, reading_places, versions, trash   (created via Cloudflare REST API)
    R2  FILES   <owner>/<doc>.docx | .thumb | .idx | .chunks/<sha256> | .media/<hash> | .history/<version>
    DO  ROOMS   one per document: transaction log in its own SQLite
 ```
@@ -53,6 +53,7 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 - **Chunked files** (`fileStore.ts`): documents of 2 MiB or more are stored as a JSON manifest at the usual key (R2 custom metadata `chunked=1`) plus chunks under `<owner>/<doc>.chunks/`. `Content-Type: application/vnd.golemdocs.delta` uploads send only changed chunks; reads reassemble through `documentResponse`. Chunks are per document, never shared, so no refcounting; deleting removes by prefix. See [Chunked storage](../chunked-storage.md).
 - `folders.ts`: `/api/folders[/:id]`; PUT is create-or-update because clients make the ids (offline-made folders upload as they are); it writes only the fields a request sends, so a rename and a move in flight together both stay; depth limited and moving a folder inside itself refused (`MAX_FOLDER_DEPTH`); `checkFolder` validates that a document's target folder exists.
 - `preferences.ts`: `/api/preferences`, rows per (profile, key) with limits; the client decides what the keys mean.
+- `reading.ts`: `/api/reading`, where the person is in each book (`reading_places`, one row per book, keyed by the hash of its text, at most 2,000). The latest reading wins on the server's clock: a `PUT` says how long ago it was read (`age`), never when, and every answer carries the server's `now`, so a device whose clock is off still compares readings rightly. Writes need sync, like preferences.
 - Deletes move the document to the trash; in the background (`ctx.waitUntil`, `defer`) its search entries and rooms go (`endRooms`) and expired trash is purged. Files, chunks, pictures and history are removed only when the trash is purged (`trash.ts: purge`).
 
 ## Sharing
@@ -92,7 +93,7 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 | `server/src/worker.ts` | router, auth gate, origin check, error mapping, exports `Room` |
 | `server/src/documents.ts`, `fileStore.ts`, `keys.ts`, `stored.ts` | document API, R2 file/chunk store, key names, `.wdoc` inner-docx access |
 | `server/src/versions.ts`, `trash.ts` | checkpoints and their pruning, the 30-day trash |
-| `server/src/userDb.ts`, `schema.ts`, `folders.ts`, `preferences.ts` | per-user D1, migrations, folders, settings |
+| `server/src/userDb.ts`, `schema.ts`, `folders.ts`, `preferences.ts`, `reading.ts` | per-user D1, migrations, folders, settings, reading places |
 | `server/src/authRoutes.ts`, `providers.ts`, `accounts.ts`, `session.ts`, `auth.ts`, `crypto.ts` | sign-in |
 | `server/src/sharing.ts`, `roomGate.ts`, `room.ts`, `roomCore.ts`, `roomMedia.ts`, `snapshot.ts` | access rules and rooms |
 | `server/src/subscriptions.ts`, `billing.ts`, `analytics.ts`, `feedback.ts` | payments and admin |

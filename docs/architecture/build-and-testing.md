@@ -115,6 +115,8 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-06 | `e2e/files/large-text-edit.spec.ts` › dragging selects text, and typing replaces it; undo and redo walk back and forth | The redo had not taken effect after 10 s (13 s in all) in pass one, passed on retry in 3.1 s; alone, passed three times in about 4 s. Why the redo was missed was not looked into |
 | 2026-11-08 | `e2e/files/folders.spec.ts` › a file dropped elsewhere on the dashboard goes in the folder being looked at | Hung for 15.3 min in the 0.36.0 release run, then failed its retry at 57 s; alone, passed four times in about 10 s |
 | 2026-11-08 | `e2e/files/folders.spec.ts` › deleting a folder deletes the folders inside it too | Failed at 15.5 s in the 0.36.0 release run, right after the test above; alone, passed four times |
+| 2026-11-09 | `e2e/collab/comments-files.spec.ts` › comments persist › a reply and a resolved state survive a reload | Timed out at 1 min in pass one of the 0.37.0 release run, passed its retry; alone, passed three times |
+| 2026-11-09 | `e2e/collab/folders.spec.ts` › documents made in the app (with a copy in this browser) stay in their folder as the dashboard refreshes | Already `@heavy`: the folder still did not show "2 items" at 23 s in the heavy pass of the 0.37.0 release run, passed its retry; alone, passed three times |
 
 ## Performance traces (`golem:*`)
 

@@ -215,8 +215,11 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
     trackChanges: false,
     codeBlocks: true,
   },
+  // A book is read, not edited (its pages turn, and where it is being read follows the person: see reading.ts).
+  // Convert To makes a document to edit from it.
   epub: {
     ...WEB,
+    editable: false,
     kind: 'epub',
     get label() {
       return t('menus.format.epub');

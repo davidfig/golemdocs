@@ -11,6 +11,7 @@ import { HttpError, ID, json } from './http.ts';
 import { handleFolders } from './folders.ts';
 import { handleRoomMedia } from './roomMedia.ts';
 import { handlePreferences } from './preferences.ts';
+import { handleReading } from './reading.ts';
 import { Room } from './room.ts';
 import { handleSite } from './site.ts';
 import { joinRoom, roomHeaders } from './roomGate.ts';
@@ -172,6 +173,15 @@ const routes: ExportedHandler = {
         }
         const { syncing, ownDb } = await ownStorage(env, userId, request.method);
         return await handlePreferences(request, url, ownDb, syncing);
+      }
+
+      // GET/PUT /api/reading: where the user is in each book they read, kept in their account (reading.ts).
+      if (path === '/api/reading') {
+        if (!cloudStorageConfigured(env)) {
+          throw new HttpError(503, 'cloud storage is not configured');
+        }
+        const { syncing, ownDb } = await ownStorage(env, userId, request.method);
+        return await handleReading(request, url, ownDb, syncing);
       }
 
       // The rest are the user's folders (folders.ts) and documents (documents.ts).

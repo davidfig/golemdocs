@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { DesktopBridge } from '../src/desktop/bridge.ts';
-import { ICLOUD_DOWNLOADING, VaultService } from '../src/desktop/vaultService.ts';
+import { ICLOUD_DOWNLOADING, lookDue, VaultService } from '../src/desktop/vaultService.ts';
 import type { VaultCodec } from '../src/desktop/vaultSync.ts';
 
 function bridge(scan: () => Promise<{ path: string; size: number; mtimeMs: number }[]>): DesktopBridge & { reads: number } {
@@ -28,6 +28,13 @@ function bridge(scan: () => Promise<{ path: string; size: number; mtimeMs: numbe
 }
 
 const codec = {} as VaultCodec;
+
+test('the folder is looked at on every tick while the window shows, and every half minute while it is hidden', () => {
+  assert.equal(lookDue(false, 4000), true);
+  assert.equal(lookDue(true, 4000), false);
+  assert.equal(lookDue(true, 29_999), false);
+  assert.equal(lookDue(true, 30_000), true);
+});
 
 test('a scan that says iCloud is still downloading leaves the service waiting, and says why', async () => {
   const b = bridge(async () => {

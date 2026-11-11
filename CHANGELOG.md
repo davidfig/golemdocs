@@ -5,6 +5,7 @@
 ### Fixed
 
 - Undo or Redo pressed right after typing, on a busy computer, sometimes did nothing. It now always takes effect.
+- The Mac app keeps your vault folder in sync while its window is hidden, the display is off or the screen is locked, as long as the Mac is awake. Before, syncing stopped a few minutes after the display turned off and only started again when you reopened the app.
 
 ## 0.37.1 - 2026-11-11
 

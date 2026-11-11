@@ -1,7 +1,7 @@
-// Keeps the vault in step while the app is open: a quick look at the folder every few seconds (a stat-only walk, so
-// no file watcher is needed), a look at the account once a minute and when the window is shown again, and a sync
-// whenever either changed. Syncs never overlap. Signed in, the other side is the account; signed out, it is the documents
-// saved in this browser (vaultGuest.ts), so the folder works without an account.
+// Keeps the vault in step while the app is open: a quick look at the folder every few seconds, or every half minute
+// while the window is hidden (a stat-only walk, so no file watcher is needed), a look at the account once a minute and
+// when the window is shown again, and a sync whenever either changed. Syncs never overlap. Signed in, the other side is
+// the account; signed out, it is the documents saved in this browser (vaultGuest.ts), so the folder works without an account.
 
 import { CloudError } from '../cloud.ts';
 import { desktopBridge, type DesktopBridge } from './bridge.ts';
@@ -37,9 +37,16 @@ export interface VaultHooks {
 export const ICLOUD_DOWNLOADING = 'icloud-downloading';
 
 const LOOK_MS = 4000;
+/** The desktop shell keeps the page's timers running while its window is hidden or the screen is locked, so the vault stays in step then too, at a pace that leaves the battery alone. */
+const HIDDEN_LOOK_MS = 30_000;
 const ACCOUNT_MS = 60_000;
 /** The longest the page's own uploads are waited for before a sync looks anyway. */
 const SETTLE_MS = 20_000;
+
+/** Whether a tick of the timer should look at the folder, `sinceLook` ms after the last look. */
+export function lookDue(hidden: boolean, sinceLook: number): boolean {
+  return !hidden || sinceLook >= HIDDEN_LOOK_MS;
+}
 
 export class VaultService {
   private status: VaultStatus = { state: 'off', root: null, lastSync: null, report: null };
@@ -49,6 +56,7 @@ export class VaultService {
   private wanted = false;
   private signature = '';
   private lastAccountLook = 0;
+  private lastLook = 0;
 
   /** `account` is the signed-in account (null: none, so the vault keeps the documents saved in this browser). */
   constructor(
@@ -93,7 +101,9 @@ export class VaultService {
   async start(): Promise<void> {
     const root = await this.bridge.root().catch(() => null);
     this.set({ root });
-    this.timer ??= setInterval(() => void this.look(), LOOK_MS);
+    this.timer ??= setInterval(() => {
+      if (lookDue(document.visibilityState === 'hidden', Date.now() - this.lastLook)) void this.look();
+    }, LOOK_MS);
     addEventListener('focus', this.onWake);
     addEventListener('online', this.onWake);
     addEventListener('visibilitychange', this.onShown);
@@ -164,6 +174,7 @@ export class VaultService {
   }
 
   private async look(): Promise<void> {
+    this.lastLook = Date.now();
     // A sync that ended with errors is not started again every few seconds (that would repeat the same failures for ever): it tries again with the next look at the account.
     // A refused folder waits for the person (Try Again, or coming back to the window), not for a retry every few seconds.
     if (!this.wanted || this.running || !this.status.root || this.status.state === 'access') return;

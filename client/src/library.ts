@@ -7,7 +7,7 @@
 import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, listDocuments, moveDocuments, saveChunked, saveCloudVersion, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
 import { CHUNK_ALGO } from './storage/chunker.ts';
 import type { Manifest } from './storage/chunker.ts';
-import { getChunks, getSaved, getSavedManifest, getSyncedBase, getThumbnail, listSaved, markSynced, rebaseSaved, saveFromCloud, saveFromCloudIfSent, type SavedInfo } from './storage/local.ts';
+import { getChunks, getSaved, getSavedManifest, getSyncedBase, getThumbnail, listSaved, markSynced, rebaseSaved, saveFromCloud, saveFromCloudIfSent, setSavedFolder, type SavedInfo } from './storage/local.ts';
 import { madeInAccount, makingInAccount } from './sync.ts';
 import { t } from './i18n/index.ts';
 
@@ -117,18 +117,28 @@ async function sendable(localId: string) {
   /** What the cloud copy has of this one's chunks: those of the version uploaded or downloaded last. */
   const known = new Set(info.cloudId ? chunked?.manifest.syncedHashes : undefined);
   const make = (name: string, folderId?: string) => (manifest ? createChunked(name, manifest, source, folderId) : createDocument(name, bytes!, folderId));
-  // A new cloud document goes in the folder it is in here. If the account doesn't have that folder
-  // (it was made while signed out and hasn't been sent yet), it goes at the top level instead.
-  const create = async (name: string) => {
+  // A new cloud document goes in the folder it is in here (or `folderId`, for a conflicted copy: see besideOriginal). If the account
+  // doesn't have that folder (it was made while signed out and hasn't been sent yet), it goes at the top level instead.
+  const create = async (name: string, folderId: string | null | undefined = info.folderId) => {
+    const folder = folderId ?? undefined;
     makingInAccount(localId, name, info.size);
     try {
-      return await make(name, info.folderId);
+      return await make(name, folder);
     } catch (error) {
-      if (info.folderId && error instanceof CloudError && error.status === 400) return make(name);
+      if (folder && error instanceof CloudError && error.status === 400) return make(name);
       throw error;
     }
   };
   return { info, bytes, manifest, source, known, create };
+}
+
+/**
+ * Where a conflicted copy goes: beside the account's copy of the original (`cloud`; null is the top level), wherever it is now. The
+ * copy here may not know: a move made elsewhere (on another computer, or in the vault folder) only changes the account's. Where the
+ * copy here thinks it is when the account's can't be found.
+ */
+function besideOriginal(cloud: CloudDocument | undefined, info: SavedInfo): string | null | undefined {
+  return cloud ? (cloud.folderId ?? null) : info.folderId;
 }
 
 /**
@@ -172,11 +182,11 @@ async function sendToCloud(localId: string, retry: boolean, host: MergeHost, mer
       return { ...(await uploadToCloud(localId, true, host, merges - 1)), merged: true };
     } else if (error.status === 409) {
       // Changed elsewhere too: keep both, unless they turn out to be the same. This copy carries on as the conflicted one.
-      const current = (await sameAsCloud(info.cloudId, bytes, manifest, source)) ? (await listDocuments().catch(() => [])).find((d) => d.id === info.cloudId) : undefined;
-      if (current) {
-        doc = current;
+      const cloud = (await listDocuments().catch(() => [])).find((d) => d.id === info.cloudId);
+      if (cloud && (await sameAsCloud(info.cloudId, bytes, manifest, source))) {
+        doc = cloud;
       } else {
-        doc = await create(conflictCopyName(info.name));
+        doc = await create(conflictCopyName(info.name), besideOriginal(cloud, info));
         conflictCopy = true;
       }
     } else {
@@ -185,6 +195,8 @@ async function sendToCloud(localId: string, retry: boolean, host: MergeHost, mer
   }
   await markSynced(localId, { cloudId: doc.id, syncedAt: info.updatedAt, cloudUpdatedAt: doc.updatedAt, name: conflictCopy ? doc.name : undefined, ...(manifest && { syncedHashes: manifest.chunks.map((c) => c.h) }), ...(bytes && { base: bytes }) });
   if (!conflictCopy) doc = await placedAsHere(localId, info.folderId, doc);
+  // This copy is the conflicted one now, so it is filed where that went (beside the original), not where it last thought it was.
+  else if (doc.folderId !== undefined && (doc.folderId ?? undefined) !== info.folderId) await setSavedFolder(localId, doc.folderId ?? null);
   // The thumbnail goes with the document, so other computers can show it without downloading the
   // document. Not worth failing the save over; the next save sends another.
   const thumbnail = await getThumbnail(localId).catch(() => null);
@@ -207,7 +219,8 @@ export async function keepAsConflictCopy(localId: string): Promise<CloudDocument
     await markSynced(localId, { cloudId: info.cloudId, syncedAt: info.updatedAt, cloudUpdatedAt: info.cloudUpdatedAt });
     return null;
   }
-  const doc = await create(conflictCopyName(info.name));
+  const cloud = (await listDocuments().catch(() => [])).find((d) => d.id === info.cloudId);
+  const doc = await create(conflictCopyName(info.name), besideOriginal(cloud, info));
   await markSynced(localId, { cloudId: info.cloudId, syncedAt: info.updatedAt, cloudUpdatedAt: info.cloudUpdatedAt });
   return doc;
 }

@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.37.1 - Unreleased
+
+### Fixed
+
+- A "(conflicted copy)" now goes in the same folder as the original, even when the original was moved on another computer or in your vault folder. It used to land at the top level.
+
 ## 0.37.0 - 2026-11-10
 
 ### Added

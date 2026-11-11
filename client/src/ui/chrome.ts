@@ -66,6 +66,8 @@ export interface ChromeOptions {
   isAdmin?: () => boolean;
   /** For the window title and About box. Default "Golem Docs". */
   appName?: string;
+  /** What can change between frames and decides whether a command may run (what can be undone, what is selected), read just before one does. */
+  liveState?: () => Partial<ChromeState>;
 }
 
 const FONT_SIZES = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
@@ -151,7 +153,7 @@ export class Chrome {
   constructor(private readonly options: ChromeOptions) {
     const { host } = options;
     this.appName = options.appName ?? 'Golem Docs';
-    this.registry = new CommandRegistry({ host, state: () => this.state, showUnimplemented: options.showUnimplemented ?? false });
+    this.registry = new CommandRegistry({ host, state: () => this.state, showUnimplemented: options.showUnimplemented ?? false, freshen: options.liveState && (() => this.update(options.liveState!())) });
     this.registerCommands();
     this.defineControls();
     this.layout = loadLayout((id) => this.controls.has(id) || this.registry.has(id));

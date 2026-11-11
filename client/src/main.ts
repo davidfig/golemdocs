@@ -4267,7 +4267,6 @@ function render(): void {
     people: current.room?.people.some((p) => !p.me) ? current.room.people.filter((p) => !p.me) : NO_PEOPLE,
     renamable: renamable(),
     kind: textView.active ? 'largetext' : embeddedDrawing ? 'svg' : current.kind,
-    hasSelection: textView.active ? textEngine.hasSelection : sheetView.active ? sheetEngine.hasSelection : selection.text.length > 0,
     zoom: camera.zoom,
     pagesPanel: pagesOpen() && !textView.active && !sheetView.active && !reflowing(),
     filesPanel: filesOpen,
@@ -4275,8 +4274,7 @@ function render(): void {
     toolbars: toolbarsOn,
     rulerVisible: rulerOn,
     format: sheetView.active ? sheetView.formatState() : selectionFormat,
-    canUndo: textView.active ? textEngine.canUndo : sheetView.active ? sheetEngine.canUndo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
-    canRedo: textView.active ? textEngine.canRedo : sheetView.active ? sheetEngine.canRedo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
+    ...editingState(),
     formMode: annotating ? formMode : null,
     painting,
     draw: { ...drawStyle, tool: drawLayer.tool, hasSelection: drawLayer.selection.length > 0, layers: layersOpen },
@@ -5522,7 +5520,19 @@ const chromeHost = createChromeHost({
     ...corpusNames.map((name) => ({ id: `corpus:${name}`, label: name.replace(/&/g, '&&') })),
   ],
 });
-const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHost, isAdmin: () => signedIn?.isAdmin === true, showUnimplemented: import.meta.env.DEV });
+/**
+ * What the open editor can undo and redo, and whether something is selected: read every frame, and again just before a command runs
+ * (see ChromeOptions.liveState), because a key pressed right after an edit can arrive before the next frame.
+ */
+function editingState(): Pick<ChromeState, 'canUndo' | 'canRedo' | 'hasSelection'> {
+  return {
+    hasSelection: textView.active ? textEngine.hasSelection : sheetView.active ? sheetEngine.hasSelection : selection.text.length > 0,
+    canUndo: textView.active ? textEngine.canUndo : sheetView.active ? sheetEngine.canUndo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
+    canRedo: textView.active ? textEngine.canRedo : sheetView.active ? sheetEngine.canRedo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
+  };
+}
+
+const chrome = mountChrome(document.getElementById('chrome')!, { host: chromeHost, isAdmin: () => signedIn?.isAdmin === true, showUnimplemented: import.meta.env.DEV, liveState: editingState });
 
 // Edit ▸ Find, Replace and Go To.
 const findDialog = new FindDialog(document.body, {

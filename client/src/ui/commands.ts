@@ -61,6 +61,11 @@ export interface CommandContext {
    * reports that it isn't available yet. Useful while the editor catches up with the UI.
    */
   showUnimplemented: boolean;
+  /**
+   * Brings the state up to date before a command runs. The state is otherwise refreshed once a frame, so a key pressed just after an
+   * edit (Undo right after typing, under load) would be checked against the state from before it and quietly refused.
+   */
+  freshen?: () => void;
 }
 
 export class CommandRegistry {
@@ -195,6 +200,7 @@ export class CommandRegistry {
   /** Runs a command if it's enabled. Returns whether it ran. */
   execute(id: string | Command, options: { refocus?: boolean } = {}): boolean {
     const command = typeof id === 'string' ? this.get(id) : id;
+    this.context.freshen?.();
     if (!this.isEnabled(command)) return false;
     const { host } = this.context;
     this.onExecute?.(command.id);

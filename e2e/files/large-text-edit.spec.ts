@@ -58,7 +58,7 @@ test('the arrow keys move the caret by character, line and word', async ({ app, 
   await expect.poll(async () => (await lineText(page, 1)) ?? '').toContain('^');
 });
 
-test('dragging selects text, and typing replaces it; undo and redo walk back and forth', { tag: '@heavy' }, async ({ app, page }) => {
+test('dragging selects text, and typing replaces it; undo and redo walk back and forth', async ({ app, page }) => {
   await open(app);
   await dragFrom(page, [0, 0], [0, 6]);
   await expect.poll(async () => (await state(page)).selected).toBe('Line 1');
@@ -68,6 +68,27 @@ test('dragging selects text, and typing replaces it; undo and redo walk back and
   await expectLine(page, 0, /^Line 1 the quick/);
   await page.keyboard.press(`${MOD}+Shift+z`);
   await expectLine(page, 0, /^X the quick/);
+});
+
+test('Undo pressed right after typing, before the next frame, still undoes it', async ({ app, page }) => {
+  await open(app);
+  await clickAt(page, 0, 0);
+  await expect.poll(async () => (await state(page)).caret).toEqual({ line: 0, col: 0 });
+  // A busy machine can deliver the key before the frame that would show there is something to undo: hold the frames back.
+  await page.evaluate(() => {
+    const w = window as unknown as { heldFrames: FrameRequestCallback[]; realFrame: typeof requestAnimationFrame };
+    w.heldFrames = [];
+    w.realFrame = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => (w.heldFrames.push(callback), 0);
+  });
+  await page.keyboard.type('X');
+  await page.keyboard.press(`${MOD}+z`);
+  await page.evaluate(() => {
+    const w = window as unknown as { heldFrames: FrameRequestCallback[]; realFrame: typeof requestAnimationFrame };
+    window.requestAnimationFrame = w.realFrame;
+    for (const callback of w.heldFrames.splice(0)) window.requestAnimationFrame(callback);
+  });
+  await expectLine(page, 0, /^Line 1 the quick/);
 });
 
 test('a double click selects a word, a triple click the line', async ({ app, page }) => {

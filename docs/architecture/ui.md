@@ -95,6 +95,7 @@ Reuse before you build, and centralize what you would copy. One implementation p
 - Do not start dev servers yourself in the main checkout; a worktree may run its own on other ports.
 - Unimplemented actions are disabled; dev builds still show them, saying "isn't available yet" (`ChromeOptions`/`CommandSpec` flags).
 - `ui/` stays host-agnostic: if you need app state, add it to `ChromeState` or a `ChromeHost` method.
+- The app pushes `ChromeState` once a frame, so between frames it can be behind the editor. What decides whether a command may run and can change on a key press (what can be undone or redone, whether something is selected) is read again just before a command runs: `ChromeOptions.liveState` (`editingState` in `main.ts`), through `CommandRegistry`'s `freshen`. Without it, Undo pressed right after typing, before the next frame, is refused as "nothing to undo".
 
 ## Related docs
 

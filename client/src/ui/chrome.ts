@@ -1167,11 +1167,14 @@ export class Chrome {
       {
         // For admins only: the whole menu is left out for everyone else (see MenuBar.refresh).
         label: t('chrome.menu.admin'),
+        // Grouped: what people do and say, then what it costs, then developer tools.
         items: [
-          { type: 'item', label: t('chrome.admin.debug'), run: () => this.showDebug(), available: isAdmin },
-          { type: 'item', label: t('chrome.admin.billing'), run: () => this.showBilling(), available: isAdmin },
           { type: 'item', label: t('chrome.admin.analytics'), run: () => this.showAnalytics(), available: isAdmin },
           { type: 'item', label: t('chrome.admin.feedback'), run: () => this.showFeedback(), available: isAdmin },
+          sep,
+          { type: 'item', label: t('chrome.admin.billing'), run: () => this.showBilling(), available: isAdmin },
+          sep,
+          { type: 'item', label: t('chrome.admin.debug'), run: () => this.showDebug(), available: isAdmin },
         ],
       },
     ];

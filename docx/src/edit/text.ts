@@ -7,7 +7,7 @@
 // operation means the same thing on every client and on a server. Layout maps them to what
 // is visible (hidden text, field results) when it lays a paragraph out.
 
-import type { Block, Inline, Paragraph, Run, RunContent, RunProperties, StyleSheet, Table } from '../model/types.ts';
+import type { Block, Inline, Paragraph, Run, RunContent, RunProperties, StyleSheet, Table, Wrapper } from '../model/types.ts';
 
 /** One character standing for a non-text position in paragraphText(). */
 export const OBJECT_CHAR = '￼';
@@ -278,6 +278,16 @@ function insertIntoRun(run: Run, offset: number, text: string): boolean {
   return false;
 }
 
+/** Whether a content control's content may not be edited (`w:lock w:val="sdtContentLocked"` or `contentLocked`). */
+export function contentLocked(wrapper: Wrapper<Inline> | Wrapper<Block>): boolean {
+  if (wrapper.shell.name !== 'w:sdt') return false;
+  for (const c of wrapper.shell.children) {
+    if (typeof c === 'string' || c.name !== 'w:sdtPr') continue;
+    for (const l of c.children) if (typeof l !== 'string' && l.name === 'w:lock') return l.attrs['w:val'] === 'sdtContentLocked' || l.attrs['w:val'] === 'contentLocked';
+  }
+  return false;
+}
+
 /** Inserts into the first run that reaches the offset (so text takes the formatting before it). */
 function insertInto(inlines: Inline[], offset: number, text: string): boolean {
   let pos = 0;
@@ -287,7 +297,8 @@ function insertInto(inlines: Inline[], offset: number, text: string): boolean {
       if (inline.kind === 'run' && insertIntoRun(inline, offset - pos, text)) return true;
       // Text at either end of a link is not part of it; only text put inside it is.
       if (inline.kind === 'hyperlink' && offset > pos && offset < pos + len && insertInto(inline.children, offset - pos, text)) return true;
-      if (inline.kind === 'wrapper' && insertInto(inline.children, offset - pos, text)) return true;
+      // The same for a content control whose content is locked (a live block's result): text typed beside it stays out of it, as in Word.
+      if (inline.kind === 'wrapper' && (!contentLocked(inline) || (offset > pos && offset < pos + len)) && insertInto(inline.children, offset - pos, text)) return true;
     }
     pos += len;
     if (pos > offset) break;

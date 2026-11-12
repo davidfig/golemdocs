@@ -275,6 +275,10 @@ export type EditOp =
   | { kind: 'pageBreak'; action: 'insert' | 'remove' | 'reset'; row: number; col: number }
   /** What-If › Solver: the sheet's model kept (in its hidden names), or taken away. */
   | { kind: 'solverModel'; model: SolverModel | null }
+  /** A live link pasted at a cell (docs/live-blocks.md §3): a live range there, filled when the workbook is next updated. */
+  | { kind: 'addLive'; row: number; col: number; source: string }
+  /** Stop Updating (docs/live-blocks.md §9): the live range at a cell keeps what it shows, as ordinary cells. */
+  | { kind: 'stopLive'; row: number; col: number }
   /** Values put in cells, as typed (Solver's solution kept). */
   | { kind: 'setCells'; cells: [number, number, number][] }
   /** Refresh: the sheet's pivot tables laid out again from their sources. */
@@ -334,6 +338,10 @@ export type ToWorker =
   | { t: 'undo'; id: number }
   | { t: 'redo'; id: number }
   | { t: 'copy'; id: number; sheet: number; range: CellRange }
+  /** What a live block calls a range (Copy as Live Link): its table's or defined name's name, else `Sheet!A1:B2`. */
+  | { t: 'liveAddress'; id: number; sheet: number; range: CellRange }
+  /** The source of the live range at a cell, for the menu's Stop Updating. */
+  | { t: 'liveAt'; id: number; sheet: number; row: number; col: number }
   /** The longest texts shown in a column (with their styles), to fit its width to them. */
   | { t: 'columnTexts'; id: number; sheet: number; col: number }
   /** The values a column of the AutoFilter could show, and those it shows. */
@@ -394,6 +402,8 @@ export type FromWorker =
   | { t: 'styles'; id: number; styles: [number, DrawStyle][] }
   | { t: 'changed'; id: number; changed: Changed }
   | { t: 'copy'; id: number; text: string; html: string }
+  | { t: 'liveAddress'; id: number; address: string }
+  | { t: 'liveAt'; id: number; source: string | null }
   | { t: 'found'; id: number; at: { sheet: number; row: number; col: number } | null }
   /** The file as it is now (.xlsx, or the CSV or TSV it was: `lossy` when that left something out), and its memory image (empty for CSV and TSV). */
   | { t: 'saved'; id: number; file: ArrayBuffer; image: ArrayBuffer; sha256: string; lossy?: boolean; lossyFormat?: string; stored?: ArrayBuffer }

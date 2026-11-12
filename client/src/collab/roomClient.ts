@@ -68,7 +68,7 @@ export type RoomState = {
   mode: 'solo' | 'shared' | 'offline';
   role: RoomRole;
   /** Everyone in the room, including us. */
-  people: { client: string; name: string; picture: string | null; color: number }[];
+  people: { client: string; name: string; picture: string | null; color: number; owner?: boolean }[];
   /** This connection's id (the `client` of its entry in `people`). */
   me: string;
   /** A watched room: who holds the document (`mine`: this account, on this device or another), or null. */
@@ -137,7 +137,7 @@ export class RoomClient {
     return {
       mode: this.mode,
       role: this.role,
-      people: this.people.map(({ client, name, picture, color }) => ({ client, name, picture, color })),
+      people: this.people.map(({ client, name, picture, color, owner }) => ({ client, name, picture, color, ...(owner && { owner }) })),
       me: this.o.client,
       holder: this.holder && { client: this.holder.client, name: this.holder.name, mine: this.holder.user === this.user },
       watching: this.watching,

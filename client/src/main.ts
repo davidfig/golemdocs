@@ -42,10 +42,11 @@ import {
   putSearchIndex,
   type SavedInfo,
 } from './storage/local.ts';
-import { folderOf, folderPath } from './folders.ts';
+import { folderContents, folderOf, folderPath, resolveFolder } from './folders.ts';
+import { isBuiltin } from './live/builtinAddress.ts';
 import { UploadQueue } from './uploadQueue.ts';
 import { LibraryStore } from './libraryStore.ts';
-import { stopSettingsSync, syncSettings, type SyncedKey } from './settingsSync.ts';
+import { settingsProfile, stopSettingsSync, syncSettings, type SyncedKey } from './settingsSync.ts';
 import { rereadDrawingOptions } from './ui/drawingOptions.ts';
 import { rereadFullScreenOptions } from './ui/fullScreen.ts';
 import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, localCopies, putDocInCatalogue, type LibraryEntry } from './sync.ts';
@@ -72,6 +73,11 @@ import { checkoutUrl, fetchSubscription, portalUrl, sellsSubscriptions, Subscrip
 import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showConfirm } from './ui/popup.ts';
+import { askToRun, pickScript, showScriptsDialog } from './ui/scriptDialogs.ts';
+import { ScriptsApp } from './scripts/app.ts';
+import { buttonScript } from './live/scriptAddress.ts';
+import { scriptState } from './scripts/state.ts';
+import { fetchForScript } from './scripts/fetch.ts';
 import { NewVersionNotice } from './ui/newVersionNotice.ts';
 import { isChunkOfOldBuild } from './buildCheck.ts';
 import { UpdateNotice } from './ui/updateNotice.ts';
@@ -82,7 +88,7 @@ import { IndexWorker } from './search/indexClient.ts';
 import { SearchLibrary, type SearchHit } from './search/searchLibrary.ts';
 import { searchableDocuments, type SourceDeps } from './search/sources.ts';
 import { SearchPanel } from './ui/searchPanel.ts';
-import { embedTitle, parseTagAddress } from '@golemdocs/docx';
+import { embedTitle, liveTitle, parseTagAddress } from '@golemdocs/docx';
 import { LoadingScreen } from './ui/loadingScreen.ts';
 import { NothingOpenScreen } from './ui/nothingOpen.ts';
 import { showToast } from './ui/toast.ts';
@@ -109,7 +115,8 @@ import { loadIgnored, saveIgnored, withIgnored, type Ignored } from './spelling/
 import { showColumnsDialog } from './ui/columnsDialog.ts';
 import { showParagraphDialog } from './ui/paragraphDialog.ts';
 import { showPageSetupDialog } from './ui/pageSetupDialog.ts';
-import { readClipboard, type Clipboard } from './ui/clipboard.ts';
+import { readClipboard, writeClipboardRich, type Clipboard } from './ui/clipboard.ts';
+import { clipboardLiveLink } from './live/liveMarks.ts';
 import { showPasteSpecialDialog } from './ui/pasteSpecialDialog.ts';
 import { attachTextInput, editKey, focusTextInput, type EditKey } from './ui/textInput.ts';
 import { cleanDocumentName } from './documentName.ts';
@@ -147,6 +154,7 @@ import { applyImageEdit, type ImageEdit } from './formats/imageEdit.ts';
 import type { ChromeState, DocumentInfo, ImageOp, ListedDocument } from './ui/actions.ts';
 import { opensLink } from './ui/linkDialog.ts';
 import { LinkPopover, type LinkDraft } from './ui/linkPopover.ts';
+import { LiveCard } from './ui/liveCard.ts';
 import { droppedDocumentKey, isDocumentDrag } from './ui/documentDrag.ts';
 import { SelectionLayer } from './webgl/selectionLayer.ts';
 import { isFormat, type Format } from './formats/convert.ts';
@@ -159,9 +167,18 @@ import { ensureUids } from './vector/nodes.ts';
 import type { Scene } from './vector/model.ts';
 import { docAddress, findByTitle, parseDocAddress, splitLink, normalizeTitle, type LinkPlaces } from './formats/wikiLinks.ts';
 import { rewriteDocumentLinks } from './formats/docLinks.ts';
+import { LiveKeeper } from './live/keeper.ts';
+import { LiveWorker, LiveWorkerDown } from './live/liveClient.ts';
+import type { LiveWorkerHandle } from './live/liveClient.ts';
+import type { StoredUpdater } from './live/storedLookup.ts';
+import { BACKGROUND_IDLE_MS, BackgroundLive } from './live/background.ts';
+import type { LiveMarker } from './live/background.ts';
+import { liveLimitBytes } from './live/backgroundLimit.ts';
+import { LiveCheckLog } from './live/checkLog.ts';
 import { afterChange, anyMoved, placedDocs, retargets, shortestTitle, type LibraryChange, type LibrarySnapshot } from './linkRename.ts';
 import { decodeImage, encodeCanvas, makeCanvas, toPng, transcode } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
+import { formatAllows } from './ui/formats.ts';
 import { DEFAULT_STATE, FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
 import { modalOpen, stripMnemonic } from './ui/dom.ts';
 
@@ -819,7 +836,10 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
         setStatus(pendingNotice);
         pendingNotice = null;
       }
-      if (current.localId) backfillThumbnail(current.localId);
+      if (current.localId) {
+        backfillThumbnail(current.localId);
+        checkLive(current.localId);
+      }
       // A file the person added is kept in the document store as soon as it is open, edited or not.
       else if (options.store && opening === current) documentEdited();
     },
@@ -1070,6 +1090,8 @@ function roomStateChanged(state: RoomState): void {
     drawLayer.cancel();
     cropLayer.cancel();
   }
+  // This session has just become the one that updates the live blocks of the document edited together: it catches up.
+  if (state.mode === 'shared' && state.liveUpdater && !(was?.mode === 'shared' && was.liveUpdater) && doc.localId) checkLive(doc.localId, false);
   showWatch();
   showSync();
   requestRender();
@@ -1598,7 +1620,8 @@ document.addEventListener('visibilitychange', () => {
   void reading?.send(true);
   rememberView();
   saveIfEdited();
-  void saving.then(() => flushUploads()); // the page may be closing: don't wait for the pause
+  liveChecks.flush();
+  void saving.then(() => liveKeeper.flush()).then(() => flushUploads()); // the page may be closing: don't wait for the pause
 });
 
 /** The open document's id in this browser, saving it first if it has unsaved edits or was never saved. */
@@ -1782,6 +1805,7 @@ const SETTING_APPLIED: Record<SyncedKey, (() => void) | null> = {
   'word.spelling.ignored.v1': rereadIgnored,
   'golem.newKinds': () => dashboard.showNewKind(), // the toolbar's New button and the menus ask each time
   'golem.newVersion.off': () => newVersionNotice.rereadOff(),
+  'golem.liveBackgroundLimit': null, // read each time a background update starts
   'word.viewMode': rereadViewMode,
   'word.formattingMarks': rereadViewOptions,
   'word.ruler': rereadViewOptions,
@@ -2125,6 +2149,19 @@ function renameDocument(input: string): string | null {
 }
 
 /** The name a download or save gets: the format's extension, except that a text file keeps the one it came with ("config.json", "main.py"). */
+/** Edit › Copy as Live Link in a document (docs/live-blocks.md §9): the part at the caret, pasted anywhere as a live block of it. */
+async function copyDocumentLiveLink(): Promise<void> {
+  // A PDF: the form field being filled in (live/pdfLive.ts); only its fields can be shown elsewhere.
+  const field = annotating ? formLayer.currentFieldName() : null;
+  if ((annotating || current.kind === 'pdf') && !field) return reportError(t('live.copy.noField'));
+  const part = field !== null ? `field:${field}` : await worker.livePart();
+  if (!part) return reportError(t('live.copy.nothing'));
+  const source = `${fileName()}#${part}`;
+  const attr = source.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  // Filled in from the document where it is pasted (the layout worker updates a pasted block at once).
+  await writeClipboardRich(`![[${source}]]`, `<div data-golem-live="${attr}"><p></p></div>`);
+}
+
 const fileName = () => (textView.active ? textFileNameOf(textView.fileName) : current.kind === 'txt' && hasExtension(current.name) ? current.name : current.kind === 'xlsx' && /\.(xlsx|xlsm|xltx|xltm)$/i.test(current.name) ? current.name : stem(current.name) + FORMATS[current.kind].extensions[0]);
 const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
 
@@ -2387,6 +2424,8 @@ function saveInBrowser(): Promise<string | null> {
         doc.absorbing = undefined;
       }
       linksAfter?.();
+      // What shows this document in a live block is updated once editing pauses (docs/live-blocks.md §6).
+      sourceSaved(info.id);
       // The workbook's memory image goes with the file it was made from.
       if (sheetSave)
         void sheetSave
@@ -2803,6 +2842,444 @@ async function updateLinksIn(entry: LibraryEntry, renames: ReadonlyMap<string, s
 
 setLinkKeeper(keepLinks);
 
+// --- Keeping live blocks up to date ----------------------------------------------------------
+// A live block (docs/live-blocks.md) shows a part of another document (a workbook's range, a drawing) and is kept up to date:
+// when that document is saved, synced or the one holding the block is opened. The keeper (live/keeper.ts) finds what depends on
+// what from the search index; this is where documents are read and written.
+
+/** Where documents are, as a link written in `from` sees them. */
+function linkPlacesFrom(from: LibraryEntry): LinkPlaces<LibraryEntry> {
+  const names = (e: LibraryEntry) => folderPath(library.folders, folderOf(e, library.folders)).map((f) => f.name);
+  return { folderNames: names, from: names(from) };
+}
+
+/** A document's bytes: this browser's copy, or the account's. */
+async function storedBytes(entry: LibraryEntry): Promise<ArrayBuffer | null> {
+  try {
+    return (entry.local && !opensFromCloud(entry) ? (await getSaved(entry.local.id))?.bytes : null) ?? (entry.cloud ? await downloadDocument(entry.cloud.id) : null);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where live blocks are updated (docs/live-blocks.md §6, *Where an update runs*): a worker, so a document and its sources
+ * are parsed away from the page and their memory is given back when it ends. Should the worker not start in this browser,
+ * updates run on the page, as before.
+ */
+const liveWorker = new LiveWorker(() => new Worker(new URL('./live/liveWorkerEntry.ts', import.meta.url), { type: 'module', name: 'live-blocks' }) as unknown as LiveWorkerHandle);
+/** Whether an update has come back from the worker (until then, a failure falls back to the page). */
+let liveWorkerWorked = false;
+// A worker draws charts and drawings on an OffscreenCanvas: a browser without one (iOS before 16.4) updates on the page.
+let liveOnPage = typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined';
+const liveUpdater: StoredUpdater = async (bytes, name, lookup, options) => {
+  const onPage = async () => (await import('./live/stored.ts')).updateFromStored(bytes, name, lookup, async (b) => (await import('./formats/vectorDoc.ts')).storedDrawing(b), options);
+  if (liveOnPage) return onPage();
+  if (liveWorkerWorked) return liveWorker.update(bytes, name, lookup, options);
+  // The first time, a copy goes, so the page still has the bytes should the worker not work here.
+  try {
+    const outcome = await liveWorker.update(bytes.slice(), name, lookup, options);
+    liveWorkerWorked = true;
+    return outcome;
+  } catch (e) {
+    if (!(e instanceof LiveWorkerDown)) throw e;
+    console.warn('The live worker did not work; live blocks are updated on the page.', e);
+    liveOnPage = true;
+    liveWorker.stop();
+    return onPage();
+  }
+};
+
+/** Whether a library entry is the document open now. */
+const isOpenEntry = (entry: LibraryEntry): boolean => entry.local !== null && entry.local.id === current.localId;
+
+/** For the open document edited together: how many changes it had had when the update being made was read from it. */
+const roomSnapshots = new Map<string, number>();
+/** Updates of the open document refused because someone edited it meanwhile, by document: tried again, a few times. */
+const roomRetries = new Map<string, number>();
+const LIVE_ROOM_RETRY_MS = 3_000;
+const ROOM_RETRIES = 5;
+
+/** An update of the document edited together lost to someone's edit: tried again shortly, from the document as it is then. */
+function retryRoomUpdate(key: string): void {
+  const tries = (roomRetries.get(key) ?? 0) + 1;
+  if (tries > ROOM_RETRIES) return void roomRetries.delete(key);
+  roomRetries.set(key, tries);
+  window.setTimeout(() => void liveKeeper.check(key), LIVE_ROOM_RETRY_MS * tries);
+}
+
+/** The documents live blocks are kept in: this device's copies, and the account's (downloaded when one is updated). */
+const liveDocuments = (): LibraryEntry[] => library.entries.filter((e) => e.local || e.cloud);
+
+const liveKeeper: LiveKeeper<LibraryEntry> = new LiveKeeper<LibraryEntry>({
+  entries: liveDocuments,
+  async links() {
+    const own = searchableDocuments(library.entries, [], searchSources);
+    await searchLibrary.sync(own);
+    return searchLibrary.links(own, true);
+  },
+  find: (title, from) => findByTitle(title, library.entries, linkPlacesFrom(from)),
+  folder(path, from) {
+    const id = resolveFolder(library.folders, path, linkPlacesFrom(from).from ?? []);
+    if (id === undefined) return null;
+    const docs = liveDocuments();
+    if (id === null) return docs;
+    const folder = library.folders.find((f) => f.id === id);
+    return folder ? folderContents(library.folders, docs, folder).items : null;
+  },
+  // The open document while it is edited together: as it is in the room now, not as last saved, with how many changes it had
+  // had then (an update made from it goes in only if nothing changed since).
+  async read(entry) {
+    if (!(isOpenEntry(entry) && current.room?.mode === 'shared')) return storedBytes(entry);
+    const doc = current;
+    const snapshot = await worker.snapshot().catch(() => null);
+    if (!snapshot || current !== doc) return null;
+    roomSnapshots.set(entry.key, snapshot.changes);
+    return snapshot.bytes.slice().buffer;
+  },
+  // Edited together, only the owner's session there longest updates it (docs/live-blocks.md §6): the others wait.
+  writable: (entry) => !(isOpenEntry(entry) && current.room && current.room.mode !== 'solo' && !(current.room.mode === 'shared' && current.room.liveUpdater && !current.shared)),
+  drawing: async (bytes) => (await import('./formats/vectorDoc.ts')).storedDrawing(bytes),
+  updater: liveUpdater,
+  script: (_from, path) => scriptsApp.produce(path),
+  button: (path) => scriptsApp.button(path),
+  scriptReads: (path) => scriptsApp.reads(path),
+  // A live export's document, laid out and written as Download writes its PDF (the open document is left alone).
+  async exportPdf(entry, bytes) {
+    const source = sourceFromFile(entry.name, bytes.slice().buffer);
+    return source ? worker.exportCopy(source, 'pdf') : null;
+  },
+  async write(entry, bytes) {
+    const isOpen = isOpenEntry(entry);
+    // Edited together, by this session for the owner: put in as an outside edit, which the room sends to everyone. Someone
+    // edited meanwhile: tried again in a moment, from the document as it is then.
+    if (isOpen && current.room?.mode === 'shared') {
+      const changes = roomSnapshots.get(entry.key);
+      roomSnapshots.delete(entry.key);
+      if (changes === undefined || !current.room.liveUpdater || current.shared) return false;
+      const source = sourceFromFile(entry.name, bytes.slice().buffer) ?? { kind: 'docx' as const, name: entry.name, bytes: bytes.slice().buffer };
+      const done = await refreshWith(source, changes);
+      if (done === 'typed') retryRoomUpdate(entry.key);
+      else roomRetries.delete(entry.key);
+      return done === true;
+    }
+    // Only in the account, or newer there than here (updated in the background): written there, unless it changed meanwhile
+    // (then the next look updates it again). This device's copy, if any, follows as any change from elsewhere does.
+    if (!isOpen && entry.cloud && opensFromCloud(entry)) {
+      if (entry.state === 'conflict' || !account) return false;
+      try {
+        library.putCloud(await saveDocument(entry.cloud.id, bytes, undefined, entry.cloud.updatedAt));
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    // Edited here meanwhile, or edited with others: left for the next check (on open, or the next save of its source).
+    if (!entry.local || entry.state === 'conflict' || (isOpen && (current.unsavedSince > 0 || current.shared || (current.room && current.room.mode !== 'solo')))) return false;
+    const info = await saveSaved({ id: entry.local.id, name: entry.name, bytes, owner: account?.id });
+    library.putLocal(info);
+    if (account) scheduleUpload(info.id);
+    if (isOpen && current.localId === info.id && current.unsavedSince === 0 && !(await refreshFromStore(current))) await openLocal(info.id);
+    return true;
+  },
+  report(entry, report) {
+    const open = entry.local !== null && entry.local.id === current.localId;
+    const say = (problem: (typeof report.problems)[number]) => t(`live.error.${problem.code}`, { source: problem.code === 'missing' ? (problem.detail ?? problem.source) : problem.source, detail: problem.detail ?? '' });
+    if (open) {
+      liveProblems.clear();
+      for (const problem of report.problems) liveProblems.set(problem.source, say(problem));
+      liveCard.refresh();
+      // A block showing a script not allowed on this device: asked once, as a phone app asks (docs/live-blocks.md §8).
+      for (const problem of report.problems.filter((p) => p.code === 'notAllowed'))
+        void scriptsApp.askForBlock(problem.source.split(/[?#]/)[0].trim()).then((ok) => ok && liveKeeper.check(entry.key, { force: true }));
+    }
+    const problem = report.problems[0];
+    if (!problem) return;
+    console.warn(`Live blocks in ${entry.name} not updated:`, JSON.stringify(report.problems));
+    // Told when it is about the document in front of the person; a block keeps its last result meanwhile.
+    if (open) {
+      setStatus(t('live.notUpdated', { name: entry.name, problem: say(problem) }));
+      liveProblemTold = true;
+    }
+  },
+});
+
+/** When the person last pressed a key, clicked or touched: background updates wait for a pause. */
+let lastInputAt = Date.now();
+for (const type of ['keydown', 'pointerdown', 'wheel']) window.addEventListener(type, () => (lastInputAt = Date.now()), { capture: true, passive: true });
+
+/** The open document's size as stored (0 when it isn't one of the library's). */
+const openSize = (): number => (current.localId ? (library.entries.find((e) => e.local?.id === current.localId)?.size ?? 0) : 0);
+
+/** The status line the background updates last showed, so finishing clears only that. */
+let backgroundStatus: string | null = null;
+
+/**
+ * Live blocks kept up to date in the background, on any of the owner's devices (docs/live-blocks.md §6): the sources changed
+ * since the account's marker, by whoever, and what shows them, one document at a time while the person is not busy.
+ */
+const backgroundLive = new BackgroundLive<LibraryEntry>({
+  async marker() {
+    if (!account) return null;
+    const response = await fetch('/api/live-marker');
+    return response.ok ? ((await response.json()) as LiveMarker) : null;
+  },
+  async move(change) {
+    if (!account) return;
+    await fetch('/api/live-marker', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(change) });
+  },
+  // The open document is left alone: it is updated as it always was, when opened and when its sources are saved here.
+  entries: () => liveDocuments().filter((e) => e.cloud),
+  // Unless it is edited together and this session updates it for the owner: no one else would.
+  dependents: async (keys) => (await liveKeeper.dependentsOfKeys(keys)).filter((e) => !isOpenEntry(e) || (current.room?.mode === 'shared' && current.room.liveUpdater)),
+  sources: (entry) => liveKeeper.sourcesOf(entry),
+  update: (entry) => liveKeeper.outcome(entry.key),
+  limit: liveLimitBytes,
+  idle: () =>
+    new Promise<void>((resolve) => {
+      // A pause in typing and clicking; on a phone, nothing large open as well (iOS reloads a page that grows too big).
+      const quiet = () => Date.now() - lastInputAt >= BACKGROUND_IDLE_MS && !(settingsProfile() === 'mobile' && openSize() > liveLimitBytes() / 2);
+      if (quiet()) return resolve();
+      const timer = window.setInterval(() => {
+        if (!quiet()) return;
+        window.clearInterval(timer);
+        resolve();
+      }, 1000);
+    }),
+  progress(left) {
+    if (left !== null && left > 0) {
+      backgroundStatus = t('live.background.left', { count: left });
+      setStatus(backgroundStatus);
+    } else if (backgroundStatus !== null) {
+      if (status === backgroundStatus) setStatus('');
+      backgroundStatus = null;
+    }
+  },
+});
+
+/** How long after the library changes background updates look for changed sources (a listing often comes in several steps). */
+const BACKGROUND_LOOK_DELAY_MS = 10_000;
+let backgroundLookTimer: number | undefined;
+library.subscribe(() => {
+  if (!account) return;
+  window.clearTimeout(backgroundLookTimer);
+  backgroundLookTimer = window.setTimeout(() => void backgroundLive.look(), BACKGROUND_LOOK_DELAY_MS);
+});
+
+/** How often a document's live blocks were out of date when it was opened, for the account (live/checkLog.ts). */
+const liveChecks = new LiveCheckLog(() => account !== null);
+
+/** A live block's label: where it comes from, Update Now and Open Source (docs/live-blocks.md §9). */
+const liveCard = new LiveCard({
+  update: (source) => void updateLiveNow(source),
+  // The source's title is the part of its address before `#`, found from where this document is, as a link's is.
+  open: (source) => void openDocumentLink(source.split('#')[0].trim()),
+  canOpen: (source) => !isBuiltin(source) && !buttonScript(source),
+  canRun: (source) => buttonScript(source) !== null,
+  run: (source) => {
+    const path = buttonScript(source);
+    if (path) void scriptsApp.act(path, 'button').catch((e: unknown) => reportError((e as Error).message));
+  },
+  // Someone else's document: their devices keep its blocks up to date, as only they have what the blocks read.
+  problem: (source) => liveProblems.get(source) ?? (current.shared ? t('live.card.keptBy', { owner: sharedOwner(current.shared.id) }) : null),
+  canUpdate: () => !current.shared,
+  // Anyone who can edit the document may turn a block into what it shows (the worker refuses where it is read-only).
+  stop: (source) => worker.command({ kind: 'stopLive', source }),
+  canStop: () => FORMATS[current.kind].editable && current.shared?.role !== 'viewer' && current.room?.role !== 'viewer',
+});
+
+/** Who owns a document shared with this person, as the library lists them. */
+function sharedOwner(id: string): string {
+  const owner = library.shared.find((d) => d.id === id)?.owner;
+  return owner?.name ?? owner?.email ?? t('live.card.theOwner');
+}
+/** Why each of the open document's blocks could not be updated, by source, from the last check (shown on its card). */
+const liveProblems = new Map<string, string>();
+/** Whether a problem with the open document's blocks was just told (Update Now then doesn't say all is well over it). */
+let liveProblemTold = false;
+
+/**
+ * File › Live PDF Copy (docs/live-blocks.md §3): a PDF of the open document beside it in its folder, written again whenever
+ * the document changes. Asked again, it brings the copy that is already there up to date.
+ */
+async function makeLivePdf(): Promise<void> {
+  await saveNow();
+  const entry = current.localId ? library.entries.find((e) => e.local?.id === current.localId) : undefined;
+  if (!entry) return;
+  const folderId = folderOf(entry, library.folders);
+  const here = library.entries.filter((e) => e.local && folderOf(e, library.folders) === folderId);
+  const [{ newLiveExport }, { isWdoc, readWdoc }] = await Promise.all([import('./live/stored.ts'), import('./formats/wdoc.ts')]);
+  // The copy made before, found by its source: made again now.
+  const base = stem(entry.name);
+  for (const other of here.filter((e) => /\.pdf$/i.test(e.name))) {
+    const bytes = await storedBytes(other).catch(() => null);
+    if (!bytes || !isWdoc(new Uint8Array(bytes))) continue;
+    const tag = (await readWdoc(new Uint8Array(bytes)).catch(() => null))?.extensions.pdf?.export;
+    if (liveTitle(tag) !== entry.name) continue;
+    setStatus(t('live.export.updating', { name: other.name }));
+    await liveKeeper.check(other.key, { force: true });
+    setStatus(t('live.export.updated', { name: other.name }));
+    return;
+  }
+  setStatus(t('live.export.making', { name: `${base}.pdf` }));
+  const stored = await storedBytes(entry);
+  if (!stored) return;
+  const taken = new Set(here.map((e) => e.name.toLowerCase()));
+  let name = `${base}.pdf`;
+  for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${base} (${n}).pdf`;
+  // The source is named as a link in the same folder names it: by its name.
+  const bytes = await newLiveExport(entry.name, await worker.convert('pdf'), new Uint8Array(stored));
+  const info = await saveSaved({ name, bytes, owner: account?.id, folderId: entry.local?.folderId ?? undefined });
+  library.putLocal(info);
+  void refreshLibrary();
+  if (account) scheduleUpload(info.id);
+  setStatus(t('live.export.made', { name }));
+}
+
+/** Update Now: the open document is saved, then every block in it is made again from its source, changed or not. */
+async function updateLiveNow(source: string): Promise<void> {
+  setStatus(t('live.card.updating', { source }));
+  await saveNow();
+  const entry = current.localId ? library.entries.find((e) => e.local?.id === current.localId) : undefined;
+  if (!entry) return;
+  liveProblemTold = false;
+  const updated = await liveKeeper.check(entry.key, { force: true });
+  if (!liveProblemTold) setStatus(updated ? t('live.card.updated') : t('live.card.notNow'));
+  focusInput();
+}
+
+/** Opening a document checks its live blocks (docs/live-blocks.md §6, rule 2). */
+function checkLive(localId: string, opened = true): void {
+  liveProblems.clear();
+  const entry = library.entries.find((e) => e.local?.id === localId);
+  // Just put in this browser (opened from the account, say), and not listed yet: checked once it is.
+  if (!entry) {
+    const stop = library.subscribe(() => {
+      if (!library.entries.some((e) => e.local?.id === localId)) return;
+      stop();
+      window.clearTimeout(giveUp);
+      if (current.localId === localId) checkLive(localId, opened);
+    });
+    const giveUp = window.setTimeout(stop, 30_000);
+    return;
+  }
+  void liveKeeper
+    .mayHaveLive(entry.key)
+    .then(async (may) => {
+      if (!may) return;
+      const updated = await liveKeeper.check(entry.key);
+      // Counted only when a document is opened (how often blocks were out of date then).
+      if (opened) liveChecks.record(updated);
+    })
+    .catch((e: unknown) => console.error(e));
+}
+
+// --- Scripts (docs/live-blocks.md §8) -----------------------------------------------------------
+// Scripts are files in the vault's Scripts folder: producers fill live blocks, actions change documents. scripts/app.ts runs
+// them; this is where they reach the library.
+
+/** A document's path in the vault: its folders and name. */
+const vaultPath = (e: LibraryEntry): string => [...folderPath(library.folders, folderOf(e, library.folders)).map((f) => f.name), e.name].join('/');
+
+/** The folder at a vault path, made (with those above it) if it isn't there; null for the top level. */
+async function vaultFolder(names: readonly string[]): Promise<string | null> {
+  let parent: string | null = null;
+  const cloud = accountForFiles() !== null;
+  for (const name of names) {
+    let folder = library.folders.find((f) => f.parentId === parent && normalizeTitle(f.name) === normalizeTitle(name));
+    if (!folder) {
+      folder = await createFolder(cloud, name, parent);
+      library.update({ folders: [...library.folders, folder] });
+    }
+    parent = folder.id;
+  }
+  return parent;
+}
+
+const scriptsApp: ScriptsApp = new ScriptsApp({
+  documents: () => library.entries.filter((e) => e.local).map((e) => ({ key: e.key, path: vaultPath(e) })),
+  async read(key) {
+    const entry = library.entries.find((e) => e.key === key);
+    const bytes = entry ? await storedBytes(entry) : null;
+    return bytes ? new Uint8Array(bytes) : null;
+  },
+  produce: (address) => liveKeeper.produce(`/${address.replace(/^\/+/, '')}`),
+  saveOpen: async () => void (await saveNow()),
+  async store(path, bytes, key) {
+    const entry = key ? library.entries.find((e) => e.key === key && e.local) : undefined;
+    const isOpen = !!entry && entry.local!.id === current.localId;
+    const parts = path.split('/');
+    const name = parts.pop()!;
+    const info = await saveSaved(entry ? { id: entry.local!.id, name: entry.name, bytes, owner: account?.id } : { name, bytes, owner: account?.id, folderId: (await vaultFolder(parts)) ?? undefined });
+    library.putLocal(info);
+    if (!entry) void refreshLibrary();
+    if (account) scheduleUpload(info.id);
+    if (isOpen && current.localId === info.id && current.unsavedSince === 0 && !(await refreshFromStore(current))) await openLocal(info.id);
+    sourceSaved(info.id);
+    return info.id;
+  },
+  fetch: (url, init) => fetchForScript(url, init),
+  async remove(key) {
+    const entry = library.entries.find((e) => e.key === key);
+    if (entry) await deleteEverywhere([entry]);
+  },
+  async claim(run, done) {
+    // With no account the vault is on this computer only: nothing to share the run with.
+    if (!account) return true;
+    const response = await fetch('/api/script-claims', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ run, device: scriptState.device(), ...(done && { done }) }) });
+    if (!response.ok) return false;
+    return done || ((await response.json()) as { claimed?: boolean }).claimed === true;
+  },
+  ask: (path, meta) => askToRun(path, meta),
+  status: (text) => setStatus(text),
+  error: (text) => reportError(text),
+  say: {
+    running: (name) => t('live.script.running', { name }),
+    ran: (name, count, message) => (message ? t('live.script.said', { name, message }) : t('live.script.ran', { name, count })),
+    failed: (name, message) => t('live.script.failed', { name, message }),
+    paused: (name) => t('live.script.pausedNow', { name }),
+    off: (name) => t('live.script.isOff', { name }),
+    undone: (name) => t('live.script.undone', { name }),
+    undoChanged: (path) => t('live.script.undoChanged', { path }),
+    undoGone: () => t('live.script.undoGone'),
+  },
+});
+
+// Scheduled actions are checked once the library has had time to load, then every minute.
+setTimeout(() => scriptsApp.startSchedules(), 15_000);
+
+/** A document was saved or synced: what shows it in a live block is updated, and actions watching its folder run. */
+function sourceSaved(id: string): void {
+  liveKeeper.saved(id);
+  scriptsApp.saved(id);
+}
+
+/** Tools › Run Script: picks a script and runs it as an action. */
+async function runScriptByHand(): Promise<void> {
+  const listing = await scriptsApp.listing();
+  const path = await pickScript(listing.map((s) => ({ path: s.path, name: s.meta?.name ?? s.path })));
+  focusInput();
+  if (path) await scriptsApp.act(path, 'hand');
+}
+
+/** A live block put in at the caret, as a pasted one would be, then filled from the vault (which only the page can read). */
+function insertLiveSource(source: string, inline = false): void {
+  const attr = source.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  send({ kind: 'pasteHtml', html: inline ? `<span data-golem-live="${attr}">…</span>` : `<div data-golem-live="${attr}"><p></p></div>`, text: '' });
+  void updateLiveNow(source);
+}
+
+/** Tools › Scripts. */
+function showScripts(): void {
+  void showScriptsDialog({
+    scripts: () => scriptsApp.listing(),
+    run: async (path) => void (await scriptsApp.act(path, 'hand')),
+    undo: (run) => scriptsApp.undo(run),
+    canUndo: (run) => scriptsApp.canUndo(run),
+    ...(!current.none && formatAllows(FORMATS[current.kind], { kind: 'insertLiveBlock' }) && { insert: (source: string) => insertLiveSource(source) }),
+  }).catch((e: unknown) => reportError((e as Error).message));
+}
+
 // A Markdown document that embeds a picture or a note (`![[map.png]]`) has the layout worker ask for it by title: this browser's copy or the account's.
 worker.embeds = async (title) => {
     const found = findByTitle(title, library.entries.filter((e) => e.key !== current.localId && !(current.shared && e.cloud?.id === current.shared.id)), linkPlaces());
@@ -2877,7 +3354,8 @@ async function share(): Promise<void> {
         : !info.cloudId
           ? { unavailable: t('app.notInAccountYet') }
           : { id: info.cloudId };
-  showShareDialog({ name: info?.name ?? current.name, people });
+  const liveEntry = info ? library.entries.find((e) => e.local?.id === info.id) : undefined;
+  showShareDialog({ name: info?.name ?? current.name, people, ...(liveEntry && { liveSources: liveKeeper.tableSources(liveEntry.key).catch(() => []) }) });
 }
 
 async function openCloud(id: string): Promise<void> {
@@ -2989,6 +3467,9 @@ async function print(preview: boolean): Promise<void> {
 /** Said when a PDF's own pages are shown after its text was edited as something else. */
 const outdatedPages = (): string => t('app.outdatedPages');
 
+/** The formats whose files keep a live block as one (Word, ODT, Markdown, HTML, and the app's own); others hold its result only. */
+const KEEPS_LIVE: ReadonlySet<string> = new Set(['docx', 'odt', 'md', 'html', 'wdoc']);
+
 /** Said once the document has opened in its new format (what exporting to it leaves out, where that's something). */
 function switchedNotice(to: Format): string {
   const { label, extensions } = FORMATS[to];
@@ -3037,6 +3518,9 @@ async function convertTo(to: DocumentKind): Promise<void> {
   clearTimeout(autosaveTimer);
   const doc = current;
   doc.unsavedSince = 0;
+  // Live blocks stay live in the document; a file of a format with no way to mark them holds only their results (docs/live-blocks.md §3).
+  const liveEntry = doc.localId ? library.entries.find((e) => e.local?.id === doc.localId) : undefined;
+  const liveLost = !KEEPS_LIVE.has(to) && liveEntry ? liveKeeper.mayHaveLive(liveEntry.key).catch(() => false) : Promise.resolve(false);
   const name = stem(current.name) + FORMATS[to].extensions[0];
   // A document becomes a workbook proper (its first table, a sheet), to edit in the grid; other formats keep the document in the app's own file.
   const toWorkbook = !inGrid && to === 'xlsx';
@@ -3067,6 +3551,7 @@ async function convertTo(to: DocumentKind): Promise<void> {
   rememberInUrl(`local:${info.id}`);
   chrome.update({ documentName: current.name, kind: current.kind });
   pendingNotice = keepBook ? t('app.bookCopied', { name }) : toWorkbook ? t('app.switchedXlsx') : switchedNotice(to);
+  if (!keepBook && !toWorkbook && (await liveLost)) pendingNotice += ` ${t('live.resultsOnly', { extension: FORMATS[to].extensions[0] ?? '' })}`;
 }
 
 /**
@@ -3926,7 +4411,7 @@ async function pictureMenu(hit: { page: GpuPage; x: number; y: number }, at: { x
 const MENU_SYNONYMS = 10;
 
 /** The right-click menu on text with no mistake under the pointer: the word's synonyms (with the Thesaurus), and in a table the table's commands. */
-function textMenu(at: { x: number; y: number }, word: NonNullable<SelectionUpdate['spell']>['word'], table: boolean): void {
+function textMenu(at: { x: number; y: number }, word: NonNullable<SelectionUpdate['spell']>['word'], table: boolean, live?: string): void {
   const item = (id: string) => ({ label: chrome.registry.get(id).plainLabel, run: () => void chrome.registry.execute(id) });
   const label = (key: Parameters<typeof t>[0]) => stripMnemonic(t(key));
   const items: PopupItem[] = [];
@@ -3967,7 +4452,12 @@ function textMenu(at: { x: number; y: number }, word: NonNullable<SelectionUpdat
       { label: label('chrome.table.delete'), items: [item('table.deleteRows'), item('table.deleteColumns'), item('table.deleteTable')] },
     );
   }
-  showPopupMenu(items, at.x, at.y, word ? t('spelling.synonyms') : stripMnemonic(t('chrome.menu.table')), focusInput);
+  // In a live block: it can be turned into ordinary content (docs/live-blocks.md §9).
+  if (live) {
+    if (items.length) items.push('separator');
+    items.push({ label: t('live.field.unlink'), run: () => worker.command({ kind: 'stopLive', source: live }) });
+  }
+  showPopupMenu(items, at.x, at.y, word ? t('spelling.synonyms') : table ? stripMnemonic(t('chrome.menu.table')) : t('live.card.title'), focusInput);
 }
 
 /** Where a double click was, when the picture it is on had not been picked yet: it is opened in the image editor once it is. */
@@ -4000,6 +4490,7 @@ function applySelection(update: SelectionUpdate): void {
   sectionColumns = update.columns;
   sectionPage = update.page;
   link = update.link ?? null;
+  liveCard.caretIn(update.live?.source ?? null, caretLineOnScreen());
   math = update.math ?? null;
   setSelectedPicture(update.picture ?? null);
   if (editMathUntil > performance.now()) {
@@ -4009,7 +4500,7 @@ function applySelection(update: SelectionUpdate): void {
   updateCursor();
   if (update.search) findDialog.report(update.search);
   if (update.spell?.menu) {
-    if (!update.spell.issue && (update.spell.table || update.spell.word) && spellMenuAt && !spellMenuAt.hover) textMenu(spellMenuAt, update.spell.word, !!update.spell.table);
+    if (!update.spell.issue && (update.spell.table || update.spell.word || update.spell.live) && spellMenuAt && !spellMenuAt.hover) textMenu(spellMenuAt, update.spell.word, !!update.spell.table, update.spell.live);
     else showSpellMenu(update.spell.issue, spellMenuAt);
     spellMenuAt = null;
   } else if (update.spell) spellDialog.report(update.spell);
@@ -4052,6 +4543,27 @@ function applySelection(update: SelectionUpdate): void {
   }
   if (update.reveal && update.focus) reveal(update.focus);
   requestRender();
+}
+
+/** The window point just under the caret (where a card over the document opens), or null when there is no caret. */
+function caretOnScreen(): { clientX: number; clientY: number } | null {
+  const caret = selection.caret;
+  const page = caret && pagesById.get(caret.page);
+  if (!caret || !page) return null;
+  const rect = canvas.getBoundingClientRect();
+  const scale = camera.zoom * CSS_PX_PER_POINT;
+  return { clientX: rect.left + (page.x + caret.x - camera.x) * scale, clientY: rect.top + (page.y + caret.y + caret.height - camera.y) * scale - 14 };
+}
+
+/** The caret's line in the window: its left, top and bottom (null when there is no caret). */
+function caretLineOnScreen(): { clientX: number; top: number; bottom: number } | null {
+  const caret = selection.caret;
+  const page = caret && pagesById.get(caret.page);
+  if (!caret || !page) return null;
+  const rect = canvas.getBoundingClientRect();
+  const scale = camera.zoom * CSS_PX_PER_POINT;
+  const top = rect.top + (page.y + caret.y - camera.y) * scale;
+  return { clientX: rect.left + (page.x + caret.x - camera.x) * scale, top, bottom: top + caret.height * scale };
 }
 
 /** Scrolls so a caret (page-relative) is in view, with a margin. */
@@ -5267,6 +5779,12 @@ const MAX_PASTED_HTML = 2_000_000;
 
 /** Pastes what came from the clipboard: formatted if it has formatting and the document can hold it. */
 function pasteClipboard(clip: Clipboard, form: 'auto' | 'html' | 'text' = 'auto'): void {
+  // A live link pasted into a drawing being edited: a live group, saved, then filled from its source at once.
+  const live = isDrawing() && vector?.editor.active && !vector.embedded ? clipboardLiveLink(clip.text ?? '', clip.html ?? '') : null;
+  if (live) {
+    vector!.editor.addLive(live);
+    return void vector!.settled().then(() => updateLiveNow(live));
+  }
   const formatted = FORMATS[current.kind].marks.length > 0;
   if (clip.html && form !== 'text' && formatted && clip.html.length <= MAX_PASTED_HTML) send({ kind: 'pasteHtml', html: clip.html, text: clip.text ?? '' });
   else if (clip.text) send({ kind: 'insertText', text: clip.text });
@@ -5420,6 +5938,21 @@ const chromeHost = createChromeHost({
       });
     }).finally(focusInput);
   },
+  makeLivePdf: () => void makeLivePdf().catch((e: unknown) => reportError((e as Error).message)),
+  showScripts,
+  runScript: () => void runScriptByHand().catch((e: unknown) => reportError((e as Error).message)),
+  showLiveBlockDialog: () => {
+    const folders = library.folders.map((f) => folderPath(library.folders, f.id).map((p) => p.name).join('/')).sort((a, b) => a.localeCompare(b));
+    // The files a table can come from, by the name a live block finds them by.
+    const tables = [...new Set(library.entries.filter((e) => e.local && /\.(csv|tsv|xlsx|xlsm)$/i.test(e.name)).map((e) => e.name))].sort((a, b) => a.localeCompare(b));
+    void formatDialogs()
+      .then((d) => d.showLiveBlockDialog(folders, tables))
+      .then((choice) => {
+        if (!choice) return;
+        insertLiveSource(choice.source, choice.inline);
+      })
+      .finally(focusInput);
+  },
   showColumnsDialog: () => {
     void showColumnsDialog(sectionColumns ?? { count: 1, space: 720, sep: false, width: 9360 }).then((choice) => {
       if (choice) send({ kind: 'setColumns', ...choice });
@@ -5442,11 +5975,8 @@ const chromeHost = createChromeHost({
     const selected = selection.text;
     if (selected.includes('\n')) return reportError(t('app.linkOneParagraph'));
     // The form opens at the caret, over the document.
-    const caret = selection.caret;
-    const page = caret && pagesById.get(caret.page);
     const rect = canvas.getBoundingClientRect();
-    const scale = camera.zoom * CSS_PX_PER_POINT;
-    const at = caret && page ? { clientX: rect.left + (page.x + caret.x - camera.x) * scale, clientY: rect.top + (page.y + caret.y + caret.height - camera.y) * scale - 14 } : { clientX: rect.left + 40, clientY: rect.top + 40 };
+    const at = caretOnScreen() ?? { clientX: rect.left + 40, clientY: rect.top + 40 };
     editLink(link ? { url: link.url, text: link.text, existing: true } : { url: '', text: selected, existing: false }, at);
   },
   showMathDialog: () => {
@@ -5490,6 +6020,7 @@ const chromeHost = createChromeHost({
   selectedText: () => selection.text,
   selectedHtml,
   copyPicture: (cut) => !textView.active && copySelectedPicture(cut),
+  copyLiveLink: copyDocumentLiveLink,
   focusEditor: focusInput,
   notify: reportError,
   toggleGrid,
@@ -5654,6 +6185,12 @@ const VAULT_ASKED_KEY = 'word.vaultAsked';
  */
 async function vaultChanged(touched: string[]): Promise<void> {
   await refreshLibrary();
+  // A source changed elsewhere (another device, an agent editing the vault): what depends on it is updated now (docs/live-blocks.md §6).
+  for (const id of touched) {
+    const entry = library.entries.find((e) => e.local?.id === id || e.cloud?.id === id);
+    if (entry?.local) sourceSaved(entry.local.id);
+  }
+  void liveKeeper.flush();
   const doc = current;
   if (!doc.localId || doc.shared || doc.unsavedSince !== 0 || doc.room?.mode === 'shared') return;
   const entry = library.entries.find((e) => e.local?.id === doc.localId);
@@ -5683,9 +6220,9 @@ async function refreshFromStore(doc: OpenDocument): Promise<boolean | 'typed'> {
 }
 
 /** Puts `source` (the open document's new content) into it in place, keeping the view on the text at its top; false if it can't be. */
-function refreshWith(source: DocumentSource): Promise<boolean | 'typed'> {
+function refreshWith(source: DocumentSource, changes?: number): Promise<boolean | 'typed'> {
   const top = pageAt(canvas.clientWidth / 2, 0);
-  return worker.refresh(source, top && { page: top.page.id, x: top.x, y: top.y });
+  return worker.refresh(source, top && { page: top.page.id, x: top.x, y: top.y }, changes);
 }
 
 /** Starts (or restarts, after signing in or out) keeping the vault folder in step. */
@@ -5962,7 +6499,10 @@ const libraryHost = {
   importFolder: (folderId: string | null) => void chromeHost.perform({ kind: 'importFolder', folderId }),
   dropFile,
   delete: deleteEverywhere,
-  share: (id: string, name: string) => showShareDialog({ name, people: { id } }),
+  share: (id: string, name: string) => {
+    const entry = library.entries.find((e) => e.cloud?.id === id);
+    showShareDialog({ name, people: { id }, ...(entry && { liveSources: liveKeeper.tableSources(entry.key).catch(() => []) }) });
+  },
   rename: renameListed,
   // Whose documents to list: before the plan is known, the account last signed in here (a head start).
   account: accountForFiles,
@@ -6184,6 +6724,8 @@ const sheetView: SheetEditor = new SheetEditor(document.getElementById('viewport
   openFailed: (message) => void reportOpenFailure(message),
   appKey: () => false,
   author: () => commentAuthor(),
+  // A live link pasted into the sheet: saved, then filled from its source at once.
+  liveAdded: (source) => void updateLiveNow(source),
 });
 /** The spreadsheet editor as the chrome sees it (see documentEngine.ts). */
 const sheetEngine: DocumentEngine = {
@@ -6203,6 +6745,7 @@ const sheetEngine: DocumentEngine = {
   selectAll: () => sheetView.selectAll(),
   insert: (text) => sheetView.insert(text),
   copy: () => sheetView.copy(),
+  copyLiveLink: () => sheetView.copyLiveLink(fileName()),
   cut: () => sheetView.cut(),
   paste: () => sheetView.paste(),
   find: (tab) => sheetView.find(tab === 'replace'),
@@ -6684,6 +7227,7 @@ const formLayer = new FormLayer(document.getElementById('viewport')!, {
   change: (fields, merge) => send({ kind: 'setFields', fields, merge }),
   notify: setStatus,
   setMode: setFormMode,
+  liveAdded: (source) => void updateLiveNow(source),
 });
 
 // A PDF page's own text, edited in place (see ui/pdfTextLayer.ts).

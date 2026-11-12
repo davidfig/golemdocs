@@ -167,7 +167,9 @@ sections column chunks' typed arrays, the string pool, formula runs and their co
 
 - **Grammar**: Excel's full formula language: A1 and R1C1, absolute and relative, whole rows and columns, 3D references
   (`Sheet1:Sheet3!A1`), defined and table names, structured references (`Table1[[#This Row],[Amount]]`), external
-  references (keep the cached values), array constants, the spill (`A1#`) and implicit-intersection (`@`) operators, the
+  references (read from the values the workbook keeps for the other workbook, `xl/externalLinks`, through
+  `client/src/sheet/externals.ts` and the engine's `external`; the vault graph refreshes them, see
+  [live-blocks.md](live-blocks.md) §5), array constants, the spill (`A1#`) and implicit-intersection (`@`) operators, the
   range, union and intersection operators, and localised function names on reading the legacy forms.
 - **Compiled to bytecode** per formula run (so a filled-down column is compiled once); relative references are resolved
   per row at evaluation. Values: number, string, boolean, error, blank, reference, array, lambda.
@@ -342,7 +344,8 @@ The recommendations below were taken as decided when work went ahead unassisted 
    engine.
 3. **What "full functionality" leaves out.** Recommended: VBA macros are kept but never run (running them is running
    untrusted code); functions that need the network or an outside service (`WEBSERVICE`, `RTD`, `CUBE*`, `STOCKHISTORY`,
-   linked data types, external workbook links) keep their saved values and are not refreshed; Power Query and data
+   linked data types) keep their saved values and are not refreshed; external workbook links keep their saved values
+   too, refreshed from the vault's copy of the other workbook when it changes (live-blocks.md §5); Power Query and data
    connections are kept, not run. Everything that is computed from the workbook itself is in.
 4. **Solver.** It is a real optimiser (simplex, GRG nonlinear, evolutionary). Recommended: in, in M6, simplex and GRG first.
 5. **Where the image container lives.** Recommended: `client/src/image/` until a second user (or the server) needs it,

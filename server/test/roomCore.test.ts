@@ -99,6 +99,15 @@ test('one person is solo: they are welcomed and nothing else happens', async () 
   assert.equal(t.core.clientsMaySave, true);
 });
 
+test('the owner’s sessions are marked, so the first of them in the room updates its live blocks', async () => {
+  const t = await setup();
+  await t.join('a', 'owner');
+  const editor = await t.join('b');
+  await t.join('c', 'owner', undefined, 'a'); // the owner's phone
+  const people = (editor.inbox.filter((m) => m.type === 'people').at(-1) as any).people;
+  assert.deepEqual(people.map((p: any) => [p.name, p.owner === true]), [['a', true], ['b', false], ['c', true]]);
+});
+
 test('people are told each others pictures, which come from the server', async () => {
   const t = await setup();
   const a = await t.join('a');

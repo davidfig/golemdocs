@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { userAnalytics } from '../src/analytics.ts';
+import { LIVE_CHECKS_END, addLiveChecks } from '../src/liveChecks.ts';
 import { world, type World } from './harness.ts';
 
 let w: World;
@@ -76,4 +77,26 @@ test('only admins can read analytics', async () => {
   assert.equal(((await r.json()) as any).total, 2);
   assert.equal((await w.call('alice@example.com', 'GET', '/api/admin/analytics')).status, 403);
   assert.equal((await w.call(null, 'GET', '/api/admin/analytics')).status, 401);
+});
+
+test('live block checks add up by day, keep nothing about who sent them, and show in analytics', async () => {
+  const send = (as: string | null, body: unknown) => w.call(as, 'POST', '/api/live-checks', { body: JSON.stringify(body), type: 'application/json' });
+  assert.equal((await send(ADMIN, { opened: 3, stale: 1 })).status, 200);
+  assert.equal((await send(ADMIN, { opened: 2, stale: 2 })).status, 200);
+  assert.equal((await send(null, { opened: 1, stale: 0 })).status, 401);
+  for (const bad of [{ opened: 1, stale: 2 }, { opened: -1, stale: 0 }, { opened: 1.5, stale: 0 }, { opened: 5000, stale: 0 }, {}]) assert.equal((await send(ADMIN, bad)).status, 400);
+  const { results } = await w.env.DIRECTORY.prepare('SELECT * FROM live_checks').all<Record<string, unknown>>();
+  assert.equal(results.length, 1);
+  assert.deepEqual(Object.keys(results[0]).sort(), ['day', 'opened', 'stale']);
+  const { liveChecks } = await userAnalytics(w.env, NOW);
+  assert.deepEqual(liveChecks.map(({ opened, stale }) => ({ opened, stale })), [{ opened: 5, stale: 3 }]);
+});
+
+test('the live block count ends on its date, and days past 120 are deleted', async () => {
+  await addLiveChecks(w.env, 4, 1, NOW - 200 * DAY);
+  await addLiveChecks(w.env, 2, 0, NOW);
+  const days = async () => (await w.env.DIRECTORY.prepare('SELECT day FROM live_checks ORDER BY day').all<{ day: string }>()).results.map((r) => r.day);
+  assert.deepEqual(await days(), [new Date(NOW).toISOString().slice(0, 10)]);
+  assert.equal(await addLiveChecks(w.env, 1, 0, LIVE_CHECKS_END), false);
+  assert.equal((await days()).length, 1);
 });

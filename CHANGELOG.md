@@ -1,5 +1,41 @@
 # What’s New in Golem Docs
 
+## 0.38.0 - Unreleased
+
+### Added
+
+- Live blocks: show a spreadsheet's table, range or cell, a CSV file, a picture or a drawing inside a Word, ODT, Markdown or HTML document, and it stays up to date when the source changes. In a Markdown note, write `![[Budget.xlsx#Expenses]]` and the table appears.
+- Edit › Copy as Live Link in a spreadsheet copies the selected cells, table or named range so that pasting it into a document makes a live block.
+- A live block can also show part of another document: a section under a heading, a bookmark, a table by its title (`![[Report.docx#table:Costs]]`), or a field of a note's front matter (`![[Chapter 3.md#field:status]]`). Edit › Copy as Live Link in a document copies the part the caret is in.
+- A live block can show a spreadsheet's chart as a picture (`![[Budget.xlsx#chart:Spending]]`, by the chart's title), redrawn when its numbers change. Pick a chart and use Edit › Copy as Live Link to copy it.
+- Spreadsheets can hold live blocks too: paste a live link (or `![[Meals.csv]]`) into a cell, and the table fills the cells from there down and across, kept up to date like any other live block. Formulas can use its numbers; typing over its cells says where they come from.
+- Insert › Live Block adds a block worked out from a folder of notes: a list of its notes with front matter fields as columns (a character list, a reading list), a count of words or notes with an optional goal ("41,200 / 50,000"), or a timeline of notes by a date in their front matter. Each stays up to date as the notes change, and can also be typed into a note (`![[@list:Characters?columns=role]]`).
+- A live block of a CSV file or spreadsheet table can show just the rows you want: in Insert › Live Block › Table, or in its address, keep rows that meet conditions, sort them, pick columns and set a limit (`![[Meals.csv?where=Calories>2000&sort=-Calories]]`).
+- PDF forms work with live blocks: paste a live link into a form field and it is filled from that source and kept up to date, so the downloaded PDF always has the current numbers. A field can be a source too: click in it and use Edit › Copy as Live Link (`![[Return.pdf#field:Total]]`).
+- Drawings can show live blocks: paste a live link into a drawing and its value, table or chart appears as a group you can move and scale, kept up to date like any other live block.
+- File › Live PDF Copy saves a PDF of your document beside it, and writes it again whenever the document changes, so the PDF in your vault folder is never out of date.
+- Scripts: a TypeScript or JavaScript file in your vault's Scripts folder can fill a live block (`![[Scripts/reading-list.ts]]`) or change notes for you, by hand (Tools › Run Script), from a button in a note (`![[@run:Scripts/daily-note.ts]]`), when a note in a folder changes, or every day or week. A script runs walled off from the network and the rest of the app, asks before its first run, and can only read and change the folders it names. Tools › Scripts shows each script's permissions and last runs, turns scripts off, and undoes a run.
+- A script that changes notes can fetch from websites it names (`network: ['api.example.com']`): it asks for each site before its first run, and can reach no other.
+- `pnpm golem run Scripts/x.ts --vault <folder>` runs a vault's script from the command line, for testing scripts and for ai agents.
+- Formulas that read another workbook (`=[Bank.xlsx]Sheet1!A1`) now keep working when the sheet recalculates, and pick up the other workbook's new numbers when it changes in your vault.
+- A live block whose source shows the document it is in, directly or through other documents, says so and keeps what it last showed.
+- A live block can't be edited by mistake: typing in it says which file it comes from, so you can change it there.
+- Put the caret in a live block to see where it comes from, with Update Now and Open Source.
+- Live blocks stay up to date when someone else changes their source, or you change it on another device: whichever of your devices is open next (the web app, a phone or a computer) updates them in the background while you aren't typing. A document too large for a phone is left for a computer, or updated when you open it; Tools › Options › Live Blocks sets how large a document each device updates in the background. Updates run apart from the editor, so typing never waits for them, and the memory they use is given back as soon as they finish.
+- In a document someone shared with you, a live block's card says that the owner's devices keep it up to date.
+- Live blocks also stay up to date in a document you're editing together with other people: one of the owner's open apps updates them, and everyone sees the change.
+- Stop Updating, on a live block's card or in its right-click menu, turns the block into ordinary text, cells or shapes holding what it last showed, so you can change it there. Edit › Undo makes it live again.
+- File › Share warns when a document has live blocks: people with its public link see what the blocks showed when they were last updated on one of your devices.
+
+### Changed
+
+- Until March 2027, signed-in apps send one anonymous daily total: how often live blocks were out of date when a document opened. It never says who or which document, and the pricing page now says so.
+
+### Fixed
+
+- An SVG file imported from a ZIP or a dropped folder now opens as a drawing. It used to be renamed to a PNG.
+- The Down arrow on the line above a table goes into the table's first row, and Up from below it into the last row. It used to jump over the whole table.
+
 ## 0.37.2 - 2026-11-11
 
 ### Fixed

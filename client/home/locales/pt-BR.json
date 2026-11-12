@@ -342,7 +342,7 @@
   "pricing.v1.h": "Sem anúncios, sem venda de dados.",
   "pricing.v1.p": "Não vendo seus dados e não mostro anúncios.",
   "pricing.v2.h": "Sem rastreamento.",
-  "pricing.v2.p": "Sem análises e sem rastreadores de publicidade.",
+  "pricing.v2.p": "Sem rastreadores de publicidade e nada que siga você. Uma exceção ao “sem análises”, até março de 2027: uma contagem diária anônima de quantas vezes os blocos dinâmicos estão desatualizados ao abrir um documento, para decidir se criamos um recurso. Ela nunca diz quem nem o quê.",
   "pricing.v3.h": "Seus arquivos, todos eles.",
   "pricing.v3.p": "Cada documento é um arquivo de verdade que pertence a você. Arquivo › Baixar tudo salva tudo em um único ZIP, a qualquer momento.",
   "pricing.legal": "Escrevi a <a href=\"/home/privacy\">Política de Privacidade</a> e os <a href=\"/home/terms\">Termos de Serviço</a> para serem lidos. São curtos.",

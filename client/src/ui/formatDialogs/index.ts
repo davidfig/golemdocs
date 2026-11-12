@@ -4,6 +4,7 @@ export { showBookmarkDialog } from './bookmarkDialog.ts';
 export { showBordersDialog } from './bordersDialog.ts';
 export { showFontDialog } from './fontDialog.ts';
 export { showListDialog } from './listDialog.ts';
+export { showLiveBlockDialog } from './liveBlockDialog.ts';
 export { showPageNumbersDialog } from './pageNumbersDialog.ts';
 export { showStylesDialog } from './stylesDialog.ts';
 export { showTabsDialog } from './tabsDialog.ts';

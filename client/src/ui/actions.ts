@@ -223,6 +223,8 @@ export type Action =
   | { kind: 'redo' }
   | { kind: 'cut' }
   | { kind: 'copy' }
+  /** The selection as a live block's source (docs/live-blocks.md): pasted into any document, it is kept up to date. */
+  | { kind: 'copyLiveLink' }
   | { kind: 'paste' }
   | { kind: 'selectAll' }
   | { kind: 'dialog'; name: DialogName }
@@ -292,6 +294,14 @@ export type Action =
   | { kind: 'insertComment' }
   | { kind: 'insertFootnote' }
   | { kind: 'insertBookmark' }
+  /** Insert › Live Block: a built-in block (a folder list, a count, a timeline), set up in a dialog. */
+  | { kind: 'insertLiveBlock' }
+  /** File › Live PDF Copy: a PDF beside the document, written again whenever it changes (docs/live-blocks.md §3). */
+  | { kind: 'livePdf' }
+  /** Tools › Scripts: every script, what it may do, its runs (docs/live-blocks.md §8). */
+  | { kind: 'scripts' }
+  /** Tools › Run Script: an action run by hand. */
+  | { kind: 'runScript' }
   | { kind: 'insertTextBox' }
   | { kind: 'insertCodeBlock' }
   | { kind: 'insertHorizontalRule' }

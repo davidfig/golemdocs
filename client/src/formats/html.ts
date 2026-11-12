@@ -62,6 +62,8 @@ import type { Comment } from '@golemdocs/docx';
 import { commentMarker, RangeTracker } from './commentRanges.ts';
 import { MONO_FONTS, styleFor } from './markdownStyles.ts';
 import { t } from '../i18n/index.ts';
+import { liveTag, liveWrapper, parseLiveTag } from '../live/liveMarks.ts';
+import type { LiveTag } from '../live/liveMarks.ts';
 
 // --- Public types -----------------------------------------------------------------------------------
 
@@ -1671,6 +1673,11 @@ class Importer {
   }
 
   private inline(el: HElement, flow: Flow, ctx: Ctx): void {
+    const live = htmlLiveTag(el);
+    if (live && !ctx.link && !ctx.pre) {
+      this.liveInline(el, live, flow, ctx);
+      return;
+    }
     const { ctx: c } = this.styled(el, ctx, 'inline');
     if (isCommentMark(el)) {
       this.commentMark(el, flow, c);
@@ -1683,6 +1690,30 @@ class Importer {
     if (el.name === 'q') this.text(flow, c, '“');
     for (const child of el.children) this.visit(child, flow, c);
     if (el.name === 'q') this.text(flow, c, '”');
+  }
+
+  /** A live value (docs/live-blocks.md §3): what the element holds, as an inline content control. */
+  private liveInline(el: HElement, tag: LiveTag, flow: Flow, ctx: Ctx): void {
+    const st = this.ensure(flow, ctx);
+    const start = st.p.children.length;
+    st.run = null;
+    st.hyperlink = null;
+    st.linkEl = null;
+    for (const child of el.children) this.visit(child, flow, ctx);
+    if (flow.para !== st) return;
+    st.p.children.push(liveWrapper(tag, st.p.children.splice(start)));
+    st.run = null;
+    st.content = true;
+  }
+
+  /** A live block: what the element holds, as a block-level content control. */
+  private liveBlock(el: HElement, tag: LiveTag, flow: Flow, ctx: Ctx): void {
+    this.close(flow);
+    const start = flow.blocks.length;
+    const c = { ...ctx, flowLevel: false };
+    for (const child of el.children) this.visit(child, flow, c);
+    this.close(flow);
+    flow.blocks.push(liveWrapper(tag, flow.blocks.splice(start)));
   }
 
   /** Puts a comment marker in the paragraph, as text would go (the next text starts a new run). */
@@ -1755,6 +1786,11 @@ class Importer {
   }
 
   private container(el: HElement, flow: Flow, ctx: Ctx): void {
+    const live = htmlLiveTag(el);
+    if (live) {
+      this.liveBlock(el, live, flow, ctx);
+      return;
+    }
     if (rawOnly(el)) {
       this.rawElement(flow, ctx, el);
       return;
@@ -2228,6 +2264,15 @@ const HIGHLIGHTS: Record<string, string> = {
 const TYPE_ATTRS: Record<string, string> = { lowerLetter: 'a', upperLetter: 'A', lowerRoman: 'i', upperRoman: 'I' };
 
 const escText = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\u00a0/g, '&nbsp;');
+/** A live block's source and stamp as an element's attributes. */
+const liveAttrs = ({ source, stamp }: LiveTag): string => ` data-golem-live="${escAttr(source)}"${stamp ? ` data-golem-stamp="${escAttr(stamp)}"` : ''}`;
+
+/** The live block an element is (its `data-golem-live` and `data-golem-stamp`), or null. */
+function htmlLiveTag(el: HElement): LiveTag | null {
+  const source = el.attrs['data-golem-live'];
+  return source ? parseLiveTag(`live:${source}${el.attrs['data-golem-stamp'] ? ` stamp=${el.attrs['data-golem-stamp']}` : ''}`) : null;
+}
+
 const escAttr = (s: string): string => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 function attrString(attrs: HtmlAttributes | undefined): string {
@@ -2658,7 +2703,12 @@ class Writer {
             const href = inline.url ?? (inline.anchor !== undefined ? `#${inline.anchor}` : undefined);
             walk(inline.children, href !== undefined ? { href } : link);
           }
-        } else if (inline.kind === 'wrapper') walk(inline.children, link);
+        } else if (inline.kind === 'wrapper') {
+          const live = liveTag(inline);
+          if (live) add({ t: 'html', s: `<span${liveAttrs(live)}>`, marks: [], link: null });
+          walk(inline.children, link);
+          if (live) add({ t: 'html', s: '</span>', marks: [], link: null });
+        }
         else if (!commentless && commentMarker(inline)) {
           const point = tracker.marker(commentMarker(inline)!, atoms.length);
           if (point !== null) add({ t: 'html', s: `${this.commentOpen(this.comments.get(point)!)}</mark>`, marks: [], link: null });
@@ -2762,9 +2812,21 @@ class Writer {
 
   private blocks(list: readonly Block[], ind: string, out: string[]): void {
     const flat: Block[] = [];
+    const markers = new Map<Block, string>();
+    const marker = (html: string): void => {
+      const stand: Block = { kind: 'paragraph', properties: {}, children: [], attrs: {} };
+      markers.set(stand, html);
+      flat.push(stand);
+    };
     const flatten = (blocks: readonly Block[]): void => {
       for (const b of blocks) {
-        if (b.kind === 'wrapper') flatten(b.children);
+        const live = liveTag(b);
+        // A live block is an element of its own around its result, carrying its source and stamp (docs/live-blocks.md §3).
+        if (live && b.kind === 'wrapper') {
+          marker(`<div${liveAttrs(live)}>`);
+          flatten(b.children);
+          marker('</div>');
+        } else if (b.kind === 'wrapper') flatten(b.children);
         else if (b.kind !== 'raw') flat.push(b);
       }
     };
@@ -2772,6 +2834,12 @@ class Writer {
     const lv: Level = { ind, lists: [], quotes: 0, quoteInd: ind, pre: null, wrappers: [] };
     for (let i = 0; i < flat.length; i++) {
       const block = flat[i];
+      const marked = markers.get(block);
+      if (marked !== undefined) {
+        this.closeGroups(lv, out);
+        out.push(`${lv.ind}${marked}`);
+        continue;
+      }
       const key = anchorOf(block);
       for (const w of (key && this.wrapperStarts.get(key)) || []) {
         if (this.opened.has(w)) continue;

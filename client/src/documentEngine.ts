@@ -19,6 +19,8 @@ export interface DocumentEngine {
   /** Types text at the caret, over the selection. */
   insert(text: string): void;
   copy(): Promise<void>;
+  /** Edit › Copy as Live Link: the selection as a live block's source (docs/live-blocks.md), for editors whose selection can be one. */
+  copyLiveLink?(): Promise<void>;
   cut(): Promise<void>;
   paste(): Promise<void>;
   /** Edit › Find, Replace or Go To. */

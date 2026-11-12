@@ -3,6 +3,7 @@
 // find bar, takes the keyboard and the mouse, and draws through SheetRenderer on the app's canvas and camera.
 
 import { t } from '../i18n/index.ts';
+import { clipboardLiveLink } from '../live/liveMarks.ts';
 import type { MessageKey } from '../i18n/index.ts';
 import { h, iconButton, CLOSE_ICON } from '../ui/dom.ts';
 import { attachTextInput, focusTextInput } from '../ui/textInput.ts';
@@ -69,6 +70,8 @@ export interface SheetEditorDeps {
   appKey(e: KeyboardEvent): boolean;
   /** The name a new note is signed with (the person signed in, or the guest's name). */
   author(): string;
+  /** A live link was pasted, making a live range (docs/live-blocks.md §3): it is filled from its source. */
+  liveAdded?(source: string): void;
 }
 
 /** Bars over the canvas, in CSS pixels: the formula bar at the top, the sheet tabs at the bottom. */
@@ -1694,7 +1697,17 @@ export class SheetEditorView {
     const sel = this.selection;
     const inside = hit.row >= sel.r0 && hit.row <= sel.r1 && hit.col >= sel.c0 && hit.col <= sel.c1;
     if (!inside && hit.kind === 'cell') this.select(hit.row, hit.col);
-    this.menu(clientX, clientY, this.cellItems(hit.kind));
+    if (hit.kind !== 'cell' || this.readOnly || !this.worker) return this.menu(clientX, clientY, this.cellItems(hit.kind));
+    // On a live range: Stop Updating too (docs/live-blocks.md §9), asked of the worker, which knows the ranges.
+    const at = { row: hit.row, col: hit.col };
+    void this.ask<Extract<FromWorker, { t: 'liveAt' }>>({ t: 'liveAt', id: this.id(), sheet: this.sheetIndex, ...at }).then(
+      ({ source }) => {
+        const items = this.cellItems(hit.kind);
+        if (source) items.push('separator', { label: t('live.field.unlink'), run: () => void this.edit({ kind: 'stopLive', ...at }) });
+        this.menu(clientX, clientY, items);
+      },
+      () => this.menu(clientX, clientY, this.cellItems(hit.kind)),
+    );
   }
 
   private menu(x: number, y: number, items: PopupItem[]): void {
@@ -1735,6 +1748,43 @@ export class SheetEditorView {
     }
   }
 
+  /**
+   * Edit › Copy as Live Link (docs/live-blocks.md): the selection as a block that stays up to date. `name` is the workbook's (its
+   * title in links). The clipboard holds the cells as copied, inside an element naming their source, so a document pastes a live
+   * block, and `![[name#address]]` as text, which Markdown reads as one too.
+   */
+  async copyLiveLink(name: string): Promise<void> {
+    if (!this.worker) return;
+    if (this.chart !== null) return this.copyChartLiveLink(name, this.chart);
+    const range = this.selection;
+    try {
+      const [copied, where] = await Promise.all([
+        this.ask<Extract<FromWorker, { t: 'copy' }>>({ t: 'copy', id: this.id(), sheet: this.sheetIndex, range }),
+        this.ask<Extract<FromWorker, { t: 'liveAddress' }>>({ t: 'liveAddress', id: this.id(), sheet: this.sheetIndex, range }),
+      ]);
+      const source = `${name}#${where.address}`;
+      const attr = source.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      const single = range.r0 === range.r1 && range.c0 === range.c1;
+      const shown = copied.text.replace(/\r?\n$/, '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      const html = single ? `<span data-golem-live="${attr}">${shown}</span>` : `<div data-golem-live="${attr}">${copied.html}</div>`;
+      await writeClipboard(`![[${source}]]`, html);
+    } catch (e) {
+      this.deps.notify(messageFor((e as Error).message));
+    }
+  }
+
+  /** The selected chart as a live block's source: by its title, or by its number on its sheet (live/chartSource.ts). */
+  private async copyChartLiveLink(name: string, index: number): Promise<void> {
+    const scene = this.chartScenes()[index];
+    if (!scene) return;
+    const sheet = this.book?.sheets[this.sheetIndex]?.name ?? '';
+    const quoted = /^[A-Za-z_][A-Za-z0-9_.]*$/.test(sheet) ? sheet : `'${sheet.replace(/'/g, "''")}'`;
+    const source = `${name}#chart:${scene.title?.trim() || `${quoted}!Chart ${index + 1}`}`;
+    const attr = source.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    // Filled in where it is pasted: the document draws the chart when it updates the block.
+    await writeClipboard(`![[${source}]]`, `<div data-golem-live="${attr}"><p></p></div>`);
+  }
+
   async paste(): Promise<void> {
     try {
       const items = await navigator.clipboard.read();
@@ -1758,6 +1808,13 @@ export class SheetEditorView {
     if (this.readOnly) return;
     // Cells copied here (the clipboard still holds their text): pasted with their formulas and looks.
     if (this.copied && this.copiedFrom && text === this.copiedFrom.text) return this.pasteSpecial('all', false);
+    // A live link (Copy as Live Link, or a plain embed only a live block can show): a live range at the active cell.
+    const source = clipboardLiveLink(text, html);
+    if (source) {
+      await this.edit({ kind: 'addLive', row: this.active.row, col: this.active.col, source });
+      this.deps.liveAdded?.(source);
+      return;
+    }
     let rows: string[][] = [];
     if (html.includes('<table')) {
       const table = new DOMParser().parseFromString(html, 'text/html').querySelector('table');
@@ -2214,7 +2271,9 @@ async function writeClipboard(text: string, html: string): Promise<void> {
 }
 
 /** A worker's message code as words. */
+/** The source of a live link on the clipboard: an element with `data-golem-live`, or text that is only `![[…]]` of an address only a live block can show. */
 function messageFor(code: string): string {
+  if (code.startsWith('live:')) return t('live.readOnly', { source: code.slice(5) });
   switch (code) {
     case 'empty':
     case 'tooLong':

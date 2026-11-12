@@ -329,6 +329,7 @@ export class Chrome {
       a('file.import', t('chrome.file.import'), { kind: 'import' }, { tooltip: t('chrome.file.import.tip') }),
       a('file.importFolder', t('chrome.file.importFolder'), { kind: 'importFolder' }, { tooltip: t('chrome.file.importFolder.tip') }),
       a('file.download', t('chrome.file.download'), { kind: 'download' }, { tooltip: t('chrome.file.download.tip') }),
+      a('file.livePdf', t('chrome.file.livePdf'), { kind: 'livePdf' }, { tooltip: t('chrome.file.livePdf.tip') }),
       a('file.downloadAll', t('chrome.file.downloadAll'), { kind: 'downloadAll' }, { tooltip: t('chrome.file.downloadAll.tip') }),
       a('file.openSelection', t('chrome.file.openSelection'), { kind: 'openSelection' }, { tooltip: t('chrome.file.openSelection.tip'), visible: (s) => s.kind === 'largetext', enabled: (s) => s.hasSelection }),
       a('file.share', t('chrome.file.share'), { kind: 'share' }, { tooltip: t('chrome.file.share.tip') }),
@@ -356,6 +357,7 @@ export class Chrome {
       a('edit.redo', t('chrome.edit.redo'), { kind: 'redo' }, { icon: 'redo', shortcut: { mac: 'Mod+Shift+Z', other: 'Mod+Y' }, enabled: (s) => s.canRedo }),
       a('edit.cut', t('chrome.edit.cut'), { kind: 'cut' }, { icon: 'cut', shortcut: 'Mod+X', nativeShortcut: true, enabled: (s) => s.hasSelection }),
       a('edit.copy', t('chrome.edit.copy'), { kind: 'copy' }, { icon: 'copy', shortcut: 'Mod+C', nativeShortcut: true, enabled: (s) => s.hasSelection }),
+      a('edit.copyLiveLink', t('chrome.edit.copyLiveLink'), { kind: 'copyLiveLink' }),
       a('edit.paste', t('chrome.edit.paste'), { kind: 'paste' }, { icon: 'paste', shortcut: 'Mod+V', nativeShortcut: true }),
       dialog('edit.pasteSpecial', t('chrome.edit.pasteSpecial'), 'pasteSpecial'),
       a('edit.selectAll', t('chrome.edit.selectAll'), { kind: 'selectAll' }, { shortcut: 'Mod+A' }),
@@ -441,6 +443,7 @@ export class Chrome {
       a('insert.codeBlock', t('chrome.insert.codeBlock'), { kind: 'insertCodeBlock' }),
       a('insert.link', t('chrome.insert.link'), { kind: 'insertLink' }, { icon: 'link', shortcut: 'Mod+K', tooltip: t('chrome.insert.link.tip') }),
       a('insert.bookmark', t('chrome.insert.bookmark'), { kind: 'insertBookmark' }),
+      a('insert.liveBlock', t('chrome.insert.liveBlock'), { kind: 'insertLiveBlock' }),
       a('insert.math', t('math.insert'), { kind: 'insertMath' }, { icon: 'math', tooltip: t('math.insert.tip') }),
     );
 
@@ -501,6 +504,8 @@ export class Chrome {
       dialog('tools.wordCount', t('chrome.tools.wordCount'), 'wordCount', { icon: 'wordCount' }),
       a('tools.trackChanges', t('chrome.tools.trackChanges'), { kind: 'toggleTrackChanges' }, { icon: 'trackChanges', shortcut: 'Mod+Shift+E', checked: (s) => s.trackChanges }),
       dialog('tools.options', t('chrome.tools.options'), 'options', { shortcut: 'Mod+,' }),
+      a('tools.runScript', t('chrome.tools.runScript'), { kind: 'runScript' }, { tooltip: t('chrome.tools.runScript.tip') }),
+      a('tools.scripts', t('chrome.tools.scripts'), { kind: 'scripts' }, { tooltip: t('chrome.tools.scripts.tip') }),
       { id: 'tools.autoFormat', label: t('chrome.tools.autoFormat'), tooltip: t('chrome.tools.autoFormat.tip'), run: () => setAutoFormat(!autoFormatOn()), checked: autoFormatOn },
     );
 
@@ -694,6 +699,7 @@ export class Chrome {
       cmd('file.share'),
       this.convertToItem(),
       cmd('file.download'),
+      cmd('file.livePdf'),
       cmd('file.downloadAll'),
       cmd('file.openSelection'),
       cmd('file.subscribe'),
@@ -733,6 +739,8 @@ export class Chrome {
       cmd('tools.wordCount'),
       cmd('tools.trackChanges'),
       cmd('tools.autoFormat'),
+      cmd('tools.runScript'),
+      cmd('tools.scripts'),
       cmd('file.pageSetup'),
       cmd('file.properties'),
       cmd('file.versionHistory'),
@@ -777,6 +785,7 @@ export class Chrome {
           cmd('file.share'),
           this.convertToItem(),
           cmd('file.download'),
+          cmd('file.livePdf'),
           cmd('file.downloadAll'),
           cmd('file.openSelection'),
           sep,
@@ -805,6 +814,7 @@ export class Chrome {
           sep,
           cmd('edit.cut'),
           cmd('edit.copy'),
+          cmd('edit.copyLiveLink'),
           cmd('edit.paste'),
           cmd('edit.pasteSpecial'),
           sep,
@@ -897,6 +907,7 @@ export class Chrome {
           sep,
           cmd('insert.link'),
           cmd('insert.bookmark'),
+          cmd('insert.liveBlock'),
           cmd('insert.math'),
         ],
       },
@@ -934,7 +945,7 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.tools'),
-        items: [cmd('tools.spelling'), cmd('tools.thesaurus'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), cmd('tools.autoFormat'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
+        items: [cmd('tools.spelling'), cmd('tools.thesaurus'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), cmd('tools.autoFormat'), sep, cmd('tools.runScript'), cmd('tools.scripts'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
       },
       {
         label: t('chrome.menu.table'),

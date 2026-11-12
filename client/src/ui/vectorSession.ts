@@ -48,6 +48,8 @@ export interface VectorSession {
   syncScene(scene: Scene): void;
   /** The SVG text of a new blank drawing. */
   blank(width: number, height: number): string;
+  /** Resolves once the last change is in the open document (to be saved). */
+  settled(): Promise<void>;
   /** Stops editing the embedded drawing. */
   closeEmbedded(): void;
   readonly embedded: boolean;
@@ -72,6 +74,8 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
   const layer = new VectorLayer(host.viewport, { camera: host.camera, page: host.page, changed: host.changed });
   const compressed = { value: false };
   let embedded: { changed(svg: string): void; leave(): void } | null = null;
+  /** The last change on its way to the open document (its file is made, then opened in place of the one before). */
+  let reopening: Promise<void> = Promise.resolve();
   const editor: VectorEditor = new VectorEditor({
     canvas: host.canvas,
     layer,
@@ -79,7 +83,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
       if (!embedded && host.sceneCommitted?.(scene, base)) return;
       const text = writeSvg(scene);
       if (embedded) embedded.changed(text);
-      else void svgBytes(text, compressed.value).then(host.reopen);
+      else reopening = svgBytes(text, compressed.value).then(host.reopen);
     },
     stateChanged: host.changed,
     notice: host.notice,
@@ -157,6 +161,7 @@ export function createVectorSession(host: VectorSessionHost): VectorSession {
         documentColors: editor.documentColors,
       };
     },
+    settled: () => reopening.catch(() => undefined),
     action(op) {
       if (op.startsWith('shape:')) return isShapeId(op.slice(6)) ? editor.setShape(op.slice(6) as ShapeId) : undefined;
       switch (op) {

@@ -42,6 +42,11 @@ export interface FormField {
   readOnly?: boolean;
   /** Text size in points; 0 or missing: fit the box. */
   fontSize?: number;
+  /**
+   * The field shows a live block's result (Golem Docs, docs/live-blocks.md): its tag, `live:<source> stamp=<hash>`. Kept
+   * with the document's fields; writing the file writes only the value.
+   */
+  live?: string;
 }
 
 // Field flags (§12.7.4, Table 226, 228, 230).

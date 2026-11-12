@@ -1,5 +1,6 @@
 import { isAdmin, pictureOf } from './accounts.ts';
 import { userAnalytics } from './analytics.ts';
+import { addLiveChecks, readLiveChecks } from './liveChecks.ts';
 import { authenticate } from './auth.ts';
 import { handleAuth } from './authRoutes.ts';
 import { billingSummary } from './billing.ts';
@@ -11,6 +12,8 @@ import { HttpError, ID, json } from './http.ts';
 import { handleFolders } from './folders.ts';
 import { handleRoomMedia } from './roomMedia.ts';
 import { handlePreferences } from './preferences.ts';
+import { handleScriptClaims } from './scriptClaims.ts';
+import { handleLiveMarker } from './liveMarker.ts';
 import { handleReading } from './reading.ts';
 import { Room } from './room.ts';
 import { handleSite } from './site.ts';
@@ -156,6 +159,14 @@ const routes: ExportedHandler = {
         throw new HttpError(405, 'method not allowed');
       }
 
+      // POST /api/live-checks { opened, stale }: documents with live blocks opened, and how many were out of date (liveChecks.ts).
+      if (path === '/api/live-checks' && request.method === 'POST') {
+        const { opened, stale } = readLiveChecks(await request.json().catch(() => null));
+        // 410 once the count has ended: the app stops asking.
+        if (!(await addLiveChecks(env, opened, stale))) throw new HttpError(410, 'the live block count has ended');
+        return json({ ok: true });
+      }
+
       // POST /api/feedback { message }: send feedback to the admins.
       if (path === '/api/feedback' && request.method === 'POST') {
         const body = (await request.json().catch(() => null)) as { message?: unknown } | null;
@@ -173,6 +184,18 @@ const routes: ExportedHandler = {
         }
         const { syncing, ownDb } = await ownStorage(env, userId, request.method);
         return await handlePreferences(request, url, ownDb, syncing);
+      }
+
+      // POST /api/script-claims: a scheduled script run, claimed by one of the person's devices (scriptClaims.ts).
+      if (path === '/api/script-claims') {
+        const { ownDb } = cloudStorageConfigured(env) ? await ownStorage(env, userId, 'GET') : { ownDb: null };
+        return await handleScriptClaims(request, ownDb);
+      }
+
+      // GET/POST /api/live-marker: how far the person's devices have kept live blocks up to date (liveMarker.ts).
+      if (path === '/api/live-marker') {
+        const { ownDb } = cloudStorageConfigured(env) ? await ownStorage(env, userId, 'GET') : { ownDb: null };
+        return await handleLiveMarker(request, ownDb);
       }
 
       // GET/PUT /api/reading: where the user is in each book they read, kept in their account (reading.ts).

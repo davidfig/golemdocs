@@ -4,8 +4,8 @@
 
 import type { WordDocument } from '../docx/document.ts';
 import { StyleResolver } from '../model/resolve.ts';
-import type { Paragraph } from '../model/types.ts';
-import { docLinkTitles } from '../search/links.ts';
+import type { Block, Paragraph } from '../model/types.ts';
+import { docLinkTitles, liveInlineTitles, liveTitle, sdtTag, textLinkTitles, textLiveTitles } from '../search/links.ts';
 import { OBJECT_CHAR, paragraphText, paragraphsIn } from './text.ts';
 
 /** One paragraph of a document, as plain text. */
@@ -17,21 +17,40 @@ export interface Segment {
   list?: 'bullet' | 'number';
   /** The titles of the stored documents the paragraph links to (see ../search/links.ts). */
   links?: string[];
+  /** Of those, the ones a live block in the paragraph shows (the vault graph's edges: docs/live-blocks.md §5). */
+  live?: string[];
 }
 
 /** The document as numbered paragraphs (the first is 0), with their style names and list kinds. */
 export function paragraphSegments(doc: WordDocument): Segment[] {
   const resolver = new StyleResolver(doc.styles, doc.theme, doc.numbering);
+  // A live block's source counts as a link of the first paragraph of its result (see ../search/links.ts).
+  const liveLinks = new Map<Paragraph, string>();
+  const findLive = (blocks: readonly Block[]): void => {
+    for (const b of blocks) {
+      if (b.kind === 'wrapper') {
+        const title = liveTitle(sdtTag(b.shell));
+        const first = title ? paragraphsIn(b.children)[0] : undefined;
+        if (title && first && !liveLinks.has(first)) liveLinks.set(first, title);
+        findLive(b.children);
+      } else if (b.kind === 'table') for (const r of b.rows) if (r.kind === 'row') for (const c of r.cells) if (c.kind === 'cell') findLive(c.children);
+    }
+  };
+  findLive(doc.body);
   return paragraphsIn(doc.body).map((p: Paragraph) => {
     const named = p.properties.style ? doc.styles.styles.find((s) => s.id === p.properties.style)?.name : undefined;
     const numbering = resolver.paragraph(p.properties).numbering;
     const level = numbering?.id ? resolver.listLevel(numbering.id, numbering.level ?? 0) : undefined;
-    const links = docLinkTitles(p);
+    const block = liveLinks.get(p);
+    const inline = liveInlineTitles(p);
+    const live = block ? [...new Set([block, ...inline])] : inline;
+    const links = block ? [...new Set([block, ...docLinkTitles(p)])] : docLinkTitles(p);
     return {
       ...(named && !/^normal$/i.test(named) && { style: named }),
       text: paragraphText(p).replaceAll(OBJECT_CHAR, '[object]'),
       ...(level && { list: level.format === 'bullet' ? ('bullet' as const) : ('number' as const) }),
       ...(links.length ? { links } : {}),
+      ...(live.length ? { live } : {}),
     };
   });
 }
@@ -64,7 +83,10 @@ export function textSegments(bytes: Uint8Array, maxLines = 100_000): Segment[] {
   while (from <= text.length && out.length < maxLines) {
     let end = from;
     while (end < text.length && text[end] !== '\n' && text[end] !== '\r') end++;
-    out.push({ text: text.slice(from, Math.min(end, from + 2000)) });
+    const line = text.slice(from, Math.min(end, from + 2000));
+    const links = textLinkTitles(line);
+    const live = textLiveTitles(line);
+    out.push({ text: line, ...(links.length && { links }), ...(live.length && { live }) });
     from = text[end] === '\r' && text[end + 1] === '\n' ? end + 2 : end + 1;
     if (end >= text.length) break;
   }

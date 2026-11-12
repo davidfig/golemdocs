@@ -3,6 +3,7 @@
 // earliest identity and were last seen at their latest login.
 
 import type { Env } from './cf.ts';
+import { liveCheckDays, type LiveCheckDay } from './liveChecks.ts';
 import { isPaid } from './subscriptions.ts';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -25,6 +26,8 @@ export interface UserAnalytics {
   payingActiveLast30: number;
   /** Oldest month first: how many joined in it, how many users there were at its end, and how many of those who joined in it pay now. */
   history: { month: string; joined: number; total: number; paying: number }[];
+  /** Documents with live blocks opened each day, and how many were out of date: the last 30 days that have any, newest first. */
+  liveChecks: LiveCheckDay[];
   /** When this was worked out. */
   asOf: number;
 }
@@ -67,5 +70,5 @@ export async function userAnalytics(env: Env, now = Date.now()): Promise<UserAna
   const history = [...joinedByMonth]
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([month, m]) => ({ month, joined: m.joined, total: (total += m.joined), paying: m.paying }));
-  return { total: results.length, newLast7, newLast30, activeLast7, activeLast30, paying, payingCancelling, formerlyPaid, payingActiveLast30, history, asOf: now };
+  return { total: results.length, newLast7, newLast30, activeLast7, activeLast30, paying, payingCancelling, formerlyPaid, payingActiveLast30, history, liveChecks: await liveCheckDays(env), asOf: now };
 }

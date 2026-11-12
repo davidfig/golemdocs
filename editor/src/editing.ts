@@ -4,7 +4,7 @@ import { type Position, type ParagraphFormat, type CommandResult, NO_CHANGE } fr
 import type { Selection as OpSelection } from '@golemdocs/ops';
 
 import { newParagraphProperties, paragraphLength, runPropertiesAt, type Paragraph, type ParagraphProperties } from '@golemdocs/docx';
-import { END, Replica, type Applied, type Mapping, type Operation, type Pos, type RemoteChange, type ServerMessage } from '@golemdocs/ops';
+import { END, Mapping, Replica, type Applied, type Operation, type Pos, type RemoteChange, type ServerMessage } from '@golemdocs/ops';
 import { EditorNavigation } from './navigation.ts';
 
 export abstract class EditorEditing extends EditorNavigation {
@@ -14,6 +14,19 @@ export abstract class EditorEditing extends EditorNavigation {
     const [ops, after] = plan;
     const change = this.replica.edit(ops, { before: this.selectionIds, after: { anchor: after, focus: after }, group });
     return this.changed(change.applied, { anchor: after, focus: after });
+  }
+
+  /**
+   * Operations worked out elsewhere (the document compared with a changed copy of it, say) as one local edit: Undo takes it
+   * back in one step, and in a room it goes to the others. The selection stays with the text it was in.
+   */
+  applyOps(ops: Operation[]): CommandResult {
+    if (ops.length === 0) return NO_CHANGE;
+    const before = this.selectionIds;
+    const change = this.replica.edit(ops, { before, after: before });
+    const mapping = new Mapping();
+    mapping.appendAll(change.applied.maps);
+    return this.changed(change.applied, Replica.mapSelection(before, mapping));
   }
 
   /** After the document changed: lay out again, put the selection where it belongs. */

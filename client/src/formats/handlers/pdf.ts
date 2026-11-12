@@ -11,7 +11,7 @@ export { PdfAnnotator } from '../../layout/pdfAnnotator.ts';
 export { markupToDocument } from '../pdfMarkup.ts';
 export { openPdfView } from '../pdfPages.ts';
 export { EditFonts } from '../pdfFonts.ts';
-export { PdfDocument, applyAnnotations, applyEdits, applyFields, readAnnotations } from '@golemdocs/pdf';
+export { PdfDocument, applyAnnotations, applyEdits, applyFields, readAnnotations, readFields } from '@golemdocs/pdf';
 export { pdfToDocument };
 
 const handler: FormatHandler = {

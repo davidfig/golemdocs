@@ -27,7 +27,8 @@ import { displayText, editText } from './format/display.ts';
 import { look } from './format/styleChange.ts';
 import { fromFileFormula } from './formula/fileNames.ts';
 import { shiftFormula } from './formula/shift.ts';
-import { History } from './edit.ts';
+import { History, contentsWritten } from './edit.ts';
+import { liveRangeIn } from '../live/sheetRanges.ts';
 import { Engine } from './formula/engine.ts';
 import { ConditionalPainter } from './conditional.ts';
 import { filterValues } from './filter.ts';
@@ -40,6 +41,7 @@ import type { BookInfo, CellContent, Changed, EditOp, FromWorker, SheetInfo, ToW
 import { loadSheet, readWorkbook } from './xlsx/read.ts';
 import { writeWorkbook } from './xlsx/write.ts';
 import { copyRange } from './clipboard.ts';
+import { liveAddress } from '../live/sheetAddress.ts';
 import { findNext } from './find.ts';
 
 let book: Workbook | null = null;
@@ -194,6 +196,10 @@ function painterFor(index: number, sheet: Worksheet): ConditionalPainter {
 
 /** After typing: the message of a validation rule (with the Stop style) that does not allow what was typed, or null. */
 function refused(index: number, op: EditOp): string | null {
+  // A live range is filled from its source: an edit of its cells would be undone at the next update (docs/live-blocks.md §9).
+  const written = contentsWritten(op);
+  const live = written && liveRangeIn(book!, index, written);
+  if (live) return `live:${live.tag.source}`;
   const sheet = book!.sheets[index];
   if (op.kind !== 'input' || !engine || !sheet || !isWorksheet(sheet) || !sheet.validations.length) return null;
   const { r0, c0, r1, c1 } = op.range;
@@ -514,6 +520,10 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
         const { text, html } = sheet && isWorksheet(sheet) ? copyRange(book, sheet, m.range) : { text: '', html: '' };
         return post({ t: 'copy', id: m.id, text, html });
       }
+      case 'liveAddress':
+        return post({ t: 'liveAddress', id: m.id, address: liveAddress(book, m.sheet, m.range) });
+      case 'liveAt':
+        return post({ t: 'liveAt', id: m.id, source: liveRangeIn(book, m.sheet, [{ r0: m.row, c0: m.col, r1: m.row, c1: m.col }])?.tag.source ?? null });
       case 'find':
         return post({ t: 'found', id: m.id, at: findNext(book, m) });
       case 'end': {

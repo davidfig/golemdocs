@@ -3,13 +3,14 @@
 // formats applied), or a document's first table into a one-sheet workbook. The sheet editor's code comes with it, so this
 // handler is its own chunk, fetched the first time it is used.
 
-import { WordDocument } from '@golemdocs/docx';
+import { WordDocument, liveTitle } from '@golemdocs/docx';
 import type { FormatHandler } from '../convert.ts';
 import { delimitedToDocument, documentToRows, isNumeric } from '../csv.ts';
 import { Kind } from '../../sheet/model/column.ts';
 import { Workbook, isWorksheet } from '../../sheet/model/workbook.ts';
 import { Worksheet } from '../../sheet/model/worksheet.ts';
 import { displayText } from '../../sheet/format/display.ts';
+import { externalTitle } from '../../sheet/externals.ts';
 import { readWorkbook } from '../../sheet/xlsx/read.ts';
 import { writeWorkbook } from '../../sheet/xlsx/write.ts';
 
@@ -18,7 +19,22 @@ export const MAX_ROWS_AS_DOCUMENT = 20_000;
 export const MAX_COLUMNS_AS_DOCUMENT = 200;
 
 export async function workbookRows(bytes: Uint8Array): Promise<string[][]> {
+  return (await workbookIndexed(bytes)).rows;
+}
+
+/**
+ * What the search index takes from a workbook: its active sheet's rows, as shown, and the titles of the sources its live
+ * ranges show (hidden names `_golem_live_<n>` with the block's tag as their comment: live/sheetHost.ts), and of the other
+ * workbooks its formulas read (sheet/externals.ts), so a change to one of them reaches it.
+ */
+export async function workbookIndexed(bytes: Uint8Array): Promise<{ rows: string[][]; live: string[] }> {
   const book = await readWorkbook(bytes, { activeOnly: true });
+  const ranges = book.names.flatMap((n) => (n.hidden && n.name.startsWith('_golem_live_') ? [liveTitle(n.attrs?.comment)] : []));
+  const live = [...new Set([...ranges, ...book.externals.map((e) => externalTitle(e.target))].filter((t): t is string => !!t))];
+  return { rows: activeRows(book), live };
+}
+
+function activeRows(book: Workbook): string[][] {
   const sheet = book.sheets[book.activeSheet];
   if (!sheet || !isWorksheet(sheet)) return [];
   const rows = Math.min(sheet.grid.rows, MAX_ROWS_AS_DOCUMENT);

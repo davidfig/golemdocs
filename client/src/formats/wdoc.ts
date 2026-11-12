@@ -139,6 +139,11 @@ export interface PdfExtension {
   fields?: FormField[];
   /** Changes to the pages' own content: text edited or added. Applied to the original's content, so undoing one gives its page back. */
   edits?: PdfEdit[];
+  /**
+   * A live export (docs/live-blocks.md §3, *A PDF that is always another document's export*): the live tag of the document
+   * this PDF is written from (`live:Report.docx stamp=…`), whose PDF replaces this one's pages whenever it changes.
+   */
+  export?: string;
 }
 
 export interface Wdoc {

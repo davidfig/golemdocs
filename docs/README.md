@@ -31,6 +31,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [text-files.md](text-files.md) | The large text and log editor (50 MB files): design, status and measurements |
 | [pdf-editing.md](pdf-editing.md) | Fill In and Edit PDF modes |
 | [spreadsheets.md](spreadsheets.md) | Plan for `.xlsx`: column-major model, memory-image cache, formula engine, hashed tile pyramid zoomable to under 1% |
+| [live-blocks.md](live-blocks.md) | Plan: computed blocks kept up to date across the vault, in every document type: sources, hosts, the vault graph, where updates run |
 | [localization.md](localization.md) | Strings, languages, spelling dictionaries, adding a language |
 | [../server/AUTH.md](../server/AUTH.md) | Sign-in provider setup |
 | [self-hosting.md](self-hosting.md) | Running your own server on your own Cloudflare account: setup, settings (`SINGLE_DATABASE`, `ALLOWED_EMAILS`, `LINK_*`), updates, limits |

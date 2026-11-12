@@ -579,6 +579,41 @@ export class VectorEditor {
     this.edit((scene, selection) => duplicateNodes(scene, selection));
   }
 
+  /**
+   * Puts a live block on the drawing (a live link pasted, docs/live-blocks.md §3): a group showing `source`, at the drawing's top
+   * left, holding a mark until it is filled from its source (live/drawingHost.ts) and then moved where it should go.
+   */
+  addLive(source: string): void {
+    if (!this.scene) return;
+    const placeholder: SceneNode = { kind: 'text', x: 0, y: 16, runs: [{ text: '…', x: 0, y: 16, style: {} }], style: { 'font-size': '16px', 'font-family': 'sans-serif' }, attrs: {} };
+    const next = cloneScene(this.scene);
+    const path = addNode(next, { kind: 'group', tag: 'g', children: [placeholder], style: {}, attrs: { 'data-golem-live': source } }, this.container(next));
+    this.commit(next, [path]);
+  }
+
+  /** Whether a picked shape is a live block (a group filled from its source, live/drawingHost.ts). */
+  get pickedLive(): boolean {
+    const scene = this.scene;
+    return !!scene && this._selection.some((p) => {
+      const node = nodeAt(scene, p);
+      return node?.kind === 'group' && node.attrs['data-golem-live'] !== undefined;
+    });
+  }
+
+  /** Stop Updating (docs/live-blocks.md §9): the picked live blocks become ordinary groups, keeping what they show. */
+  stopLive(): void {
+    if (!this.pickedLive) return;
+    this.edit((scene, selection) => {
+      for (const path of selection) {
+        const node = nodeAt(scene, path);
+        if (node?.kind !== 'group') continue;
+        delete node.attrs['data-golem-live'];
+        delete node.attrs['data-golem-stamp'];
+      }
+      return selection;
+    });
+  }
+
   group(): void {
     this.edit((scene, selection) => {
       const group = groupNodes(scene, selection);

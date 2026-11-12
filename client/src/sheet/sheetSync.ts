@@ -51,6 +51,7 @@ export function sheetRoom(o: SheetRoomOptions): SheetRoom {
         holder: state.holder && { name: state.holder.name, mine: state.holder.mine },
         watching: state.watching,
         catchingUp: state.catchingUp,
+        liveUpdater: false,
       };
       const key = JSON.stringify(out);
       if (key === shown) return;

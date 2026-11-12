@@ -89,6 +89,17 @@ test.describe('the Table menu', () => {
     expect(await isMenuItemEnabled(app, 'Table', 'Merge Cells')).toBe(true);
   });
 
+  test('Down from the line above a table goes into its first cell', async ({ app }) => {
+    await app.type('above');
+    await app.press('Enter');
+    await insertTable(app, 2, 2);
+    await app.focus();
+    await app.press('ControlOrMeta+Home');
+    await app.press('ArrowDown');
+    await app.type('x');
+    await expect.poll(async () => (await firstTable(app))[0][0]).toBe('x');
+  });
+
   test('leaving the table by clicking above it turns the commands off again', async ({ app }) => {
     await app.type('above');
     await app.press('Enter');

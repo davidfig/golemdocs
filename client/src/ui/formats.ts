@@ -384,7 +384,7 @@ export function acceptList(): string {
 }
 
 /** What can still be done with no document open: opening or making one, the account, and the app's own settings and views. */
-const WITHOUT_DOCUMENT = new Set<Action['kind']>(['new', 'open', 'import', 'importFolder', 'openSample', 'openSaved', 'syncNow', 'signIn', 'signOut', 'subscribe', 'manageSubscription', 'clearLocalData', 'downloadAll', 'toggleFilesPanel', 'toggleFooter', 'toggleToolbars']);
+const WITHOUT_DOCUMENT = new Set<Action['kind']>(['new', 'open', 'scripts', 'runScript', 'import', 'importFolder', 'openSample', 'openSaved', 'syncNow', 'signIn', 'signOut', 'subscribe', 'manageSubscription', 'clearLocalData', 'downloadAll', 'toggleFilesPanel', 'toggleFooter', 'toggleToolbars']);
 const DIALOGS_WITHOUT_DOCUMENT = new Set<string>(['options', 'trash', 'vault', 'updates', 'searchAll']);
 
 /** Whether the action means anything with no document open (after File › Close). */
@@ -392,8 +392,16 @@ export function worksWithoutDocument(action: Action): boolean {
   return action.kind === 'dialog' ? DIALOGS_WITHOUT_DOCUMENT.has(action.name) : WITHOUT_DOCUMENT.has(action.kind);
 }
 
+/** The documents that can hold live blocks (their markers: docs/architecture/formats.md, *Live blocks*). */
+const LIVE_HOSTS = new Set<DocumentKind>(['docx', 'odt', 'md', 'html']);
+
+/** The documents a live block can show part of: text (live/textSource.ts) and a PDF's form fields (live/pdfLive.ts). */
+const LIVE_TEXT_SOURCES = new Set<DocumentKind>(['docx', 'odt', 'md', 'html', 'rtf', 'pdf']);
+
 /** Whether a document of this format can express the action at all. */
 export function formatAllows(profile: FormatProfile, action: Action): boolean {
+  // A selection of cells, or a part of a text document (docs/live-blocks.md §9).
+  if (action.kind === 'copyLiveLink') return !!profile.sheetEditor || LIVE_TEXT_SOURCES.has(profile.kind);
   // The spreadsheet editor: its own editing, undo, clipboard, find and sheet commands (printing and converting open the active sheet as a document first).
   if (profile.sheetEditor) {
     switch (action.kind) {
@@ -620,6 +628,16 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       return profile.footnotes;
     case 'insertBookmark':
       return profile.bookmarks;
+    // The formats that hold live blocks (docs/live-blocks.md §3).
+    case 'insertLiveBlock':
+      return LIVE_HOSTS.has(profile.kind);
+    // A live PDF copy of a text document (docs/live-blocks.md §3).
+    case 'livePdf':
+      return LIVE_TEXT_SOURCES.has(profile.kind) && profile.kind !== 'pdf';
+    // Scripts are the vault's, whatever is open.
+    case 'scripts':
+    case 'runScript':
+      return true;
     case 'insertTextBox':
       return profile.pageLayout;
     case 'insertCodeBlock':

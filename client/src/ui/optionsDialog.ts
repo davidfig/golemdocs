@@ -13,6 +13,7 @@ import { inAppMenuOnMac, keepMenuInFullScreen, setInAppMenuOnMac, setKeepMenuInF
 import { scrollPastEndOn, setScrollPastEnd } from './scrollOptions.ts';
 import { showDialog } from './popup.ts';
 import { showReplacements } from './replacementsDialog.ts';
+import { LIVE_LIMIT_CHOICES, liveLimitMb, setLiveLimitMb } from '../live/backgroundLimit.ts';
 
 function check(label: string, on: boolean, set: (value: boolean) => void): HTMLElement {
   const box = h('input', { attrs: { type: 'checkbox' } });
@@ -30,6 +31,14 @@ export function optionsPanel(): HTMLElement {
   smoothing.set(pencilSmoothing());
   const editList = h('button', { class: 'wm-button', text: t('dialogs.options.editReplacements'), attrs: { type: 'button' } });
   editList.addEventListener('click', () => showReplacements());
+  const liveLimit = choiceButton(
+    { label: t('dialogs.options.liveLimit'), groups: () => [{ values: LIVE_LIMIT_CHOICES.map(String) }], name: (v) => (v === '0' ? t('dialogs.options.liveNever') : t('dialogs.options.liveMb', { mb: v })), width: 160 },
+    (v) => {
+      liveLimit.set(v);
+      setLiveLimitMb(Number(v));
+    },
+  );
+  liveLimit.set(String(liveLimitMb()));
   return h(
     'div',
     { class: 'wm-options' },
@@ -51,6 +60,7 @@ export function optionsPanel(): HTMLElement {
       check(t('dialogs.options.showGuides'), showGuidesOn(), setShowGuides),
       check(t('dialogs.options.lockGuides'), lockGuidesOn(), setLockGuides),
     ),
+    h('fieldset', {}, h('legend', { text: t('dialogs.options.live') }), h('label', {}, t('dialogs.options.liveLimit'), liveLimit.el), h('p', { class: 'wm-hint', text: t('dialogs.options.liveHint') })),
   );
 }
 

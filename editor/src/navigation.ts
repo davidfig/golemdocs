@@ -221,9 +221,19 @@ export abstract class EditorNavigation extends EditorBase {
         if (next && next.columnWidth !== undefined && next.column !== current.column) return this.positionInLine(next, goal);
       }
       if (candidates.length === 0) continue;
-      // Stay in the same column (table cells) when a line there qualifies. A column is as wide as its widest line, so a short or empty line is still in the column its text is in.
+      // A column is as wide as its widest line, so a short or empty line is still in the column its text is in.
       const extent = new Map<number, number>();
       for (const l of page.lines) extent.set(l.column, Math.max(extent.get(l.column) ?? 0, l.width + (l.x - l.column)));
+      // From body text in one column, the next line is the nearest one, a table's first or last row included: of the lines
+      // that high (a row's cells), the one nearest the goal. A cell's text starts inside its margin, so the goal of a line at
+      // the margin is never in a cell's column, and preferring the column would jump over the table.
+      if (current.columnWidth === undefined && !this.replica.engine.index.locate(current.paragraph)) {
+        const first = candidates.reduce((a, b) => (dir < 0 ? (b.y + b.height > a.y + a.height ? b : a) : b.y < a.y ? b : a));
+        const row = candidates.filter((l) => (dir < 0 ? l.y + l.height > first.y + 0.01 : l.y < first.y + first.height - 0.01));
+        const away = (l: LineRecord) => Math.max(0, l.column - goal, goal - l.column - (extent.get(l.column) ?? 0));
+        return this.positionInLine(row.reduce((a, b) => (away(b) < away(a) ? b : a)), goal);
+      }
+      // In a table cell, or a section's column: stay in the same column when a line there qualifies.
       const inColumn = candidates.filter((l) => goal >= l.column - 1 && goal <= l.column + (extent.get(l.column) ?? 0) + 1);
       const pool = inColumn.length ? inColumn : candidates;
       const best = pool.reduce((a, b) => (dir < 0 ? (b.y + b.height > a.y + a.height ? b : a) : b.y < a.y ? b : a));

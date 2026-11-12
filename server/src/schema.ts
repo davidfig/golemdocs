@@ -76,4 +76,25 @@ export const USER_MIGRATIONS: string[][] = [
        read_at    INTEGER NOT NULL
      )`,
   ],
+  // 7: scheduled script runs (docs/live-blocks.md §8, *Triggers*). Each run has an id (the script's path and when it is due),
+  // and the first device to claim it runs it; `done_at` once it has. A claim not done within a while is given to another
+  // device. The server keeps claims only, never the script.
+  [
+    `CREATE TABLE script_claims (
+       run_id     TEXT PRIMARY KEY,
+       device     TEXT NOT NULL,
+       claimed_at INTEGER NOT NULL,
+       done_at    INTEGER
+     )`,
+  ],
+  // 8: how far the person's devices have kept live blocks up to date (docs/live-blocks.md §6, *Updates in the background*).
+  // One row: `worked_to` is the server time up to which every changed source's dependents were updated, by whichever device;
+  // `deferred` (JSON, document ids) are dependents a device left because they were too large for it.
+  [
+    `CREATE TABLE live_marker (
+       id         INTEGER PRIMARY KEY CHECK (id = 1),
+       worked_to  INTEGER NOT NULL,
+       deferred   TEXT NOT NULL DEFAULT '[]'
+     )`,
+  ],
 ];

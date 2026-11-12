@@ -3,14 +3,31 @@
 // format: a link is a hyperlink to `doc:Title`, and an embed is an unresolved link or a drawing or content
 // control named `embed:Title...` (see embedMarks.ts). Free of the browser.
 
-import { EMBED_PREFIX, WordDocument, docAddress, embedTitle, paragraphsIn, parseDocAddress } from '@golemdocs/docx';
-import type { Block, Hyperlink, Inline } from '@golemdocs/docx';
+import { EMBED_PREFIX, LIVE_PREFIX, WordDocument, docAddress, embedTitle, liveTitle, paragraphsIn, parseDocAddress } from '@golemdocs/docx';
+import type { Block, Hyperlink, Inline, XmlElement } from '@golemdocs/docx';
 import { isWdoc, readWdoc, writeWdoc } from './wdoc.ts';
 
 /** An embed's body with its title (the part before `#` and `|`) replaced. */
 function embedBodyWith(body: string, title: string): string {
   const end = body.search(/[#|]/);
   return `${title}${end < 0 ? '' : body.slice(end)}`;
+}
+
+/** The `w:tag` of a content control's shell, or undefined. */
+function tagElement(shell: XmlElement): XmlElement | undefined {
+  if (shell.name !== 'w:sdt') return undefined;
+  const properties = shell.children.find((c): c is XmlElement => typeof c !== 'string' && c.name === 'w:sdtPr');
+  return properties?.children.find((c): c is XmlElement => typeof c !== 'string' && c.name === 'w:tag');
+}
+
+/** Points a live block's tag (`live:Budget.xlsx#Expenses stamp=…`) at its source's new title; whether it changed. */
+function rewriteLive(tag: XmlElement | undefined, renames: ReadonlyMap<string, string>): boolean {
+  const value = tag?.attrs['w:val'];
+  const title = liveTitle(value);
+  const next = title && renames.get(title);
+  if (!tag || !value || !title || !next) return false;
+  tag.attrs['w:val'] = `${LIVE_PREFIX}${next}${value.slice(LIVE_PREFIX.length + value.slice(LIVE_PREFIX.length).indexOf(title) + title.length)}`;
+  return true;
 }
 
 /** A link's text, when it is nothing but plain text runs: the visible target of a `[[Title]]` link. */
@@ -53,8 +70,10 @@ function rewriteInlines(inlines: readonly Inline[], renames: ReadonlyMap<string,
         changed++;
       }
       changed += rewriteInlines(inline.children, renames);
-    } else if (inline.kind === 'wrapper') changed += rewriteInlines(inline.children, renames);
-    else if (inline.kind === 'run') {
+    } else if (inline.kind === 'wrapper') {
+      if (rewriteLive(tagElement(inline.shell), renames)) changed++;
+      changed += rewriteInlines(inline.children, renames);
+    } else if (inline.kind === 'run') {
       for (const item of inline.content) {
         if (item.kind !== 'drawing' || !item.name?.startsWith(EMBED_PREFIX)) continue;
         const body = item.name.slice(EMBED_PREFIX.length);
@@ -85,7 +104,7 @@ function rewriteEmbeds(blocks: readonly Block[], renames: ReadonlyMap<string, st
             tag.attrs['w:val'] = `${EMBED_PREFIX}${embedBodyWith(body, next)}`;
             changed++;
           }
-        }
+        } else if (rewriteLive(tagElement(block.shell), renames)) changed++;
       }
       changed += rewriteEmbeds(block.children, renames);
     } else if (block.kind === 'table') {

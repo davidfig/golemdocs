@@ -179,19 +179,19 @@ test.describe('menu bar with the keyboard', () => {
     await page.keyboard.press('ArrowRight'); // Edit
     await page.keyboard.press('ArrowDown');
     await expect(page.getByRole('menu')).toBeVisible();
-    // Undo, Redo, Cut, Copy are disabled on an empty document: the first enabled row is Paste.
-    await expect(menuRow(page, 'Paste')).toHaveClass(/active/);
+    // Undo, Redo, Cut, Copy are disabled on an empty document: the first enabled row is Copy as Live Link.
+    await expect(menuRow(page, 'Copy as Live Link')).toHaveClass(/active/);
     await page.keyboard.press('ArrowDown');
-    await expect(menuRow(page, 'Paste Special…')).toHaveClass(/active/);
+    await expect(menuRow(page, 'Paste')).toHaveClass(/active/);
     await page.keyboard.press('End');
     await expect(page.locator('.wm-menu .wm-item.active')).toHaveCount(1);
     await expect(menuRow(page, 'Search All Documents…')).toHaveClass(/active/);
     await page.keyboard.press('ArrowDown'); // wraps
-    await expect(menuRow(page, 'Paste')).toHaveClass(/active/);
+    await expect(menuRow(page, 'Copy as Live Link')).toHaveClass(/active/);
     await page.keyboard.press('ArrowUp'); // wraps back
     await expect(menuRow(page, 'Search All Documents…')).toHaveClass(/active/);
     await page.keyboard.press('Home');
-    await expect(menuRow(page, 'Paste')).toHaveClass(/active/);
+    await expect(menuRow(page, 'Copy as Live Link')).toHaveClass(/active/);
   });
 
   test('left and right arrows move between open menus', async ({ app, page }) => {

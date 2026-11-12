@@ -7,6 +7,7 @@
 // the rows of the run that read a changed row are worked out from how the reference moves along the run.
 
 import { Kind, MAX_COLUMNS, MAX_ROWS } from '../model/column.ts';
+import { externalBook, externalValue } from '../externals.ts';
 import type { FormulaRun } from '../model/column.ts';
 import { isWorksheet } from '../model/workbook.ts';
 import type { Workbook } from '../model/workbook.ts';
@@ -152,6 +153,23 @@ export class Engine implements Host {
   extent(sheet: number): { rows: number; cols: number } {
     const grid = this.worksheet(sheet)?.grid;
     return { rows: grid?.rows ?? 0, cols: grid?.cols ?? 0 };
+  }
+
+  external(name: string, sheet: string, r0: number, c0: number, r1: number, c1: number): Scalar | ArrayValue {
+    const book = externalBook(this.book.externals, name);
+    if (!book) return REF;
+    // Most of a whole column: as far as the values kept go.
+    const rows: Scalar[][] = [];
+    for (let r = r0; r <= Math.min(r1, r0 + 9999); r++) {
+      const row: Scalar[] = [];
+      for (let c = c0; c <= Math.min(c1, c0 + 255); c++) {
+        const value = externalValue(book, sheet, r, c);
+        if (value === null) return REF;
+        row.push(value);
+      }
+      rows.push(row);
+    }
+    return rows.length === 1 && rows[0].length === 1 ? rows[0][0] : ArrayValue.of(rows);
   }
 
   rowHidden(sheet: number, row: number): boolean {

@@ -146,3 +146,30 @@ export function deletionList<T extends Placed & { name: string }>(folders: reado
   for (const doc of docs) if (!seen.has(doc)) lines.push(doc.name);
   return lines;
 }
+
+/**
+ * The folder a path names (`Characters`, `Novel/Characters`), as written in a document in the folder `from` (its names, top
+ * first): inside that folder first, then from the top level; a single name found nowhere else is any one folder of that name.
+ * `''` or `/` is the top level (null); undefined when nothing matches.
+ */
+export function resolveFolder(folders: readonly Folder[], path: string, from: readonly string[]): string | null | undefined {
+  const names = path.split('/').map((s) => s.trim()).filter(Boolean);
+  if (!names.length) return null;
+  const same = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'accent' }) === 0;
+  const walk = (start: string | null, list: string[]): string | null | undefined => {
+    let at: string | null = start;
+    for (const name of list) {
+      const next = folders.find((f) => f.parentId === at && same(f.name, name));
+      if (!next) return undefined;
+      at = next.id;
+    }
+    return at;
+  };
+  const here = walk(null, [...from]);
+  const relative = here === undefined ? undefined : walk(here, names);
+  if (relative !== undefined) return relative;
+  const top = walk(null, names);
+  if (top !== undefined) return top;
+  const named = names.length === 1 ? folders.filter((f) => same(f.name, names[0])) : [];
+  return named.length === 1 ? named[0].id : undefined;
+}

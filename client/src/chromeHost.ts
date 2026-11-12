@@ -87,6 +87,11 @@ export interface AppHooks {
   showStylesDialog(): void;
   showPageNumbersDialog(): void;
   showBookmarkDialog(): void;
+  /** Insert › Live Block's dialog, then the block it sets up at the caret. */
+  showLiveBlockDialog(): void;
+  makeLivePdf(): void;
+  showScripts(): void;
+  runScript(): void;
   /** Show the Spelling and Grammar dialog and look for the first problem. */
   showSpelling(): void;
   showThesaurus(): void;
@@ -157,6 +162,8 @@ export interface AppHooks {
   selectedHtml(): string | undefined;
   /** A picture is selected: puts it on the clipboard (and, for a cut, takes it out of the document); whether one was. */
   copyPicture(cut: boolean): boolean;
+  /** Edit › Copy as Live Link in a document: the part at the caret (a titled table, a bookmark, a section). */
+  copyLiveLink(): Promise<void>;
   focusEditor(): void;
   notify(message: string): void;
   toggleGrid(): void;
@@ -202,6 +209,7 @@ const SUPPORTED = new Set<ActionKind>([
   'clearLocalData',
   'cut',
   'copy',
+  'copyLiveLink',
   'paste',
   'selectAll',
   'undo',
@@ -227,6 +235,10 @@ const SUPPORTED = new Set<ActionKind>([
   'insertComment',
   'insertLink',
   'insertBookmark',
+  'insertLiveBlock',
+  'livePdf',
+  'scripts',
+  'runScript',
   'insertMath',
 ]);
 
@@ -437,6 +449,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.clearLocalData();
         case 'viewMode':
           return app.setViewMode(action.mode);
+        case 'copyLiveLink':
+          return app.engine() ? app.engine()!.copyLiveLink?.() : app.copyLiveLink();
         case 'copy':
           if (app.engine()) return app.engine()!.copy();
           if (app.copyPicture(false)) return;
@@ -545,6 +559,14 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return action.rows && action.columns ? app.send({ kind: 'format', action }) : app.showTableDialog();
         case 'insertBookmark':
           return app.showBookmarkDialog();
+        case 'insertLiveBlock':
+          return app.showLiveBlockDialog();
+        case 'livePdf':
+          return app.makeLivePdf();
+        case 'scripts':
+          return app.showScripts();
+        case 'runScript':
+          return app.runScript();
         case 'insertComment': {
           if (!app.annotating()) return app.startComment();
           const text = window.prompt(t('app.notePrompt'));

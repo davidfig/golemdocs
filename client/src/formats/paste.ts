@@ -4,6 +4,7 @@
 // document. Its paragraphs and tables are what gets pasted; what they need from that document to
 // look as they did (the styles they use, their list definitions) is carried over as operations.
 
+import { liveTag } from '../live/liveMarks.ts';
 import { paragraphsIn, type Block, type Inline, type Style, type WordDocument } from '@golemdocs/docx';
 import type { Operation } from '@golemdocs/ops';
 import { importDocument } from './convert.ts';
@@ -55,7 +56,8 @@ export async function htmlToPaste(html: string, target: WordDocument): Promise<P
 /** The blocks of a scratch document, with what they need from it, as something to paste into `target` (empty ones at the ends go unless `trim` is off). */
 export function pastedFrom(document: WordDocument, target: WordDocument, trim = true): Pasted | null {
   // Blocks as they are: no section breaks, no unmodeled content, and no empty lines at the ends.
-  let blocks: Block[] = structuredClone(document.body).flatMap((b): Block[] => (b.kind === 'wrapper' ? b.children : b.kind === 'raw' ? [] : [b]));
+  // A live block (live/liveMarks.ts) stays one: it is what was copied, a part of another document kept up to date.
+  let blocks: Block[] = structuredClone(document.body).flatMap((b): Block[] => (b.kind === 'wrapper' && !liveTag(b) ? b.children : b.kind === 'raw' ? [] : [b]));
   while (trim && blocks.length && isEmpty(blocks[0])) blocks.shift();
   while (trim && blocks.length && isEmpty(blocks[blocks.length - 1])) blocks.pop();
   if (blocks.length === 0) return null;

@@ -15,6 +15,8 @@ interface Analytics {
   formerlyPaid: number;
   payingActiveLast30: number;
   history: { month: string; joined: number; total: number; paying: number }[];
+  /** Missing from a server older than the page. */
+  liveChecks?: { day: string; opened: number; stale: number }[];
   asOf: number;
 }
 
@@ -73,6 +75,15 @@ function render(body: HTMLElement, a: Analytics): void {
       h('thead', {}, h('tr', {}, head(t('panels.analytics.month'), false), head(t('panels.analytics.joined')), head(t('panels.analytics.totalCol')), head(t('panels.analytics.payingCol')))),
       h('tbody', {}, ...rows),
     ),
+    h('h4', { text: t('panels.analytics.live') }),
+    a.liveChecks?.length
+      ? h(
+          'table',
+          {},
+          h('thead', {}, h('tr', {}, head(t('panels.analytics.day'), false), head(t('panels.analytics.liveOpened')), head(t('panels.analytics.liveStale')), head(''))),
+          h('tbody', {}, ...a.liveChecks.map((d) => h('tr', {}, h('td', { text: new Date(`${d.day}T00:00:00Z`).toLocaleDateString(getLocale(), { dateStyle: 'medium', timeZone: 'UTC' }) }), cell(d.opened), cell(d.stale), h('td', { class: 'wm-analytics-number', text: d.opened ? percent.format(d.stale / d.opened) : '–' })))),
+        )
+      : h('p', { text: t('panels.analytics.liveNone') }),
     h('small', { text: t('panels.analytics.asOf', { time: new Date(a.asOf).toLocaleString(getLocale()) }) }),
   );
 }

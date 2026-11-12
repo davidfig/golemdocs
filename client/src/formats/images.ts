@@ -17,10 +17,10 @@ export interface ImageData {
 
 export const MIME: Record<ImageType, string> = { png: 'image/png', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', heic: 'image/heic' };
 
-/** The name a picture called `name` is kept under (see `toPng`): GIF, BMP and SVG open, and are saved, as PNG; HEIC as JPEG. */
+/** The name a picture called `name` is kept under (see `toPng`): GIF and BMP open, and are saved, as PNG; HEIC as JPEG. An SVG is a drawing and keeps its name. */
 export function keptPictureName(name: string): string {
   if (/\.hei[cf]$/i.test(name)) return name.replace(/\.[^.]*$/, '.jpg');
-  return /\.(gif|bmp|svg)$/i.test(name) ? name.replace(/\.[^.]*$/, '.png') : name;
+  return /\.(gif|bmp)$/i.test(name) ? name.replace(/\.[^.]*$/, '.png') : name;
 }
 
 // --- HEIC ---------------------------------------------------------------------------------------

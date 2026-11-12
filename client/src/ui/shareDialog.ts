@@ -31,6 +31,8 @@ export interface ShareTarget {
   name: string;
   /** The cloud document to share with people by email, or why that can't be done. */
   people: { id: string } | { unavailable: string };
+  /** The files the document's live blocks show (docs/live-blocks.md §6): visitors to its public link see their last results. */
+  liveSources?: Promise<string[]>;
 }
 
 const section = (heading: string, ...content: (HTMLElement | null)[]): HTMLElement =>
@@ -54,7 +56,7 @@ export const embedCode = (url: string, title: string): string =>
   `<iframe src="${url.replace(/&/g, '&amp;')}" title="${title.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" width="800" height="600" style="border:0" allowfullscreen></iframe>`;
 
 /** The public link: a switch, and while it is on, the address, Copy Link, Copy Embed Code and Reset Link. */
-function publicSection(id: string, name: string): HTMLElement {
+function publicSection(id: string, name: string, liveSources?: Promise<string[]>): HTMLElement {
   const toggle = h('input', { attrs: { type: 'checkbox' } });
   const address = h('input', { class: 'wm-input', attrs: { type: 'text', readonly: '', 'aria-label': t('dialogs.share.publicLinkLabel') } });
   address.addEventListener('focus', () => address.select());
@@ -97,7 +99,16 @@ function publicSection(id: string, name: string): HTMLElement {
   publicLink(id).then(show, (error: Error) => say(error.message, true));
 
   const note = h('p', { class: 'wm-hint', text: t('dialogs.share.publicNote') });
-  return section(t('dialogs.share.publicHeading'), h('label', { class: 'wm-find-case' }, toggle, t('dialogs.share.publicToggle')), note, linkRow, moreRow, message);
+  // Live blocks are kept up to date by an app, not by the link: a visitor sees what they showed at the last update.
+  const live = h('p', { class: 'wm-hint' });
+  live.hidden = true;
+  void liveSources?.then((sources) => {
+    const names = [...new Set(sources)];
+    if (!names.length) return;
+    live.textContent = t('dialogs.share.liveNote', { sources: names.join(', ') });
+    live.hidden = false;
+  });
+  return section(t('dialogs.share.publicHeading'), h('label', { class: 'wm-find-case' }, toggle, t('dialogs.share.publicToggle')), note, live, linkRow, moreRow, message);
 }
 
 /** A modal for sharing the open document with people. */
@@ -177,7 +188,7 @@ export function showShareDialog(target: ShareTarget): void {
     'id' in target.people
       ? section(t('dialogs.share.peopleHeading'), form, message, h('p', { class: 'wm-hint', text: t('dialogs.share.note') }), people)
       : section(t('dialogs.share.peopleHeading'), h('p', { text: target.people.unavailable }));
-  const body = h('div', { class: 'wm-dialog-body' }, peopleSection, 'id' in target.people ? publicSection(target.people.id, target.name) : null);
+  const body = h('div', { class: 'wm-dialog-body' }, peopleSection, 'id' in target.people ? publicSection(target.people.id, target.name, target.liveSources) : null);
   dialog.append(dialogTitleBar(t('dialogs.share.title', { name: target.name }), () => dialog.close()), body, h('div', { class: 'wm-dialog-buttons' }, done));
   // Keys stay in the dialog: the document's handlers listen on the window.
   dialog.addEventListener('keydown', (e) => e.stopPropagation());

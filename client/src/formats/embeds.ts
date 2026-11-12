@@ -51,7 +51,7 @@ export function embedTitles(document: WordDocument): string[] {
 }
 
 /** The blocks under the heading called `section` (up to the next heading as high or higher), or null when there is no such heading. */
-function sectionOf(blocks: Block[], section: string): Block[] | null {
+export function sectionOf(blocks: Block[], section: string): Block[] | null {
   const level = (b: Block): number => (b.kind === 'paragraph' ? Number(/^Heading([1-6])$/.exec(b.properties.style ?? '')?.[1] ?? 0) : 0);
   const wanted = normalizeTitle(section);
   const start = blocks.findIndex((b) => b.kind === 'paragraph' && level(b) > 0 && normalizeTitle(paragraphText(b)) === wanted);
@@ -72,14 +72,24 @@ function setApart(blocks: Block[]): void {
 
 /** The embedded note's blocks as they can go in `into`: styles and lists they use defined there, and a rule down their left. Null when it has nothing. */
 function noteBlocks(note: WordDocument, section: string, into: WordDocument): Block[] | null {
-  const copy = Object.create(note) as WordDocument;
-  copy.body = collapseEmbeds(note.body);
-  let blocks = copy.body;
+  let blocks = collapseEmbeds(note.body);
   if (section) {
     const found = sectionOf(blocks, section);
     if (!found) return null;
-    copy.body = blocks = found;
+    blocks = found;
   }
+  const adopted = adoptBlocks(note, blocks, into);
+  if (adopted) setApart(adopted);
+  return adopted;
+}
+
+/**
+ * Some of `from`'s blocks as they can go in `into` (copies): the styles and lists they use defined there. Null when there are
+ * none. Pictures are left pointing at `from`'s parts; whoever takes them adds those to `into`.
+ */
+export function adoptBlocks(from: WordDocument, blocks: Block[], into: WordDocument): Block[] | null {
+  const copy = Object.create(from) as WordDocument;
+  copy.body = blocks;
   const pasted = pastedFrom(copy, into, true);
   if (!pasted) return null;
   for (const op of pasted.define) {
@@ -89,7 +99,6 @@ function noteBlocks(note: WordDocument, section: string, into: WordDocument): Bl
       into.numbering = { ...numbering, instances: [...numbering.instances, op.list.instance], abstracts: [...numbering.abstracts, op.list.abstract] };
     }
   }
-  setApart(pasted.blocks);
   return pasted.blocks;
 }
 

@@ -72,6 +72,8 @@ export interface Person {
   selection: Selection | null;
   /** Not kept by the room across reconnects: it is only ever the latest position. */
   pointer: Pointer | null;
+  /** The document's owner (any of their devices): the one of them in the room longest updates its live blocks (docs/live-blocks.md §6). */
+  owner?: boolean;
 }
 
 export type MultiplayerClientMessage =

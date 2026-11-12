@@ -145,26 +145,35 @@ export function showDialog(title: string, body: Node, onClose?: () => void): voi
 }
 
 /** Asks before doing something that can't be undone. Resolves true only if `action` is clicked. */
-export function showConfirm(title: string, body: Node, action: string): Promise<boolean> {
+export async function showConfirm(title: string, body: Node, action: string): Promise<boolean> {
+  return (await showChoice(title, body, [{ label: action, value: true, primary: true }])) === true;
+}
+
+/**
+ * Asks which of a few things to do: Cancel, then a button for each choice (the last is the main one, unless one says so).
+ * Resolves with the choice clicked, or null for Cancel, Escape or the close button. Cancel has the focus, so Enter does nothing
+ * that can't be taken back.
+ */
+export function showChoice<T>(title: string, body: Node, choices: readonly { label: string; value: T; primary?: boolean }[]): Promise<T | null> {
   return new Promise((resolve) => {
     const dialog = h('dialog', { class: 'wm-dialog', attrs: { 'aria-label': title } });
     const cancel = h('button', { class: 'wm-button', text: t('menus.dialog.cancel') });
-    const confirm = h('button', { class: 'wm-button wm-primary', text: action });
-    dialog.append(
-      dialogTitleBar(title, () => dialog.close()),
-      h('div', { class: 'wm-dialog-body' }, body),
-      h('div', { class: 'wm-dialog-buttons' }, cancel, confirm),
-    );
-    let confirmed = false;
+    const main = choices.findIndex((c) => c.primary);
+    let chosen: T | null = null;
+    const buttons = choices.map((choice, i) => {
+      const button = h('button', { class: `wm-button${i === (main < 0 ? choices.length - 1 : main) ? ' wm-primary' : ''}`, text: choice.label });
+      button.addEventListener('click', () => {
+        chosen = choice.value;
+        dialog.close();
+      });
+      return button;
+    });
+    dialog.append(dialogTitleBar(title, () => dialog.close()), h('div', { class: 'wm-dialog-body' }, body), h('div', { class: 'wm-dialog-buttons' }, cancel, ...buttons));
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     cancel.addEventListener('click', () => dialog.close());
-    confirm.addEventListener('click', () => {
-      confirmed = true;
-      dialog.close();
-    });
     dialog.addEventListener('close', () => {
       dialog.remove();
-      resolve(confirmed);
+      resolve(chosen);
     });
     document.body.append(dialog);
     dialog.showModal();

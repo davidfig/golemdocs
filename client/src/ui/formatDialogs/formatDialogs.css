@@ -229,3 +229,21 @@
     flex-direction: column;
   }
 }
+
+/* Insert › Live Block: "Only where [field] is [value]" on one line, and the address it makes. */
+.wm-live-where {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.wm-live-where .wm-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.wm-live-address {
+  overflow-wrap: anywhere;
+}

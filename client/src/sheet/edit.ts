@@ -4,6 +4,7 @@
 // in other formulas are moved by the engine too when rows and columns move.
 
 import { newSparklineGroup } from './sparklines.ts';
+import { addSheetLive, removeSheetLive } from '../live/sheetRanges.ts';
 import { dataTableRun } from './whatIf.ts';
 import { writeSolverModel } from './solver.ts';
 import { printNames, setPrintNames } from './print.ts';
@@ -173,6 +174,33 @@ function rangeOf(op: EditOp): CellRange | null {
   }
 }
 
+/**
+ * The cells whose contents an edit writes (null when it writes none, or could write any: a Replace across the sheet is
+ * checked cell by cell where it is made). The sheet worker keeps live ranges out of them (live/sheetRanges.ts).
+ */
+export function contentsWritten(op: EditOp): CellRange[] | null {
+  const cell = (row: number, col: number): CellRange => ({ r0: row, c0: col, r1: row, c1: col });
+  switch (op.kind) {
+    case 'input':
+    case 'paste':
+      return [rangeOf(op)!];
+    case 'clear':
+      return op.what === 'formats' ? null : op.ranges;
+    case 'replace':
+      return op.cells ? op.cells.map((c) => cell(c.row, c.col)) : null;
+    case 'sort':
+      return [op.range];
+    case 'fill':
+      return [op.target];
+    case 'pasteCells':
+      return op.what === 'formats' ? null : [pasteTarget(op.source, op.at, op.transpose)];
+    case 'setCells':
+      return op.cells.map(([r, c]) => cell(r, c));
+    default:
+      return null;
+  }
+}
+
 /** The columns an edit's cells are in: 'all' for an edit that moves structure, 'cells' for one that may change any cell. */
 function columnsOf(op: EditOp): number[] | 'all' | 'cells' | null {
   switch (op.kind) {
@@ -228,7 +256,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
     for (const sheet of book.sheets) if (isWorksheet(sheet)) for (const column of sheet.grid.columns) if (column?.formulas.length) columns.push([column, column.formulas.map((f) => ({ ...f }))]);
     out.formulas = { columns, names: book.names.map((n) => ({ ...n })), charts: book.sheets.filter(isWorksheet).map((s): [Worksheet, Worksheet['charts'], Worksheet['sparklines']] => [s, s.charts, s.sparklines]) };
   }
-  if (op.kind === 'solverModel' || op.kind === 'pageSetup' || op.kind === 'printArea') out.names = book.names.map((n) => ({ ...n }));
+  if (op.kind === 'solverModel' || op.kind === 'pageSetup' || op.kind === 'printArea' || op.kind === 'addLive' || op.kind === 'stopLive') out.names = book.names.map((n) => ({ ...n }));
   if (op.kind === 'addSheet' || op.kind === 'insertPivot' || op.kind === 'scenarioSummary' || op.kind === 'deleteSheet' || op.kind === 'renameSheet' || op.kind === 'moveSheet') {
     out.sheets = { list: book.sheets.slice(), titles: book.sheets.map((s) => s.name), parts: book.source ? book.source.parts.map((p) => ({ ...p })) : [], names: book.names.map((n) => ({ ...n })), active: book.activeSheet, removed: (book.source?.removed ?? []).slice() };
     return out;
@@ -570,6 +598,12 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
       sheet.pageSetup = { ...s, rowBreaks: [...rows].sort((a, b) => a - b), colBreaks: [...cols].sort((a, b) => a - b) };
       return { ranges: [] };
     }
+    case 'addLive':
+      addSheetLive(book, index, op.row, op.col, op.source);
+      return { ranges: [{ r0: op.row, c0: op.col, r1: op.row, c1: op.col }] };
+    case 'stopLive':
+      removeSheetLive(book, index, op.row, op.col);
+      return { ranges: [] };
     case 'solverModel':
       book.names = writeSolverModel(book.names, index, quoteSheet(sheet.name), op.model);
       book.dirty = true;

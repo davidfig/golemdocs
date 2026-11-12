@@ -26,6 +26,9 @@ export interface Host {
   spillOf(sheet: number, row: number, col: number): RangeRef | null;
   /** The range a structured reference names (`table` empty: the table the formula's cell is in), or an error. */
   structured(table: string, spec: string, ctx: Context): RangeRef | FormulaError;
+  /** A range of another workbook (`[1]Sheet1!A1:B2`), from the values last seen there: a value for one cell, an array for
+   * more; #REF! when the workbook keeps none for it (sheet/externals.ts). */
+  external(book: string, sheet: string, r0: number, c0: number, r1: number, c1: number): Scalar | ArrayValue;
   /** Whether a row is hidden (SUBTOTAL 101-111, AGGREGATE). */
   rowHidden(sheet: number, row: number): boolean;
   /** The 1904 date system. */

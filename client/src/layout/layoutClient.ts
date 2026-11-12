@@ -53,9 +53,11 @@ export class LayoutClient {
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
   /** What a `saved` answer said of its `seq`, for `saveMarked`. */
   private readonly savedSeqs = new Map<number, number>();
+  private readonly savedChanges = new Map<number, number>();
   private readonly thesaurusRequests = new Map<number, (answer: { result: LookUp | null; failed?: boolean }) => void>();
   private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
   private readonly textRequests = new Map<number, (place: [number, number] | null) => void>();
+  private readonly partRequests = new Map<number, (part: string | null) => void>();
   private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
   private readonly refreshRequests = new Map<number, (done: boolean | 'typed') => void>();
 
@@ -219,6 +221,15 @@ export class LayoutClient {
     });
   }
 
+  /** The part of the document at the caret, as an address's part after `#` (Copy as Live Link), or null when there is none. */
+  livePart(): Promise<string | null> {
+    const request = this.nextRequest++;
+    return new Promise((resolve) => {
+      this.partRequests.set(request, resolve);
+      this.send({ type: 'livePart', doc: this.doc, request });
+    });
+  }
+
   /** Brings a place in the text (`textAt`'s) to the top of the view, through the layout updates' `keep`, as the pages up to it are laid out. */
   goTo(place: [number, number]): void {
     this.send({ type: 'goTo', doc: this.doc, place });
@@ -251,6 +262,20 @@ export class LayoutClient {
     });
   }
 
+  /** `save`, and how many changes the open document had had then (for a live block update made from it, `refresh`). */
+  snapshot(): Promise<{ bytes: Uint8Array; changes: number }> {
+    let request = 0;
+    return this.request((r) => {
+      request = r;
+      return { type: 'save', doc: this.doc, request: r };
+    }).then((bytes) => {
+      const changes = this.savedChanges.get(request) ?? -1;
+      this.savedChanges.delete(request);
+      this.savedSeqs.delete(request);
+      return { bytes: new Uint8Array(bytes), changes };
+    });
+  }
+
   /** Puts edits kept from before the page last went away back into the open document. They are in turn with the commands sent after this. */
   replayJournal(batches: Operation[][]): void {
     this.send({ type: 'replayJournal', doc: this.doc, batches });
@@ -259,6 +284,11 @@ export class LayoutClient {
   /** What `source` holds with those edits in it, as a .wdoc, leaving the open document alone. */
   journalCopy(source: DocumentSource, batches: Operation[][]): Promise<Uint8Array> {
     return this.request((request) => ({ type: 'journalCopy', request, source, batches })).then((bytes) => new Uint8Array(bytes));
+  }
+
+  /** A document that is not open exported as a file of a format (a live export); the open document doesn't change. */
+  exportCopy(source: DocumentSource, to: Format): Promise<Uint8Array> {
+    return this.request((request) => ({ type: 'exportCopy', request, source, to })).then((bytes) => new Uint8Array(bytes));
   }
 
   /** The open document exported as a file of a format (lossy); the open document doesn't change. */
@@ -276,11 +306,11 @@ export class LayoutClient {
    * the top of the view) where it is. False when that can't be done: open the document again instead. 'typed' when it was edited here
    * meanwhile: those edits win and nothing was put in.
    */
-  refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null): Promise<boolean | 'typed'> {
+  refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null, changes?: number): Promise<boolean | 'typed'> {
     const request = this.nextRequest++;
     return new Promise((resolve) => {
       this.refreshRequests.set(request, resolve);
-      this.send({ type: 'refresh', doc: this.doc, request, source, view });
+      this.send({ type: 'refresh', doc: this.doc, request, source, view, ...(changes !== undefined && { changes }) });
     });
   }
 
@@ -316,6 +346,11 @@ export class LayoutClient {
       this.textRequests.delete(message.request);
       return;
     }
+    if (message.type === 'livePart') {
+      this.partRequests.get(message.request)?.(message.part);
+      this.partRequests.delete(message.request);
+      return;
+    }
     if (message.type === 'linkAt') {
       this.linkRequests.get(message.request)?.({ url: message.url, text: message.text, checkbox: message.checkbox });
       this.linkRequests.delete(message.request);
@@ -338,6 +373,7 @@ export class LayoutClient {
     }
     if (message.type === 'media' || message.type === 'saved') {
       if (message.type === 'saved' && message.seq !== undefined) this.savedSeqs.set(message.request, message.seq);
+      if (message.type === 'saved' && message.changes !== undefined) this.savedChanges.set(message.request, message.changes);
       this.requests.get(message.request)?.(message.bytes, message.type === 'saved' ? message.error : undefined);
       this.requests.delete(message.request);
       return;

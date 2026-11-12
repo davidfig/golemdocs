@@ -477,6 +477,22 @@ async function withTable() {
   return t;
 }
 
+test('Down from the text above a table goes into its first row, and Up from below into its last', skip, async () => {
+  const { doc, editor, apply } = await withTable();
+  await apply({ kind: 'move', to: 'documentEnd' }, { kind: 'insertText', text: 'Below' });
+  const cell = (r: number, c: number) => (tablesOf(doc)[0].rows[r] as Extract<Doc['body'][number], { kind: 'table' }>['rows'][number] & { kind: 'row' }).cells[c];
+  const inCell = (r: number, c: number) => (cell(r, c) as { children: Paragraph[] }).children.includes(editor.selection.focus.paragraph);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'down' });
+  assert.ok(inCell(0, 0), 'Down from "Top" is in the first cell');
+  // Within the table Down keeps to the column, and out of the last row it goes on below the table.
+  await apply({ kind: 'move', to: 'right' }, { kind: 'move', to: 'down' });
+  assert.ok(inCell(1, 0), 'Down from "a" is in "c"');
+  await apply({ kind: 'move', to: 'down' });
+  assert.equal(paragraphText(editor.selection.focus.paragraph), 'Below');
+  await apply({ kind: 'move', to: 'up' });
+  assert.ok(inCell(1, 0), 'Up from "Below" is in the last row');
+});
+
 test('tab moves through a table\'s cells, selecting each, and adds a row after the last', skip, async () => {
   const { doc, editor, apply } = await withTable();
   assert.deepEqual(gridText(doc), [['a', 'b'], ['c', 'd']]);

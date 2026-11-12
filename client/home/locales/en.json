@@ -342,7 +342,7 @@
   "pricing.v1.h": "No ads, no selling data.",
   "pricing.v1.p": "I don’t sell your data and I don’t show ads.",
   "pricing.v2.h": "No tracking.",
-  "pricing.v2.p": "No analytics and no advertising trackers.",
+  "pricing.v2.p": "No advertising trackers, and nothing that follows you. One exception to “no analytics”, until March 2027: an anonymous daily count of how often live blocks are out of date when a document opens, to decide whether to build one feature. It never says who or what.",
   "pricing.v3.h": "Your files, all of them.",
   "pricing.v3.p": "Every document is a real file that belongs to you. File › Download All saves everything as one ZIP, any time.",
   "pricing.legal": "I wrote the <a href=\"/home/privacy\">Privacy Policy</a> and <a href=\"/home/terms\">Terms of Service</a> to be read. They are short.",

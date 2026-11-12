@@ -11,7 +11,7 @@ import type { Segment } from '../edit/segments.ts';
 import { normalizeTag, readTag } from './tags.ts';
 
 /** Bumped when the tokenizer or the format changes, so every kept index is made again. */
-export const INDEX_VERSION = 2;
+export const INDEX_VERSION = 4;
 
 /** A paragraph's text is kept up to this long (for the snippet of a hit); its words are all indexed. */
 const PARAGRAPH_CHARS = 400;
@@ -34,6 +34,8 @@ export interface DocIndex {
   g: Record<string, number[]>;
   /** Title of a stored document the paragraphs link to (as written in the link) -> the paragraphs it is linked from, in order. */
   l: Record<string, number[]>;
+  /** Of those, the titles live blocks show -> the paragraphs they are in (missing from an index of an older version). */
+  s?: Record<string, number[]>;
 }
 
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
@@ -93,7 +95,7 @@ function note(map: Record<string, number[]>, key: string, paragraph: number, lim
 
 /** The index of a document's paragraphs. */
 export function buildIndex(segments: readonly Segment[]): DocIndex {
-  const index: DocIndex = { v: INDEX_VERSION, n: segments.length, p: [], h: [], t: {}, g: {}, l: {} };
+  const index: DocIndex = { v: INDEX_VERSION, n: segments.length, p: [], h: [], t: {}, g: {}, l: {}, s: {} };
   const room = { left: MAX_TERMS };
   const count = Math.min(segments.length, MAX_PARAGRAPHS);
   for (let k = 0; k < count; k++) {
@@ -102,6 +104,7 @@ export function buildIndex(segments: readonly Segment[]): DocIndex {
     if (isHeading(segment)) index.h.push(k);
     for (const word of tokenize(segment.text)) note(index.t, word, k, room);
     for (const title of segment.links ?? []) note(index.l, title, k, room);
+    for (const title of segment.live ?? []) note(index.s!, title, k, room);
     for (let at = segment.text.indexOf('#'); at >= 0; at = segment.text.indexOf('#', at + 1)) {
       const tag = readTag(segment.text, at);
       if (!tag) continue;

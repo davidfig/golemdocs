@@ -247,3 +247,20 @@ test('a field split over runs, and a simple field, count too', () => {
   assert.ok(hasPageField(simple));
   assert.equal(withoutPageFields(simple).paragraph.children.length, 0);
 });
+
+test('text put at either end of a locked content control stays out of it; an unlocked one takes it', () => {
+  const control = (lock: boolean): Inline => ({
+    kind: 'wrapper',
+    shell: { name: 'w:sdt', attrs: {}, children: [{ name: 'w:sdtPr', attrs: {}, children: lock ? [{ name: 'w:lock', attrs: { 'w:val': 'sdtContentLocked' }, children: [] }] : [] }] },
+    contentElement: 'w:sdtContent',
+    children: [run('2740')],
+  });
+  const locked = para(run('Total '), control(true), run(' so far'));
+  insertText(locked, 10, 'X');
+  insertText(locked, 6, 'Y');
+  assert.equal(shape(locked), 'Total Y|2740|X so far');
+  assert.equal((locked.children[1] as { children: Inline[] }).children.length, 1);
+  const open = para(run('Total '), control(false), run(' so far'));
+  insertText(open, 10, 'X');
+  assert.equal(shape(open), 'Total |2740X| so far');
+});

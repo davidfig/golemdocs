@@ -342,7 +342,7 @@
   "pricing.v1.h": "Pas de publicité, pas de revente de données.",
   "pricing.v1.p": "Je ne vends pas vos données et je n’affiche pas de publicités.",
   "pricing.v2.h": "Pas de suivi.",
-  "pricing.v2.p": "Aucun outil d’analyse et aucun traceur publicitaire.",
+  "pricing.v2.p": "Aucun traceur publicitaire, et rien qui vous suit. Une exception à « aucun outil d’analyse », jusqu’en mars 2027 : un décompte quotidien anonyme du nombre de fois où des blocs dynamiques sont périmés à l’ouverture d’un document, pour décider de créer une fonction. Il ne dit jamais qui ni quoi.",
   "pricing.v3.h": "Vos fichiers, tous.",
   "pricing.v3.p": "Chaque document est un vrai fichier qui vous appartient. Fichier › Tout télécharger (ZIP) enregistre tout dans un seul ZIP, à tout moment.",
   "pricing.legal": "J’ai rédigé la <a href=\"/home/privacy\">politique de confidentialité</a> et les <a href=\"/home/terms\">conditions d’utilisation</a> pour qu’elles soient lues. Elles sont courtes.",

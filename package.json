@@ -16,6 +16,7 @@
     "fonts": "tsx scripts/fonts/generate.ts",
     "fonts:emoji": "tsx scripts/fonts/emoji.ts",
     "thesaurus": "tsx scripts/thesaurus.ts",
+    "golem": "tsx scripts/golem.ts",
     "test": "pnpm --no-bail --filter @golemdocs/docx --filter @golemdocs/layout --filter @golemdocs/ops --filter @golemdocs/editor --filter @golemdocs/server --filter @golemdocs/client --filter @golemdocs/pdf --filter @golemdocs/odt test",
     "test:coverage": "tsx scripts/coverage.ts",
     "e2e": "tsx scripts/e2e.ts",

@@ -144,3 +144,32 @@ test('on a phone: the owner turns the link on from the menu, and someone signed 
   await phone.close();
   await stranger.close();
 });
+
+test('a document with live blocks says, when its link is shared, that visitors see their last results; and the viewer shows them', async ({ browser }) => {
+  const owner = await newPerson(browser, 'owner');
+  await uploadDoc(owner.page, 'Meals.csv', Buffer.from('Day,Calories\nMon,2100\n'));
+  const doc = await uploadDoc(owner.page, 'Plan.md', Buffer.from('This week:\n\n![[Meals.csv]]\n'));
+  const app = await openCloud(owner.page, doc.id);
+  // Opening it fills the block; the share saves and uploads that.
+  await expect.poll(() => app.text(), { timeout: 20_000 }).toContain('2100');
+
+  await app.menu('File', 'Share');
+  const dialog = owner.page.locator('dialog.wm-share');
+  await expect(dialog.getByText(/live blocks from Meals\.csv/)).toBeVisible();
+  await dialog.getByLabel('Anyone with the link can view').check();
+  const url = await dialog.getByRole('textbox', { name: 'Public link' }).inputValue();
+  expect(url).toMatch(/\/view\?p=/);
+
+  const stranger = await signedOutContext(browser);
+  const page = await stranger.newPage();
+  // The filled block reaches the account with the next upload, a moment after it was made.
+  await expect
+    .poll(
+      async () => {
+        await page.goto(url);
+        return viewerText(page);
+      },
+      { timeout: 30_000, intervals: [1000, 2000] },
+    )
+    .toContain('2100');
+});

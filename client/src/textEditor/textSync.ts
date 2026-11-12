@@ -47,6 +47,8 @@ export function textRoom(o: TextRoomOptions): TextRoom {
       holder: null,
       watching: false,
       catchingUp: false,
+      // Text files and workbooks in a room shared with others keep their live blocks until it is down to one session.
+      liveUpdater: false,
     };
     const key = JSON.stringify(state);
     if (key === shown) return;

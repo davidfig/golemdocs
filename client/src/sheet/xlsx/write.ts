@@ -8,6 +8,7 @@
 
 import { writePivots } from '../pivotWrite.ts';
 import { writeCharts } from '../charts/write.ts';
+import { writeExternals } from '../externals.ts';
 import { OpcPackage, child, deflatePieces, el, elements, serializeXml } from '@golemdocs/docx';
 import type { XmlElement } from '@golemdocs/docx';
 import { ERRORS, Kind, columnName } from '../model/column.ts';
@@ -124,6 +125,7 @@ export async function writeWorkbook(book: Workbook, options: WriteOptions = {}):
   }
 
   if (book.dirty || (cellsChanged && recalculate)) writeWorkbookPart(book, recalculate && cellsChanged);
+  await writeExternals(pkg, book.externals);
   return pkg.write();
 }
 

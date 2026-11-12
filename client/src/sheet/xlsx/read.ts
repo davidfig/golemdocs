@@ -4,6 +4,7 @@
 // one later, so a big workbook can show its first sheet before the others are in.
 
 import { readPivotTables } from '../pivot.ts';
+import { readExternals } from '../externals.ts';
 import { readCharts } from '../charts/model.ts';
 import type { XmlElement } from '@golemdocs/docx';
 import { readTable } from '../tables.ts';
@@ -95,6 +96,7 @@ export async function readWorkbook(bytes: Uint8Array, options: ReadOptions = {})
       return defined;
     });
 
+  book.externals = await readExternals(pkg, workbookPart, workbookXml);
   book.source = { pkg, workbookPart, workbookXml, parts, stylesPart, stringsPart, sharedCount: 0 };
 
   if (stringsPart && pkg.has(stringsPart)) {

@@ -13,6 +13,7 @@ import { t } from '../i18n/index.ts';
 import type { WireField } from '../layout/protocol.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
 import type { FormMode } from './actions.ts';
+import { clipboardLiveLink, liveTagText, parseLiveTag } from '../live/liveMarks.ts';
 import { h, isFormField, modalOpen, makeDraggable, segmented } from './dom.ts';
 import './formLayer.css';
 
@@ -35,6 +36,8 @@ export interface FormLayerHost {
   notify(message: string): void;
   /** The user picked a mode in the palette. */
   setMode(mode: FormMode): void;
+  /** A field was made to show a live block (a live link pasted into it): fill it now. */
+  liveAdded?(source: string): void;
 }
 
 type Box = WireField['box'];
@@ -77,6 +80,9 @@ export class FormLayer {
   private dragging: { id: string; box: Box } | null = null;
   private nextId = 1;
 
+  /** The field last focused in Fill In mode (or picked in Edit Form), kept while a menu has the focus. */
+  private lastFocused: string | null = null;
+
   constructor(
     parent: HTMLElement,
     private readonly host: FormLayerHost,
@@ -92,7 +98,11 @@ export class FormLayer {
     }, { passive: false });
     this.catcher.addEventListener('pointerdown', (e) => this.place(e));
     host.canvas.addEventListener('pointerdown', () => {
+      this.lastFocused = null;
       if (this.mode === 'edit' && this.selected) this.select(null);
+    });
+    this.el.addEventListener('focusin', (e) => {
+      for (const [id, el] of this.elements) if (el === e.target) this.lastFocused = id;
     });
     window.addEventListener('keydown', (e) => this.key(e), true);
     // Keys pressed in a field being filled in (a text box of several lines, a check box) are the
@@ -220,17 +230,31 @@ export class FormLayer {
       const f = this.field(id);
       if (f) this.setValue(f, el.value, `value:${f.name}`);
     });
+    // A live link pasted in makes the field show what it names, kept up to date (docs/live-blocks.md, *PDFs*).
+    el.addEventListener('paste', (event) => {
+      const e = event as ClipboardEvent;
+      const f = this.field(id);
+      const source = e.clipboardData ? clipboardLiveLink(e.clipboardData.getData('text/plain'), e.clipboardData.getData('text/html')) : null;
+      if (!f || !source || f.readOnly || !this.fields) return;
+      e.preventDefault();
+      this.fields = this.fields.map((o) => (o.id === id ? { ...o, live: liveTagText({ source, stamp: '' }) } : o));
+      this.host.change(this.fields);
+      this.render();
+      this.host.liveAdded?.(source);
+    });
     return el;
   }
 
   private syncInput(el: HTMLElement, field: WireField): void {
-    el.title = field.name;
+    const live = parseLiveTag(field.live);
+    el.title = live ? t('live.readOnly', { source: live.source }) : field.name;
+    el.classList.toggle('wm-field-live', !!live);
     el.setAttribute('aria-label', field.name);
     if (el instanceof HTMLButtonElement) {
       const on = !!field.onState && field.value === field.onState;
       el.setAttribute('aria-checked', String(on));
       el.textContent = on ? (field.kind === 'radio' ? '●' : '✓') : '';
-      el.disabled = !!field.readOnly;
+      el.disabled = !!field.readOnly || !!live;
     } else if (el instanceof HTMLSelectElement) {
       const options = field.options ?? [];
       const list = options.some((o) => o.value === field.value) || !field.value ? options : [{ value: field.value, label: field.value }, ...options];
@@ -240,14 +264,20 @@ export class FormLayer {
         el.replaceChildren(h('option', { text: '', attrs: { value: '' } }), ...list.map((o) => h('option', { text: o.label, attrs: { value: o.value } })));
       }
       if (el.value !== field.value) el.value = field.value;
-      el.disabled = !!field.readOnly;
+      el.disabled = !!field.readOnly || !!live;
     } else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
       // Leave what's being typed alone: the worker's copy may be a keystroke behind.
       if (document.activeElement !== el && el.value !== field.value) el.value = field.value;
-      el.readOnly = !!field.readOnly;
+      el.readOnly = !!field.readOnly || !!live;
       if (field.maxLength) el.maxLength = field.maxLength;
       else el.removeAttribute('maxlength');
     }
+  }
+
+  /** The name of the field being filled in or picked, for Copy as Live Link; null when there is none. */
+  currentFieldName(): string | null {
+    const id = this.mode === 'edit' ? this.selected : this.lastFocused;
+    return (id && this.field(id)?.name) || null;
   }
 
   /** Sets a field's value, shared by every widget with its name. */
@@ -402,7 +432,7 @@ export class FormLayer {
   /** The selected field's name and settings, in the palette. */
   private syncProperties(): void {
     const field = this.selected ? this.field(this.selected) : undefined;
-    const key = field ? JSON.stringify([field.id, field.name, field.kind, field.multiline, field.options]) : '';
+    const key = field ? JSON.stringify([field.id, field.name, field.kind, field.multiline, field.options, field.live]) : '';
     if (this.properties.dataset.key === key && this.properties.contains(document.activeElement)) return;
     this.properties.dataset.key = key;
     if (this.placing) {
@@ -463,6 +493,13 @@ export class FormLayer {
         this.replaceField(id, { options: labels.map((label) => ({ value: old.get(label) ?? label, label })) });
       });
       rows.push(h('label', { class: 'wm-forms-row wm-forms-column' }, h('span', { text: t('panels.forms.options') }), options));
+    }
+    const live = parseLiveTag(field.live);
+    if (live) {
+      // A live field: where it comes from, and a way to keep its value and stop updating it.
+      const unlink = h('button', { class: 'wm-forms-delete', text: t('live.field.unlink'), attrs: { type: 'button' } });
+      unlink.addEventListener('click', () => this.replaceField(id, { live: undefined }));
+      rows.push(h('p', { class: 'wm-forms-hint', text: t('live.card.source', { source: live.source }) }), unlink);
     }
     const remove = h('button', { class: 'wm-forms-delete', text: t('panels.forms.deleteField'), attrs: { type: 'button' } });
     remove.addEventListener('click', () => this.remove(id));

@@ -99,7 +99,7 @@ Commit `a6d62c7a` ("Contain multiplayer") removed every second way to reach a ro
 - `Transaction {id, client, ops}`; the room's log is an ordered list, version = length. Ids are unique, so resubmission after reconnect is idempotent.
 - `RoomMeta` (`roomCore.ts`): `epoch`, `mode`, `snapshotVersion`, `handoffDeadline`, `flusher`, `settleAt`, `snapshotDue`, `kind`; stored in the `kv` table.
 - `PeerState`: `userId`, `role`, `client`, `name`, `picture` (from the account, never from the client), `color`, `selection`, `pointer`, `synced`. Persisted as a WebSocket attachment so it survives object eviction.
-- Roles: `owner | editor | viewer` (`RoomRole`, `sharing.ts` `Role`).
+- Roles: `owner | editor | viewer` (`RoomRole`, `sharing.ts` `Role`). The people list marks the owner's sessions (`Person.owner`), so the owner's first session can keep the document's live blocks up to date for the room: the layout worker's room state says whether this session is that one (`liveUpdater`). It updates from `snapshot()` (the bytes and the worker's count of changes) and sends the result back with that count; the worker refuses it (`typed`) if the document changed in between, and the page tries again from a new snapshot ([Live blocks](../live-blocks.md) §6).
 - Epoch: each shared stretch is an epoch; every message carries it and messages from an old one are ignored. `solo` and `end()` bump it.
 - Timings (`DEFAULT_TIMINGS`): handoff 15 s, snapshot 5 s after the first unsaved edit (3x for `text`), grace 30 s before winding down.
 

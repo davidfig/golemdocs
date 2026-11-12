@@ -2251,6 +2251,11 @@ html.wm-titlebar .wm-format {
   width: min(420px, calc(100vw - 8px));
 }
 
+/* A live block's label (liveCard.ts). */
+.wm-dialog.wm-live.wm-over {
+  width: min(360px, calc(100vw - 8px));
+}
+
 .wm-link-body {
   display: flex;
   flex-direction: column;
@@ -3482,4 +3487,34 @@ body.wm-fullscreen .wm-keys {
 
 .wm-sel-handle.end::after {
   bottom: -11px;
+}
+
+/* --- Scripts (ui/scriptDialogs.ts) ----------------------------------------------------------- */
+
+.wm-dialog.wm-scripts-dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.wm-script-grant {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.wm-script-details {
+  min-height: 44px;
+}
+
+.wm-script-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+/* The frame a script runs in (scripts/sandbox.ts): never seen. */
+.wm-script-sandbox {
+  position: fixed;
+  width: 0;
+  height: 0;
+  border: 0;
+  visibility: hidden;
 }

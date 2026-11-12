@@ -136,7 +136,7 @@ export class RoomCore {
   }
 
   private people(): Person[] {
-    return this.members.map((p) => ({ client: p.state.client!, name: p.state.name, picture: p.state.picture, color: p.state.color, selection: p.state.selection, pointer: p.state.pointer ?? null }));
+    return this.members.map((p) => ({ client: p.state.client!, name: p.state.name, picture: p.state.picture, color: p.state.color, selection: p.state.selection, pointer: p.state.pointer ?? null, ...(p.state.role === 'owner' && { owner: true }) }));
   }
 
   private broadcast(message: MultiplayerServerMessage, except?: Peer, only: (p: Peer) => boolean = () => true): void {

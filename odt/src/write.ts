@@ -47,6 +47,7 @@ import {
 } from '@golemdocs/docx';
 import type { OdtExtension, OdtFragment, OdtImageFrame, OdtObject, OdtProperties } from './extension.ts';
 import { odfStyleName } from './names.ts';
+import { liveTagOf } from './live.ts';
 import {
   MANIFEST_NS,
   MIME_TEXT,
@@ -494,6 +495,32 @@ class Writer {
   // --- Blocks ------------------------------------------------------------------------------
 
   private writeBlocks(blocks: Block[], sink: AutoStyles, layer?: ParagraphProperties, topLevel = false): Entry[] {
+    // A live block (live.ts) is a section named with its tag around its content; what lies between live blocks is written
+    // as before.
+    if (blocks.some((b) => liveTagOf(b) !== null)) {
+      const out: Entry[] = [];
+      let run: Block[] = [];
+      const flush = () => {
+        if (run.length) out.push(...this.writeFlat(run, sink, layer, topLevel));
+        run = [];
+      };
+      for (const b of blocks) {
+        const tag = liveTagOf(b);
+        if (tag === null || b.kind !== 'wrapper') {
+          run.push(b);
+          continue;
+        }
+        flush();
+        const inner = this.writeBlocks(b.children, sink, layer, false);
+        out.push({ node: el('text:section', { 'text:name': tag }, inner.map((e) => e.node)), ids: inner.flatMap((e) => e.ids) });
+      }
+      flush();
+      return out;
+    }
+    return this.writeFlat(blocks, sink, layer, topLevel);
+  }
+
+  private writeFlat(blocks: Block[], sink: AutoStyles, layer?: ParagraphProperties, topLevel = false): Entry[] {
     const flat: (Paragraph | Table)[] = [];
     const flatten = (list: Block[]) => {
       for (const b of list) {
@@ -1181,9 +1208,15 @@ class InlineWriter {
           if (link) this.walk(inline.children, link, linkStyle);
           else this.walk(inline.children, inline, this.w.linkStyle(inline));
           break;
-        case 'wrapper':
+        case 'wrapper': {
+          const tag = liveTagOf(inline);
+          if (tag !== null && !this.field) {
+            this.live(tag, inline.children, link);
+            break;
+          }
           this.walk(inline.children, link, linkStyle);
           break;
+        }
         case 'raw': {
           const skip = this.at(null, link);
           const commentId = inline.xml.attrs['w:id'];
@@ -1306,6 +1339,21 @@ class InlineWriter {
       }
       this.fieldDepth = Math.max(this.fieldDepth - 1, 0);
     }
+  }
+
+  /** A live value (live.ts): a text-input field described by its tag, holding its text. Each character is a position. */
+  private live(tag: string, children: Inline[], link: Hyperlink | null): void {
+    let text = '';
+    const gather = (list: Inline[]) => {
+      for (const i of list) {
+        if (i.kind === 'run') for (const c of i.content) text += c.kind === 'text' ? c.text : c.kind === 'tab' ? '\t' : '';
+        else if (i.kind === 'hyperlink' || i.kind === 'wrapper') gather(i.children);
+      }
+    };
+    gather(children);
+    this.at(null, link);
+    this.push(el('text:text-input', { 'text:description': tag }, text ? [text] : []), null, link);
+    this.pos += text.length;
   }
 
   private push(node: XmlNode, style: string | null, link: Hyperlink | null): void {

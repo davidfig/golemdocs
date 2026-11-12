@@ -156,6 +156,14 @@ function sheetsOf(sheet: SheetName | null, ctx: Context): number[] | FormulaErro
 const at = (part: RefPart, d: number): number => (part.abs ? part.i : part.i + d);
 
 function compileRef(node: Extract<Node, { t: 'cell' | 'area' | 'cols' | 'rows' }>): Compiled {
+  const book = node.sheet?.book;
+  if (book !== undefined && (node.t === 'cell' || node.t === 'area')) {
+    const sheet = node.sheet!.first;
+    return (ctx) =>
+      node.t === 'cell'
+        ? ctx.host.external(book, sheet, at(node.row, ctx.dRow), at(node.col, ctx.dCol), at(node.row, ctx.dRow), at(node.col, ctx.dCol))
+        : ctx.host.external(book, sheet, Math.min(at(node.r0, ctx.dRow), at(node.r1, ctx.dRow)), Math.min(at(node.c0, ctx.dCol), at(node.c1, ctx.dCol)), Math.max(at(node.r0, ctx.dRow), at(node.r1, ctx.dRow)), Math.max(at(node.c0, ctx.dCol), at(node.c1, ctx.dCol)));
+  }
   return (ctx) => {
     const sheets = sheetsOf(node.sheet, ctx);
     if (isError(sheets)) return sheets;

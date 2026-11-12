@@ -66,6 +66,7 @@ import {
   fromBase64,
 } from './odf.ts';
 import { openPackage, type OdfPackage } from './package.ts';
+import { LIVE_PREFIX, liveWrapperOf } from './live.ts';
 import { readCellProperties, readParagraphProperties, readTextProperties, type Unmapped } from './properties.ts';
 
 const ID_ATTR = 'w14:paraId';
@@ -574,6 +575,14 @@ class Reader {
   }
 
   private readSection(e: XmlElement, out: Block[], depth: number): void {
+    // A live block's section (live.ts): its content in a content control, not a section record.
+    const live = e.name === 'text:section' ? e.attrs['text:name'] : undefined;
+    if (live?.startsWith(LIVE_PREFIX)) {
+      const inner: Block[] = [];
+      for (const c of e.children) if (typeof c !== 'string') this.readBlock(c, inner, false, depth + 1);
+      out.push(liveWrapperOf(live, inner));
+      return;
+    }
     const record: OdtSection = { element: e.name, attributes: { ...e.attrs }, firstParagraphId: '', lastParagraphId: '' };
     if (e.attrs['text:name']) record.name = e.attrs['text:name'];
     const styles = this.collectStyles({ name: e.name, attrs: e.attrs, children: [] });
@@ -758,6 +767,15 @@ class Reader {
         return;
     }
     if (DROPPED.has(name)) return;
+    const live = name === 'text:text-input' ? e.attrs['text:description'] : undefined;
+    if (live?.startsWith(LIVE_PREFIX) && !inLink) {
+      // A live value (live.ts): its text in an inline content control.
+      const children: Inline[] = [];
+      this.addText(children, props, textOf(e), ctx);
+      container.push(liveWrapperOf(live, children));
+      ctx.lastSpace = false;
+      return;
+    }
     if (FIELDS.has(name)) {
       const text = textOf(e);
       (this.ext.fields ??= []).push({ paragraphId: ctx.id, offset: ctx.offset, text, fragment: this.fragment(e) });

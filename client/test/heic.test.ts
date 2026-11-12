@@ -41,6 +41,9 @@ test('a HEIC photo is kept under a JPEG name', () => {
   assert.equal(keptPictureName('IMG_0001.HEIC'), 'IMG_0001.jpg');
   assert.equal(keptPictureName('a.b.heif'), 'a.b.jpg');
   assert.equal(keptPictureName('a.jpg'), 'a.jpg');
+  assert.equal(keptPictureName('a.gif'), 'a.png');
+  // An SVG opens as a drawing, kept as SVG.
+  assert.equal(keptPictureName('Plan.svg'), 'Plan.svg');
 });
 
 test('libheif decodes the main picture to RGBA, turned as the file says', async () => {

@@ -120,6 +120,7 @@ Shared UI components (dropdowns, `LayerTree`, cursors, shape lists) are mandated
 - **Addresses are ids + model offsets**, never `Paragraph` references across a boundary; selections that leave the worker or enter `History` must use `Pos`.
 - **A command that adds characters outside the core atlases must wait for font pages** (`runCommand` re-enters after `ensurePages`); equations wait for `ensureMath`.
 - **Viewers and offline rooms are read-only**: `readOnly` in the worker blocks everything except selection/view commands.
+- **Live blocks are read-only** (`client/src/live/guard.ts`): the worker refuses a command in `LIVE_GUARDED` that would change part of a live block (`livePart`), and says where the block comes from. A selection that holds a whole block may still delete it. `SelectionUpdate.live` names the block the caret is in, for its label (`ui/liveCard.ts`: Update Now saves and forces `LiveKeeper.check`; Open Source opens the source like a `doc:` link). Text typed at either end of a content control whose content is locked goes beside it, not into it (`insertInto` in `docx/src/edit/text.ts`, as Word does).
 - **The document is in the worker.** The page cannot read it synchronously; use a `ToWorker` request (`save`, `agent`, ...).
 - **Format-dependent behavior** goes through `ui/formats.ts` (`FORMATS[kind]`), e.g. which marks a format can hold.
 - Large pieces of UI and editors are lazy chunks; keep new code behind the existing entry modules (see `AGENTS.md`, "Bundle size").

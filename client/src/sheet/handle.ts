@@ -137,6 +137,10 @@ export class SheetEditor {
     return this.view?.copy(false) ?? Promise.resolve();
   }
 
+  copyLiveLink(name: string): Promise<void> {
+    return this.view?.copyLiveLink(name) ?? Promise.resolve();
+  }
+
   cut(): Promise<void> {
     return this.view?.copy(true) ?? Promise.resolve();
   }

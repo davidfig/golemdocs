@@ -175,12 +175,16 @@ export class SearchLibrary {
     return mine;
   }
 
-  /** The titles each of `docs` links to, as written in its links (from its index, so none is read; a document with no index yet is absent). */
-  async links(docs: readonly SearchableDocument[]): Promise<Map<string, string[]>> {
+  /**
+   * The titles each of `docs` links to, as written in its links (from its index, so none is read; a document with no index yet is
+   * absent). With `live`, only the titles its live blocks show (the vault graph: docs/live-blocks.md §5).
+   */
+  async links(docs: readonly SearchableDocument[], live = false): Promise<Map<string, string[]>> {
     const all = await this.load();
     const out = new Map<string, string[]>();
     for (const doc of docs) {
-      const titles = Object.keys(all.get(doc.key)?.index.l ?? {});
+      const index = all.get(doc.key)?.index;
+      const titles = Object.keys((live ? index?.s : index?.l) ?? {});
       if (titles.length) out.set(doc.key, titles);
     }
     return out;

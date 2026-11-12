@@ -33,16 +33,17 @@ test('reads documents with their folders, leaving out system files and types tha
   assert.equal(new TextDecoder().decode(files[1].bytes), '# q1');
 });
 
-test('a GIF, BMP or SVG is read under the PNG name it is kept as, so it can not take the name of a PNG beside it', async () => {
+test('a GIF or BMP is read under the PNG name it is kept as, so it can not take the name of a PNG beside it; an SVG stays a drawing', async () => {
   const zip = await writeZip([
     { name: 'logo.png', data: enc.encode('p') },
+    { name: 'logo.gif', data: enc.encode('GIF89a') },
     { name: 'logo.svg', data: enc.encode('<svg/>') },
   ]);
   const { files } = await readZipFiles(zip);
-  assert.deepEqual(files.map((f) => f.name), ['logo.png', 'logo.png']);
+  assert.deepEqual(files.map((f) => f.name), ['logo.png', 'logo.png', 'logo.svg']);
   const { t, saved } = target();
   await importFiles(files, t);
-  assert.deepEqual(saved.map((s) => s.name), ['logo.png', 'logo (2).png']);
+  assert.deepEqual(saved.map((s) => s.name), ['logo.png', 'logo (2).png', 'logo.svg']);
 });
 
 test('a file in the ZIP that cannot be read is skipped, not the reason the rest are not imported', async () => {

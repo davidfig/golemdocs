@@ -87,6 +87,11 @@ import { findIssues, type TextIssue } from '../spelling/check.ts';
 import { countText, tableShape } from './wordCount.ts';
 import { htmlToPaste } from '../formats/paste.ts';
 import { resolveEmbeds, type Embedded } from '../formats/embeds.ts';
+import { deletedAround, livePartIn } from '../live/guard.ts';
+import { livePartAddress } from '../live/partAddress.ts';
+import { findLiveIn, liveIndexAt, unwrapLive } from '../live/liveMarks.ts';
+import type { LiveTag } from '../live/liveMarks.ts';
+import type { SourceLookup } from '../live/sources.ts';
 import { sourceFromFile } from '../formats/source.ts';
 import { fontFile, loadAppFonts } from '../formats/appFonts.ts';
 import { withDrawingText } from '../formats/drawingText.ts';
@@ -177,6 +182,15 @@ async function embedded(title: string, fonts: FontSet): Promise<Embedded | null>
   const { document } = await load(source, fonts);
   return document ? { kind: 'document', document } : null;
 }
+
+/** A live block's source, asked of the page by title like an embed (docs/live-blocks.md): its bytes, and a drawing's picture. */
+const liveSource: SourceLookup = async (title) => {
+  const file = await askEmbed(title);
+  if (!file) return null;
+  const bytes = new Uint8Array(file.bytes);
+  const drawing = /\.svgz?$/i.test(file.name) ? await (await import('../formats/vectorDoc.ts')).storedDrawing(bytes) : null;
+  return { name: file.name, bytes, ...(drawing && { drawing }) };
+};
 
 /** Puts the pictures and notes a Markdown document embeds in place. Whatever isn't found in time stays a link. */
 async function showEmbeds(document: WordDocument, fonts: FontSet): Promise<void> {
@@ -334,6 +348,9 @@ function applySettings(wire: WireCommand): void {
   else if (wire.kind === 'autoCorrect') setAutoCorrect(wire);
 }
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
+/** Commands that edit at the selection, refused in a live block (see `livePart`). */
+const LIVE_GUARDED = new Set<string>(['insertText', 'insertParagraph', 'insertLineBreak', 'insertContent', 'pasteContent', 'pasteHtml', 'delete', 'formatText', 'formatParagraphs', 'changeCase', 'insertTable', 'tab', 'setLink', 'removeLink', 'tableEdit', 'splitCells', 'format', 'applyPainter', 'moveDrawing', 'moveDrawingToParagraph', 'replaceDrawing', 'replacePicture', 'addComment', 'addBookmark']);
+
 const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'select', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'spellAt', 'countWords', 'getProperties', 'selectWord']);
 
 /** A book's key: the hash of its paragraphs' text, so the same book finds its reading place on every device, and its places are the same paragraphs. */
@@ -691,6 +708,7 @@ class OpenDocument {
       remoteRects,
       painting: this.painter !== null,
       link: editor.selectedLink(),
+      live: this.liveAtCaret(editor),
       math: editor.selectedMath(),
       picture: this.selectedPicture(editor),
       inTable: editor.inTable(),
@@ -1302,7 +1320,7 @@ class OpenDocument {
     const net = this.net;
     if (!net) return;
     const { mode, role, people, holder, watching, catchingUp } = net.state;
-    post({ type: 'roomState', doc: this.doc, mode, role, people: people.map(({ client, name, picture, color }) => ({ name, picture, color, me: client === this.clientId })), unconfirmed: this.replica?.sync?.unconfirmed ?? this.layerSync?.unconfirmed ?? 0, holder: holder && { name: holder.name, mine: holder.mine }, watching, catchingUp });
+    post({ type: 'roomState', doc: this.doc, mode, role, people: people.map(({ client, name, picture, color }) => ({ name, picture, color, me: client === this.clientId })), unconfirmed: this.replica?.sync?.unconfirmed ?? this.layerSync?.unconfirmed ?? 0, holder: holder && { name: holder.name, mine: holder.mine }, watching, catchingUp, liveUpdater: people.find((p) => p.owner)?.client === this.clientId });
   }
 
   /**
@@ -1604,6 +1622,7 @@ class OpenDocument {
       receive: (message) => {
         const { change } = this.editor!.receive(message);
         if (change) {
+          this.changes++;
           this.drawingChanged();
           // Other people's carets move with the text too.
           for (const person of this.people.values()) if (person.selection) person.selection = Replica.mapSelection(person.selection, change.mapping);
@@ -1644,6 +1663,7 @@ class OpenDocument {
     }
     this.edited = true;
     this.typedAt = performance.now();
+    this.changes++;
     void this.pump();
   }
 
@@ -1769,10 +1789,11 @@ class OpenDocument {
    * can't be done that way (not a flowing document, or a change operations can't make): the page opens the document again instead.
    * Edits made here meanwhile win: the file is left for the next sync to settle, and the answer is 'typed'.
    */
-  async refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null): Promise<boolean | 'typed'> {
+  async refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null, changes?: number): Promise<boolean | 'typed'> {
     const { editor, session, document, replica } = this;
     if (!this.isSetUp || this.closed || !editor || !session || !document || !replica) return false;
-    if (this.annotator || this.layers || this.vectorLayers || this.shared || this.readOnly || this.format === 'pdf' || isLayeredFormat(this.format)) return false;
+    // Edited together, only a live update made from the document as it is now goes in (its own ops go to the room).
+    if (this.annotator || this.layers || this.vectorLayers || (this.shared && changes === undefined) || this.readOnly || this.format === 'pdf' || isLayeredFormat(this.format)) return false;
     const typed = this.typedAt;
     const fonts = await fontsReady;
     const loaded = await load(source, fonts);
@@ -1780,7 +1801,7 @@ class OpenDocument {
     if (loaded.lens === 'md') await showEmbeds(loaded.document, fonts);
     await session.ensureFor(loaded.document);
     if (this.closed || this.editor !== editor) return false;
-    if (this.typedAt !== typed || this.waiting) return 'typed';
+    if (this.typedAt !== typed || this.waiting || (changes !== undefined && this.changes !== changes)) return 'typed';
     const diff = diffDocuments(document, loaded.document, () => replica.newId());
     if (!diff) return false;
     this.extensions = loaded.extensions;
@@ -1879,6 +1900,8 @@ class OpenDocument {
     let pasted: Awaited<ReturnType<typeof htmlToPaste>> = null;
     try {
       pasted = await htmlToPaste(html, document);
+      // A live block pasted (Copy as Live Link) is filled in as it goes in; one whose source can't be read keeps what was copied.
+      if (pasted && findLiveIn(pasted.blocks).length) await (await import('../live/update.ts')).updateLiveIn(pasted.blocks, document, liveSource);
       if (pasted?.fonts.size) await session.ensureFonts(pasted.fonts);
     } catch {
       pasted = null;
@@ -1948,6 +1971,8 @@ class OpenDocument {
 
   /** When the last edit was made here (performance.now()): squiggles hold off for the word just finished until the typing pauses. */
   private typedAt = -Infinity;
+  /** Every change to the open document, from anyone (typed, undone, from the room, from outside): a live update made from an older state is refused. */
+  changes = 0;
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** The squiggles for the pages shown: red under misspelled words, green under grammar mistakes. */
@@ -2020,6 +2045,16 @@ class OpenDocument {
       const against = (p: typeof start) => list.indexOf(p.paragraph) - at || p.offset - hit.offset;
       if (editor.collapsed || against(start) > 0 || against(end) < 0) editor.apply({ kind: 'select', paragraph: at, from: hit.offset, to: hit.offset });
       this.spell = { issue: null, menu: true, table: true };
+    }
+    // In a live block of an editable document: the menu offers Stop Updating, for the block the caret is put in.
+    if (hit && !this.spell.issue && select && !this.readOnly && FORMATS[this.format as DocumentKind]?.editable) {
+      const at = { paragraph: hit.paragraph, offset: hit.offset };
+      const live = livePartIn(editor.doc.body, at, at);
+      if (live) {
+        const inside = livePartIn(editor.doc.body, editor.selection.focus, editor.selection.focus);
+        if (inside?.source !== live.source) editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: hit.offset, to: hit.offset });
+        this.spell = { ...this.spell, live: live.source };
+      }
     }
     // No mistake: the word under the point, for the menu's synonyms.
     if (hit && !this.spell.issue && select && !this.readOnly && FORMATS[this.format as DocumentKind]?.editable) {
@@ -2098,14 +2133,69 @@ class OpenDocument {
     } else this.sendSelection();
   }
 
+  /** The live block the caret is in (its source), for the block's label. */
+  /** The part of the document at the caret that a live block elsewhere could show (Copy as Live Link). */
+  partAtCaret(): string | null {
+    const editor = this.editor;
+    return editor ? livePartAddress(editor.doc.body, editor.selection.focus) : null;
+  }
+
+  private liveAtCaret(editor: Editor): { source: string } | null {
+    if (this.annotator || this.readOnly) return null;
+    const tag = livePartIn(editor.doc.body, editor.selection.focus, editor.selection.focus);
+    return tag && { source: tag.source };
+  }
+
+  /**
+   * Stop Updating (docs/live-blocks.md §9): the live block of `source` at the caret becomes its result, as ordinary content.
+   * Worked out on a copy and put in as the difference, one edit, so Undo brings the block back and others in a room see it.
+   */
+  private async stopLive(source: string, tries = 3): Promise<void> {
+    const { editor, document, replica } = this;
+    if (!editor || !document || !replica || this.readOnly || this.annotator) return;
+    const index = liveIndexAt(document.body, editor.selection.focus.paragraph, source);
+    if (index < 0) return;
+    const changes = this.changes;
+    const copy = await WordDocument.read(await document.write());
+    if (this.closed || this.editor !== editor) return;
+    // Changed meanwhile (typed here, or someone else's edit): worked out again from the document as it is now.
+    if (this.changes !== changes) return tries > 1 ? this.stopLive(source, tries - 1) : undefined;
+    const at = findLiveIn(copy.body)[index];
+    if (!at || at.tag.source !== source) return;
+    unwrapLive(at);
+    const diff = diffDocuments(document, copy, () => replica.newId());
+    if (!diff?.ops.length) return;
+    editor.applyOps(diff.ops);
+    this.edited = true;
+    void this.pump();
+  }
+
+  private livePart(wire: WireCommand): LiveTag | null {
+    const editor = this.editor;
+    if (!editor || this.annotator) return null;
+    const { anchor, focus } = editor.selection;
+    const paragraphs = editor.paragraphs();
+    const order = paragraphs.indexOf(anchor.paragraph) - paragraphs.indexOf(focus.paragraph) || anchor.offset - focus.offset;
+    let [start, end] = order <= 0 ? [anchor, focus] : [focus, anchor];
+    if (wire.kind === 'delete' && order === 0) {
+      const around = deletedAround(paragraphs, start, wire.direction);
+      if (!around) return null;
+      ({ start, end } = around);
+    }
+    return livePartIn(editor.doc.body, start, end);
+  }
+
   private runCommand(wire: WireCommand, cjkReady = false, mathReady = false): void | Promise<void> {
     // Sent while the document is still loading: run once it has (later commands queue behind it).
     // Settings that aren't the document's take effect at once, as the first layout uses them.
     if (!this.isSetUp && !SETTINGS_COMMANDS.has(wire.kind)) return this.setUp.then(() => this.runCommand(wire, cjkReady, mathReady));
+    const liveBlock = LIVE_GUARDED.has(wire.kind) ? this.livePart(wire) : null;
+    if (liveBlock) return this.notice(t('live.readOnly', { source: liveBlock.source }));
     if (wire.kind === 'format') return this.applyFormat(wire.action);
     if (wire.kind === 'applyPainter') return this.applyPainter();
     if (wire.kind === 'countWords') return this.countWords(wire.whole ?? false, wire.footer ?? false);
     if (wire.kind === 'pasteHtml') return this.pasteHtml(wire.html, wire.text);
+    if (wire.kind === 'stopLive') return this.stopLive(wire.source);
     if (wire.kind === 'getProperties') {
       this.props = { ...this.document?.properties };
       return this.sendSelection();
@@ -2693,7 +2783,10 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     // A picture another person added is fetched from the room when it is first needed.
     document.fetchPart = (part) => entry.fetchRoomMedia(part);
     entry.replica = replica;
-    replica.onTransaction = (transaction) => entry.journalEdit(transaction.ops);
+    replica.onTransaction = (transaction) => {
+      entry.changes++;
+      entry.journalEdit(transaction.ops);
+    };
     entry.session = session;
     entry.editor = new Editor(replica, session);
     entry.formats = new FormatReader(document);
@@ -2804,6 +2897,8 @@ async function save(doc: number, request: number, lens?: Format): Promise<void> 
     // What the body holds is known exactly: the edits up to this one, read in the same synchronous stretch as it is written. What is written
     // after it (styles, comments, properties) may hold later edits too, which replace rather than add, so replaying those is harmless.
     let seq = open.journalSeq;
+    // Taken before the write: a change made while it is written counts as after it.
+    const changes = open.changes;
     const bytes = await writeWdoc({
       manifest: { version: WDOC_VERSION, lens: lens ?? open.format, origin: open.origin, pagesCurrent: open.pagesCurrent && !open.edited },
       document: open.document ? await open.document.write({ onBody: () => (seq = open.journalSeq) }) : null,
@@ -2811,7 +2906,7 @@ async function save(doc: number, request: number, lens?: Format): Promise<void> 
       extensions: currentExtensions(open),
     });
     const buffer = bytes.slice().buffer;
-    post({ type: 'saved', request, bytes: buffer, seq }, [buffer]);
+    post({ type: 'saved', request, bytes: buffer, seq, changes }, [buffer]);
   } catch (e) {
     post({ type: 'saved', request, bytes: null, error: (e as Error).message });
   }
@@ -2830,6 +2925,21 @@ async function journalCopy(request: number, source: DocumentSource, batches: Ope
       original: loaded.original,
       extensions: loaded.extensions,
     });
+    const buffer = bytes.slice().buffer;
+    post({ type: 'saved', request, bytes: buffer }, [buffer]);
+  } catch (e) {
+    post({ type: 'saved', request, bytes: null, error: (e as Error).message });
+  }
+}
+
+/** A document that is not open (its stored file) exported as a file of a format, leaving the open one alone. */
+async function exportCopy(request: number, source: DocumentSource, to: Format): Promise<void> {
+  try {
+    const fonts = await fontsReady;
+    const loaded = await load(source, fonts);
+    if (!loaded.document) throw new Error(t('app.documentNotOpen'));
+    await loaded.document.fetchMissingMedia();
+    const bytes = await exportDocument(loaded.document, loaded.extensions, to, fonts);
     const buffer = bytes.slice().buffer;
     post({ type: 'saved', request, bytes: buffer }, [buffer]);
   } catch (e) {
@@ -3035,6 +3145,9 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
     case 'goTo':
       if (current?.doc === message.doc) current.goTo(message.place);
       break;
+    case 'livePart':
+      post({ type: 'livePart', request: message.request, part: current?.doc === message.doc ? current.partAtCaret() : null });
+      break;
     case 'linkAt':
       post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, text: '', checkbox: false }) });
       break;
@@ -3079,6 +3192,9 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
     case 'replayJournal':
       if (current?.doc === message.doc) current.replayJournal(message.batches);
       break;
+    case 'exportCopy':
+      void exportCopy(message.request, message.source, message.to);
+      break;
     case 'journalCopy':
       void journalCopy(message.request, message.source, message.batches);
       break;
@@ -3089,7 +3205,7 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       void pictureBase(message.doc, message.request);
       break;
     case 'refresh':
-      void (current?.doc === message.doc ? current.refresh(message.source, message.view) : Promise.resolve(false))
+      void (current?.doc === message.doc ? current.refresh(message.source, message.view, message.changes) : Promise.resolve(false))
         .catch((e: unknown) => {
           console.error(e);
           return false;

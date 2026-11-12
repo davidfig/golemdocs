@@ -9,6 +9,7 @@ import { history } from './history.ts';
 import { textEditor } from './textEditor.ts';
 import { sheet } from './sheet.ts';
 import { link } from './link.ts';
+import { live } from './live.ts';
 import { math } from './math.ts';
 import { menus } from './menus.ts';
 import { format } from './format.ts';
@@ -25,4 +26,4 @@ import { viewer } from './viewer.ts';
 import { pageSetup } from './pageSetup.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Partial<Messages> = { ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };
+export const messages: Partial<Messages> = { ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...live, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };

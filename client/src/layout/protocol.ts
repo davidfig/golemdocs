@@ -105,6 +105,8 @@ export type WireCommand =
   | (Omit<Extract<Command, { kind: 'resizeDrawing' }>, 'page'> & { page?: number })
   | { kind: 'undo' }
   | { kind: 'redo' }
+  /** Stop Updating: the live block of `source` the caret is in becomes ordinary content (one undoable step). */
+  | { kind: 'stopLive'; source: string }
   /** Formatting from the menus and toolbars (see formatting.ts). */
   | { kind: 'format'; action: FormatAction }
   /**
@@ -234,6 +236,11 @@ export interface RoomState {
   watching: boolean;
   /** It was saved since it was opened here: nothing may be changed until the newer one is open. */
   catchingUp: boolean;
+  /**
+   * This session updates the document's live blocks while it is edited together (docs/live-blocks.md §6): it is the owner's,
+   * and of the owner's sessions in the room, the one there longest. No one else can: only the owner has what blocks read.
+   */
+  liveUpdater: boolean;
 }
 
 /**
@@ -266,6 +273,8 @@ export type ToWorker =
   | { type: 'replayJournal'; doc: number; batches: Operation[][] }
   /** The same, into a copy of what `source` holds rather than the open document: answered with `saved`. */
   | { type: 'journalCopy'; request: number; source: DocumentSource; batches: Operation[][] }
+  /** A document that is not open, exported as a file of a format (a live export: docs/live-blocks.md §3). */
+  | { type: 'exportCopy'; request: number; source: DocumentSource; to: Format }
   /** Where this user's mouse is (null: it left the document), for the other people in the room. */
   | { type: 'pointer'; doc: number; pointer: Pointer | null }
   /** The open document has just been uploaded to the cloud: join its multiplayer room now. */
@@ -282,6 +291,8 @@ export type ToWorker =
   | { type: 'media'; doc: number; request: number; part: string }
   /** The address of the link under a page point (for the hover tip). */
   | { type: 'linkAt'; doc: number; request: number; page: number; x: number; y: number }
+  /** Copy as Live Link: the part of the document at the caret, as an address's part after `#` (live/partAddress.ts). */
+  | { type: 'livePart'; doc: number; request: number }
   /** The text at a page point (the top of the view, where a book is being read): answered with `textAt`. */
   | { type: 'textAt'; doc: number; request: number; page: number; x: number; y: number }
   /** Brings a place in the text (paragraph index, offset) to the top of the view, through the layout updates' `keep`, while the pages up to it are laid out. */
@@ -308,7 +319,18 @@ export type ToWorker =
    * The open document's file changed outside the app: its new content (`source`) is put in as edits, keeping the view on the text at
    * `view` (a point on a page: the top of the view). Answered with `refreshed`; not done (`ok` false) means it should be opened again.
    */
-  | { type: 'refresh'; doc: number; request: number; source: DocumentSource; view: { page: number; x: number; y: number } | null }
+  | {
+      type: 'refresh';
+      doc: number;
+      request: number;
+      source: DocumentSource;
+      view: { page: number; x: number; y: number } | null;
+      /**
+       * A live block update made from the open document as it was at this many changes (`snapshot`), applied even while it is
+       * edited together: refused ('typed') if anything changed since, so no one's edit is undone.
+       */
+      changes?: number;
+    }
   /** The stored document an embed asked for (`embed`), or none; its bytes are the file as stored. */
   | { type: 'embedFile'; request: number; file: { name: string; bytes: ArrayBuffer } | null }
   /** What is wrong in each of some lines of a plain text file (no document is involved): `sample` is the beginning of the file, which says its language. `at` asks instead for the problem under an offset of the line `texts[at.index]`. */
@@ -365,7 +387,7 @@ export interface SelectionUpdate {
   /** Formatting at the caret or across the selection, for the toolbar. */
   format: FormatState;
   /** Set once after a `spellNext`: what is wrong at the selection, or null when nothing more is. */
-  spell?: { issue: SpellIssue | null; /** After a `spellAt`: for the right-click menu, not the dialog. */ menu?: boolean; /** After a `spellAt`: the point is in an editable table (the caret is moved there unless it was already in the selection), so the menu can offer the table's commands. */ table?: boolean; /** After a right-click `spellAt` on no mistake in editable text: the word under the point (its paragraph among the document's, and where it is in it), for its synonyms. */ word?: { text: string; paragraph: number; from: number; to: number } };
+  spell?: { issue: SpellIssue | null; /** After a `spellAt`: for the right-click menu, not the dialog. */ menu?: boolean; /** After a `spellAt`: the point is in an editable table (the caret is moved there unless it was already in the selection), so the menu can offer the table's commands. */ table?: boolean; /** After a right-click `spellAt` on no mistake in editable text: the word under the point (its paragraph among the document's, and where it is in it), for its synonyms. */ word?: { text: string; paragraph: number; from: number; to: number }; /** After a right-click `spellAt` in a live block of an editable document: its source, for Stop Updating (the caret is put in it). */ live?: string };
   /** The squiggles under what is wrong (check-as-you-type): page id, x, y, width, height, kind (0 spelling, 1 grammar) per mark. */
   spellMarks?: Float64Array;
   /** Set once after `getProperties`. */
@@ -382,6 +404,8 @@ export interface SelectionUpdate {
   columns?: { count: number; space: number; sep: boolean; width: number };
   /** The selection is in a table cell (the Table menu works on it). */
   inTable?: boolean;
+  /** The live block the caret is in, for its label (docs/live-blocks.md §9). */
+  live?: { source: string } | null;
   /** The link the selection is in (or starts in), for Insert Hyperlink and Ctrl+click. */
   link?: { url: string; text: string } | null;
   /** The equation the selection is (exactly), for Insert Equation to change. */
@@ -462,10 +486,11 @@ export type FromWorker =
   /** A Markdown document being opened embeds a picture or note (`![[title]]`): the stored document of that title, as `embedFile`. */
   | { type: 'embed'; request: number; title: string }
   | { type: 'linkAt'; request: number; url: string | null; text: string; checkbox: boolean }
+  | { type: 'livePart'; request: number; part: string | null }
   /** The text at the point a `textAt` asked about: paragraph index and offset, or null (no text there, or no document). */
   | { type: 'textAt'; request: number; place: [number, number] | null }
   /** `seq`: the last edit (see `journal`) the bytes hold. */
-  | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string; seq?: number }
+  | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string; seq?: number; /** How many changes the open document had had when it was written (any, from anyone). */ changes?: number }
   /** An edit made here, in order, for the page to keep until a save holds it; `ops` null when what was done can't be replayed (see storage/editJournal.ts). */
   | { type: 'journal'; doc: number; seq: number; ops: Operation[] | null }
   /** `typed`: not put in, because the document was edited here meanwhile (those edits win; `ok` is true, as nothing needs opening again). */

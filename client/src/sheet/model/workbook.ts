@@ -7,6 +7,7 @@ import { StyleTable } from './styles.ts';
 import { OFFICE_THEME } from './theme.ts';
 import type { Theme } from './theme.ts';
 import type { Worksheet } from './worksheet.ts';
+import type { ExternalBook } from '../externals.ts';
 
 export interface DefinedName {
   name: string;
@@ -37,6 +38,8 @@ export class Workbook {
   styles = new StyleTable();
   theme: Theme = OFFICE_THEME;
   names: DefinedName[] = [];
+  /** The other workbooks its formulas read, with the values last seen there (externals.ts). */
+  externals: ExternalBook[] = [];
   /** Dates count from 1904-01-01 (old Mac workbooks) instead of 1900-01-00. */
   date1904 = false;
   /** The file asks for everything to be calculated when it is opened (`calcPr fullCalcOnLoad`): its values may be stale

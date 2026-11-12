@@ -61,6 +61,8 @@ import { commentMarker, commentThreads, RangeTracker } from './commentRanges.ts'
 import { MONO_FONTS, styleFor, TASK_GLYPHS } from './markdownStyles.ts';
 import { EMBED_PREFIX, EMBED_STYLE, embedPlaceholder, embedTag, placeholderBody } from './embedMarks.ts';
 import { readWikiLink, wikiLinkText } from './wikiLinks.ts';
+import { isLiveSourceName, liveTag, liveWrapper } from '../live/liveMarks.ts';
+import { LIVE_CLOSE, liveClose, liveOpen, liveOpenTag, splitLiveInline } from '../live/markdownMarks.ts';
 import { normalizeTag, parseTagAddress, readTag, tagAddress } from '@golemdocs/docx';
 
 const MAX_DEPTH = 24;
@@ -1106,6 +1108,7 @@ function listMarker(line: string, cols: number, idx: number): Marker | null {
 function interrupts(line: string): boolean {
   const { cols, idx } = leading(line);
   if (cols >= 4) return false;
+  if (liveOpenTag(line) || liveClose(line)) return true;
   if (line[idx] === '>') return true;
   if (atxHeading(line, cols, idx) || fenceStart(line, cols, idx) || isHr(line, cols, idx)) return true;
   const m = listMarker(line, cols, idx);
@@ -1281,7 +1284,11 @@ class Builder {
   /** Runs the deferred inline parsing (it needs every link definition, so it waits for the block pass). */
   finish(): void {
     const add = (blocks: CriticBlock[]): string[] => this.addComments(blocks);
-    for (const { p, text } of this.pending) p.children = parseInline(text, this.refs, this.used, add);
+    // A live value inside a sentence (`<!-- golem:live Budget.xlsx#Total stamp=… -->$4,210<!-- /golem:live -->`) is read apart
+    // from the text around it and kept as an inline content control.
+    for (const { p, text } of this.pending) {
+      p.children = splitLiveInline(text).flatMap((part) => (typeof part === 'string' ? parseInline(part, this.refs, this.used, add) : [liveWrapper(part.tag, parseInline(part.text, this.refs, this.used, add))]));
+    }
   }
 
   /** Adds the styles the document ended up using. */
@@ -1317,6 +1324,20 @@ function parseBlocks(b: Builder, lines: string[], ctx: Ctx, out: Block[]): void 
       for (let k = i; k <= lastCode; k++) out.push(b.code(isBlank(lines[k]) ? '' : stripCols(lines[k], 4)));
       i = lastCode + 1;
       continue;
+    }
+
+    // A live block (docs/live-blocks.md §4): its result between comment markers, kept as a content control.
+    const live = liveOpenTag(line);
+    if (live) {
+      let j = i + 1;
+      while (j < n && !liveClose(lines[j]) && !liveOpenTag(lines[j])) j++;
+      if (j < n && liveClose(lines[j])) {
+        const inner: Block[] = [];
+        parseBlocks(b, lines.slice(i + 1, j), ctx, inner);
+        out.push(liveWrapper(live, inner.length ? inner : [newParagraph({})]));
+        i = j + 1;
+        continue;
+      }
     }
 
     // Fenced code block (info string is dropped: the model has nowhere to keep it).
@@ -1504,6 +1525,33 @@ function parseBlocks(b: Builder, lines: string[], ctx: Ctx, out: Block[]): void 
  * quotes, fenced/indented code blocks, horizontal rules, GFM tables and hard line breaks.
  * Never throws; unknown syntax stays literal text.
  */
+/**
+ * `![[Budget.xlsx#Expenses]]` names something only a live block can show (a workbook's range, a CSV's rows): it becomes an
+ * empty live block, filled in when the note is next checked (docs/live-blocks.md §4), so a person or an agent can add one by
+ * writing the plain embed. Alone in its paragraph it is a block (a table); inside a sentence, a value.
+ */
+function liveEmbeds(blocks: Block[]): void {
+  const sourceOf = (inline: Inline): string | null => {
+    const body = inline.kind === 'hyperlink' ? placeholderBody(inline) : null;
+    if (body === null) return null;
+    const source = body.split('|')[0].trim();
+    return isLiveSourceName(source) ? source : null;
+  };
+  blocks.forEach((block, i) => {
+    if (block.kind !== 'paragraph') return;
+    const only = block.children.length === 1 ? sourceOf(block.children[0]) : null;
+    if (only && !block.properties.numbering) {
+      // An empty paragraph until it is filled: the search index finds a block's source through its first paragraph.
+      blocks[i] = liveWrapper<Block>({ source: only, stamp: '' }, [newParagraph({})]);
+      return;
+    }
+    block.children = block.children.map((inline) => {
+      const source = sourceOf(inline);
+      return source ? liveWrapper<Inline>({ source, stamp: '' }, []) : inline;
+    });
+  });
+}
+
 export async function markdownToDocument(source: string): Promise<WordDocument> {
   let text = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
   text = text.replace(/\r\n?/g, '\n');
@@ -1516,6 +1564,7 @@ export async function markdownToDocument(source: string): Promise<WordDocument> 
     builder.finish();
     builder.install();
     doc.body = body.length ? body : [newParagraph({})];
+    liveEmbeds(doc.body);
     return doc;
   } catch {
     // Safety net: literal text, one paragraph per line.
@@ -1978,6 +2027,13 @@ class Exporter {
         i++;
         continue;
       }
+      const marker = this.markers.get(block);
+      if (marker !== undefined) {
+        this.emit(marker, false);
+        this.reset();
+        i++;
+        continue;
+      }
       const kind = this.classify(block);
       if (kind.kind === 'code') {
         const paras: Paragraph[] = [];
@@ -2011,12 +2067,28 @@ class Exporter {
     for (const b of blocks) {
       const embed = embedTag(b);
       const placeholder = embed === null ? null : embedPlaceholder(embed);
+      const live = liveTag(b);
       // An embedded note's text is the other note's: written as the embed.
       if (placeholder) out.push({ kind: 'paragraph', properties: {}, children: [placeholder], attrs: {} });
+      // A live block's result is written between its markers (docs/live-blocks.md §4).
+      else if (live && b.kind === 'wrapper') {
+        out.push(this.marker(liveOpen(live)));
+        this.flatten(b.children, out);
+        out.push(this.marker(LIVE_CLOSE));
+      }
       else if (b.kind === 'wrapper') this.flatten(b.children, out);
       else out.push(b);
     }
     return out;
+  }
+
+  /** Lines written as they are (a live block's markers), by the stand-in paragraph flatten puts in their place. */
+  private markers = new Map<Paragraph, string>();
+
+  private marker(text: string): Paragraph {
+    const p: Paragraph = { kind: 'paragraph', properties: {}, children: [], attrs: {} };
+    this.markers.set(p, text);
+    return p;
   }
 
   private emit(text: string, tight: boolean): void {
@@ -2149,9 +2221,13 @@ class Exporter {
             else walk(inline.children, inline.url ?? `#${inline.anchor}`, inline.attrs['w:tooltip'], inline.url === undefined ? undefined : inline.markdownDest);
             break;
           }
-          case 'wrapper':
+          case 'wrapper': {
+            const live = liveTag(inline);
+            if (live) segs.push({ text: liveOpen(live), ...plainFmt, raw: true });
             walk(inline.children, link, title, dest);
+            if (live) segs.push({ text: LIVE_CLOSE, ...plainFmt, raw: true });
             break;
+          }
           case 'raw':
             if (this.threads.size && commentMarker(inline)) {
               segs.push({ text: '', ...plainFmt, mark: commentMarker(inline)! });

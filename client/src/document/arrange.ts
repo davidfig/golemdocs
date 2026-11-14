@@ -52,6 +52,22 @@ export function columnsToFill(pages: readonly Page[], aspect: number, gap: numbe
   return best;
 }
 
+/**
+ * Whether a point lies in the seam between two pages one above the other: the gap between them, or `slop` either side of
+ * where they meet (so a click on the line between touching pages counts). Pages must be in reading order, one column.
+ */
+export function onSeam(pages: readonly Omit<Page, 'moveTo'>[], x: number, y: number, slop: number): boolean {
+  for (let i = 0; i + 1 < pages.length; i++) {
+    const a = pages[i];
+    const b = pages[i + 1];
+    const bottom = a.y + a.height;
+    if (b.y < bottom - 0.01) continue; // not below it (another column)
+    if (y < bottom - slop || y > b.y + slop) continue;
+    if (x >= Math.min(a.x, b.x) && x <= Math.max(a.x + a.width, b.x + b.width)) return true;
+  }
+  return false;
+}
+
 /** The page nearest to a point (the one under it, if any), or null with no pages. */
 export function nearestPage<T extends Omit<Page, 'moveTo'>>(pages: readonly T[], x: number, y: number): T | null {
   let best: T | null = null;

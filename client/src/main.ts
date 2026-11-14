@@ -86,7 +86,7 @@ import { embedTitle, parseTagAddress } from '@golemdocs/docx';
 import { LoadingScreen } from './ui/loadingScreen.ts';
 import { NothingOpenScreen } from './ui/nothingOpen.ts';
 import { showToast } from './ui/toast.ts';
-import { arrangePages, columnsToFill, nearestPage, type Bounds } from './document/arrange.ts';
+import { arrangePages, columnsToFill, nearestPage, onSeam, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
 import { MAX_SHARED_TEXT_BYTES } from '@golemdocs/ops/textOps';
 import type { TextRoom } from './textEditor/view.ts';
@@ -272,6 +272,15 @@ try {
   toolbarsOn = localStorage.getItem(TOOLBARS_KEY) !== 'off';
 } catch {
   // Storage unavailable: the toolbars start on.
+}
+
+// View > Hide Space Between Pages: Print layout without the gap between pages. Remembered in this browser.
+const COLLAPSE_KEY = 'word.collapsePages';
+let collapsePages = false;
+try {
+  collapsePages = localStorage.getItem(COLLAPSE_KEY) === 'on';
+} catch {
+  // Storage unavailable: the pages start apart.
 }
 
 // The ruler (View > Ruler): off until turned on, then remembered in this browser.
@@ -1305,10 +1314,15 @@ function arrange(): void {
   // A big text file draws itself, on this camera: the empty document under it must not move it.
   if (textView.active) return;
   const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
-  const gap = reflowing() ? 0 : PAGE_GAP;
+  const gap = reflowing() || pagesJoined() ? 0 : PAGE_GAP;
   bounds = arrangePages(pages, grid ? columnsToFill(pages, aspect, gap) : 1, gap);
   if (pages.length && (!cameraPlaced || (grid && !userMoved))) placeCamera();
   requestRender();
+}
+
+/** The pages touch: the space between them is hidden (Print layout only). */
+function pagesJoined(): boolean {
+  return collapsePages && wordView();
 }
 
 /** Flow view is on, and applies to this document (not a PDF's own pages, a picture or the page grid). */
@@ -1785,6 +1799,7 @@ const SETTING_APPLIED: Record<SyncedKey, (() => void) | null> = {
   'word.viewMode': rereadViewMode,
   'word.formattingMarks': rereadViewOptions,
   'word.ruler': rereadViewOptions,
+  'word.collapsePages': rereadViewOptions,
   'word.footer': rereadViewOptions,
   'word.toolbarsShown': rereadViewOptions,
   'word.fullScreenMenus': rereadFullScreenOptions,
@@ -1821,6 +1836,11 @@ function rereadViewOptions(): void {
   footerOn = stored(FOOTER_KEY) !== 'off';
   toolbarsOn = stored(TOOLBARS_KEY) !== 'off';
   rulerOn = stored(RULER_KEY) === 'on';
+  const collapsed = stored(COLLAPSE_KEY) === 'on';
+  if (collapsed !== collapsePages) {
+    collapsePages = collapsed;
+    rearrangeKeepingPlace();
+  }
   const marks = stored(MARKS_KEY) === 'on';
   if (marks !== formattingMarks) worker.setMarks((formattingMarks = marks));
   if (footerOn) refreshFooter();
@@ -4238,6 +4258,7 @@ function render(): void {
   const caretVisible = caretOn && document.activeElement === input && document.hasFocus();
   syncReflow();
   renderer.flat = reflowing();
+  renderer.joined = pagesJoined();
   if (textView.active) {
     // A big text file: its own bounds, from the top-left corner however short or narrow it is, and drawn by the large-text editor.
     const area = textView.bounds();
@@ -4273,6 +4294,7 @@ function render(): void {
     footer: footerOn,
     toolbars: toolbarsOn,
     rulerVisible: rulerOn,
+    collapsePages,
     format: sheetView.active ? sheetView.formatState() : selectionFormat,
     ...editingState(),
     formMode: annotating ? formMode : null,
@@ -4384,6 +4406,8 @@ function pageAt(cssX: number, cssY: number): { page: GpuPage; x: number; y: numb
 const MULTI_CLICK_MS = 500;
 const MULTI_CLICK_PX = 4;
 const MULTI_TAP_PX = 24;
+/** How far from where two pages meet (CSS pixels) a double click still counts as between them. */
+const SEAM_PX = 4;
 let lastClick = { time: 0, x: 0, y: 0, count: 0 };
 
 /** Whether a press would be the next click of the clicks before it. */
@@ -4421,6 +4445,16 @@ function press(e: Press): void {
     sheetView.press(e.offsetX, e.offsetY, e.shiftKey, clickCount(e), e.metaKey || e.ctrlKey);
     return;
   }
+  // A double click between two pages hides the space between them, or shows it again.
+  let counted: number | undefined;
+  const point = camera.toDocument(e.offsetX, e.offsetY);
+  if (!e.word && wordView() && onSeam(pages, point.x, point.y, SEAM_PX / (camera.zoom * CSS_PX_PER_POINT))) {
+    counted = clickCount(e);
+    if (counted === 2) {
+      lastClick.count = 0;
+      return void toggleCollapsePages();
+    }
+  }
   const hit = pageAt(e.offsetX, e.offsetY);
   // Editing a PDF: a click picks the text under it to edit there (or, over nothing, puts the text down).
   if (annotating && formMode === 'edit') {
@@ -4443,7 +4477,7 @@ function press(e: Press): void {
     waitingDrag = null;
     return;
   }
-  const clicks = e.word ? 1 : clickCount(e);
+  const clicks = e.word ? 1 : (counted ?? clickCount(e));
   // A double click on a vector drawing in the text edits the drawing.
   if (clicks === 2 && !embeddedDrawing && FORMATS[current.kind].editable && !isDrawing()) {
     const image = hit.page.images.find((i) => i.svg && hit.x >= i.x && hit.x <= i.x + i.width && hit.y >= i.y && hit.y <= i.y + i.height);
@@ -5130,6 +5164,27 @@ function toggleToolbars(): void {
   requestRender();
 }
 
+/** Hides or shows the space between pages. */
+function toggleCollapsePages(): void {
+  collapsePages = !collapsePages;
+  try {
+    localStorage.setItem(COLLAPSE_KEY, collapsePages ? 'on' : 'off');
+  } catch {
+    // Storage unavailable: the choice lasts for this session only.
+  }
+  rearrangeKeepingPlace();
+}
+
+/** Positions the pages again with what is at the middle of the window staying there, whatever moved the pages. */
+function rearrangeKeepingPlace(): void {
+  const anchor = pageAt(canvas.clientWidth / 2, canvas.clientHeight / 2)?.page;
+  const was = anchor?.y ?? 0;
+  const gap = anchor ? camera.y - was : 0;
+  arrange();
+  if (anchor && !textView.active) camera.y = anchor.y + gap;
+  requestRender();
+}
+
 function toggleRuler(): void {
   rulerOn = !rulerOn;
   try {
@@ -5498,6 +5553,7 @@ const chromeHost = createChromeHost({
   toggleFooter,
   toggleToolbars,
   toggleRuler,
+  toggleCollapsePages,
   setViewMode,
   toggleFormattingMarks: () => {
     formattingMarks = !formattingMarks;

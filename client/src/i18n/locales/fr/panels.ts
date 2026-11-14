@@ -100,6 +100,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.items': '{count} éléments',
   'panels.dashboard.rename': 'Renommer',
   'panels.dashboard.move': 'Déplacer…',
+  'panels.dashboard.moveHere': 'Déplacer',
   'panels.dashboard.moveTitle': 'Déplacer « {name} » vers…',
   'panels.dashboard.cancel': 'Annuler',
   'panels.dashboard.deleteFolder': 'Supprimer le dossier',

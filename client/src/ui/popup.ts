@@ -204,11 +204,18 @@ export async function showConfirm(title: string, body: Node, action: string): Pr
 /**
  * Asks which of a few things to do: Cancel, then a button for each choice (the last is the main one, unless one says so).
  * Resolves with the choice clicked, or null for Cancel, Escape or the close button. Cancel has the focus, so Enter does nothing
- * that can't be taken back.
+ * that can't be taken back. `options.className` is added to the dialog's (for its width or its body's parts), and
+ * `options.role` replaces the dialog's role (`alertdialog` for a warning). Asked from inside another modal dialog, it opens
+ * over it.
  */
-export function showChoice<T>(title: string, body: Node, choices: readonly { label: string; value: T; primary?: boolean }[]): Promise<T | null> {
+export function showChoice<T>(
+  title: string,
+  body: Node,
+  choices: readonly { label: string; value: T; primary?: boolean }[],
+  options: { className?: string; role?: 'alertdialog' } = {},
+): Promise<T | null> {
   return new Promise((resolve) => {
-    const dialog = h('dialog', { class: 'wm-dialog', attrs: { 'aria-label': title } });
+    const dialog = h('dialog', { class: options.className ? `wm-dialog ${options.className}` : 'wm-dialog', attrs: { 'aria-label': title, ...(options.role ? { role: options.role } : {}) } });
     const cancel = h('button', { class: 'wm-button', text: t('menus.dialog.cancel') });
     const main = choices.findIndex((c) => c.primary);
     let chosen: T | null = null;

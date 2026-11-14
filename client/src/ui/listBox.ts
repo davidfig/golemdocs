@@ -27,8 +27,11 @@ export function optionGroup(heading: string): { heading: HTMLElement; group: HTM
   return { heading: el, group };
 }
 
-/** A row: a choice, a heading over the rows after it, or a row that can't be picked (a note such as "(no suggestions)"). */
-export type ListRow = string | { heading: string } | { note: string };
+/**
+ * A row: a choice, a heading over the rows after it, or a row that can't be picked (a note such as "(no suggestions)").
+ * A choice or a note can be indented `indent` steps, to show a tree (Move's folders).
+ */
+export type ListRow = string | { heading: string } | { note: string; indent?: number } | { choice: string; indent?: number };
 
 export interface ListBox {
   readonly el: HTMLElement;
@@ -83,22 +86,29 @@ export function listBox(label: string, options: { rows?: number; onPick?: (value
       choices = [];
       picked = -1;
       el.removeAttribute('aria-activedescendant');
+      const indent = (option: HTMLElement, steps: number | undefined) => {
+        if (steps) option.style.paddingLeft = `${8 + steps * 16}px`;
+        return option;
+      };
       // Rows under a heading go in a group named by it.
       let into: HTMLElement = el;
       for (const row of rows) {
-        if (typeof row !== 'string') {
-          if ('heading' in row) {
-            const { group } = optionGroup(row.heading);
-            el.append(group);
-            into = group;
-          } else into.append(h('div', { class: 'wm-option disabled', text: row.note, attrs: { role: 'option', 'aria-disabled': 'true' } }));
+        if (typeof row !== 'string' && 'heading' in row) {
+          const { group } = optionGroup(row.heading);
+          el.append(group);
+          into = group;
           continue;
         }
+        if (typeof row !== 'string' && 'note' in row) {
+          into.append(indent(h('div', { class: 'wm-option disabled', text: row.note, attrs: { role: 'option', 'aria-disabled': 'true' } }), row.indent));
+          continue;
+        }
+        const text = typeof row === 'string' ? row : row.choice;
         const index = choices.length;
-        const option = h('div', { class: 'wm-option', text: row, attrs: { role: 'option', 'aria-selected': 'false' } });
-        option.dataset.value = row;
+        const option = indent(h('div', { class: 'wm-option', text, attrs: { role: 'option', 'aria-selected': 'false' } }), typeof row === 'string' ? 0 : row.indent);
+        option.dataset.value = text;
         option.addEventListener('mousedown', () => show(index, true));
-        option.addEventListener('dblclick', () => options.onChoose?.(row));
+        option.addEventListener('dblclick', () => options.onChoose?.(text));
         choices.push(option);
         into.append(option);
       }

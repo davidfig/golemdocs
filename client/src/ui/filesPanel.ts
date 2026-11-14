@@ -328,7 +328,7 @@ export class FilesPanel {
       { label: t('panels.files.openItem'), run: () => this.host.open(entry) },
       ...(entry.cloud ? [{ label: t('panels.dashboard.share'), run: () => this.host.share(entry.cloud!.id, entry.cloud!.name) }] : []),
       { label: t('panels.dashboard.rename'), run: () => this.startRename(`doc:${entry.key}`) },
-      { label: t('panels.dashboard.move'), run: () => pickFolder(document.body, this.folders, t('panels.dashboard.moveTitle', { name: entry.name }), () => false, folderOf(entry, this.folders), (to) => void this.relocate({ kind: 'doc', entry }, to)) },
+      { label: t('panels.dashboard.move'), run: () => pickFolder(this.folders, t('panels.dashboard.moveTitle', { name: entry.name }), () => false, folderOf(entry, this.folders), (to) => void this.relocate({ kind: 'doc', entry }, to)) },
       'separator',
       { label: t('panels.dashboard.delete'), run: () => void this.ask([], [entry], () => this.host.delete([entry])) },
     ];
@@ -346,7 +346,7 @@ export class FilesPanel {
       { label: t('panels.dashboard.newFolder'), run: () => void this.newFolder(folder.id) },
       'separator',
       { label: t('panels.dashboard.rename'), run: () => this.startRename(folder.id) },
-      { label: t('panels.dashboard.move'), run: () => pickFolder(document.body, this.folders, t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => void this.relocate({ kind: 'folder', folder }, to)) },
+      { label: t('panels.dashboard.move'), run: () => pickFolder(this.folders, t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => void this.relocate({ kind: 'folder', folder }, to)) },
       'separator',
       { label: t('panels.dashboard.deleteFolder'), run: () => void this.ask([folder], [], (before) => removeFolderTree(before.folders, before.entries, [folder], (entries, folderIds) => this.host.delete(entries, folderIds))) },
     ];

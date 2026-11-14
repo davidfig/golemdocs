@@ -54,7 +54,7 @@ export class TrashDialog {
       list.replaceChildren(...(items.length ? items.map((item) => this.row(item, refresh)) : [h('li', { class: 'wm-history-empty', text: t('trash.empty') })]));
     };
     empty.addEventListener('click', () => {
-      void confirmDelete(t('trash.emptyTitle'), items.map((item) => item.name), dialog).then(async (yes) => {
+      void confirmDelete(t('trash.emptyTitle'), items.map((item) => item.name)).then(async (yes) => {
         if (!yes) return;
         await deps.purge().catch((error: unknown) => this.host.tell((error as Error).message));
         void refresh();
@@ -92,7 +92,7 @@ export class TrashDialog {
     });
     const forever = h('button', { class: 'wm-button', text: t('trash.deleteForever'), attrs: { type: 'button' } });
     forever.addEventListener('click', () => {
-      void confirmDelete(t('trash.deleteTitle', { name: item.name }), [item.name], this.dialog ?? document.body).then(async (yes) => {
+      void confirmDelete(t('trash.deleteTitle', { name: item.name }), [item.name]).then(async (yes) => {
         if (!yes) return;
         await deps.purge(item).catch((error: unknown) => this.host.tell((error as Error).message));
         void refresh();

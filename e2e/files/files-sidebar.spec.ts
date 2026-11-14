@@ -1,7 +1,7 @@
 // View > Files Sidebar: the documents as a tree beside the editor.
 
 import { expect, test } from './fixtures';
-import { dropFileOn, dropFilesOn, formatLabel, importFile, status, text, waitForOpen, waitForSaved } from './helpers';
+import { dropFileOn, dropFilesOn, formatLabel, importFile, moveTo, status, text, waitForOpen, waitForSaved } from './helpers';
 
 const panel = (page: import('@playwright/test').Page) => page.locator('.wm-files');
 const row = (page: import('@playwright/test').Page, name: string) => panel(page).locator('.wm-files-file', { hasText: name });
@@ -84,7 +84,7 @@ test('right click makes a folder, renames it, and deletes it with what is in it'
 
   await row(page, 'inside').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Move…' }).click();
-  await page.locator('.wm-move-choice', { hasText: 'Notes' }).click();
+  await moveTo(page, 'Notes');
   // The folder a document is moved into opens, so it shows there without clicking the folder.
   await expect(row(page, 'inside')).toHaveCount(1);
 

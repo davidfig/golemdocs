@@ -145,6 +145,12 @@ test('deleting asks in a dialog listing the document, and then it is gone for go
   // The button only asks.
   const dialog = page.getByRole('alertdialog');
   await expect(dialog.locator('.wm-delete-list li')).toHaveText(['beta.md']);
+  // It is the shared dialog, with the shared buttons (Delete the main one) and Cancel focused.
+  await expect(dialog).toHaveClass(/\bwm-dialog\b/);
+  await expect(dialog.locator('.wm-dialog-title')).toContainText('beta.md');
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toHaveClass(/\bwm-button\b/);
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await expect(dialog.getByRole('button', { name: 'Delete' })).toHaveClass(/\bwm-button wm-primary\b/);
   await expect(cards(page)).toHaveCount(3);
   await dialog.getByRole('button', { name: 'Delete' }).click();
   await expect(cards(page)).toHaveCount(2);

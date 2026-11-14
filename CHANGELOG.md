@@ -83,6 +83,7 @@
 - The spreadsheet filter card gives the keyboard back to the cells when it closes, and the Scenario Manager and Solver lists can be used from the keyboard.
 - In High Contrast’s dark form, the chosen bullet or number in Bullets and Numbering was invisible; it now shows, also in Windows contrast themes.
 - In Windows contrast themes, Screen Reader Mode’s hidden text no longer shows over the pages.
+- The Delete and Move dialogs (from Trash, Version History, the Files sidebar and the Documents screen) now look like every other dialog, with the same title bar and buttons. Move lists folders in a list box: pick one, then press Move (or double-click it).
 
 ## 0.37.2 - 2026-11-11
 

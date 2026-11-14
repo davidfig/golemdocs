@@ -1302,7 +1302,16 @@ html.wm-titlebar .wm-format {
   font-weight: 600;
 }
 
+/* A long title (a file's name) ends in an ellipsis rather than pushing the close button out. */
+.wm-dialog-title > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .wm-dialog-close {
+  flex: none;
   width: 24px;
   height: 24px;
   padding: 0;
@@ -2502,6 +2511,53 @@ html.wm-titlebar .wm-format {
 
 .wm-list-box .wm-option.disabled {
   color: var(--wm-disabled);
+}
+
+/* --- Move and Delete (folderPicker.ts, deleteDialog.ts) ---------------------------------------- */
+
+.wm-dialog.wm-move,
+.wm-dialog.wm-delete {
+  width: 400px;
+}
+
+.wm-move .wm-list-box {
+  margin-bottom: 0;
+}
+
+.wm-move .wm-list-box .wm-option,
+.wm-delete-list li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wm-delete-note {
+  margin: 0 0 8px;
+}
+
+/* What would go, in a field like the shared list box's, but nothing in it is picked. */
+.wm-delete-list {
+  box-sizing: border-box;
+  max-height: 260px;
+  min-height: 60px;
+  margin: 0;
+  padding: 2px 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--wm-field-border);
+  border-radius: 4px;
+  background: var(--wm-field-bg);
+  color: var(--wm-text);
+}
+
+.wm-delete-list:focus-visible {
+  outline: none;
+  border-color: var(--wm-accent);
+  box-shadow: 0 0 0 3px var(--wm-accent-ring);
+}
+
+.wm-delete-list li {
+  padding: 3px 8px;
+  white-space: nowrap;
 }
 
 /* --- Thesaurus ------------------------------------------------------------------------------- */

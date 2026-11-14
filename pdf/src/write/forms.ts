@@ -40,6 +40,10 @@ export interface FormField {
   multiline?: boolean;
   maxLength?: number;
   readOnly?: boolean;
+  /** The field must be filled in before the form is sent. */
+  required?: boolean;
+  /** What the field is for, in words (its alternate name, `TU`): what a screen reader says for it, and its tooltip. */
+  description?: string;
   /** Text size in points; 0 or missing: fit the box. */
   fontSize?: number;
   /**
@@ -54,6 +58,7 @@ const LIVE_KEY = 'GolemLive';
 
 // Field flags (§12.7.4, Table 226, 228, 230).
 const READ_ONLY = 1 << 0;
+const REQUIRED = 1 << 1;
 const MULTILINE = 1 << 12;
 const RADIO = 1 << 15;
 const PUSHBUTTON = 1 << 16;
@@ -151,6 +156,7 @@ function entries(doc: PdfDocument): Map<string, Entry> {
     const widgets: PdfObject[] = kids.length ? kids : [ref];
     const kind = kindOf(here);
     if (!kind) return;
+    const description = text(doc, dict.get('TU'))?.trim();
     for (const listed of widgets) {
       if (!(listed instanceof PdfRef)) continue;
       let w = listed;
@@ -183,6 +189,8 @@ function entries(doc: PdfDocument): Map<string, Entry> {
       const size = da ? /(-?\d*\.?\d+)\s+Tf/.exec(da) : null;
       if (size) field.fontSize = Math.max(0, Number(size[1]));
       if (here.ff & READ_ONLY) field.readOnly = true;
+      if (here.ff & REQUIRED) field.required = true;
+      if (description) field.description = description;
       if (kind === 'checkbox' || kind === 'radio') {
         const states = [...(doc.dict(doc.dict(widget.get('AP'))?.get('N'))?.keys() ?? [])].filter((s) => s !== 'Off');
         field.onState = states[0] ?? 'Yes';

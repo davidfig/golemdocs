@@ -118,7 +118,12 @@ export interface ChartScene {
   title: string | null;
   /** Its series and categories as Select Data shows them. */
   data: ChartData;
+  /** What kind of chart it is (its first group's), to name it to a screen reader. */
+  kind?: ChartKindName | null;
 }
+
+/** A chart's kind as the Insert › Chart menu names it (a bar chart's columns stand up, its bars lie down). */
+export type ChartKindName = 'column' | 'bar' | 'line' | 'area' | 'pie' | 'doughnut' | 'scatter';
 
 export interface CellTile {
   sheet: number;

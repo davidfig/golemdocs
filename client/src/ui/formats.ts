@@ -503,6 +503,9 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       return profile.vectorTools;
     case 'sheet':
       return profile.sheetEditor;
+    // Headings and tables are a flowing document's.
+    case 'jump':
+      return profile.kind !== 'pdf' && !profile.imageTools && !profile.vectorTools && !profile.sheetEditor;
     // Every document can be selected and copied from, a PDF's own pages too (which can't be cut from or pasted into: answered below).
     case 'copy':
     case 'selectAll':
@@ -615,6 +618,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'table':
       return profile.tables;
     case 'insertImage':
+    case 'altText':
       return profile.images;
     // A Word document keeps the drawing's SVG beside its picture; a Markdown one embeds a drawing of its own.
     case 'insertDrawing':

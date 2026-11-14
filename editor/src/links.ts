@@ -199,6 +199,22 @@ export abstract class EditorLinks extends EditorEditing {
     return result;
   }
 
+  /** The selected picture given a description (alt text), or none when `text` is empty. */
+  describePicture(command: Extract<Command, { kind: 'describePicture' }>): CommandResult {
+    const picture = this.selectedPicture();
+    const text = command.text.trim();
+    if (!picture || (picture.drawing.description ?? '') === text) return NO_CHANGE;
+    const [from] = this.ordered();
+    const id = this.replica.id(from.paragraph);
+    const described: Drawing = { ...picture.drawing };
+    if (text) described.description = text;
+    else delete described.description;
+    const ops: Operation[] = [{ type: 'delete', paragraph: id, from: from.offset, to: from.offset + 1 }, { type: 'insertItem', paragraph: id, offset: from.offset, item: structuredClone(described) }];
+    const result = this.edit([ops, { paragraph: id, offset: from.offset + 1 }]);
+    this.selectPictureAt(from);
+    return result;
+  }
+
   /** The link at the selection (its start, if it's a range), for the toolbar and the Insert Hyperlink dialog. */
   selectedLink(): { url: string; text: string } | null {
     const [start] = this.ordered();

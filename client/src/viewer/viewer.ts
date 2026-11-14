@@ -5,6 +5,10 @@
 //
 // `mount` styles the document it is in (the color scheme is on the root element), so it is meant to own that document: the viewer
 // page (viewer.html, ./main.ts) or a frame of its own.
+//
+// Screen readers: the app's Screen Reader Mode (ScreenReaderSupport: the reading layer over the pages, the textarea mirroring the
+// caret, announcements), on while the person's `golem.screenReader` setting is (the site's page shares the app's storage), the host
+// asks for it, or it is turned on here (Mod+Alt+Z, or the first button Tab reaches). See docs/architecture/accessibility.md.
 
 import '../ui/ui.css';
 import './viewer.css';
@@ -14,6 +18,13 @@ import { loadLocale, t } from '../i18n/index.ts';
 import { LayoutClient, type DocumentListener } from '../layout/layoutClient.ts';
 import type { LayoutUpdate, SelectionUpdate } from '../layout/protocol.ts';
 import { CLOSE_ICON, h, iconButton } from '../ui/dom.ts';
+import { ScreenReaderSupport } from '../screenReaderSupport.ts';
+import { announce } from '../ui/announce.ts';
+import { forcedColors, onAccessibilityChange } from '../ui/accessibilityOptions.ts';
+import { toolbarKeys } from '../ui/focusRegions.ts';
+import { onScreenReaderChange, SCREEN_READER_SHORTCUT, screenReaderOn, setScreenReader } from '../ui/screenReader.ts';
+import { matches, parseShortcut } from '../ui/shortcuts.ts';
+import { editKey } from '../ui/textInput.ts';
 import { Camera, CSS_PX_PER_POINT } from '../view/camera.ts';
 import { GpuPage } from '../webgl/gpuPage.ts';
 import { PageRenderer } from '../webgl/pageRenderer.ts';
@@ -34,6 +45,10 @@ export interface ViewerOptions {
   dark?: boolean;
   /** The language of the viewer's own words (a BCP 47 tag; default English). */
   locale?: string;
+  /** Screen Reader Mode starts on (the host knows its user has a screen reader); otherwise it follows `golem.screenReader`. */
+  screenReader?: boolean;
+  /** The High Contrast colors around the pages. */
+  contrast?: boolean;
   /** Shown in the bar beside the page number (a shared document's name, say). */
   title?: string;
   /** Shows a Download button in the bar, which calls this (a public link's page saves the file). */
@@ -78,13 +93,14 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   const doc = el.ownerDocument;
   const win = doc.defaultView ?? window;
   const dark = options.dark ?? false;
-  doc.documentElement.dataset.theme = dark ? 'dark' : 'golem';
-  doc.documentElement.dataset.scheme = 'golem';
+  doc.documentElement.dataset.theme = dark ? 'dark' : options.contrast ? 'contrast' : 'golem';
+  doc.documentElement.dataset.scheme = options.contrast ? 'contrast' : 'golem';
   const fontBase = new URL(options.fontBase, doc.baseURI).href;
 
   // --- DOM ----------------------------------------------------------------------------------------
   const root = h('div', { class: 'wm-viewer' });
-  const view = h('div', { class: 'wm-viewer-view' });
+  // The document's region: what a screen reader's landmarks list names by the document's name.
+  const view = h('main', { class: 'wm-viewer-view', attrs: { 'aria-label': options.title ?? options.name } });
   const canvas = h('canvas', { attrs: { role: 'document' } });
   // Holds the focus, for copy and the keys; nothing typed in it goes anywhere (`inputmode="none"`: no on-screen keyboard).
   const input = h('textarea', { class: 'wm-viewer-input', attrs: { inputmode: 'none', autocomplete: 'off', autocorrect: 'off', spellcheck: 'false', tabindex: '0' } });
@@ -107,6 +123,8 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   const findBar = h('div', { class: 'wm-viewer-bar wm-viewer-find', attrs: { role: 'search' } });
   findBar.hidden = true;
   const bar = h('div', { class: 'wm-viewer-bar', attrs: { role: 'toolbar' } });
+  // Screen Reader Mode, from the keyboard: the first thing Tab reaches, shown only while it has the focus (as the app's skip link).
+  const readerButton = h('button', { class: 'wm-sr-only', attrs: { type: 'button', 'aria-pressed': 'false' } });
 
   // --- Rendering state -----------------------------------------------------------------------------
   const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: true });
@@ -144,7 +162,10 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     frame = 0;
     if (!renderer || !selection) return;
     camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight, SIDE_PADDING, SIDE_PADDING_X);
+    // Windows' contrast themes: the pages and their text in the system's colors, as in the app.
+    renderer.forced = forcedColors();
     renderer.render(camera, pages, selection, false, dark);
+    reader?.render({ x: camera.x, y: camera.y, scale: camera.zoom * CSS_PX_PER_POINT, width: canvas.clientWidth, height: canvas.clientHeight }, pages);
     updateBar();
   }
 
@@ -193,6 +214,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       pagesById.get(id)?.dispose(gl);
       pagesById.delete(id);
     }
+    reader?.layout(update.drop);
     pages = [];
     for (const id of update.order) {
       const page = pagesById.get(id);
@@ -208,6 +230,10 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     selection?.update(update);
     selectedText = update.text;
     if (update.search) findMessage.textContent = update.search.found ? '' : t('dialogs.find.noMatches');
+    const pageIndex = update.focus ? pages.findIndex((p) => p.id === update.focus!.page) : -1;
+    // Screen Reader Mode says where a match is with the words around it (and the mirror holds its line); otherwise its page is said.
+    reader?.selection(update, pageIndex >= 0 ? { index: pageIndex, count: pages.length } : null);
+    if (update.search?.found && !screenReaderOn() && pageIndex >= 0) announce(t('viewer.foundOnPage', { page: pageIndex + 1, pages: pages.length }));
     if (update.reveal && update.focus) reveal(update.focus);
     requestRender();
   }
@@ -265,7 +291,11 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     const count = pages.length ? t('viewer.pageCount', { count: pages.length.toLocaleString(options.locale) }) : '';
     if (count !== shownCount) pageCount.textContent = shownCount = count;
     const zoom = `${Math.round(camera.zoom * 100).toLocaleString(options.locale)}%`;
-    if (zoom !== shownZoom) zoomLabel.textContent = shownZoom = zoom;
+    if (zoom !== shownZoom) {
+      zoomLabel.textContent = shownZoom = zoom;
+      // Named for what it does, with the zoom it shows (its text alone, "125%", says neither).
+      zoomLabel.setAttribute('aria-label', t('viewer.zoomButton', { zoom }));
+    }
   }
 
   // --- The document ---------------------------------------------------------------------------------
@@ -282,6 +312,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     },
     done(count) {
       options.onOpened?.({ name: options.name, format, pages: count });
+      caretToView();
     },
     selection: applySelection,
     selectionHtml(text, html) {
@@ -479,12 +510,19 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
    * decision (protocol.ts); a key it has no use for goes to the host (`onKey`), so the page around it can act on Escape, a letter, ← →.
    */
   function onKeyDown(e: KeyboardEvent): void {
+    // Handled already (a toolbar's arrow keys).
+    if (e.defaultPrevented) return;
+    if (matches(parseShortcut(SCREEN_READER_SHORTCUT)!, e)) {
+      e.preventDefault();
+      return setScreenReader(!screenReaderOn());
+    }
     const action = viewerKey(e, {
       mac: MAC,
       inField: e.target === query || e.target === pageField,
       onButton: e.target instanceof HTMLButtonElement,
       findOpen: !findBar.hidden,
       canScrollSideways: canScrollSideways(camera, bounds, canvas.clientWidth),
+      caret: screenReaderOn() && !fixedPages && e.target === input,
     });
     if (action === 'browser') return;
     if (action === 'host') return void options.onKey?.(hostKey(e));
@@ -528,6 +566,11 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
         return goToPage(0);
       case 'last':
         return goToPage(pages.length - 1);
+      case 'caret': {
+        const key = editKey(e, MAC);
+        if (key?.kind === 'move' && key.to !== 'pageUp' && key.to !== 'pageDown') send({ kind: 'move', to: key.to, extend: key.extend });
+        return;
+      }
     }
   }
 
@@ -539,10 +582,56 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     if (selectionHtml && selectionHtml.text === selectedText) e.clipboardData?.setData('text/html', selectionHtml.html);
   }
 
-  // Whatever is typed into the focus holder is thrown away.
-  const onInput = (): void => {
-    input.value = '';
+  // Whatever is typed into the focus holder is thrown away. In Screen Reader Mode it holds the text around the caret
+  // (ScreenReaderSupport), so typing is refused before it changes it.
+  const onBeforeInput = (e: InputEvent): void => {
+    if (!e.isComposing && e.inputType !== 'insertCompositionText') e.preventDefault();
   };
+  const onInput = (): void => {
+    if (!screenReaderOn()) input.value = '';
+  };
+
+  // --- Screen readers -------------------------------------------------------------------------------
+
+  /** Screen Reader Mode's side of the viewer: the reading layer, the mirror and what is said (null without a worker). */
+  const reader = worker
+    ? new ScreenReaderSupport(input, worker, {
+        request: (ids, headings) => worker.a11yPages(ids, headings),
+        goTo: (paragraph, offset) => {
+          send({ kind: 'select', paragraph, from: offset, to: offset });
+          focusView();
+        },
+        showPage: (id) => goToPage(pages.findIndex((page) => page.id === id)),
+        documentName: () => options.title ?? options.name,
+      })
+    : null;
+
+  /** Screen Reader Mode: the caret goes to the text at the top of the view, so the textarea holds what is read first. The view stays. */
+  function caretToView(): void {
+    if (!screenReaderOn() || fixedPages || !worker || !pages.length) return;
+    const top = pageAt(canvas.clientWidth / 2, 24);
+    if (!top) return;
+    // At the page's left edge: the start of the first line in view, not the middle of it.
+    void worker.textAt(top.page.id, 0, top.y).then((place) => {
+      if (place && !destroyed) send({ kind: 'select', paragraph: place[0], from: place[1], to: place[1], quiet: true });
+    });
+  }
+
+  /** What shows the mode: the toggle's state, and the canvas left out while the reading layer stands for it. */
+  function showReaderMode(on: boolean): void {
+    readerButton.setAttribute('aria-pressed', String(on));
+    if (on) canvas.setAttribute('aria-hidden', 'true');
+    else canvas.removeAttribute('aria-hidden');
+  }
+  const stopReaderMode = onScreenReaderChange((on) => {
+    showReaderMode(on);
+    if (on) caretToView();
+  });
+  if (options.screenReader) setScreenReader(true);
+  showReaderMode(screenReaderOn());
+  readerButton.addEventListener('click', () => setScreenReader(!screenReaderOn()));
+  // Contrast colors of the system came or went: the pages are drawn in them.
+  onAccessibilityChange(requestRender);
 
   const resize = new ResizeObserver(([entry]) => {
     const box = entry.devicePixelContentBoxSize?.[0];
@@ -562,7 +651,8 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   // --- Start ---------------------------------------------------------------------------------------
 
   el.append(root);
-  root.append(bar, findBar, view);
+  root.append(readerButton, bar, findBar, view);
+  bar.addEventListener('keydown', (e) => toolbarKeys(bar, e, focusView));
   resize.observe(canvas);
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
@@ -571,6 +661,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('gesturestart', onGestureStart);
   canvas.addEventListener('gesturechange', onGestureChange);
+  input.addEventListener('beforeinput', onBeforeInput);
   input.addEventListener('input', onInput);
   root.addEventListener('keydown', onKeyDown);
   doc.addEventListener('copy', onCopy);
@@ -585,7 +676,14 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     // The viewer's words are in the language asked for (English while it loads); the worker's errors follow it.
     const locale = await loadLocale(options.locale ?? 'en').catch(() => 'en');
     if (destroyed) return;
+    doc.documentElement.lang = locale;
+    // The bar's words are written again in this language at the next frame.
+    shownZoom = shownCount = '';
+    reader?.relabel(options.title ?? options.name);
     canvas.setAttribute('aria-label', t('viewer.document'));
+    bar.setAttribute('aria-label', t('viewer.toolbar'));
+    findBar.setAttribute('aria-label', t('viewer.find'));
+    readerButton.textContent = t('a11y.options.screenReader');
     pageField.setAttribute('aria-label', t('viewer.pageNumber'));
     zoomLabel.title = t('viewer.actualSize');
     zoomLabel.addEventListener('click', () => {
@@ -646,12 +744,15 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       const source = sourceFromFile(options.name, bufferOf(bytes));
       if (destroyed || !worker || !source) return;
       replacing = true;
+      reader?.opened(options.title ?? options.name);
       worker.openReadOnly(source, listener);
     },
     destroy() {
       if (destroyed) return;
       destroyed = true;
       if (frame) win.cancelAnimationFrame(frame);
+      stopReaderMode();
+      reader?.dispose();
       resize.disconnect();
       doc.removeEventListener('copy', onCopy);
       doc.removeEventListener('cut', onCopy);

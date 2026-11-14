@@ -210,10 +210,10 @@ export class CommandRegistry {
       const action = this.actionOf(command);
       if (action) this.perform(action, command.plainLabel);
     }
-    // A dialog takes the keyboard for itself, and so do the link form, a new comment's box and a workbook's note card (over the document).
+    // A dialog takes the keyboard for itself, and so do the link and alt text forms, a new comment's box and a workbook's note card (over the document).
     const action = this.actionOf(command);
     const kind = action?.kind;
-    const opensDialog = command.takesKeyboard || kind === 'dialog' || kind === 'insertLink' || kind === 'insertComment' || (action?.kind === 'sheet' && (action.op === 'newNote' || action.op === 'protectSheet' || action.op === 'unprotectSheet' || action.op === 'goalSeek' || action.op === 'dataTable' || action.op === 'scenarioManager' || action.op === 'solver'));
+    const opensDialog = command.takesKeyboard || kind === 'dialog' || kind === 'insertLink' || kind === 'altText' || kind === 'insertComment' || (action?.kind === 'sheet' && (action.op === 'newNote' || action.op === 'protectSheet' || action.op === 'unprotectSheet' || action.op === 'goalSeek' || action.op === 'dataTable' || action.op === 'scenarioManager' || action.op === 'solver'));
     if (options.refocus !== false && !opensDialog) host.focusEditor();
     return true;
   }

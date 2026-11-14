@@ -6,6 +6,7 @@ import type { MessageKey } from '../i18n/index.ts';
 import { t } from '../i18n/index.ts';
 import { h, segmented } from '../ui/dom.ts';
 import { choiceButton } from '../ui/dropdown.ts';
+import { listBox } from '../ui/listBox.ts';
 import { button, field, message, modal } from './dialogParts.ts';
 import { parseCells } from './scenarios.ts';
 import { emptyModel } from './solver.ts';
@@ -34,21 +35,20 @@ export function askSolver(current: SolverModel | null, active: string): Promise<
     value.disabled = model.goal !== 'value';
     const changing = field(t('sheet.solver.changing'), model.changing);
     let chosen = model.constraints.length ? 0 : -1;
-    const list = h('div', { class: 'wm-list wm-sheet-solver-list', attrs: { role: 'listbox', 'aria-label': t('sheet.solver.constraints'), tabindex: '0' } });
+    const list = listBox(t('sheet.solver.constraints'), {
+      rows: 5,
+      onPick: () => {
+        chosen = list.index;
+        change.disabled = remove.disabled = chosen < 0;
+      },
+      onChoose: () => change.click(),
+    });
     const add = button(t('sheet.solver.add'));
     const change = button(t('sheet.solver.change'));
     const remove = button(t('sheet.solver.delete'));
     const render = () => {
-      list.replaceChildren(
-        ...model.constraints.map((c, i) => {
-          const row = h('div', { class: `wm-option${i === chosen ? ' active' : ''}`, text: describe(c), attrs: { role: 'option', 'aria-selected': String(i === chosen) } });
-          row.addEventListener('click', () => {
-            chosen = i;
-            render();
-          });
-          return row;
-        }),
-      );
+      list.set(model.constraints.map(describe));
+      if (chosen >= 0) list.pick(chosen);
       change.disabled = remove.disabled = chosen < 0;
     };
     add.addEventListener('click', async () => {
@@ -103,7 +103,7 @@ export function askSolver(current: SolverModel | null, active: string): Promise<
         label(t('sheet.solver.changing')),
         changing,
         label(t('sheet.solver.constraints')),
-        h('div', { class: 'wm-sheet-scenario' }, list, h('div', { class: 'wm-sheet-scenario-buttons' }, add, change, remove)),
+        h('div', { class: 'wm-sheet-scenario' }, list.el, h('div', { class: 'wm-sheet-scenario-buttons' }, add, change, remove)),
         h('label', { class: 'wm-sheet-check' }, box, h('span', { text: t('sheet.solver.nonNegative') })),
         h('div', { class: 'wm-sheet-solver-goal' }, label(t('sheet.solver.method')), method.el),
         problem,

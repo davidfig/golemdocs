@@ -63,6 +63,8 @@ export type Command =
   | { kind: 'moveDrawing'; page: PageLayout; x: number; y: number }
   /** Gives the selected picture a size in points (and, for a floating one, a place on its page: the top left corner). */
   | { kind: 'resizeDrawing'; width: number; height: number; page?: PageLayout; x?: number; y?: number }
+  /** Gives the selected picture a description (alt text, read by screen readers and kept in the file); empty takes it off. */
+  | { kind: 'describePicture'; text: string }
   /** Moves the selected picture to the end of a paragraph (its number among the document's paragraphs). */
   | { kind: 'moveDrawingToParagraph'; paragraph: number }
   /** Shows the selected picture as another image part (it was edited); its width stays, its height follows `aspect` (height over width) unless that is 0. */

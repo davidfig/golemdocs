@@ -4,6 +4,7 @@
 
 import { t } from '../i18n/index.ts';
 import { h } from '../ui/dom.ts';
+import { listBox } from '../ui/listBox.ts';
 import { button, field, modal } from './dialogParts.ts';
 import { parseCells } from './scenarios.ts';
 import type { Scenario, Scenarios } from './scenarios.ts';
@@ -24,7 +25,14 @@ export function openScenarioManager(deps: ScenarioManagerDeps): Promise<void> {
   return new Promise((resolve) => {
     let scenarios: Scenarios = deps.scenarios ?? { list: [], current: null, show: null, results: '' };
     let chosen = scenarios.list.length ? 0 : -1;
-    const list = h('div', { class: 'wm-list wm-sheet-scenario-list', attrs: { role: 'listbox', 'aria-label': t('sheet.scenario.list'), tabindex: '0' } });
+    const list = listBox(t('sheet.scenario.list'), {
+      rows: 7,
+      onPick: () => {
+        chosen = list.index;
+        describe();
+      },
+      onChoose: () => doShow(),
+    });
     const about = h('div', { class: 'wm-sheet-scenario-about' });
     const show = button(t('sheet.scenario.show'));
     const add = button(t('sheet.scenario.add'));
@@ -33,18 +41,12 @@ export function openScenarioManager(deps: ScenarioManagerDeps): Promise<void> {
     const summary = button(t('sheet.scenario.summary'));
     const close = button(t('sheet.scenario.close'));
     const render = () => {
-      list.replaceChildren(
-        ...scenarios.list.map((s, i) => {
-          const row = h('div', { class: `wm-option${i === chosen ? ' active' : ''}`, text: s.name, attrs: { role: 'option', 'aria-selected': String(i === chosen) } });
-          row.addEventListener('click', () => {
-            chosen = i;
-            render();
-          });
-          row.addEventListener('dblclick', () => doShow());
-          return row;
-        }),
-      );
-      if (!scenarios.list.length) list.append(h('div', { class: 'wm-list-heading', text: t('sheet.scenario.none') }));
+      list.set(scenarios.list.length ? scenarios.list.map((s) => s.name) : [{ note: t('sheet.scenario.none') }]);
+      if (chosen >= 0) list.pick(chosen);
+      describe();
+    };
+    /** What the chosen scenario changes, and which buttons apply. */
+    const describe = () => {
       const s = scenarios.list[chosen];
       about.replaceChildren(...(s ? [h('div', { text: t('sheet.scenario.cells', { cells: s.inputs.map(cellName).join(', ') }) }), ...(s.comment ? [h('div', { text: s.comment })] : [])] : []));
       for (const b of [show, change, remove]) b.disabled = !s;
@@ -60,12 +62,6 @@ export function openScenarioManager(deps: ScenarioManagerDeps): Promise<void> {
       deps.show(chosen);
       scenarios = { ...scenarios, current: chosen, show: chosen };
     };
-    list.addEventListener('keydown', (e) => {
-      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-      e.preventDefault();
-      chosen = Math.max(0, Math.min(scenarios.list.length - 1, chosen + (e.key === 'ArrowDown' ? 1 : -1)));
-      render();
-    });
     show.addEventListener('click', doShow);
     add.addEventListener('click', async () => {
       const made = await editScenario(null, deps, scenarios.list.map((s) => s.name));
@@ -94,7 +90,7 @@ export function openScenarioManager(deps: ScenarioManagerDeps): Promise<void> {
     });
     const dialog = modal(
       t('sheet.scenario.manager'),
-      [h('div', { class: 'wm-sheet-scenario' }, h('div', {}, list, about), h('div', { class: 'wm-sheet-scenario-buttons' }, show, add, change, remove, summary))],
+      [h('div', { class: 'wm-sheet-scenario' }, h('div', {}, list.el, about), h('div', { class: 'wm-sheet-scenario-buttons' }, show, add, change, remove, summary))],
       [close],
       resolve,
     );

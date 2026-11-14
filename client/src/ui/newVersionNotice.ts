@@ -6,6 +6,7 @@
 import { version } from '../../../package.json';
 import { t } from '../i18n/index.ts';
 import { CLOSE_ICON, h, iconButton, keepAboveFooter } from './dom.ts';
+import { showNotice } from './notice.ts';
 import './newVersionNotice.css';
 
 const SEEN_KEY = 'golem.newVersion.seen';
@@ -35,25 +36,26 @@ export class NewVersionNotice {
     const view = h('button', { class: 'wm-button', text: t('dialogs.newVersion.view'), attrs: { type: 'button' } });
     const hide = h('button', { class: 'wm-version-notice-off', text: t('dialogs.newVersion.off'), attrs: { type: 'button' } });
     this.el.append(close, h('p', { text: t('dialogs.newVersion.message', { version }) }), h('div', { class: 'wm-version-notice-actions' }, view, hide));
-    close.addEventListener('click', () => (this.el.hidden = true));
+    close.addEventListener('click', () => showNotice(this.el, false));
     view.addEventListener('click', () => {
-      this.el.hidden = true;
+      showNotice(this.el, false);
       openChangelog();
     });
     hide.addEventListener('click', () => {
       write(OFF_KEY, '1');
-      this.el.hidden = true;
+      showNotice(this.el, false);
     });
     const first = read(SEEN_KEY) === null;
     const isNew = !first && read(SEEN_KEY) !== version;
     write(SEEN_KEY, version);
-    this.el.hidden = !(isNew && read(OFF_KEY) !== '1');
+    this.el.hidden = true;
     parent.append(this.el);
+    showNotice(this.el, isNew && read(OFF_KEY) !== '1');
     keepAboveFooter(this.el);
   }
 
   /** "Don't show again" came from the account: the note goes, if it is showing. */
   rereadOff(): void {
-    if (read(OFF_KEY) === '1') this.el.hidden = true;
+    if (read(OFF_KEY) === '1') showNotice(this.el, false);
   }
 }

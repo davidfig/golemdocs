@@ -13,6 +13,7 @@ export const SCHEMES = [
   { id: 'blue', get label() { return t('menus.scheme.blue'); } },
   { id: 'olive', get label() { return t('menus.scheme.olive'); } },
   { id: 'gray', get label() { return t('menus.scheme.gray'); } },
+  { id: 'contrast', get label() { return t('a11y.scheme.contrast'); } },
 ] as const;
 
 export type SchemeId = (typeof SCHEMES)[number]['id'];

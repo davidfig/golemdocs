@@ -154,10 +154,11 @@ export async function setCombo(page: Page, label: string, value: string): Promis
   await box.press('Enter');
 }
 
-/** Pick (or unpick) a swatch from a toolbar split colour button's palette. */
+/** Pick (or unpick) a swatch from a toolbar split colour button's palette: by its code (a swatch is named by its colour, with the code as its tooltip), or a button's name. */
 export async function pickColor(page: Page, label: 'Font Color' | 'Highlight', swatch: string): Promise<void> {
   await page.getByRole('toolbar').getByRole('button', { name: `${label} options` }).click();
-  await page.getByRole('dialog', { name: label }).getByRole('button', { name: swatch, exact: true }).click();
+  const palette = page.getByRole('dialog', { name: label });
+  await (swatch.startsWith('#') ? palette.locator(`.wm-swatch[title="${swatch}"]`) : palette.getByRole('button', { name: swatch, exact: true })).click();
 }
 
 /** Type a line and select all of it (caret ends after the last character; selection is the whole line). */

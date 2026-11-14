@@ -5,9 +5,11 @@
 import { t } from '../i18n/index.ts';
 import type { ListedDocument } from './actions.ts';
 import type { Command, CommandRegistry } from './commands.ts';
-import { h } from './dom.ts';
+import { announce } from './announce.ts';
+import { h, uniqueId } from './dom.ts';
 import { fileIcon } from './fileIcons.ts';
 import { ICONS, iconElement } from './icons.ts';
+import { optionGroup, pickOption } from './listBox.ts';
 import { tooltip } from './toolbar.ts';
 import { closePopup, openPopup, popupOpenFor } from './popup.ts';
 
@@ -114,8 +116,12 @@ export class CommandPalette {
     // Found by title alone (no category): searching "document" shouldn't list them all.
     const documents = this.documents().map((doc, index): PaletteRow => ({ id: `document:${index}`, label: doc.name, category: '', meta: doc.folder, title: doc.folder ? `${doc.folder} / ${doc.name}` : doc.name, icon: () => fileIcon(doc.name), enabled: () => true, run: doc.open }));
 
-    const input = h('input', { class: 'wm-palette-input', attrs: { type: 'text', placeholder: t('chrome.palette.search'), 'aria-label': t('chrome.palette.search'), autocomplete: 'off', spellcheck: 'false' } });
-    const list = h('div', { class: 'wm-list wm-palette-list', attrs: { role: 'listbox' } });
+    // A combo box: the focus stays in the search box, and the row the arrows are on is its active descendant.
+    const list = h('div', { class: 'wm-list wm-palette-list', attrs: { role: 'listbox', id: uniqueId('wm-palette-list'), 'aria-label': t('chrome.palette.label') } });
+    const input = h('input', {
+      class: 'wm-palette-input',
+      attrs: { type: 'text', role: 'combobox', 'aria-expanded': 'true', 'aria-autocomplete': 'list', 'aria-controls': list.id, placeholder: t('chrome.palette.search'), 'aria-label': t('chrome.palette.search'), autocomplete: 'off', spellcheck: 'false' },
+    });
     const panel = h('div', { class: 'wm-command-palette', attrs: { role: 'dialog', 'aria-label': t('chrome.palette.label') } }, input, list);
 
     let rows: { el: HTMLElement; entry: PaletteRow }[] = [];
@@ -123,6 +129,7 @@ export class CommandPalette {
     const setActive = (index: number) => {
       active = rows.length ? (index + rows.length) % rows.length : -1;
       rows.forEach((row, i) => row.el.classList.toggle('active', i === active));
+      pickOption(list, rows[active]?.el ?? null, input);
       rows[active]?.el.scrollIntoView({ block: 'nearest' });
     };
     const run = (entry: PaletteRow) => {
@@ -142,10 +149,16 @@ export class CommandPalette {
       row.addEventListener('mousemove', () => setActive(rows.findIndex((r) => r.el === row)));
       row.addEventListener('click', () => run(entry));
       rows.push({ el: row, entry });
-      list.append(row);
+      into.append(row);
+    };
+    let into: HTMLElement = list;
+    const heading = (text: string) => {
+      into = optionGroup(text).group;
+      list.append(into);
     };
     const render = () => {
       list.replaceChildren();
+      into = list;
       rows = [];
       const query = input.value.trim();
       if (query) {
@@ -154,16 +167,24 @@ export class CommandPalette {
       } else {
         const recent = this.recent.map((id) => entries.find((e) => e.id === id)).filter((e) => e !== undefined);
         if (recent.length) {
-          list.append(h('div', { class: 'wm-list-heading', text: t('chrome.palette.recent') }));
+          heading(t('chrome.palette.recent'));
           recent.forEach(add);
         }
-        list.append(h('div', { class: 'wm-list-heading', text: t('chrome.palette.all') }));
+        heading(t('chrome.palette.all'));
         entries.forEach(add);
       }
       setActive(rows.length ? 0 : -1);
     };
 
-    input.addEventListener('input', render);
+    // How many rows a search found is said once typing pauses, since the list shows it only to the eye.
+    let countTimer = 0;
+    input.addEventListener('input', () => {
+      render();
+      window.clearTimeout(countTimer);
+      countTimer = window.setTimeout(() => {
+        if (input.isConnected) announce(input.value.trim() ? (rows.length ? t('a11y.palette.found', { count: rows.length }) : t('chrome.palette.none')) : '');
+      }, 400);
+    });
     input.addEventListener('keydown', (e) => {
       e.stopPropagation(); // the document's handlers listen on the window
       if (e.key === 'ArrowDown') setActive(active + 1);

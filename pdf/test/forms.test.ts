@@ -15,10 +15,10 @@ async function form(): Promise<Uint8Array> {
   const widget = (rect: number[], extra: Record<string, unknown> = {}) => new PdfDict({ Type: N('Annot'), Subtype: N('Widget'), Rect: rect, P: page.ref, ...(extra as object) } as never);
 
   const person = doc.add(new PdfDict({ T: PdfString.text('person') }));
-  const name = doc.add(widget([100, 700, 300, 720], { T: PdfString.text('name'), FT: N('Tx'), V: PdfString.text('Ann'), Parent: person, DA: PdfString.text('/Helv 11 Tf 0 g') }));
+  const name = doc.add(widget([100, 700, 300, 720], { T: PdfString.text('name'), FT: N('Tx'), Ff: 2, TU: PdfString.text('Your full name'), V: PdfString.text('Ann'), Parent: person, DA: PdfString.text('/Helv 11 Tf 0 g') }));
   doc.dict(person)!.set('Kids', [name]);
   const agree = doc.add(widget([100, 660, 115, 675], { T: PdfString.text('agree'), FT: N('Btn'), V: N('Yes'), AS: N('Yes'), AP: states('Yes') }));
-  const color = doc.add(new PdfDict({ T: PdfString.text('color'), FT: N('Btn'), Ff: RADIO, V: N('Blue') }));
+  const color = doc.add(new PdfDict({ T: PdfString.text('color'), TU: PdfString.text('Favourite colour'), FT: N('Btn'), Ff: RADIO, V: N('Blue') }));
   const red = doc.add(widget([100, 620, 112, 632], { Parent: color, AS: N('Off'), AP: states('Red') }));
   const blue = doc.add(widget([130, 620, 142, 632], { Parent: color, AS: N('Blue'), AP: states('Blue') }));
   doc.dict(color)!.set('Kids', [red, blue]);
@@ -49,6 +49,15 @@ test('fillable fields are read, one per widget, with their values', async () => 
   assert.deepEqual(byName(fields, 'color').map((f) => f.onState), ['Red', 'Blue']);
   assert.equal(fields[4].combo, true);
   assert.deepEqual(fields[4].options, [{ value: 'S', label: 'S' }, { value: 'M', label: 'Medium' }]);
+});
+
+test('a field’s description (TU) and whether it is required are read, for screen readers', async () => {
+  const fields = readFields(PdfDocument.load(await form()));
+  assert.equal(fields[0].description, 'Your full name');
+  assert.equal(fields[0].required, true);
+  assert.deepEqual(byName(fields, 'color').map((f) => f.description), ['Favourite colour', 'Favourite colour']);
+  assert.equal(fields[1].description, undefined);
+  assert.equal(fields[1].required, undefined);
 });
 
 test('filled values are written as an incremental update and read back', async () => {

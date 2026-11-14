@@ -32,6 +32,8 @@ export interface LinkPopoverActions {
   open(url: string): void;
   /** The form came back for a link the pointer was on: the choice, or `null` to take the link off. */
   apply(target: LinkTarget, choice: LinkChoice | null): void;
+  /** Gives the keyboard back to the document. */
+  focusEditor?(): void;
 }
 
 const SHOW_DELAY = 400;
@@ -89,9 +91,13 @@ export class LinkPopover {
     // Keys stay in the form: the document's handlers listen on the window.
     this.root.addEventListener('keydown', (e) => {
       e.stopPropagation();
-      if (e.key === 'Escape' && this.done) {
-        e.preventDefault();
-        this.end(undefined);
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      // Opened by the pointer and then reached from the keyboard, it closes just the same, and the keyboard goes back to the document.
+      if (this.done) this.end(undefined);
+      else {
+        this.hide();
+        this.actions.focusEditor?.();
       }
     });
     this.form.addEventListener('submit', (e) => {

@@ -536,7 +536,7 @@ test('File › Page Setup turns a sheet on its side and repeats its first row; S
   await expect.poll(async () => (await state(page)).loaded).toBe(true);
   await app.menu('File', 'Page Setup…');
   const dialog = page.getByRole('dialog', { name: 'Page Setup' });
-  await dialog.getByRole('button', { name: 'Landscape' }).click();
+  await dialog.getByRole('radio', { name: 'Landscape' }).click();
   await dialog.getByRole('tab', { name: 'Sheet' }).click();
   await dialog.getByRole('textbox', { name: 'Rows to repeat at top' }).fill('1:1');
   await dialog.getByRole('button', { name: 'OK' }).click();

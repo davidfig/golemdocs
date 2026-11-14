@@ -92,6 +92,7 @@ import { SearchPanel } from './ui/searchPanel.ts';
 import { embedTitle, liveTitle, parseTagAddress } from '@golemdocs/docx';
 import { LoadingScreen } from './ui/loadingScreen.ts';
 import { NothingOpenScreen } from './ui/nothingOpen.ts';
+import { AltTextPopover } from './ui/altTextPopover.ts';
 import { showToast } from './ui/toast.ts';
 import { arrangePages, columnsToFill, nearestPage, onSeam, type Bounds } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
@@ -183,6 +184,10 @@ import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
 import { formatAllows } from './ui/formats.ts';
 import { DEFAULT_STATE, FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
 import { h, modalOpen, stripMnemonic } from './ui/dom.ts';
+import { ScreenReaderSupport } from './screenReaderSupport.ts';
+import { cycleRegions, focusFirst, type Region } from './ui/focusRegions.ts';
+import { caretBlinks, caretPoints, forcedColors, onAccessibilityChange, rereadCaretOptions } from './ui/accessibilityOptions.ts';
+import { rereadScreenReader, screenReaderOn } from './ui/screenReader.ts';
 
 // Every string the UI builds goes through t(): the language has to be loaded first. Started here
 // and awaited once the worker is running, so it doesn't hold up starting the worker.
@@ -232,6 +237,7 @@ const atlases = new AtlasLibrary(gl, FONT_BASE, assetLoaded);
 // The default font nearly every document uses: fetch its atlases now, not after the first layout.
 atlases.warm(['calibri/regular.webp', 'calibri/bold.webp']);
 const selection = new SelectionLayer(gl);
+selection.setCaretWidth(caretPoints());
 // The document, layout and editing live in a worker; it streams pages here as GPU-ready
 // buffers and answers input with page updates and selection geometry. This thread draws.
 const worker = new LayoutClient((faces) => {
@@ -562,12 +568,39 @@ function turnPage(by: 1 | -1): void {
     const here = nearestPage(pages, center.x, center.y);
     const index = here ? pages.indexOf(here) : 0;
     goToPage(Math.min(Math.max(index + by, 0), pages.length - 1));
+    readTurnedPage();
     return;
   }
   const viewHeight = canvas.clientHeight / (camera.zoom * CSS_PX_PER_POINT);
   camera.y += by * (viewHeight - 2 * READING_TOP_PX / (camera.zoom * CSS_PX_PER_POINT));
   userMoved = true;
   requestRender();
+  readTurnedPage();
+}
+
+/**
+ * Screen Reader Mode: a book's page was turned (or the reading layer went on to another page). Where the reader is now is
+ * said, as the status bar shows it, and the caret goes to the top of the page in view, so the textarea holds the text read
+ * next (and the screen reader reads on from there). The view stays where the turn put it (`quiet`).
+ */
+function readTurnedPage(): void {
+  if (!isBook() || !screenReaderOn() || !pages.length) return;
+  const top = pageAt(canvas.clientWidth / 2, READING_TOP_PX);
+  const index = top ? pages.indexOf(top.page) : -1;
+  screenReader.pageTurned(wordView() && index >= 0 ? { page: index + 1, pages: pages.length } : null, bookProgress());
+  if (!top) return;
+  const book = reading;
+  // At the page's left edge: the start of the first line in view, not the middle of it.
+  void worker.textAt(top.page.id, 0, top.y).then((place) => {
+    if (place && reading === book) send({ kind: 'select', paragraph: place[0], from: place[1], to: place[1], quiet: true });
+  });
+}
+
+/** Something typed, deleted or pasted in a book goes nowhere: in Screen Reader Mode it is said why. Whether it was a book. */
+function bookRefuses(): boolean {
+  if (!isBook()) return false;
+  screenReader.readOnly();
+  return true;
 }
 
 /** Back to a book after a while away (another window, another device): it moves to where it was read since, if that was elsewhere. */
@@ -700,6 +733,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
     pagesPanel.setPages(pages);
   }
   selection.clear();
+  screenReader.opened(name);
   commentsPanel.reset();
   comments = [];
   formLayer.update(null);
@@ -789,6 +823,7 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     opened(docName, format, fixedPages, outdated) {
       name = opening.name = docName;
       opening.kind = format;
+      screenReader.layer.setName(docName);
       annotating = fixedPages;
       // A document saved by an older version as plain text (a .wdoc of the text lens): the text editor takes it from here.
       if (format === 'txt' && !options.asDocument && !options.pictureEdit) void migrateText(current, docName, options);
@@ -1080,6 +1115,7 @@ function roomStateChanged(state: RoomState): void {
   const was = doc.room;
   doc.room = state;
   if (state.mode === 'shared') doc.journal?.clear(); // the room holds the edits now
+  screenReader.room(state.people.filter((p) => !p.me).map((p) => p.name));
   const text = describeRoom(state);
   if (text !== lastRoomText) notify(text || t('app.editingAlone'));
   lastRoomText = text;
@@ -1311,6 +1347,7 @@ function applyLayout(update: LayoutUpdate): void {
     pagesById.get(id)?.dispose(gl!);
     pagesById.delete(id);
   }
+  screenReader.layout(update.drop);
   pages = [];
   for (const id of update.order) {
     const page = pagesById.get(id);
@@ -1537,6 +1574,19 @@ interface OpenDocument {
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
 let current: OpenDocument = { localId: null, journal: null, unsavedSince: 0, builtIn: false, room: null, roomRequested: false, ignored: { words: [], rules: [] }, shared: null, newFolder: null, name: '', kind: 'docx' };
+/** Screen Reader Mode: the textarea mirroring the caret's text, the reading layer over the pages, and what is announced (screenReaderSupport.ts). */
+const screenReader = new ScreenReaderSupport(input, worker, {
+  request: (ids, headings) => worker.a11yPages(ids, headings),
+  goTo: (paragraph, offset) => {
+    send({ kind: 'select', paragraph, from: offset, to: offset });
+    focusInput();
+  },
+  showPage: (id) => {
+    goToPage(pages.findIndex((page) => page.id === id));
+    readTurnedPage();
+  },
+  documentName: () => current.name,
+});
 /**
  * The folder the next document to open goes in once first saved (null: the top level): set just
  * before it opens (New, Import or a file dropped on a folder), and taken over by open().
@@ -1842,6 +1892,9 @@ const SETTING_APPLIED: Record<SyncedKey, (() => void) | null> = {
   'vector.penPressure': rereadDrawingOptions,
   'vector.nudgeSize': rereadDrawingOptions,
   'vector.nudgeStrength': rereadDrawingOptions,
+  'golem.screenReader': rereadScreenReader,
+  'golem.caretWidth': rereadCaretOptions,
+  'golem.caretBlink': rereadCaretOptions,
 };
 
 function rereadSpelling(): void {
@@ -4509,6 +4562,7 @@ async function pictureMenu(hit: { page: GpuPage; x: number; y: number }, at: { x
       { label: label('chrome.pdfEdit.delete'), run: () => send({ kind: 'delete', direction: 'backward' }) },
       'separator',
       { label: t('picture.frame.edit'), run: () => void editPicture(picture), disabled: !!picture.svg || sharedLive() || !!current.shared },
+      { label: stripMnemonic(t('a11y.alt.menu')), run: () => void editAltText({ clientX: at.x, clientY: at.y }) },
     ],
     at.x,
     at.y,
@@ -4610,8 +4664,10 @@ function applySelection(update: SelectionUpdate): void {
     if (math) chromeHost.perform({ kind: 'insertMath' });
   }
   updateCursor();
+  if (update.jumpMissed) showToast(t(update.jumpMissed === 'heading' ? 'a11y.noHeading' : 'a11y.noTable'));
   if (update.search) findDialog.report(update.search);
   if (update.spell?.menu) {
+    if (spellMenuAt?.caret) spellMenuAt = { ...spellMenuAt, ...caretPoint() };
     if (!update.spell.issue && (update.spell.table || update.spell.word || update.spell.live) && spellMenuAt && !spellMenuAt.hover) textMenu(spellMenuAt, update.spell.word, !!update.spell.table, update.spell.live);
     else showSpellMenu(update.spell.issue, spellMenuAt);
     spellMenuAt = null;
@@ -4641,11 +4697,13 @@ function applySelection(update: SelectionUpdate): void {
     editTimes = { total: performance.now() - editSent, worker: update.workerMs };
     editSent = 0;
   }
-  // Copy and cut read the selected text from `selection` (see the clipboard handlers).
-  input.value = '';
+  // Copy and cut read the selected text from `selection` (see the clipboard handlers). The textarea is empty, or in Screen Reader Mode holds the text around the caret.
+  const caretPage = update.focus ? pages.findIndex((page) => page.id === update.focus!.page) : -1;
+  screenReader.selection(update, caretPage >= 0 ? { index: caretPage, count: pages.length } : null);
   caretOn = true;
   clearInterval(blinkTimer);
-  if (update.caret) {
+  // A caret that does not blink (Tools › Options, or the system asks for reduced motion) stays on.
+  if (update.caret && caretBlinks()) {
     blinkTimer = window.setInterval(() => {
       // An unfocused editor draws no caret, so there's nothing to redraw (focus redraws).
       if (document.activeElement !== input || !document.hasFocus()) return;
@@ -4677,6 +4735,23 @@ function caretLineOnScreen(): { clientX: number; top: number; bottom: number } |
   const top = rect.top + (page.y + caret.y - camera.y) * scale;
   return { clientX: rect.left + (page.x + caret.x - camera.x) * scale, top, bottom: top + caret.height * scale };
 }
+
+// Tools › Options › Accessibility, or the system's colors or motion preference, changed: the caret and pages are drawn again,
+// and the thumbnails too when the system's contrast colors came or went.
+let drawnForced = JSON.stringify(forcedColors());
+onAccessibilityChange(() => {
+  const nowForced = JSON.stringify(forcedColors());
+  if (nowForced !== drawnForced) {
+    drawnForced = nowForced;
+    pagesPanel.recolor();
+  }
+  selection.setCaretWidth(caretPoints());
+  if (!caretBlinks()) {
+    clearInterval(blinkTimer);
+    caretOn = true;
+  }
+  requestRender();
+});
 
 /** Scrolls so a caret (page-relative) is in view, with a margin. */
 function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
@@ -4867,16 +4942,17 @@ function render(): void {
     // A big text file: its own bounds, from the top-left corner however short or narrow it is, and drawn by the large-text editor.
     const area = textView.bounds();
     camera.clampToStart(area, canvas.clientWidth, canvas.clientHeight);
-    const frame = textView.draw(pagesDark(), caretOn && document.hasFocus());
+    const frame = textView.draw(pagesDark(), caretOn && document.hasFocus(), forcedColors());
     lastStats = { pages: frame?.chunks ?? 0, visiblePages: frame?.chunks ?? 0, glyphs: frame?.glyphs ?? 0, drawCalls: frame?.drawCalls ?? 0 };
   } else if (sheetView.active) {
     // A workbook: drawn by the spreadsheet editor, from the top-left of its cells.
     camera.clampToStart(sheetView.bounds(), canvas.clientWidth, canvas.clientHeight);
-    sheetView.draw(pagesDark());
+    sheetView.draw(pagesDark(), forcedColors());
     lastStats = { pages: 0, visiblePages: 0, glyphs: 0, drawCalls: 0 };
   } else {
     if (!pendingView) camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight); // a restored position may lie past the pages that have arrived so far
     if (renderer.flat) camera.x = bounds.x;
+    renderer.forced = forcedColors();
     lastStats = renderer.render(camera, pages, selection, caretVisible, pagesDark());
     if (selection.fading) requestRender();
   }
@@ -4892,6 +4968,7 @@ function render(): void {
     people: current.room?.people.some((p) => !p.me) ? current.room.people.filter((p) => !p.me) : NO_PEOPLE,
     renamable: renamable(),
     kind: textView.active ? 'largetext' : embeddedDrawing ? 'svg' : current.kind,
+    pictureSelected: !textView.active && !sheetView.active && !!selectedPicture,
     zoom: camera.zoom,
     pagesPanel: pagesOpen() && !textView.active && !sheetView.active && !reflowing(),
     filesPanel: filesOpen,
@@ -4916,6 +4993,7 @@ function render(): void {
   selectionHandles.position();
   pictureFrame.position();
   commentsPanel.position();
+  screenReader.render({ x: camera.x, y: camera.y, scale: camera.zoom * CSS_PX_PER_POINT, width: canvas.clientWidth, height: canvas.clientHeight }, textView.active ? [] : pages);
   syncPagesPanel();
   updateFooter();
   updateRuler();
@@ -5206,7 +5284,9 @@ const pageFitsWidth = (): boolean => !!pages.length && pages[0].width * camera.z
 
 /** A tap at the left or right third of a book turns its page back or forward (the middle is an ordinary tap: a link, a selection). */
 function bookTapTurn(x: number): 1 | -1 | null {
-  if (!isBook()) return null;
+  // Not in Screen Reader Mode: a screen reader's own taps (VoiceOver's double tap on what it has found) land on the page,
+  // and must reach what is there rather than turn it. Swipes, the keys and the reading layer still turn pages.
+  if (!isBook() || screenReaderOn()) return null;
   const width = canvas.clientWidth;
   return x > width * (2 / 3) ? 1 : x < width / 3 ? -1 : null;
 }
@@ -5515,6 +5595,7 @@ window.addEventListener('blur', () => linkKeyChanged({ metaKey: false, ctrlKey: 
 const linkPopover = new LinkPopover({
   editable: () => FORMATS[current.kind].editable && current.shared?.role !== 'viewer' && !annotating,
   open: followLink,
+  focusEditor: focusInput,
   apply: (target, choice) => {
     // The caret goes into the link (the commands run in order), so the change is to that link.
     send({ kind: 'pointer', page: target.page, x: target.x, y: target.y });
@@ -5527,6 +5608,20 @@ for (const type of ['keydown', 'wheel']) window.addEventListener(type, () => lin
 function editLink(draft: LinkDraft, at: { clientX: number; clientY: number }): void {
   void linkPopover.edit(draft, at).then((choice) => {
     if (choice !== undefined) send(choice ? { kind: 'setLink', url: choice.url, text: choice.text } : { kind: 'removeLink' });
+    focusInput();
+  });
+}
+/** The form for the selected picture's alt text, opened at a window point (from the keyboard: under the picture). */
+const altTextPopover = new AltTextPopover();
+function editAltText(at?: { clientX: number; clientY: number }): void {
+  const picture = selectedPicture;
+  if (!picture) return reportError(t('a11y.alt.none'));
+  const page = pagesById.get(picture.page);
+  const rect = canvas.getBoundingClientRect();
+  const scale = camera.zoom * CSS_PX_PER_POINT;
+  const place = at ?? (page ? { clientX: rect.left + (page.x + picture.x - camera.x) * scale, clientY: rect.top + (page.y + picture.y + picture.height - camera.y) * scale - 14 } : { clientX: rect.left + 40, clientY: rect.top + 40 });
+  void altTextPopover.edit(picture.description ?? '', place).then((text) => {
+    if (text !== undefined && text !== (picture.description ?? '')) send({ kind: 'describePicture', text });
     focusInput();
   });
 }
@@ -5837,8 +5932,9 @@ function viewKey(e: KeyboardEvent): boolean {
   // Only with the keyboard on the document itself: a focused button, menu or list keeps its keys.
   const onDocument = e.target === input || e.target === canvas || e.target === document.body;
   if (isBook() && onDocument && !mod && !e.altKey && !modalOpen()) {
-    // Shift with an arrow selects text (to copy from the book), as anywhere.
-    const arrow = !e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0);
+    // Shift with an arrow selects text (to copy from the book), as anywhere. In Screen Reader Mode the arrows move the caret,
+    // so the screen reader reads the book by character and line; Page Down, Page Up and Space still turn pages.
+    const arrow = !e.shiftKey && !screenReaderOn() && (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0);
     const forward = e.key === 'PageDown' || arrow === 1 || (e.key === ' ' && !e.shiftKey);
     const back = e.key === 'PageUp' || arrow === -1 || (e.key === ' ' && e.shiftKey);
     if (forward || back) {
@@ -5903,14 +5999,19 @@ window.addEventListener('keydown', (e) => {
   if (!commands) return;
   e.preventDefault();
   if (document.activeElement !== input) focusInput();
+  if (commands.some((command) => command.kind !== 'move' && command.kind !== 'selectAll') && bookRefuses()) return;
   for (const command of commands) send(command);
 });
 
 // Typed text, input methods, copy, cut and paste in the hidden textarea (ui/textInput.ts).
 attachTextInput(input, {
-  insert: (text) => send({ kind: 'insertText', text }),
+  insert: (text) => {
+    if (!bookRefuses()) send({ kind: 'insertText', text });
+  },
   key: (key) => {
-    for (const command of editingCommand(key) ?? []) send(command);
+    const commands = editingCommand(key) ?? [];
+    if (commands.some((command) => command.kind !== 'move' && command.kind !== 'selectAll') && bookRefuses()) return;
+    for (const command of commands) send(command);
   },
   copy: () => selection.text,
   copyHtml: selectedHtml,
@@ -5918,7 +6019,9 @@ attachTextInput(input, {
   cut: () => {
     if (selection.text) send({ kind: 'delete', direction: 'backward' });
   },
-  paste: (clip) => pasteClipboard(clip),
+  paste: (clip) => {
+    if (!bookRefuses()) pasteClipboard(clip);
+  },
 });
 
 /** HTML larger than this is pasted as plain text (reading it would take too long). */
@@ -6193,6 +6296,7 @@ const chromeHost = createChromeHost({
   toggleToolbars,
   toggleRuler,
   toggleCollapsePages,
+  altText: () => editAltText(),
   setViewMode,
   toggleFormattingMarks: () => {
     formattingMarks = !formattingMarks;
@@ -6544,7 +6648,7 @@ function toggleFilesPanel(): void {
 }
 
 /** Where the menu being asked for goes, and, when the pointer only rests on the mistake, the point to select it at if a suggestion is chosen. */
-type SpellMenuAt = { x: number; y: number; hover?: { page: number; px: number; py: number } };
+type SpellMenuAt = { x: number; y: number; hover?: { page: number; px: number; py: number }; /** Asked for at the caret (the menu key): it opens under the caret as the answer finds it. */ caret?: boolean };
 let spellMenuAt: SpellMenuAt | null = null;
 
 /** The menu for a mistake the layout worker found at a point: after a right click, or because the pointer rested there. */
@@ -6643,6 +6747,34 @@ canvas.addEventListener('contextmenu', (e) => {
   focusInput();
   spellMenuAt = { x: e.clientX, y: e.clientY };
   send({ kind: 'spellAt', page: hit.page.id, x: hit.x, y: hit.y, check: spellDialog.checkingLive });
+});
+
+// The same menu from the keyboard: the menu key or Shift+F10 in the document opens it for the word at the caret, under it,
+// with the keyboard in the menu (its synonyms, the Thesaurus, a mistake's suggestions, a table's commands).
+function caretMenu(): boolean {
+  if (!selection.caret || textView.active || sheetView.active || annotating || isPicture() || isDrawing()) return false;
+  if (!spellDialog.checkingLive && !FORMATS[current.kind].editable) return false;
+  // The worker answers about its own caret, which keys typed just before may have moved beyond the one shown here.
+  spellMenuAt = { ...caretPoint(), caret: true };
+  send({ kind: 'spellAt', page: selection.caret.page, x: 0, y: 0, caret: true, check: spellDialog.checkingLive });
+  return true;
+}
+/** Under the caret, in the window. */
+function caretPoint(): { x: number; y: number } {
+  const caret = selection.caret;
+  const page = caret && pagesById.get(caret.page);
+  const rect = canvas.getBoundingClientRect();
+  if (!caret || !page) return { x: rect.left + 40, y: rect.top + 40 };
+  const scale = camera.zoom * CSS_PX_PER_POINT;
+  return { x: rect.left + (page.x + caret.x - camera.x) * scale, y: rect.top + (page.y + caret.y + caret.height - camera.y) * scale };
+}
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'F10' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && caretMenu()) e.preventDefault();
+});
+// The menu key sends a `contextmenu` to the focused textarea; the browser's own menu for it would offer nothing useful.
+input.addEventListener('contextmenu', (e) => {
+  if (e.button === 2) return;
+  if (caretMenu()) e.preventDefault();
 });
 
 // The dashboard of all documents (File ▸ Dashboard). Opening a document from it goes through the
@@ -7176,7 +7308,7 @@ drawLayer.onUpdate(() => pagesPanel.refresh()); // a picture's shapes are in its
  * edited, which the laid-out page only catches up with when the drawing is opened again).
  */
 function thumbnailPixels(page: GpuPage, width: number, height: number): Uint8ClampedArray<ArrayBuffer> | null {
-  const pixels = gl ? traced('pagesPanelThumbnail', () => readPage(gl!, renderer, page, width, height, pagesDark())) : null;
+  const pixels = gl ? traced('pagesPanelThumbnail', () => readPage(gl!, renderer, page, width, height, pagesDark(), forcedColors())) : null;
   if (page !== pages[0] || (!isPicture() && !isDrawing())) return pixels;
   const thumb = document.createElement('canvas');
   thumb.width = width;
@@ -7450,6 +7582,72 @@ const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
   },
   focusEditor: focusInput,
 });
+
+// --- Getting around from the keyboard (ui/focusRegions.ts) -----------------------------------------------------
+
+/** F6 and Shift+F6: the menu bar, the toolbars, the document, the side panels and the status bar, in turn. */
+function focusRegions(): Region[] {
+  const panel = (el: HTMLElement): Region => ({ el, focus: () => focusFirst(el) });
+  const documentRegion: Region = {
+    el: document.getElementById('viewport')!,
+    focus: () => {
+      focusByTap();
+      return document.activeElement === input || (textView.active && document.activeElement !== document.body);
+    },
+  };
+  // A drawing's or a picture's layers: the tree's row with the keyboard, not the panel's close button.
+  const layers = [...document.querySelectorAll<HTMLElement>('.wm-layers')].map(
+    (el): Region => ({
+      el,
+      focus: () => {
+        const row = el.hidden ? null : el.querySelector<HTMLElement>('[role="treeitem"][tabindex="0"]');
+        if (!row) return focusFirst(el);
+        row.focus();
+        return document.activeElement === row;
+      },
+    }),
+  );
+  // A workbook's own parts (formula bar, cells, sheet tabs) stand in for the document.
+  const documentRegions = sheetView.active ? sheetView.regions() : [documentRegion];
+  // The notes at the bottom of the window (a new version, reload, sign-in ran out), while they show (ui/notice.ts).
+  const notices = [...document.querySelectorAll<HTMLElement>('.wm-notice:not([hidden])')].map(panel);
+  return [...chrome.regions(), ...documentRegions, ...layers, panel(commentsPanel.el), panel(filesPanel.el), panel(pagesPanel.el), panel(footer.el), ...notices];
+}
+
+window.addEventListener(
+  'keydown',
+  (e) => {
+    if (e.key !== 'F6' || e.ctrlKey || e.metaKey || e.altKey || modalOpen()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    cycleRegions(focusRegions(), document.activeElement, e.shiftKey);
+  },
+  true,
+);
+
+// A closed dialog gives the keyboard back to what had it before (the browser does that). If that is gone (a menu row,
+// a card that closed), it goes to the document rather than to nothing. `close` does not bubble, hence the capture.
+document.addEventListener(
+  'close',
+  (e) => {
+    if (!(e.target instanceof HTMLDialogElement)) return;
+    setTimeout(() => {
+      const active = document.activeElement;
+      if ((!active || active === document.body) && !modalOpen()) focusInput();
+    });
+  },
+  true,
+);
+
+// The first thing Tab reaches: straight to the document, past the menus and toolbars.
+{
+  const skip = h('a', { class: 'wm-sr-only', text: t('a11y.skip'), attrs: { href: '#viewport' } });
+  skip.addEventListener('click', (e) => {
+    e.preventDefault();
+    focusByTap();
+  });
+  document.body.prepend(skip);
+}
 
 window.addEventListener('dragover', (e) => {
   e.preventDefault();

@@ -21,6 +21,20 @@ export function squiggleRects(x: number, y: number, width: number, height: numbe
   return out;
 }
 
+/** A dashed double line under a box at (x, y) of size width × height (grammar mistakes): [x, y, width, height] each. */
+export function dashRects(x: number, y: number, width: number, height: number): number[][] {
+  const out: number[][] = [];
+  const dash = 2.4;
+  const gap = 1.2;
+  const thick = 0.6;
+  const base = y + height - thick - 0.3;
+  for (let at = x; at < x + width; at += dash + gap) {
+    const w = Math.min(dash, x + width - at);
+    out.push([at, base - 1.2, w, thick], [at, base, w, thick]);
+  }
+  return out;
+}
+
 /** Other people's selections (behind the text, in their colour), and their carets: a bar with a small flag on top, points. */
 export const REMOTE_ALPHA = 0.25;
 export const REMOTE_WIDTH = 1.5;

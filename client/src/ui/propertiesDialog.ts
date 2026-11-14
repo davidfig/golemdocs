@@ -5,7 +5,7 @@
 import type { DocumentProperties } from '@golemdocs/docx';
 import { getLocale, t, type MessageKey } from '../i18n/index.ts';
 import type { WireCommand, WordStats } from '../layout/protocol.ts';
-import { h } from './dom.ts';
+import { h, tabList } from './dom.ts';
 import { dialogTitleBar } from './popup.ts';
 
 const SUMMARY: { key: keyof DocumentProperties; label: MessageKey; multiline?: boolean }[] = [
@@ -89,6 +89,7 @@ export class PropertiesDialog {
       panes.push([button, pane]);
     });
     select(0);
+    tabList(tabs, panes.map(([, pane]) => pane));
 
     const ok = h('button', { class: 'wm-button', text: t('properties.ok'), attrs: { type: 'submit' } });
     ok.disabled = true;

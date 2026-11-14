@@ -84,17 +84,20 @@ test.describe('the People section of the Share dialog', () => {
     await expect(row).toBeVisible();
     await expect(row).toContainText(guest.name);
     await expect(row).toContainText(guest.email);
-    const access = row.getByRole('group', { name: 'Access' });
-    await expect(access.getByRole('button', { name: 'Can edit' })).toHaveAttribute('aria-pressed', 'true');
+    // Each person's controls are named for them, so a screen reader can tell the rows apart.
+    const access = row.getByRole('radiogroup', { name: `Access for ${guest.name}` });
+    await expect(access.getByRole('radio', { name: 'Can edit' })).toHaveAttribute('aria-checked', 'true');
     await expect(dialog.getByLabel('Email address')).toHaveValue('');
     expect((await sharesOf(owner.page, doc.id)).map((s) => [s.email, s.role])).toEqual([[guest.email, 'editor']]);
 
-    await access.getByRole('button', { name: 'Can view' }).click();
-    await expect(access.getByRole('button', { name: 'Can view' })).toHaveAttribute('aria-pressed', 'true');
+    await access.getByRole('radio', { name: 'Can view' }).click();
+    await expect(access.getByRole('radio', { name: 'Can view' })).toHaveAttribute('aria-checked', 'true');
     await expect.poll(async () => (await sharesOf(owner.page, doc.id))[0]?.role).toBe('viewer');
 
-    await row.getByRole('button', { name: 'Remove' }).click();
+    await row.getByRole('button', { name: `Remove ${guest.name}` }).click();
     await expect(dialog.getByText('Not shared with anyone yet.')).toBeVisible();
+    // The row with the focus went: the keyboard is back in the address box.
+    await expect(dialog.getByLabel('Email address')).toBeFocused();
     expect(await sharesOf(owner.page, doc.id)).toEqual([]);
     await owner.context.close();
     await guest.context.close();
@@ -105,7 +108,7 @@ test.describe('the People section of the Share dialog', () => {
     await shareWith(owner.page, doc.id, guest.email, 'viewer');
     const dialog = await openShareDialog(owner.app);
     const row = dialog.getByRole('listitem').filter({ hasText: guest.email });
-    await expect(row.getByRole('group', { name: 'Access' }).getByRole('button', { name: 'Can view' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(row.getByRole('radiogroup', { name: /^Access for / }).getByRole('radio', { name: 'Can view' })).toHaveAttribute('aria-checked', 'true');
     await owner.context.close();
     await guest.context.close();
   });

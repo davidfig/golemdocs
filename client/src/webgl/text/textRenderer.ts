@@ -1,4 +1,4 @@
-import { createProgram, uniforms } from '../program.ts';
+import { createProgram, setForcedUniforms, uniforms, type ForcedColors } from '../program.ts';
 import type { Camera } from '../../view/camera.ts';
 import type { GpuFace } from './gpuFace.ts';
 import type { TextBatch } from './textBatch.ts';
@@ -22,6 +22,8 @@ export class TextRenderer {
   private readonly u: Record<(typeof UNIFORMS)[number], WebGLUniformLocation>;
   /** Draw colors as they show on a dark page (Dark Pages). */
   darkPages = false;
+  /** Draw in the system's high contrast colors (see ForcedColors). */
+  forced: ForcedColors | null = null;
 
   constructor(private readonly gl: WebGL2RenderingContext) {
     this.program = createProgram(gl, TEXT_VERTEX, TEXT_FRAGMENT);
@@ -46,6 +48,7 @@ export class TextRenderer {
     gl.uniform1f(this.u.u_scale, scale);
     gl.uniform2f(this.u.u_viewport, camera.width, camera.height);
     gl.uniform1f(this.u.u_darkPages, this.darkPages ? 1 : 0);
+    setForcedUniforms(gl, this.program, this.forced);
 
     let boundFace: GpuFace | null = null;
     for (const batch of batches) {

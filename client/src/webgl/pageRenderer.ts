@@ -4,7 +4,7 @@ import { ImageRenderer, type DrawImage } from './shapes/imageRenderer.ts';
 import { RectRenderer } from './shapes/rectRenderer.ts';
 import type { TextBatch } from './text/textBatch.ts';
 import { TextRenderer } from './text/textRenderer.ts';
-import { DARK_PAGE_RGB } from './program.ts';
+import { DARK_PAGE_RGB, type ForcedColors } from './program.ts';
 import type { Camera } from '../view/camera.ts';
 import type { GpuPage } from './gpuPage.ts';
 import type { SelectionLayer } from './selectionLayer.ts';
@@ -48,12 +48,15 @@ export class PageRenderer {
   flat = false;
   /** Pages touch (the space between them is hidden): a thin line marks each edge, with no shadow. */
   joined = false;
+  /** The system's high contrast colors, when it asks for them (forced-colors): pages and text are drawn in them. */
+  forced: ForcedColors | null = null;
 
   /** `darkPages`: dark sheets with light letters (View › Color Scheme › Dark Pages); pictures of pages leave it off. */
   render(camera: Camera, pages: readonly GpuPage[], selection?: SelectionLayer, caretVisible = true, darkPages = false): FrameStats {
     const gl = this.gl;
     this.rects.darkPages = darkPages;
     this.text.darkPages = darkPages;
+    this.rects.forced = this.text.forced = this.forced;
     const scale = camera.scale;
     const left = camera.x;
     const top = camera.y;
@@ -92,7 +95,7 @@ export class PageRenderer {
         this.sheets.add(x0 - grow, y0 - grow + 2 * scale, x1 - x0 + 2 * grow, y1 - y0 + 2 * grow, PAGE_SHADOW);
       }
       if (!this.flat) this.sheets.add(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2, PAGE_BORDER);
-      this.sheets.add(x0, y0, x1 - x0, y1 - y0, darkPages ? DARK_PAGE_COLOR : PAGE_COLOR);
+      this.sheets.add(x0, y0, x1 - x0, y1 - y0, this.forced ? packColor(this.forced.page) : darkPages ? DARK_PAGE_COLOR : PAGE_COLOR);
     }
     this.sheets.flush(camera.width, camera.height);
 

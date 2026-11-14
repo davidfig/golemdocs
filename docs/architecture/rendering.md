@@ -70,7 +70,7 @@ Hit-testing splits across the thread boundary. The main thread owns only geometr
 ## Canvas consequences
 
 - **There is no text in the DOM.** Typing goes into a hidden `<textarea id="input" aria-label="Document">` that is moved to the caret each frame, so IME candidate windows and the on-screen keyboard appear in the right place. Keys, composition and clipboard go through it.
-- **Accessibility is limited.** Screen readers see one labelled textarea and the DOM menus, toolbars and dialogs (which carry roles), not the document text. The plan to fix this is in [Accessibility](accessibility.md).
+- **Screen readers cannot read the canvas.** In Screen Reader Mode the page describes it in invisible HTML instead: the text near the caret in the input textarea, and the pages in view as a reading layer over the canvas. Windows contrast themes reach the canvas only through the `u_forced` shader uniforms. See [Accessibility](accessibility.md).
 - **DOM overlays** sit above the canvas for things that need real inputs or are easier in HTML: PDF form fields (`ui/formLayer.ts`), PDF text editing (`ui/pdfTextLayer.ts`), comments (`ui/commentsPanel.ts`), other people's pointers (`ui/pointerLayer.ts`), crop and draw layers. Each has a `position()` called from `render()`.
 - **No browser find or spellcheck on the page.** Find, spelling and grammar squiggles are drawn by the worker's geometry (`spellMarks`, `squiggleRects`).
 - **How e2e reads text** (`e2e/fixtures.ts`): `main.ts` exposes `window.selectionState` (`caret`, `text`, `others`), `window.loaded`, `window.pages`, `window.status`, `camera`, `pageAt`, `send`. `app.text()` presses Ctrl+A and reads `selectionState.text`. Plain text files expose `window.textEditor.text()`. Other checks use DOM of menus and dialogs, or downloaded files. Pixel assertions are rare.
@@ -114,7 +114,7 @@ Hit-testing splits across the thread boundary. The main thread owns only geometr
 - Adding a font or charset changes committed binaries under `client/public/fonts/`; run `pnpm fonts` and check the manifest. The `.ttf` copies exist for PDF export. Emoji pages are made separately (`pnpm fonts:emoji`).
 - Every renderer that draws `GlyphList`s must handle a color face (`FaceMetrics.color`): draw it through a `GpuFace` (which knows from `FaceDescriptor.color`), or as a picture, never as a distance field.
 - Dark Pages is a shader-side colour mapping (`DARK_PAGES_GLSL`), not a different layout; thumbnails pass `darkPages` explicitly.
-- After changing the look the marketing clip shows, re-record it (see AGENTS.md, `pnpm record:home`).
+- After changing the look the marketing clips show, re-record them (see AGENTS.md, `pnpm record:home` and `pnpm record:workbook`).
 
 ## Related docs
 

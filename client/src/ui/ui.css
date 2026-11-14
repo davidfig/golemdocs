@@ -184,6 +184,73 @@
   background: linear-gradient(#8a8a8a, #555);
 }
 
+/* High Contrast: black on white with strong edges and a deep blue for what is picked; its dark side is white on black with yellow.
+   Meets WCAG AAA contrast for text and 3:1 for every edge that shows a control. */
+
+:root[data-theme='contrast'] {
+  --wm-text: #000;
+  --wm-disabled: #595959;
+  --wm-face: #fff;
+  --wm-bar-top: #fff;
+  --wm-bar-bottom: #fff;
+  --wm-border: #000;
+  --wm-etch-dark: #000;
+  --wm-etch-light: #fff;
+  --wm-hot: #ffff00;
+  --wm-hot-border: #000;
+  --wm-checked: #cfe0ff;
+  --wm-checked-hot: #ffff00;
+  --wm-menu-bg: #fff;
+  --wm-gutter: #fff;
+  --wm-field-border: #000;
+  --wm-field-bg: #fff;
+  --wm-toolbar-border: #000;
+  --wm-menu-border: #000;
+  --wm-title-bottom: #00008b;
+  --wm-muted: #333;
+  --wm-error: #a00000;
+  --wm-warning: #6b3d00;
+  --wm-link: #00008b;
+  --wm-row-hover: #ffff00;
+  --wm-letter: #000;
+  --wm-desk: #6b6b6b;
+}
+
+:root[data-theme='dark'][data-scheme='contrast'] {
+  --wm-text: #fff;
+  --wm-disabled: #a6a6a6;
+  --wm-face: #000;
+  --wm-bar-top: #000;
+  --wm-bar-bottom: #000;
+  --wm-border: #fff;
+  --wm-etch-dark: #fff;
+  --wm-etch-light: #000;
+  --wm-hot: #3d3d00;
+  --wm-hot-border: #ffff00;
+  --wm-checked: #00336b;
+  --wm-checked-hot: #3d3d00;
+  --wm-menu-bg: #000;
+  --wm-gutter: #000;
+  --wm-field-border: #fff;
+  --wm-field-bg: #000;
+  --wm-toolbar-border: #fff;
+  --wm-menu-border: #fff;
+  --wm-title-bottom: #000;
+  --wm-muted: #ddd;
+  --wm-error: #ff8080;
+  --wm-warning: #ffd060;
+  --wm-link: #ffff00;
+  --wm-row-hover: #3d3d00;
+  --wm-letter: #fff;
+  --wm-desk: #3a3a3a;
+}
+
+/* Focus that shows from across the room. */
+:root[data-scheme='contrast'] :focus-visible {
+  outline: 3px solid var(--wm-hot-border);
+  outline-offset: 1px;
+}
+
 :root[data-theme='blue'] {
   --wm-face: #c4dbf9;
   --wm-bar-top: #f3f8ff;
@@ -906,7 +973,8 @@ html.wm-titlebar .wm-format {
   cursor: default;
 }
 
-.wm-list-heading:not(:first-child) {
+.wm-list-heading:not(:first-child),
+.wm-list-group:not(:first-child) > .wm-list-heading {
   margin-top: 6px;
 }
 
@@ -1006,7 +1074,7 @@ html.wm-titlebar .wm-format {
   background: var(--wm-hot);
 }
 
-.wm-segment[aria-pressed='true'] {
+.wm-segment[aria-checked='true'] {
   background: var(--wm-checked-hot);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
 }
@@ -1881,6 +1949,14 @@ html.wm-titlebar .wm-format {
   margin: 0 0 0 auto;
 }
 
+.wm-options-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 0;
+}
+
 /* --- Tools > Options > Edit List (see replacementsDialog.ts) --------------------------------------- */
 
 .wm-replacements {
@@ -1995,6 +2071,11 @@ html.wm-titlebar .wm-format {
   :root {
     --wm-ease: 0ms;
   }
+
+  /* Saving still shows by its colour, without the pulse. */
+  .wm-sync[data-state='saving'] .wm-sync-dot {
+    animation: none;
+  }
 }
 
 /* --- Find and Replace ------------------------------------------------------------------------ */
@@ -2073,6 +2154,14 @@ html.wm-titlebar .wm-format {
   background: var(--wm-field-bg);
   color: var(--wm-text);
   font: 13px var(--wm-font);
+}
+
+/* A text box of several lines: as tall as its rows, with the same padding all round. No more specific than .wm-input, so a
+   text box's own rule (the math source, the properties comments) still wins. */
+.wm-input:where(textarea) {
+  height: auto;
+  padding: 5px 8px;
+  resize: vertical;
 }
 
 .wm-input:focus {
@@ -2235,7 +2324,7 @@ html.wm-titlebar .wm-format {
   width: 420px;
 }
 
-/* A card drawn over the document, not modal (the link form, linkPopover.ts; a sheet's filter, sheet/filterCard.ts). */
+/* A card drawn over the document, not modal (the link and alt text forms, linkPopover.ts and altTextPopover.ts; a sheet's filter, sheet/filterCard.ts). */
 .wm-dialog.wm-over {
   position: fixed;
   z-index: 50;
@@ -3517,4 +3606,103 @@ body.wm-fullscreen .wm-keys {
   height: 0;
   border: 0;
   visibility: hidden;
+}
+
+/* Text for screen readers only (ui/announce.ts, the reading layer's lists and buttons): kept in the page, not drawn. */
+.wm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A visually hidden control that has the keyboard shows itself, so a sighted keyboard user sees where they are. */
+.wm-sr-only:focus-visible {
+  z-index: 30;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 4px 8px;
+  clip-path: none;
+  background: var(--wm-menu-bg);
+  color: var(--wm-text);
+  outline: 2px solid var(--wm-accent);
+}
+
+/* Screen Reader Mode: the pages near the view described as HTML (ui/readingLayer.ts), laid over the canvas where each
+   line is drawn but not drawn itself, and letting the pointer through to the canvas. */
+.wm-reading {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  color: transparent;
+  /* Windows' contrast themes would give its text the system's color, showing it over the pages drawn on the canvas. */
+  forced-color-adjust: none;
+}
+
+.wm-reading-page {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
+.wm-reading-page ul,
+.wm-reading-page ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wm-reading-piece {
+  position: absolute;
+  margin: 0;
+  overflow: hidden;
+  font: 8px/1 var(--wm-font);
+  white-space: pre-wrap;
+}
+
+.wm-reading-piece a {
+  color: transparent;
+}
+
+/* Menu items, options and toolbar buttons that have the keyboard (F6, F10, arrows) show it by their highlight, which the theme
+   already draws for the pointer; the focus ring is for everything else. */
+.wm-item:focus-visible,
+.wm-title:focus-visible {
+  outline: none;
+}
+
+.wm-option:focus-visible {
+  outline: none;
+  background: var(--wm-hot);
+  box-shadow: inset 0 0 0 1px var(--wm-hot-border);
+}
+
+.wm-tbutton:focus-visible,
+.wm-swatch:focus-visible,
+.wm-dropdown:focus-visible {
+  outline: 2px solid var(--wm-hot-border);
+  outline-offset: -2px;
+}
+
+/* Windows' contrast themes: what the theme shows with a background alone (a pressed button, the highlighted menu item) also gets an edge. */
+@media (forced-colors: active) {
+  .wm-tbutton[aria-pressed='true'],
+  .wm-segment[aria-checked='true'],
+  .wm-item.active,
+  .wm-title.active,
+  .wm-option.active,
+  .wm-option[aria-selected='true'],
+  .wm-crow.selected {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
 }

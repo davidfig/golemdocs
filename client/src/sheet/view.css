@@ -140,6 +140,11 @@
   padding: 0 6px;
 }
 
+/* The two textareas of the cells, grouped for F6 only: the group lays nothing out. */
+.wm-sheet-cells {
+  display: contents;
+}
+
 /* The in-cell editor: a real textarea over the cell, growing to the right with what is typed. */
 .wm-sheet-editor {
   position: absolute;
@@ -337,11 +342,6 @@
   gap: 10px;
 }
 
-.wm-sheet-scenario-list {
-  height: 160px;
-  border: 1px solid var(--wm-border);
-}
-
 .wm-sheet-scenario-about {
   margin-top: 6px;
   min-height: 2.6em;
@@ -369,7 +369,7 @@
   opacity: 0.7;
 }
 
-/* What-If › Solver: a label beside its control (the goal, the method); the constraints' list shorter than scenarios'. */
+/* What-If › Solver: a label beside its control (the goal, the method). */
 .wm-sheet-solver-goal {
   display: flex;
   align-items: center;
@@ -379,11 +379,6 @@
 
 .wm-sheet-solver-goal .wm-input {
   width: 90px;
-}
-
-.wm-sheet-solver-list {
-  height: 110px;
-  border: 1px solid var(--wm-border);
 }
 
 /* A pivot button's card for several fields: the field's choice above the sort buttons. */

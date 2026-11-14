@@ -5,7 +5,7 @@ import { expect, test, type App } from './fixtures';
 import { importFile, text, waitForOpen, waitForSaved } from './helpers';
 
 const palette = (page: Page) => page.getByRole('dialog', { name: 'Command palette' });
-const search = (page: Page) => palette(page).getByRole('textbox', { name: 'Search commands and documents' });
+const search = (page: Page) => palette(page).getByRole('combobox', { name: 'Search commands and documents' });
 const options = (page: Page) => palette(page).getByRole('option');
 const option = (page: Page, label: string) => options(page).filter({ has: page.locator('.wm-palette-label', { hasText: new RegExp(`^${label}$`) }) });
 

@@ -5,8 +5,10 @@ import { t } from '../i18n/index.ts';
 import { SMOOTHING_LEVELS, lockGuidesOn, penPressureOn, pencilSmoothing, returnToSelectOn, selectAfterPencilOn, setLockGuides, setPenPressure, setPencilSmoothing, setReturnToSelect, setSelectAfterPencil, setShowGuides, showGuidesOn, type Smoothing } from './drawingOptions.ts';
 import { AUTOCORRECT_KEYS } from '../layout/autocorrect.ts';
 import { autoCorrectOptions, setAutoCorrect } from './autoCorrect.ts';
-import { h } from './dom.ts';
+import { h, segmented } from './dom.ts';
 import { choiceButton } from './dropdown.ts';
+import { CARET_WIDTHS, caretBlinks, caretWidth, setCaretBlinks, setCaretWidth, type CaretWidth } from './accessibilityOptions.ts';
+import { screenReaderOn, setScreenReader } from './screenReader.ts';
 import { desktopMenu } from '../desktop/bridge.ts';
 import { IS_MAC } from './shortcuts.ts';
 import { inAppMenuOnMac, keepMenuInFullScreen, setInAppMenuOnMac, setKeepMenuInFullScreen } from './fullScreen.ts';
@@ -39,9 +41,27 @@ export function optionsPanel(): HTMLElement {
     },
   );
   liveLimit.set(String(liveLimitMb()));
+  const widthNames: Record<CaretWidth, Parameters<typeof t>[0]> = { 1: 'a11y.options.thin', 2: 'a11y.options.medium', 3: 'a11y.options.thick' };
+  const widths = segmented(
+    t('a11y.options.caretWidth'),
+    CARET_WIDTHS.map((w) => ({ value: String(w), text: t(widthNames[w]) })),
+    (value) => {
+      setCaretWidth(Number(value) as CaretWidth);
+      widths.set(value);
+    },
+  );
+  widths.set(String(caretWidth()));
   return h(
     'div',
     { class: 'wm-options' },
+    h(
+      'fieldset',
+      {},
+      h('legend', { text: t('a11y.options.title') }),
+      check(t('a11y.options.screenReader'), screenReaderOn(), setScreenReader),
+      check(t('a11y.options.caretBlink'), caretBlinks(), setCaretBlinks),
+      h('div', { class: 'wm-options-row' }, h('span', { text: t('a11y.options.caretWidth') }), widths.el),
+    ),
     h('fieldset', {}, h('legend', { text: t('dialogs.options.view') }), check(t('dialogs.options.fullScreenMenu'), keepMenuInFullScreen(), setKeepMenuInFullScreen), check(t('dialogs.options.scrollPastEnd'), scrollPastEndOn(), setScrollPastEnd), ...(IS_MAC && desktopMenu() ? [check(t('dialogs.options.macInAppMenu'), inAppMenuOnMac(), setInAppMenuOnMac)] : [])),
     h('fieldset', {}, h('legend', { text: t('dialogs.options.autocorrect') }), ...AUTOCORRECT_KEYS.map((rule) => check(t(`dialogs.options.${rule}`), autoCorrectOptions()[rule], (on) => setAutoCorrect(rule, on))), editList),
     h(

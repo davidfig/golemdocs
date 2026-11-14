@@ -1,5 +1,5 @@
 import { RECT_INSTANCE_BYTES as INSTANCE_BYTES } from '@golemdocs/layout';
-import { DARK_PAGES_GLSL, createProgram, uniforms } from '../program.ts';
+import { DARK_PAGES_GLSL, createProgram, setForcedUniforms, uniforms, type ForcedColors } from '../program.ts';
 import type { Camera } from '../../view/camera.ts';
 
 // Retained rectangles in document space (a page's shading, underlines, borders), uploaded
@@ -88,6 +88,8 @@ export class RectBatchRenderer {
   private readonly u: Record<'u_translate' | 'u_scale' | 'u_viewport' | 'u_darkPages', WebGLUniformLocation>;
   /** Draw colors as they show on a dark page (Dark Pages). */
   darkPages = false;
+  /** Draw in the system's high contrast colors (see ForcedColors). */
+  forced: ForcedColors | null = null;
 
   constructor(private readonly gl: WebGL2RenderingContext) {
     this.program = createProgram(gl, VERTEX, FRAGMENT);
@@ -103,6 +105,7 @@ export class RectBatchRenderer {
     gl.uniform1f(this.u.u_scale, scale);
     gl.uniform2f(this.u.u_viewport, camera.width, camera.height);
     gl.uniform1f(this.u.u_darkPages, this.darkPages ? 1 : 0);
+    setForcedUniforms(gl, this.program, this.forced);
     let draws = 0;
     for (const batch of batches) {
       const vao = batch.prepare(gl);

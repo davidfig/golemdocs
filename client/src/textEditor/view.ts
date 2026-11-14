@@ -18,6 +18,8 @@ import { MAX_SHARED_REPLACEMENTS, nextMatch, replaceAllLines, replaceRangesOf, s
 import { mapOffset, type TextOp, type TextReplica } from '@golemdocs/ops/textOps';
 import { readClipboard, writeClipboardText } from '../ui/clipboard.ts';
 import { attachTextInput, editKey, focusTextInput, type EditKey } from '../ui/textInput.ts';
+import { CaretMirror, linesContext } from '../ui/caretMirror.ts';
+import { onScreenReaderChange, screenReaderOn } from '../ui/screenReader.ts';
 import type { SpellIssue, TextMark } from '../layout/protocol.ts';
 import { TextSpell } from './spell.ts';
 import type { SpellDeps } from './spell.ts';
@@ -34,6 +36,7 @@ export { textRoom } from './textSync.ts';
 export type { TextRoom, TextRoomOptions } from './textSync.ts';
 import { CELL, LINE, LineScene } from './scene.ts';
 import type { Entries, Rect } from './scene.ts';
+import type { ForcedColors } from '../webgl/program.ts';
 import './view.css';
 
 const MAX_COPY_LINES = 500_000;
@@ -172,6 +175,8 @@ export class TextEditorView {
     parent.append(this.el);
 
     this.listenToInput();
+    this.mirror = new CaretMirror(this.input);
+    onScreenReaderChange(() => this.describe());
     this.findInput.addEventListener('input', () => {
       this.keepMessage = false;
       this.searchSoon();
@@ -384,12 +389,12 @@ export class TextEditorView {
   }
 
   /** Draws the text on the canvas, as the (shared) camera sees it. Null when nothing is open. */
-  draw(darkPages: boolean, caretOn: boolean): LineFrame | null {
+  draw(darkPages: boolean, caretOn: boolean, forced: ForcedColors | null = null): LineFrame | null {
     const index = this.index;
     if (!index) return null;
     const started = performance.now();
     if (this.revealing > 0) this.applyReveal();
-    const frame = this.renderer.draw(this.deps.camera, { darkPages, caretVisible: caretOn && this.focused, selection: this.sel, highlight: this.highlight, current: this.current, composing: this.composing, marks: this.spell?.active ? (line, text) => this.marksOf(line, text) : undefined, remotes: this.remotePositions() });
+    const frame = this.renderer.draw(this.deps.camera, { darkPages, forced, caretVisible: caretOn && this.focused, selection: this.sel, highlight: this.highlight, current: this.current, composing: this.composing, marks: this.spell?.active ? (line, text) => this.marksOf(line, text) : undefined, remotes: this.remotePositions() });
     // Laying lines out settled their heights; a caret still out of view is brought in.
     if (this.revealing > 0) this.applyReveal();
     this.lastFrame = frame;
@@ -423,6 +428,19 @@ export class TextEditorView {
   private announceSelection(): void {
     const index = this.index;
     if (index && this.onPresence) this.onPresence(offsetOf(index, this.sel.anchor), offsetOf(index, this.sel.focus));
+    this.describe();
+  }
+
+  private readonly mirror: CaretMirror;
+
+  /** Screen Reader Mode: the textarea holds the caret's line (or the lines selected), with the selection where ours is (see ui/caretMirror.ts). */
+  private describe(): void {
+    const index = this.index;
+    if (!screenReaderOn() || !index) {
+      this.mirror.show(null);
+      return;
+    }
+    this.mirror.show(linesContext((line) => shown(index, line).text, this.sel.anchor, this.sel.focus));
   }
 
   /** What counts as a mistake changed (the person turned checking on or off, or added or ignored a word): check the lines again. */

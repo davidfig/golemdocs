@@ -252,10 +252,15 @@ export class FormLayer {
   }
 
   private syncInput(el: HTMLElement, field: WireField): void {
+    // Named by what the field is for, where the PDF says (its TU), rather than by its name in the file ("f1_01[0]").
+    // Each of a group's radio buttons also says its own choice. A live field's tooltip says where it comes from.
+    const label = field.description || field.name;
     const live = parseLiveTag(field.live);
-    el.title = live ? t('live.readOnly', { source: live.source }) : field.name;
+    el.title = live ? t('live.readOnly', { source: live.source }) : label;
     el.classList.toggle('wm-field-live', !!live);
-    el.setAttribute('aria-label', field.name);
+    el.setAttribute('aria-label', field.kind === 'radio' && field.onState ? `${label}, ${field.onState}` : label);
+    if (field.required && field.kind !== 'checkbox' && field.kind !== 'radio') el.setAttribute('aria-required', 'true');
+    else el.removeAttribute('aria-required');
     if (el instanceof HTMLButtonElement) {
       const on = !!field.onState && field.value === field.onState;
       el.setAttribute('aria-checked', String(on));

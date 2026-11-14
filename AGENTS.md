@@ -46,9 +46,9 @@ Another person and another device of the same account are the same thing: a seco
 
 `docs/README.md` indexes the docs, and `docs/architecture.md` with `docs/architecture/*.md` explains how each area works. When a change alters how an area works (a key file added, moved or removed, a changed data flow or protocol, a new invariant or rule), update that area's doc in the same change; a rule added to this file belongs in the matching doc too. Update `docs/actions-status.md` when you hook up an action. Skip it for changes that leave the design as it was (a bug fix, new copy, a new menu item).
 
-## Marketing clip
+## Marketing clips
 
-The home page's "It opens everything" picture plays `client/public/home/war-and-peace.webm`, a recording of the real app. When the app's look changes in a way the clip shows (toolbars, menus, the status bar, Page Grid), re-record it with `pnpm record:home` (`scripts/marketing/record-war-and-peace.ts`). It needs the user's dev server on :5173 and takes about a minute; see the script's header for options.
+Two pictures on the home page are recordings of the real app, each in the app's light theme and, for the site's dark theme, in its dark theme with dark pages (`-dark.webm`). The "It opens everything" picture plays `client/public/home/war-and-peace.webm` (War and Peace in Page Grid), re-recorded with `pnpm record:home` (`scripts/marketing/record-war-and-peace.ts`). The spreadsheet section plays `client/public/home/workbook.webm` (a workbook of a million orders zooming out to its whole width and back), re-recorded with `pnpm record:workbook` (`scripts/marketing/record-workbook.ts`); it opens a workbook that `scripts/marketing/make-workbook.ts` writes to `.cache/marketing/orders.xlsx` the first time (about 80 MB, never committed). When the app's look changes in a way the clips show (toolbars, menus, the status bar, Page Grid, the spreadsheet view, the dark theme), re-record them. Each script records both themes, needs the user's dev server on :5173 (or `--url` to a worktree's own) and takes a minute or two; see the scripts' headers for options, and `scripts/marketing/clip.ts` for what they share.
 
 ## Settings that follow the account
 
@@ -85,6 +85,16 @@ The app should look and behave the same everywhere: the same buttons, icons, fon
 - **In-document dialogs, not modal ones, where it makes sense.** A small edit of something in the document itself (a link, and the like) is a card or form drawn over the document next to what it changes: opened from the pointer or the caret, non-modal, closed by Escape or a press elsewhere, and keyboard-reachable. Model new ones on `LinkPopover` (`ui/linkPopover.ts`). A modal `<dialog>` (`showDialog`) stays for what is about the whole document or the app (page setup, options, find, files, sign-in) or needs a lot of room. When a command opens such a card, make sure the command runner does not hand the focus back to the editor (see `CommandRegistry.execute`).
 - **One look everywhere.** Fonts, sizes, spacing, colors, borders and radii come from the shared styles and `--wm-*` variables in `ui.css`, never from values chosen for one place. This holds for every part of the app, dialogs and in-document cards and forms included: build them from the shared parts (`.wm-dialog` with `dialogTitleBar`, `.wm-dialog-body`, `.wm-dialog-buttons`, `.wm-button`, `.wm-input`, `.wm-find-message`), so a new one looks like the ones around it. Don't write a new font-size, font-family, button or input style; if a shared one is missing something, extend it and let everything use it. Check a new or changed UI next to an existing dialog (Find, Page Setup) before finishing.
 - **Draw icons, don't type them.** Use an SVG (`iconButton`) rather than a character such as `×` or `▸`: characters are placed differently by each font, so they don't line up with each other.
+
+## Accessibility comes with every feature
+
+A feature is not finished until people who use a screen reader, only a keyboard, or high contrast can use it too. Build it in the same change, never as a follow-up; see `docs/architecture/accessibility.md` for how each piece works.
+
+- **Keyboard:** everything a pointer does has a keyboard way to do it (a command or menu item at least, for drag and drop and double-clicks). New panels and toolbars join the F6 regions (`ui/focusRegions.ts`); dialogs and cards close with Escape and give the focus back.
+- **Names and roles:** every control has an accessible name (`aria-label` on icon-only buttons, a `<label>` on inputs) and the ARIA role of its pattern. Use the shared controls (`dropdown`, `choiceButton`, `listBox`, `segmented`, `colorButton`, `LayerTree`, `showDialog`), which already do this, rather than building new ones.
+- **The canvas:** what only shows on the canvas must reach Screen Reader Mode: the caret's text through the textarea mirror (`CaretMirror`), the structure through the reading layer, and changes the person did not type (a page turned, a cell moved to, a result found) through `announce()` (`ui/announce.ts`). Do this work only while `screenReaderOn()`.
+- **Looks:** new colours work in the High Contrast theme and Windows contrast themes (`forced-colors`, `forcedColors()` for anything drawn on a canvas), nothing is shown by colour alone, and nothing moves when the system asks for reduced motion.
+- **Tests:** add e2e checks in `e2e/accessibility/` (roles, names and the keyboard path, through `getByRole`), and say in the change if a manual screen reader pass is needed.
 
 ## Localization
 

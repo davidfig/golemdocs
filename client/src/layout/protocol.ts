@@ -18,6 +18,7 @@ import type { AutoCorrectOptions } from './autocorrect.ts';
 import type { PickedStyle } from './pdfAnnotator.ts';
 import type { LookUp } from '../spelling/thesaurus.ts';
 import type { SiteLinks } from '../site.ts';
+import type { A11yHeading, A11yPage, CaretContext } from './a11y.ts';
 
 export type DocumentSource =
   /** A .docx file's bytes (transferred to the worker). */
@@ -115,6 +116,8 @@ export type WireCommand =
    * or the end of the selection, and reports it (see `SelectionUpdate.spell`).
    */
   | { kind: 'spellNext'; from: 'documentStart' | 'selectionStart' | 'selectionEnd'; grammar: boolean }
+  /** Edit › Next / Previous Heading or Table: the caret goes to its start (see `SelectionUpdate.jump` when there is none). */
+  | { kind: 'jump'; to: 'heading' | 'table'; backward: boolean }
   /** Words to accept as spelled correctly in every document (the user's dictionary). */
   | { kind: 'spellWords'; words?: string[] }
   /** What is ignored in the open document: the words and grammar rules, replacing what was ignored before. */
@@ -129,7 +132,7 @@ export type WireCommand =
   | { kind: 'liveOwner'; owner: LiveOwner }
   /** Right click at a point of a page: selects the mistake there and reports it (see `SelectionUpdate.spell`, `menu`). */
   /** The mistake under a point, for a menu. Selected in the document (a right click), unless `select` is false (the pointer only rests on it). */
-  | { kind: 'spellAt'; page: number; x: number; y: number; select?: boolean; /** False while spell checking is off: only whether the point is in a table is reported. */ check?: boolean }
+  | { kind: 'spellAt'; page: number; x: number; y: number; select?: boolean; /** False while spell checking is off: only whether the point is in a table is reported. */ check?: boolean; /** At the caret rather than the point (the menu key, Shift+F10): the worker's own caret, which the page's may not have caught up with. */ caret?: boolean }
   /** Count the words, characters, paragraphs, lines and pages of the document (or of the selection): the answer is `SelectionUpdate.stats`. */
   | { kind: 'countWords'; /** Count the whole document even if there is a selection. */ whole?: boolean; /** The status bar is asking: the answer comes back as `footerStats`, not `stats`. */ footer?: boolean }
   /** Paste formatted text from the clipboard's HTML (`text` is its plain text, used if the HTML can't be read). */
@@ -258,6 +261,10 @@ export type ToWorker =
   | { type: 'reflow'; width: number | null }
   /** Draw formatting marks (¶, dots for spaces, tab arrows) on pages laid out from now on, and lay the open document out again. */
   | { type: 'marks'; on: boolean }
+  /** Screen Reader Mode: send the text around the caret with each selection (`SelectionUpdate.context`), and answer `a11yPages`. */
+  | { type: 'a11y'; on: boolean }
+  /** Screen Reader Mode: the structure of these pages (by id) for the reading layer, and the document's headings when `headings` is set. */
+  | { type: 'a11yPages'; doc: number; pages: number[]; headings: boolean }
   /** The page's language, so errors and default names the worker makes are in it. Sent before any `open`. */
   | { type: 'locale'; locale: string }
   /** A document is on its way (still downloading): load the faces nearly every document uses now, so they are there when its bytes are. */
@@ -418,7 +425,7 @@ export interface SelectionUpdate {
   /** The equation the selection is (exactly), for Insert Equation to change. */
   math?: MathEquation | null;
   /** The picture the selection is exactly, and where it is: page id and rectangle in points (for the frame around it). */
-  picture?: { page: number; x: number; y: number; width: number; height: number; floating: boolean; /** Which picture of the text it is: its paragraph (among the document's) and its offset in it. */ at: { paragraph: number; offset: number }; /** The picture's part of the package, to fetch its bytes. */ part: string; svg?: string } | null;
+  picture?: { page: number; x: number; y: number; width: number; height: number; floating: boolean; /** Which picture of the text it is: its paragraph (among the document's) and its offset in it. */ at: { paragraph: number; offset: number }; /** The picture's part of the package, to fetch its bytes. */ part: string; svg?: string; /** Its alt text. */ description?: string } | null;
   /** The Format Painter has picked up formatting and is waiting for a selection. */
   painting?: boolean;
   /** Set once after a Find (whether it found a match) or Replace All (how many it replaced). */
@@ -450,6 +457,12 @@ export interface SelectionUpdate {
   pdfNotice?: 'partialRedaction';
   /** Set once for fonts in PDF edits that the app has no equivalent of, so different ones were used. */
   pdfFontNotice?: string[];
+  /** Screen Reader Mode: the text around the caret, for the hidden textarea (null: no text is selected, a picture or a PDF's page say). */
+  context?: CaretContext | null;
+  /** Screen Reader Mode: the spelling or grammar mistake the caret is in (null: none). */
+  mistake?: { kind: 'spelling' | 'grammar'; text: string; paragraph: number; start: number } | null;
+  /** After a `jump` that found nothing that way: what was looked for. */
+  jumpMissed?: 'heading' | 'table';
 }
 
 export type FromWorker =
@@ -467,6 +480,8 @@ export type FromWorker =
   | ({ type: 'selection'; doc: number } & SelectionUpdate)
   /** The selected text as HTML (`text` is the plain text it was made from, to match it with the selection), for copy. */
   | { type: 'selectionHtml'; doc: number; text: string; html: string }
+  /** The answer to `a11yPages`: the pages' structure (those still laid out), and the headings when asked for. */
+  | { type: 'a11yPages'; doc: number; pages: A11yPage[]; headings?: A11yHeading[] }
   | { type: 'error'; doc: number; message: string }
   /** Something to tell the person that isn't a failure to open (a picture that could not be shared, say). */
   | { type: 'notice'; doc: number; message: string }

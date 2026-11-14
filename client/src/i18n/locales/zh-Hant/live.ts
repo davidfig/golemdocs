@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "將游標放在有標題的表格、書籤或標題下的章節中，即可將其複製為即時連結。",
+  'live.insideLive': "此儲存格已屬於一個即時區塊，因此不能在這裡貼上即時連結。請貼到區塊外的空白儲存格中。",
   'live.readOnly': "此部分顯示 {source}，並從那裡保持更新。請在來源檔案中修改。",
   'live.notUpdated': "{name} 中的即時區塊未更新：{problem}",
   'live.resultsOnly': "即時區塊在這裡仍會更新；下載的 {extension} 檔案只包含它們目前顯示的內容。",

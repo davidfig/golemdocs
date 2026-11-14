@@ -120,7 +120,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
       await expect(row(page, 'alpha')).toHaveAttribute('aria-level', '1');
     });
 
-    test('sidebar: a folder can\'t be dragged into itself or into a folder inside it', async ({ browser, baseURL }) => {
+    test('sidebar: a folder can\'t be dragged into itself or into a folder inside it', { tag: '@heavy' }, async ({ browser, baseURL }) => {
       const { page } = await start(engine, browser, baseURL, []);
       await newSidebarFolder(page, 'Outer');
       await newSidebarFolder(page, 'Inner');

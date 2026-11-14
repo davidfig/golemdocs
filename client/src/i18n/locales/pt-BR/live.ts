@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "Coloque o cursor em uma tabela com título, um indicador ou uma seção sob um título para copiá-la como link dinâmico.",
+  'live.insideLive': "Esta célula já faz parte de um bloco dinâmico, então não é possível colar um link dinâmico aqui. Cole-o em uma célula vazia fora do bloco.",
   'live.readOnly': "Esta parte mostra {source} e é mantida atualizada a partir dele. Altere-o lá.",
   'live.notUpdated': "Um bloco dinâmico em {name} não foi atualizado: {problem}",
   'live.resultsOnly': "Seus blocos dinâmicos continuam atualizados aqui; um arquivo {extension} baixado tem só o que eles mostram agora.",

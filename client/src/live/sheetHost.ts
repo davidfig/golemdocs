@@ -20,7 +20,7 @@ import { liveTagText } from './liveMarks.ts';
 import { formulaOf, sheetLiveRanges } from './sheetRanges.ts';
 import type { SheetLive } from './sheetRanges.ts';
 import { externalCellsRead, externalTitle, refreshExternal } from '../sheet/externals.ts';
-import type { LiveResult } from './result.ts';
+import type { LiveNumber, LiveResult } from './result.ts';
 import { resultOf, stampOf } from './sources.ts';
 import type { SourceLookup } from './sources.ts';
 import type { UpdateReport } from './update.ts';
@@ -36,11 +36,19 @@ export function numberOf(text: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** A result's cells, as rows; null when it has none (a picture, part of a text document). */
-function cellsOf(result: LiveResult): string[][] | null {
-  if (result.kind === 'table') return result.rows;
-  if (result.kind === 'value') return [[result.text]];
+/** A result's cells, as rows, and its numbers with their formats where it has them (from a workbook); null when it has
+ * no cells (a picture, part of a text document). */
+function cellsOf(result: LiveResult): { rows: string[][]; values?: (LiveNumber | null)[][] } | null {
+  if (result.kind === 'table') return { rows: result.rows, ...(result.values && { values: result.values }) };
+  if (result.kind === 'value') return { rows: [[result.text]], ...(result.number && { values: [[result.number]] }) };
   return null;
+}
+
+/** A cell's style with a number format: the cell's own look (font, fill, borders, alignment) with the source's format. */
+function withFormat(book: Workbook, style: number, format: string): number {
+  const own = book.styles.format(style);
+  const numFmt = book.styles.formatId(format);
+  return own.numFmt === numFmt ? style : book.styles.internFormat({ ...own, numFmt });
 }
 
 /** The range a result's cells fill from a live range's top left. */
@@ -78,7 +86,7 @@ function blockedAt(book: Workbook, sheetIndex: number, sheet: Worksheet, self: S
 
 /** Writes a result's cells over `next` (from a live range's top left), clearing what `old` filled beyond it; formulas in
  * either are taken out, since the cells are the source's now. */
-function fill(book: Workbook, sheet: Worksheet, old: CellRange, next: CellRange, rows: string[][]): void {
+function fill(book: Workbook, sheet: Worksheet, old: CellRange, next: CellRange, rows: string[][], values?: (LiveNumber | null)[][]): void {
   const { r0, c0 } = next;
   const styleAt = (r: number, c: number): number => sheet.grid.columns[c]?.style(r) ?? 0;
   // What the old result filled and the new one does not is cleared (its formatting stays, as Excel's Clear Contents).
@@ -87,8 +95,11 @@ function fill(book: Workbook, sheet: Worksheet, old: CellRange, next: CellRange,
   for (let r = next.r0; r <= next.r1; r++) {
     for (let c = next.c0; c <= next.c1; c++) {
       const text = rows[r - r0]?.[c - c0] ?? '';
+      // A workbook's number keeps its value and format (currency, a date); text from elsewhere is read as a number if it is one.
+      const value = values?.[r - r0]?.[c - c0];
       const number = numberOf(text);
-      if (!text) sheet.grid.set(r, c, Kind.Empty, 0, styleAt(r, c));
+      if (value) sheet.grid.set(r, c, Kind.Number, value.n, withFormat(book, styleAt(r, c), value.format));
+      else if (!text) sheet.grid.set(r, c, Kind.Empty, 0, styleAt(r, c));
       else if (number !== null) sheet.grid.set(r, c, Kind.Number, number, styleAt(r, c));
       else sheet.grid.set(r, c, Kind.String, book.strings.add(text), styleAt(r, c));
     }
@@ -113,8 +124,8 @@ export async function updateSheetLive(book: Workbook, lookup: SourceLookup, opti
       report.problems.push({ source: live.tag.source, code: result.code, ...(result.detail !== undefined && { detail: result.detail }) });
       continue;
     }
-    const rows = cellsOf(result);
-    if (!rows) {
+    const cells = cellsOf(result);
+    if (!cells) {
       report.problems.push({ source: live.tag.source, code: 'unsupported' });
       continue;
     }
@@ -123,14 +134,14 @@ export async function updateSheetLive(book: Workbook, lookup: SourceLookup, opti
     const sheet = book.sheets[live.sheet];
     if (!sheet || !isWorksheet(sheet)) continue;
     await loadSheet(book, live.sheet);
-    const range = extentOf(live.range, rows);
+    const range = extentOf(live.range, cells.rows);
     // A result that needs cells the person (or another live range) is using keeps its last one, and says so.
     const blocked = blockedAt(book, live.sheet, sheet, live, live.tag.stamp ? live.range : null, range);
     if (blocked) {
       report.problems.push({ source: live.tag.source, code: 'blocked', detail: blocked });
       continue;
     }
-    fill(book, sheet, live.range, range, rows);
+    fill(book, sheet, live.range, range, cells.rows, cells.values);
     live.name.formula = formulaOf(sheet, range);
     live.name.attrs = { ...live.name.attrs, comment: liveTagText({ source: live.tag.source, stamp, by: own.by }) };
     book.dirty = true;

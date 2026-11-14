@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "将光标放在带标题的表格、书签或标题下的章节中，即可将其复制为实时链接。",
+  'live.insideLive': "此单元格已属于一个实时块，因此不能在这里粘贴实时链接。请粘贴到块外的空单元格中。",
   'live.readOnly': "此部分显示 {source}，并从那里保持更新。请在源文件中修改。",
   'live.notUpdated': "{name} 中的实时块未更新：{problem}",
   'live.resultsOnly': "实时块在这里仍会更新；下载的 {extension} 文件只包含它们当前显示的内容。",

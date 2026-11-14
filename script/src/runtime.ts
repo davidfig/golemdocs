@@ -33,7 +33,7 @@ export type RunMode = 'describe' | 'produce' | 'act';
 
 /** The app to the worker. */
 export type ToRuntime =
-  | { type: 'run'; program: string; mode: RunMode; today: ScriptToday; now?: string; seed: number }
+  | { type: 'run'; program: string; mode: RunMode; today: ScriptToday; now?: string; seed: number; /** What the runtime says, in the person's language (messages.ts `RUNTIME_MESSAGES`). */ messages?: Record<string, string> }
   | { type: 'go' }
   | { type: 'reply'; id: number; ok: true; value: unknown }
   | { type: 'reply'; id: number; ok: false; error: string };
@@ -73,6 +73,9 @@ export function scriptRuntime(port: RuntimePort): void {
     }
   }
   const post = (message: unknown): void => port.post(message);
+  /** What the runtime says, in the person's language when the app gave it (the English otherwise). */
+  let messages: Record<string, string> = {};
+  const said = (key: string, english: string): string => messages[key] ?? english;
   let nextId = 1;
   const waiting = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
   let go: (() => void) | null = null;
@@ -94,7 +97,7 @@ export function scriptRuntime(port: RuntimePort): void {
   const deterministic = (seed: number): void => {
     const RealDate = Date;
     const noClock = (): never => {
-      throw new Error('A producer cannot read the clock: use `today`, which the app gives it');
+      throw new Error(said('noClock', 'A producer cannot read the clock: use `today`, which the app gives it'));
     };
     // Not a subclass (its prototype chain would lead back to the real Date), and the real one's instances point here too.
     const FixedDate = function (this: unknown, ...args: unknown[]) {
@@ -134,7 +137,7 @@ export function scriptRuntime(port: RuntimePort): void {
           return array;
         },
       });
-      Object.defineProperty(crypto, 'randomUUID', { value: () => { throw new Error('A producer cannot make random ids: its block must show the same for the same files'); } });
+      Object.defineProperty(crypto, 'randomUUID', { value: () => { throw new Error(said('noRandomIds', 'A producer cannot make random ids: its block must show the same for the same files')); } });
     }
     g.Date = FixedDate;
     let state = seed >>> 0 || 1;
@@ -229,12 +232,12 @@ export function scriptRuntime(port: RuntimePort): void {
     try {
       meta = loaded.meta === undefined ? null : JSON.parse(JSON.stringify(loaded.meta));
     } catch {
-      throw new Error('`meta` must be plain data');
+      throw new Error(said('plainMeta', '`meta` must be plain data'));
     }
     post({ type: 'meta', meta });
     if (mode === 'describe') return;
     await new Promise<void>((resolve) => (go = resolve));
-    if (typeof loaded.default !== 'function') throw new Error('A script exports a function as its default: `export default async function (api) { ... }`');
+    if (typeof loaded.default !== 'function') throw new Error(said('defaultExport', 'A script exports a function as its default: `export default async function (api) { ... }`'));
     let usedDate = false;
     const api: Record<string, unknown> = {
       ...results,
@@ -258,7 +261,7 @@ export function scriptRuntime(port: RuntimePort): void {
       api.open = async (path: string, options: { create?: boolean } = {}) => documentHandle(await ask('open', text(path), !!options.create));
       api.create = async (path: string, markdown = '') => {
         const doc = documentHandle(await ask('open', text(path), true));
-        if (!doc.isEmpty) throw new Error(`${text(path)} is already there`);
+        if (!doc.isEmpty) throw new Error(said('alreadyThere', '{path} is already there').replace('{path}', text(path)));
         if (markdown) doc.append(markdown);
         return doc;
       };
@@ -272,6 +275,7 @@ export function scriptRuntime(port: RuntimePort): void {
     if (message.type === 'run' && !started) {
       mode = message.mode;
       started = { program: message.program, today: message.today, now: message.now, seed: message.seed };
+      messages = message.messages ?? {};
       start().catch(fail);
     } else if (message.type === 'go') go?.();
     else if (message.type === 'reply') {

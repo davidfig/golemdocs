@@ -177,7 +177,7 @@ import type { LiveMarker } from './live/background.ts';
 import { liveLimitBytes } from './live/backgroundLimit.ts';
 import { learnAccountOwner, liveOwner, newBlockBy, setLiveAccount } from './live/ownerStore.ts';
 import { LiveCheckLog } from './live/checkLog.ts';
-import { afterChange, anyMoved, placedDocs, retargets, shortestTitle, type LibraryChange, type LibrarySnapshot } from './linkRename.ts';
+import { afterChange, anyFolderMoved, anyMoved, folderRetargets, mergeRetargets, placedDocs, retargets, shortestTitle, type LibraryChange, type LibrarySnapshot } from './linkRename.ts';
 import { decodeImage, encodeCanvas, makeCanvas, toPng, transcode } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
 import { formatAllows } from './ui/formats.ts';
@@ -2814,9 +2814,9 @@ function linkPlaces(): LinkPlaces<LibraryEntry> {
 }
 
 // --- Keeping links working -------------------------------------------------------------------
-// Renaming or moving a document or folder can leave the links to it (`[[Plan]]`, `[[Notes/Plan]]`) naming nothing. So
-// the documents that link to a moved one are found from their search indexes (which list their links) and the links are
-// written again (see linkRename.ts, formats/docLinks.ts). Done after the change, in the background, one change at a time.
+// Renaming or moving a document or folder can leave the links to it (`[[Plan]]`, `[[Notes/Plan]]`, a live block's source,
+// a built-in block's folder) naming nothing. So the documents that link to a moved one are found from their search indexes
+// (which list their links) and the links are written again (see linkRename.ts, formats/docLinks.ts). Done after the change, in the background, one change at a time.
 
 function librarySnapshot(): LibrarySnapshot {
   return { docs: library.entries.map((e) => ({ key: e.key, name: e.name, folderId: folderOf(e, library.folders) })), folders: library.folders };
@@ -2828,19 +2828,21 @@ let linkUpdates: Promise<void> = Promise.resolve();
 function keepLinks(change: LibraryChange): () => void {
   const before = librarySnapshot();
   const after = afterChange(before, change);
-  if (!anyMoved(placedDocs(before), placedDocs(after))) return () => {};
+  if (!anyMoved(placedDocs(before), placedDocs(after)) && !anyFolderMoved(before, after)) return () => {};
   return () => {
     linkUpdates = linkUpdates
-      .then(() => updateLinks(placedDocs(before), placedDocs(after)))
+      .then(() => updateLinks(before, after))
       .catch((e: Error) => reportError(t('app.linksUpdateFailed', { message: e.message })));
   };
 }
 
-async function updateLinks(before: ReturnType<typeof placedDocs>, after: ReturnType<typeof placedDocs>): Promise<void> {
+async function updateLinks(before: LibrarySnapshot, after: LibrarySnapshot): Promise<void> {
   await saving; // the open document's links are in its saved copy
   const own = searchableDocuments(library.entries, [], searchSources);
   await searchLibrary.sync(own);
-  const plan = retargets(before, after, await searchLibrary.links(own));
+  const links = await searchLibrary.links(own);
+  // Links to documents, and built-in live blocks' folders (`@list:Characters`).
+  const plan = mergeRetargets(retargets(placedDocs(before), placedDocs(after), links), folderRetargets(before, after, links));
   let updated = 0;
   let skipped = 0;
   for (const [key, renames] of plan) {

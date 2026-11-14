@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "Setzen Sie den Cursor in eine Tabelle mit Titel, eine Textmarke oder einen Abschnitt unter einer Überschrift, um ihn als Live-Link zu kopieren.",
+  'live.insideLive': "Diese Zelle gehört schon zu einem Live-Block, daher kann hier kein Live-Link eingefügt werden. Fügen Sie ihn in eine leere Zelle außerhalb des Blocks ein.",
   'live.readOnly': "Dieser Teil zeigt {source} und wird von dort aktuell gehalten. Ändern Sie ihn dort.",
   'live.notUpdated': "Ein Live-Block in {name} wurde nicht aktualisiert: {problem}",
   'live.resultsOnly': "Die Live-Blöcke bleiben hier aktuell; eine heruntergeladene {extension}-Datei enthält nur, was sie gerade zeigen.",

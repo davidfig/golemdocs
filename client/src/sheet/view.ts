@@ -1814,8 +1814,9 @@ export class SheetEditorView {
     const source = clipboardLiveLink(text, html);
     if (source) {
       const by = await this.deps.blockBy?.();
-      await this.edit({ kind: 'addLive', row: this.active.row, col: this.active.col, source, ...(by && { by }) });
-      this.deps.liveAdded?.(source);
+      const changed = await this.edit({ kind: 'addLive', row: this.active.row, col: this.active.col, source, ...(by && { by }) });
+      // Refused (the cell is in another live range, which says why): nothing to fill.
+      if (changed?.ranges.length) this.deps.liveAdded?.(source);
       return;
     }
     let rows: string[][] = [];
@@ -2294,6 +2295,8 @@ function messageFor(code: string): string {
       return t('sheet.tableOverlap');
     case 'sheetProtected':
       return t('sheet.sheetProtected');
+    case 'liveInside':
+      return t('live.insideLive');
     case 'noChartData':
       return t('sheet.noChartData');
     case 'noPivots':

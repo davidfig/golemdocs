@@ -121,7 +121,7 @@ test('the runner runs a producer only with a grant, asks when a person started i
   grants.set('Scripts/loop.ts', { reads: [], writes: [], trigger: '' });
   const loop = await runner.produce('Scripts/loop.ts');
   assert.equal(loop.kind === 'error' && loop.code, 'script');
-  assert.match(loop.kind === 'error' ? loop.detail ?? '' : '', /cycle/);
+  assert.match(loop.kind === 'error' ? loop.detail ?? '' : '', /depends on this document/);
   assert.deepEqual(await runner.produce('Scripts/none.ts'), { kind: 'error', code: 'missing', detail: 'Scripts/none.ts' });
   answer = null;
   const writer = await runner.produce('Scripts/writer.ts', { interactive: true });

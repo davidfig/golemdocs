@@ -55,9 +55,9 @@ test('a workbook gives a defined range as a table and a defined cell as a value'
   assert.deepEqual(range.rows, [['Item', 'Amount'], ['Rent', '2100'], ['Food', '640']]);
   assert.equal(range.header, true);
   assert.deepEqual(range.align, ['left', 'right']);
-  assert.deepEqual(await sheetResult(bytes, 'Total'), { kind: 'value', text: '2740' });
-  assert.deepEqual(await sheetResult(bytes, 'Budget!B2'), { kind: 'value', text: '2100' });
-  assert.deepEqual(await sheetResult(bytes, 'A3:B3'), { kind: 'table', rows: [['Food', '640']], header: false, align: ['left', 'right'] });
+  assert.deepEqual(await sheetResult(bytes, 'Total'), { kind: 'value', text: '2740', number: { n: 2740, format: 'General' } });
+  assert.deepEqual(await sheetResult(bytes, 'Budget!B2'), { kind: 'value', text: '2100', number: { n: 2100, format: 'General' } });
+  assert.deepEqual(await sheetResult(bytes, 'A3:B3'), { kind: 'table', rows: [['Food', '640']], header: false, align: ['left', 'right'], values: [[null, { n: 640, format: 'General' }]] });
   assert.deepEqual(await sheetResult(bytes, 'Nope'), { kind: 'error', code: 'notFound', detail: 'Nope' });
   assert.deepEqual(await sheetResult(bytes, 'table:Nope'), { kind: 'error', code: 'noTable', detail: 'Nope' });
 });
@@ -542,7 +542,7 @@ test('Copy as Live Link names a selection by its defined name when it has one, e
   book.sheets[0].name = 'Home budget';
   assert.equal(liveAddress(book, 0, { r0: 1, c0: 0, r1: 1, c1: 0 }), "'Home budget'!A2");
   // What it gives is read back to the same cells.
-  assert.deepEqual(await sheetResult(await budget(), 'Budget!A2:B3'), { kind: 'table', rows: [['Rent', '2100'], ['Food', '640']], header: false, align: ['left', 'right'] });
+  assert.deepEqual(await sheetResult(await budget(), 'Budget!A2:B3'), { kind: 'table', rows: [['Rent', '2100'], ['Food', '640']], header: false, align: ['left', 'right'], values: [[null, { n: 2100, format: 'General' }], [null, { n: 640, format: 'General' }]] });
 });
 
 // --- Read-only in the editor -------------------------------------------------------------------
@@ -1516,4 +1516,33 @@ test('a pasted block with no `by` is signed as the person’s even when its sour
   assert.equal(report.updated, 2);
   assert.deepEqual(report.problems.map((p) => p.code), ['missing', 'missing']);
   for (const at of findLive(document)) assert.ok(at.tag.by && (await isOwnedBy(at.tag.by, me.secrets)));
+});
+
+test('a workbook’s live range filled from another workbook keeps numbers, currency and dates as numbers in their formats', async () => {
+  const source = new Workbook();
+  const sheet = new Worksheet('Money', 1);
+  source.sheets.push(sheet);
+  const money = source.styles.internFormat({ ...source.styles.format(0), numFmt: source.styles.formatId('"$"#,##0.00') });
+  const date = source.styles.internFormat({ ...source.styles.format(0), numFmt: source.styles.formatId('yyyy-mm-dd') });
+  sheet.grid.set(0, 0, Kind.String, source.strings.add('Due'), 0);
+  sheet.grid.set(0, 1, Kind.String, source.strings.add('Amount'), 0);
+  sheet.grid.set(1, 0, Kind.Number, 46341, date);
+  sheet.grid.set(1, 1, Kind.Number, 2100.5, money);
+  sheet.grid.set(2, 0, Kind.String, source.strings.add('02134'), 0);
+  source.names.push({ name: 'Bills', formula: 'Money!$A$1:$B$3' });
+  const bytes = await writeWorkbook(source, { recalculate: false });
+
+  const lookup = async (title: string) => (title === 'Money.xlsx' ? { name: 'Money.xlsx', bytes } : null);
+  const { bytes: out } = await updateStoredLive(await hostBook('Money.xlsx#Bills'), 'Plan.xlsx', lookup);
+  const { readWorkbook, loadSheet } = await import('../src/sheet/xlsx/read.ts');
+  const book = await readWorkbook(out!);
+  await loadSheet(book, 0);
+  const plan = book.sheets[0] as Worksheet;
+  const cell = (r: number, c: number) => ({ kind: plan.grid.columns[c]!.kind(r), value: plan.grid.columns[c]!.value(r), format: book.styles.formatCode(book.styles.format(plan.grid.columns[c]!.style(r)).numFmt) });
+  // The range starts at B3 (hostBook): the date and the amount are numbers with the source's formats.
+  assert.deepEqual(cell(3, 1), { kind: Kind.Number, value: 46341, format: 'yyyy-mm-dd' });
+  assert.deepEqual(cell(3, 2), { kind: Kind.Number, value: 2100.5, format: '"$"#,##0.00' });
+  // Text stays text, leading zero and all.
+  assert.equal(cell(4, 1).kind, Kind.String);
+  assert.deepEqual((await cellsOfBook(out!)).rows[3].slice(1), ['2026-11-15', '$2,100.50']);
 });

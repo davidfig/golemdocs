@@ -268,3 +268,16 @@ test('a producer cannot keep the clock from its top-level code, reach the real D
   assert.match((a.result as { text: string }).text, /^1970-01-01T00:00:00\.000Z\|1767225600000\|\d+,\d+$/);
   assert.deepEqual(a.result, b.result);
 });
+
+import { SCRIPT_MESSAGES, setScriptMessages } from '../src/messages.ts';
+
+test('messages are said in the language the app gives, in the linker, the host and the sandbox alike', async () => {
+  setScriptMessages({ ...SCRIPT_MESSAGES, at: '{path} — {message}', atLine: '{path} ({line}) — {message}', noScript: 'kein solches Skript', noClock: 'keine Uhr' });
+  try {
+    await assert.rejects(linkScript('Scripts/none.ts', vaultScripts({})), (e: unknown) => e instanceof ScriptError && e.message === 'Scripts/none.ts — kein solches Skript');
+    const files = { 'Scripts/clock.ts': `export default () => Date.now();` };
+    await assert.rejects(run(files, 'Scripts/clock.ts'), (e: unknown) => e instanceof ScriptRunError && /keine Uhr/.test(e.message) && /^Scripts\/clock\.ts \(1\) — /.test(e.message));
+  } finally {
+    setScriptMessages(SCRIPT_MESSAGES);
+  }
+});

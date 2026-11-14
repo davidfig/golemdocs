@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 
 // --- A just-enough IndexedDB: stores are maps; requests answer on the next tick. -----------------
 
-export function fakeIndexedDB(): unknown {
+/**
+ * `full` makes a write fail as a full disk does: the transaction is aborted with a QuotaExceededError and none of its writes
+ * are kept.
+ */
+export function fakeIndexedDB(options: { full?: (store: string, value: unknown) => boolean } = {}): unknown {
   const databases = new Map<string, Map<string, { keyPath?: string; rows: Map<unknown, unknown> }>>();
   const request = (produce: () => unknown) => {
     const req: { result?: unknown; error: null; onsuccess?: () => void; onerror?: () => void } = { error: null };
@@ -23,7 +27,13 @@ export function fakeIndexedDB(): unknown {
         },
         transaction(names: string | string[]) {
           const allowed = new Set([names].flat());
-          return {
+          const before = new Map([...allowed].filter((n) => stores.has(n)).map((n) => [n, new Map(stores.get(n)!.rows)]));
+          let error: DOMException | null = null;
+          let aborted: ((e: unknown) => void) | undefined;
+          const tx = {
+            get error() {
+              return error;
+            },
             objectStore(store: string) {
               assert.ok(allowed.has(store), `store ${store} not in transaction`);
               const s = stores.get(store)!;
@@ -32,6 +42,7 @@ export function fakeIndexedDB(): unknown {
                 getAll: () => request(() => [...s.rows.values()].map((v) => structuredClone(v))),
                 getAllKeys: () => request(() => [...s.rows.keys()]),
                 put(value: unknown, key?: unknown) {
+                  if (options.full?.(store, value)) error ??= new DOMException('The quota has been exceeded.', 'QuotaExceededError');
                   s.rows.set(s.keyPath ? (value as Record<string, unknown>)[s.keyPath] : key, structuredClone(value));
                   return request(() => undefined);
                 },
@@ -42,11 +53,18 @@ export function fakeIndexedDB(): unknown {
               };
             },
             set oncomplete(fn: () => void) {
-              setTimeout(fn, 0);
+              setTimeout(() => {
+                if (!error) return fn();
+                for (const [n, rows] of before) stores.get(n)!.rows = rows;
+                aborted?.(error);
+              }, 0);
             },
             set onerror(_fn: unknown) {},
-            set onabort(_fn: unknown) {},
+            set onabort(fn: (e: unknown) => void) {
+              aborted = fn;
+            },
           };
+          return tx;
         },
       };
       const req: { result?: unknown; error: null; onupgradeneeded?: () => void; onsuccess?: () => void } = { error: null, result: db };

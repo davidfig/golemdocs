@@ -3,6 +3,7 @@
 // `Scripts/`) is pointed at that script's own `data:` module, so the sandbox loads nothing from anywhere. No packages and
 // no URLs: anything else is an error, as is a cycle of imports.
 
+import { say } from './messages.ts';
 import { stripTypes } from './strip.ts';
 import { ScriptSyntaxError, lineAt, tokenize } from './tokens.ts';
 
@@ -19,7 +20,7 @@ export class ScriptError extends Error {
     readonly path: string,
     readonly line?: number,
   ) {
-    super(line ? `${path}, line ${line}: ${message}` : `${path}: ${message}`);
+    super(line ? say('atLine', { path, line, message }) : say('at', { path, message }));
   }
 }
 
@@ -72,11 +73,11 @@ export async function linkScript(entry: string, load: (path: string) => Promise<
   const visit = async (path: string, importedFrom?: { path: string; line: number }): Promise<string> => {
     const done = urls.get(path);
     if (done) return done;
-    if (visiting.includes(path)) throw new ScriptError(`imports form a cycle: ${[...visiting.slice(visiting.indexOf(path)), path].join(' → ')}`, importedFrom?.path ?? path, importedFrom?.line);
+    if (visiting.includes(path)) throw new ScriptError(say('importCycle', { chain: [...visiting.slice(visiting.indexOf(path)), path].join(' → ') }), importedFrom?.path ?? path, importedFrom?.line);
     const text = await load(path);
     if (text === null) {
-      if (importedFrom) throw new ScriptError(`there is no script ${path}`, importedFrom.path, importedFrom.line);
-      throw new ScriptError('there is no such script', path);
+      if (importedFrom) throw new ScriptError(say('noScriptAt', { path }), importedFrom.path, importedFrom.line);
+      throw new ScriptError(say('noScript'), path);
     }
     visiting.push(path);
     files.push(path);
@@ -93,10 +94,10 @@ export async function linkScript(entry: string, load: (path: string) => Promise<
     let out = js;
     for (const place of [...found].reverse()) {
       const line = lineAt(js, place.start);
-      if (!place.name.startsWith('./') && !place.name.startsWith('../')) throw new ScriptError(`scripts can only import other scripts, by a relative path ('./lib.ts'), not '${place.name}'`, path, line);
+      if (!place.name.startsWith('./') && !place.name.startsWith('../')) throw new ScriptError(say('relativeImport', { name: place.name }), path, line);
       let target = resolvePath(path, place.name);
       if (target && !/\.(?:ts|js|mts|mjs)$/i.test(target)) target += '.ts';
-      if (!target || !isScriptPath(target)) throw new ScriptError(`'${place.name}' is outside ${SCRIPTS_FOLDER}/`, path, line);
+      if (!target || !isScriptPath(target)) throw new ScriptError(say('outsideScripts', { name: place.name, folder: SCRIPTS_FOLDER }), path, line);
       const url = await visit(target, { path, line });
       out = out.slice(0, place.start) + JSON.stringify(url) + out.slice(place.end);
     }
@@ -105,7 +106,7 @@ export async function linkScript(entry: string, load: (path: string) => Promise<
     urls.set(path, url);
     return url;
   };
-  if (!isScriptPath(entry)) throw new ScriptError(`a script is a .ts or .js file in ${SCRIPTS_FOLDER}/`, entry);
+  if (!isScriptPath(entry)) throw new ScriptError(say('notAScript', { folder: SCRIPTS_FOLDER }), entry);
   const url = await visit(entry);
   return { url, files };
 }

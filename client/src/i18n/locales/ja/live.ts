@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "タイトル付きの表、ブックマーク、または見出しの下のセクションにカーソルを置くと、ライブリンクとしてコピーできます。",
+  'live.insideLive': "このセルはすでにライブブロックの一部なので、ここにはライブリンクを貼り付けられません。ブロックの外の空のセルに貼り付けてください。",
   'live.readOnly': "この部分は {source} を表示し、そこから自動で更新されます。変更は元のファイルで行ってください。",
   'live.notUpdated': "{name} のライブブロックを更新できませんでした: {problem}",
   'live.resultsOnly': "ライブブロックはここでは引き続き更新されます。ダウンロードした {extension} ファイルには現在の表示内容だけが含まれます。",

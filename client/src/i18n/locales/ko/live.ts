@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "제목이 있는 표, 책갈피 또는 제목 아래 구역에 커서를 두면 라이브 링크로 복사할 수 있습니다.",
+  'live.insideLive': "이 셀은 이미 라이브 블록의 일부이므로 여기에 라이브 링크를 붙여 넣을 수 없습니다. 블록 밖의 빈 셀에 붙여 넣으세요.",
   'live.readOnly': "이 부분은 {source}을(를) 보여 주며 거기서 최신 상태로 유지됩니다. 원본에서 변경하세요.",
   'live.notUpdated': "{name}의 라이브 블록을 업데이트하지 못했습니다: {problem}",
   'live.resultsOnly': "라이브 블록은 여기서 계속 업데이트됩니다. 다운로드한 {extension} 파일에는 지금 보이는 내용만 들어 있습니다.",

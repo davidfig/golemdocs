@@ -1,6 +1,8 @@
 // What an action fetches from a site it named in `meta.network` (docs/live-blocks.md §8), made by the app. Small and static:
 // the app makes the request, not the live chunk.
 
+import { say } from './messages.ts';
+
 /** A request an action makes of a site, and what came back, as plain data. */
 export interface ScriptFetch {
   method: string;
@@ -26,7 +28,7 @@ export async function fetchForScript(url: string, init: ScriptFetch, fetcher: ty
     redirect: 'error',
     signal: AbortSignal.timeout(20_000),
   }).catch((e: unknown) => {
-    throw new Error(`${new URL(url).hostname} could not be reached (${(e as Error).message}); a site must allow requests from other pages (CORS) for scripts in the app to use it`);
+    throw new Error(say('unreachable', { host: new URL(url).hostname, error: (e as Error).message }));
   });
   const headers: Record<string, string> = {};
   response.headers.forEach((value, key) => (headers[key] = value));

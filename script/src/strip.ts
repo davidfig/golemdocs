@@ -5,6 +5,7 @@
 // (enums, namespaces, parameter properties, decorators, `<T>value`, `import x = require()`, `export =`) is an error, with
 // its line: a script uses the plain JavaScript forms instead.
 
+import { say } from './messages.ts';
 import { ScriptSyntaxError, lineAt, tokenize } from './tokens.ts';
 import type { Token } from './tokens.ts';
 
@@ -233,7 +234,7 @@ class Stripper {
   /** Erases `: Type` at `i` (the colon); the index after it. */
   private annotation(i: number): number {
     const end = this.type(i + 1);
-    if (end === i + 1) this.fail('A type is missing', i + 1);
+    if (end === i + 1) this.fail(say('typeMissing'), i + 1);
     this.erase(i, end);
     return end;
   }
@@ -279,15 +280,15 @@ class Stripper {
           }
           break;
         case 'enum':
-          if (sameLine && this.name(i + 1)) this.fail('Enums are not supported in scripts: use an object', i);
+          if (sameLine && this.name(i + 1)) this.fail(say('noEnums'), i);
           break;
         case 'namespace':
         case 'module':
-          if (sameLine && (this.name(i + 1) || next.kind === 'string') && !this.t[i + 2]?.newline) this.fail('Namespaces are not supported in scripts: use modules', i);
+          if (sameLine && (this.name(i + 1) || next.kind === 'string') && !this.t[i + 2]?.newline) this.fail(say('noNamespaces'), i);
           break;
       }
     }
-    if (this.is(i, '@')) this.fail('Decorators are not supported in scripts', i);
+    if (this.is(i, '@')) this.fail(say('noDecorators'), i);
     return this.expression(i);
   }
 
@@ -299,7 +300,7 @@ class Stripper {
       this.erase(i, end);
       return end;
     }
-    if (this.name(j) && this.is(j + 1, '=')) this.fail('`import x = ...` is not supported in scripts: use `import x from`', i);
+    if (this.name(j) && this.is(j + 1, '=')) this.fail(say('noImportEquals'), i);
     for (; j < this.t.length && this.t[j].kind !== 'string'; j++) if (this.is(j, '{')) j = this.specifiers(j);
     return this.afterSemicolon(j + 1);
   }
@@ -337,9 +338,9 @@ class Stripper {
     const j = i + 1;
     const next = this.t[j];
     if (!next) return j;
-    if (this.is(j, '=')) this.fail('`export =` is not supported in scripts: use `export default`', i);
-    if (this.is(j, 'as') && this.is(j + 1, 'namespace')) this.fail('`export as namespace` is not supported in scripts', i);
-    if (this.is(j, 'import')) this.fail('`export import` is not supported in scripts', i);
+    if (this.is(j, '=')) this.fail(say('noExportEquals'), i);
+    if (this.is(j, 'as') && this.is(j + 1, 'namespace')) this.fail(say('noExportNamespace'), i);
+    if (this.is(j, 'import')) this.fail(say('noExportImport'), i);
     if (this.is(j, 'type')) {
       // `export type { A }`, `export type * from`: all of it.
       if (this.is(j + 1, '{') || this.is(j + 1, '*')) {
@@ -353,8 +354,8 @@ class Stripper {
     if (this.is(j, 'interface')) return this.interfaceDeclaration(i, j);
     if (this.is(j, 'declare')) return this.declared(i, j);
     if (this.is(j, 'default') && this.is(j + 1, 'interface')) return this.interfaceDeclaration(i, j + 1);
-    if (this.is(j, 'enum') || (this.is(j, 'const') && this.is(j + 1, 'enum'))) this.fail('Enums are not supported in scripts: use an object', i);
-    if ((this.is(j, 'namespace') || this.is(j, 'module')) && this.name(j + 1)) this.fail('Namespaces are not supported in scripts: use modules', i);
+    if (this.is(j, 'enum') || (this.is(j, 'const') && this.is(j + 1, 'enum'))) this.fail(say('noEnums'), i);
+    if ((this.is(j, 'namespace') || this.is(j, 'module')) && this.name(j + 1)) this.fail(say('noNamespaces'), i);
     if (this.is(j, 'abstract') && this.is(j + 1, 'class')) {
       this.erase(j, j + 1);
       return this.classDeclaration(j + 1);
@@ -371,9 +372,9 @@ class Stripper {
   private typeAlias(from: number, at: number): number {
     let j = at + 2;
     if (this.is(j, '<')) j = this.angleEnd(j);
-    if (j < 0 || !this.is(j, '=')) this.fail('A type alias is not complete', at);
+    if (j < 0 || !this.is(j, '=')) this.fail(say('typeAliasOpen'), at);
     const end = this.type(j + 1);
-    if (end === j + 1) this.fail('A type is missing', j + 1);
+    if (end === j + 1) this.fail(say('typeMissing'), j + 1);
     const after = this.afterSemicolon(end);
     this.erase(from, after);
     return after;
@@ -385,11 +386,11 @@ class Stripper {
     while (j < this.t.length && !this.is(j, '{')) {
       if (this.is(j, '<')) {
         const end = this.angleEnd(j);
-        if (end < 0) this.fail('An interface is not complete', at);
+        if (end < 0) this.fail(say('interfaceOpen'), at);
         j = end;
       } else j++;
     }
-    if (j >= this.t.length) this.fail('An interface has no body', at);
+    if (j >= this.t.length) this.fail(say('interfaceNoBody'), at);
     const end = this.t[j].match! + 1;
     this.erase(from, end);
     return end;
@@ -457,14 +458,14 @@ class Stripper {
         case 'let':
         case 'const':
         case 'var':
-          if (this.is(i + 1, 'enum')) this.fail('Enums are not supported in scripts: use an object', i);
+          if (this.is(i + 1, 'enum')) this.fail(say('noEnums'), i);
           if (this.name(i + 1) || this.is(i + 1, '{') || this.is(i + 1, '[')) return this.variables(i + 1);
           break;
         case 'as':
         case 'satisfies':
           if (prev >= 0 && this.valueEnd(prev) && !token.newline) {
             const end = this.is(i + 1, 'const') ? i + 2 : this.type(i + 1);
-            if (end === i + 1) this.fail('A type is missing', i + 1);
+            if (end === i + 1) this.fail(say('typeMissing'), i + 1);
             this.erase(i, end);
             return end;
           }
@@ -500,7 +501,7 @@ class Stripper {
           this.erase(i, end);
           return end;
         }
-        return this.fail('`<Type>value` is not supported in scripts: use `value as Type`', i);
+        return this.fail(say('noAngleCast'), i);
       }
       case '(': {
         const close = token.match!;
@@ -614,7 +615,7 @@ class Stripper {
     if (this.name(j)) j++;
     if (this.is(j, '<')) {
       const end = this.angleEnd(j);
-      if (end < 0) this.fail('Type parameters are not closed', j);
+      if (end < 0) this.fail(say('typeParametersOpen'), j);
       this.erase(j, end);
       j = end;
     }
@@ -640,8 +641,8 @@ class Stripper {
     let j = i + 1;
     while (j < close) {
       const start = j;
-      if (this.is(j, '@')) this.fail('Decorators are not supported in scripts', j);
-      if (this.name(j) && TS_MODIFIERS.has(this.t[j].text) && (this.name(j + 1) || this.is(j + 1, '{') || this.is(j + 1, '['))) this.fail('Parameter properties are not supported in scripts: assign the fields in the constructor', j);
+      if (this.is(j, '@')) this.fail(say('noDecorators'), j);
+      if (this.name(j) && TS_MODIFIERS.has(this.t[j].text) && (this.name(j + 1) || this.is(j + 1, '{') || this.is(j + 1, '['))) this.fail(say('noParameterProperties'), j);
       // `this: Type`, a type for `this` only.
       if (this.is(j, 'this') && this.is(j + 1, ':')) {
         const end = this.type(j + 2);
@@ -733,7 +734,7 @@ class Stripper {
     if (this.name(j) && !this.is(j, 'extends') && !this.is(j, 'implements')) j++;
     if (this.is(j, '<')) {
       const end = this.angleEnd(j);
-      if (end < 0) this.fail('Type parameters are not closed', j);
+      if (end < 0) this.fail(say('typeParametersOpen'), j);
       this.erase(j, end);
       j = end;
     }
@@ -756,7 +757,7 @@ class Stripper {
       while (j < this.t.length && !this.is(j, '{')) j = this.t[j].match !== undefined && this.is(j, '(') ? this.t[j].match! + 1 : j + 1;
       this.erase(start, j);
     }
-    if (!this.is(j, '{')) this.fail('A class has no body', i);
+    if (!this.is(j, '{')) this.fail(say('classNoBody'), i);
     this.classBody(j);
     return this.t[j].match! + 1;
   }
@@ -769,7 +770,7 @@ class Stripper {
         j++;
         continue;
       }
-      if (this.is(j, '@')) this.fail('Decorators are not supported in scripts', j);
+      if (this.is(j, '@')) this.fail(say('noDecorators'), j);
       const start = j;
       // A static block.
       if (this.is(j, 'static') && this.is(j + 1, '{')) {

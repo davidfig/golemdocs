@@ -16,6 +16,7 @@
 // numbered from 1, skipping ids in use.
 
 import {
+  liftMovedLiveTags,
   commentEnd,
   commentReference,
   commentStart,
@@ -66,7 +67,7 @@ import {
   fromBase64,
 } from './odf.ts';
 import { openPackage, type OdfPackage } from './package.ts';
-import { LIVE_PREFIX, liveWrapperOf } from './live.ts';
+import { LIVE_PREFIX, liveTagOfSectionName, liveWrapperOf } from './live.ts';
 import { readCellProperties, readParagraphProperties, readTextProperties, type Unmapped } from './properties.ts';
 
 const ID_ATTR = 'w14:paraId';
@@ -206,6 +207,8 @@ class Reader {
   private annotationEnds = new Set<string>();
   private nextComment = 0;
   private readonly openBookmarks = new Map<string, OdtBookmark>();
+  /** Reading a live value's text:meta: a live value inside it is read as its text. */
+  private inLive = false;
 
   private readonly memoParagraph = new Map<string, ParagraphStyleInfo>();
   private readonly memoSpan = new Map<string, RunProperties>();
@@ -238,6 +241,8 @@ class Reader {
     for (const d of descendants(text)) if (d.name === 'office:annotation-end' && d.attrs['office:name']) this.annotationEnds.add(d.attrs['office:name']);
     const body: Block[] = [];
     this.readBlocks(text.children, body, true);
+    // A live table's tag LibreOffice moved into its first cell (a plain-text content control, see live.ts) goes back.
+    liftMovedLiveTags(body);
     if (!body.length) body.push(this.emptyParagraph());
     doc.body = body;
 
@@ -576,8 +581,8 @@ class Reader {
 
   private readSection(e: XmlElement, out: Block[], depth: number): void {
     // A live block's section (live.ts): its content in a content control, not a section record.
-    const live = e.name === 'text:section' ? e.attrs['text:name'] : undefined;
-    if (live?.startsWith(LIVE_PREFIX)) {
+    const live = e.name === 'text:section' ? liveTagOfSectionName(e.attrs['text:name']) : null;
+    if (live !== null) {
       const inner: Block[] = [];
       for (const c of e.children) if (typeof c !== 'string') this.readBlock(c, inner, false, depth + 1);
       out.push(liveWrapperOf(live, inner));
@@ -762,13 +767,35 @@ class Reader {
         this.walk(firstChild(e, 'text:ruby-base')?.children ?? [], container, props, ctx, depth + 1, inLink);
         return;
       case 'text:meta':
-      case 'text:meta-field':
+      case 'text:meta-field': {
+        // A formatted live value (live.ts): its spans in an inline content control.
+        const live = name === 'text:meta' ? e.attrs['xhtml:content'] : undefined;
+        if (live?.startsWith(LIVE_PREFIX) && !this.inLive) {
+          const children: Inline[] = [];
+          this.inLive = true;
+          this.walk(e.children, children, props, ctx, depth + 1, inLink);
+          this.inLive = false;
+          container.push(liveWrapperOf(live, children));
+          return;
+        }
         this.walk(e.children, container, props, ctx, depth + 1, inLink);
         return;
+      }
     }
     if (DROPPED.has(name)) return;
+    const control = name === 'loext:content-control' ? e.attrs['loext:tag'] : undefined;
+    if (control?.startsWith(LIVE_PREFIX) && !this.inLive) {
+      // A Word content control as LibreOffice keeps it (live.ts): a live value, or a live table's tag it moved into the
+      // table's first cell (plain text), which liftMovedLiveTags puts back around the table.
+      const children: Inline[] = [];
+      this.inLive = true;
+      this.walk(e.children, children, props, ctx, depth + 1, inLink);
+      this.inLive = false;
+      container.push(liveWrapperOf(control, children, e.attrs['loext:plain-text'] === 'true'));
+      return;
+    }
     const live = name === 'text:text-input' ? e.attrs['text:description'] : undefined;
-    if (live?.startsWith(LIVE_PREFIX) && !inLink) {
+    if (live?.startsWith(LIVE_PREFIX) && !this.inLive) {
       // A live value (live.ts): its text in an inline content control.
       const children: Inline[] = [];
       this.addText(children, props, textOf(e), ctx);

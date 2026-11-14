@@ -107,7 +107,7 @@ blocks are updated. Someone else's keeps what it came with, and the app says so 
 
 | Source | Address | Result |
 | --- | --- | --- |
-| Spreadsheet (`.xlsx`, `.ods`, `.csv`) | `Budget.xlsx#Expenses` (table), `#Total` (defined name), `#Summary!A1:D10` (range), a single cell | table or value, with the sheet's number formats applied |
+| Spreadsheet (`.xlsx`, `.ods`, `.csv`) | `Budget.xlsx#Expenses` (table), `#Total` (defined name), `#Summary!A1:D10` (range), a single cell | table or value, with the sheet's number formats applied; each number cell also carries its number and format code (`values`), so a workbook it fills gets numbers, currency and dates, not text |
 | Spreadsheet chart | `Budget.xlsx#chart:Spending` | picture (M2) |
 | PDF | `Contract.pdf#page:3`, `Return.pdf#field:Total` | picture of a page, or a form field's value (M2) |
 | A whole document, exported | `Report.docx` as the source of `Report.pdf` | the PDF (M3) |
@@ -131,7 +131,7 @@ it read-only with a small label naming its source. Each format's writer decides 
 | Host | How the block is saved | Other apps see |
 | --- | --- | --- |
 | Word (`.docx`) | the content control, as is | the table or value; Word keeps it but does not update it |
-| OpenDocument (`.odt`) | a named section (block) or a text field or span (inline), with the source and stamp in its name or a hidden attribute: M0 settles which survives LibreOffice | the content |
+| OpenDocument (`.odt`) | a section named with the tag (block; a repeated tag gets ` copy=2`, `copy=3`… since section names must be unique), a text-input field described by it (a value in one format), or a `text:meta` with the tag in its RDFa `xhtml:content` (a value with formatting, a picture or a link inside): what LibreOffice keeps (M0) | the content |
 | Markdown | HTML comment markers around the result (§4) | a normal table or value |
 | HTML | an element with `data-golem-live`, `data-golem-by` and `data-golem-stamp` attributes | the content |
 | Spreadsheet (`.xlsx`, `.ods`) | a range filled from the source, anchored at its top-left cell; the address and stamp in a defined name and the workbook's custom properties (M2). A source that is another workbook uses Excel's own external reference instead (§5) | values in cells |
@@ -221,7 +221,19 @@ An inline value: `So far we've spent <!-- golem:live Budget.xlsx#Total stamp=3f9
   read, alongside the search index (`docIndex.ts`). From it, the reverse map: source → documents depending on it. Kept on
   the device (IndexedDB in the browser, beside the vault on desktop) and rebuildable from the files, so it is a cache,
   never the truth.
-- **Renames** follow, as wikilinks do: renaming `Budget.xlsx` rewrites the sources that name it.
+- **Renames** follow, as wikilinks do: renaming or moving `Budget.xlsx` rewrites the sources that name it, wherever the
+  block is kept (`rewriteDocumentLinks` in `formats/docLinks.ts`): a content control's tag, a Markdown marker, an embed, a
+  drawing's `data-golem-live`, a workbook's live range (the comment of its hidden name; only the workbook part's text is
+  edited, every other part is copied byte for byte), a PDF's live fields (the ones kept with it, or the file's own, which
+  are then kept with it), Edit PDF's text boxes and pictures, and a Live PDF Copy's `pdf.export` tag. Who made the block
+  (`by=`) and its stamp are kept as they were. Renaming or moving a *folder* rewrites the built-in blocks that read it
+  (`@list:Vault/Characters?…`, `@timeline:`, a count of a folder), and those reading a folder inside it
+  (`@list:Vault/Characters/Sub`): `folderRetargets` in `linkRename.ts` resolves each path as the block does (`resolveFolder`,
+  from the host's folder) before and after, and writes a path that finds the same folder again, escaped as
+  `builtinAddress.ts` writes it. The rename finds the hosts through the search index, which lists every kind of host's
+  sources as a rename sees them (a count's document rather than its whole address: `linkTitle`), so a workbook, a PDF or a
+  drawing that shows a renamed source is found as a note is. A workbook formula's reference to another workbook
+  (`[Bank.xlsx]Sheet1!A1`) is not rewritten.
 - **Chains.** A workbook's references to another workbook (`[Bank.xlsx]Sheet1!A1`) read the values it keeps in its
   external link parts (`sheet/externals.ts`). They are edges of the graph: the workbook's index lists the other
   workbook's title among its live sources (`workbookIndexed`), so a new bank export makes the keeper refresh the kept
@@ -437,6 +449,11 @@ error.
 
 ### The sandbox
 
+**What a script is told** when it can't be read or run is in the person's language: the script package's messages
+(`script/src/messages.ts`, English) are replaced by the app's (`scripts.error.*`, set by `client/src/scripts/messages.ts`
+before each run), the sandbox's runtime is handed the ones it says with each run (it can't import), and the app's answers
+to a script's requests are `scripts.vault.*`. The command line keeps the English.
+
 Golem Docs runs in a web view everywhere (the browser, Tauri's WebView on desktop, the phone apps), so one sandbox serves
 every platform, with no dependencies:
 
@@ -579,6 +596,30 @@ Blocks M0 Tests/`, with a checklist for the checks done by hand (Word, Excel, VS
   in that cell. The Word reader puts such a tag back around the table (`docx/src/docx/liveRepair.ts`). Calc keeps the
   hidden defined name of a workbook's live range but drops its comment, where the tag is, so the range stops being live:
   the tag needs a place Calc keeps.
+- **LibreOffice and ODT, in detail** (26.8, opened and saved once and twice; `odt/test/live.test.ts`):
+  - Two sections with the same name: Writer renames the second to `Section1`, losing its tag. So a repeated tag is
+    written `<tag> copy=2` (then 3...), which Writer keeps, and the reader drops the suffix.
+  - A text-input field keeps only text, so formatting inside a value was lost. A `text:span` with an attribute of our
+    own loses the attribute; a bookmark range named with the tag survives but would need unique names too. A `text:meta`
+    survives with its spans and its `xhtml:content` (the tag), but only with an RDFa property whose prefix is declared
+    (`xmlns:golem="urn:golemdocs:"`, `xhtml:property="golem:live"`, and an `xhtml:about`): an undeclared or full-IRI
+    property makes Writer drop all three RDFa attributes. Writer renames the prefix (`gen:live`), so the reader goes by
+    `xhtml:content` alone. A value in one format stays a field (inside a span for its format); anything else is a meta.
+  - A field inside a link is kept as it is (the reader used to skip it). A meta that fills a link's whole text is moved
+    outside the link, so the value comes back holding the link rather than inside it; its next update drops the link.
+  - Writer's own ODT holds Word's content controls as `loext:content-control` with `loext:tag` (and
+    `loext:plain-text` for the one it moved into a table): a `.docx` converted to ODT in LibreOffice keeps its live tags
+    there. The ODT reader reads them as live blocks and puts a moved table tag back around its table, as the Word reader
+    does (`liftMovedLiveTags`).
+- **LibreOffice and a live table in `.docx`, in detail** (`docx/test/liveRepair.test.ts`): Writer keeps a live table's
+  tag only when the first cell starts with text, formatted or not, or is empty; it then moves it there as described
+  above, and the repair puts it back (at any depth). When the first cell starts with anything else (a live value, a
+  link, a bookmark, another content control, a nested table), Writer's import drops the table's tag altogether, so
+  there is nothing in the file to repair: the table becomes ordinary content (a live value in that cell keeps its own
+  tag, which Writer writes without `<w:text/>`, so the repair never mistakes it for a moved one).
+  A second copy of the tag in the table's caption or description (`w:tblCaption`, `w:tblDescription`) does not help:
+  Writer drops both on import, so neither survives docx → docx nor docx → ODT → docx (nor shows in its ODT). Still
+  open: another place for the tag that Writer keeps.
 - **The script sandbox in WebKit** (Safari's engine, which the macOS and iOS shells use): every test in
   `e2e/live/scripts.spec.ts` passes, including the escapes. The spec now also tries the shells' bridges
   (`__TAURI_INTERNALS__`, `webkit.messageHandlers`, `ipc://`), blocked in the browser; it has not yet been run inside a

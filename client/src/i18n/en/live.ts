@@ -1,6 +1,7 @@
 // Live blocks (docs/live-blocks.md): parts of a document kept up to date from another file.
 export const live = {
   'live.copy.nothing': "Put the caret in a table with a title, a bookmark, or a section under a heading to copy it as a live link.",
+  'live.insideLive': "This cell is already part of a live block, so a live link can’t be pasted here. Paste it into an empty cell outside the block.",
   'live.readOnly': "This part shows {source} and is kept up to date from it. Change it there.",
   'live.notUpdated': "A live block in {name} was not updated: {problem}",
   'live.resultsOnly': "Its live blocks stay live here; a downloaded {extension} file has only what they show now.",

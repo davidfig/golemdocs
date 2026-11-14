@@ -2,11 +2,14 @@
 // `[[Notes/Plan]]` names the document by title or folder path (see formats/wikiLinks.ts), so renaming
 // the document, renaming or moving a folder it is in, or moving the note that holds a relative link,
 // can make it name nothing (or another document). This is the pure part: from where documents were and
-// are, which links must be written differently. Finding the documents that hold links (the search
+// are, which links must be written differently. Built-in live blocks (`@list:Characters?columns=role`) name a folder rather than
+// a document, so renaming or moving a folder rewrites them too (`folderRetargets`). Finding the documents that hold links (the search
 // index lists them) and writing the new links into them is main.ts's, through formats/docLinks.ts.
 
-import { folderPath, type Folder } from './folders.ts';
+import { folderRenameKey } from '@golemdocs/docx';
+import { folderPath, resolveFolder, type Folder } from './folders.ts';
 import { findByTitle, normalizeTitle, splitLink, titleOfName } from './formats/wikiLinks.ts';
+import { parseBuiltin } from './live/builtinAddress.ts';
 
 /** A document and the folders it is in, from the top level down. */
 export interface PlacedDoc {
@@ -117,5 +120,68 @@ export function retargets(before: readonly PlacedDoc[], after: readonly PlacedDo
       out.get(key)!.set(title, next);
     }
   }
+  return out;
+}
+
+/** The names of a folder's path, from the top level down. */
+const namesOf = (folders: readonly Folder[], id: string): string[] => folderPath(folders, id).map((f) => f.name);
+
+/** Whether any folder is under another name or in another folder (built-in blocks naming it, or a folder in it, must change). */
+export function anyFolderMoved(before: LibrarySnapshot, after: LibrarySnapshot): boolean {
+  return before.folders.some((f) => after.folders.some((g) => g.id === f.id) && !same(namesOf(before.folders, f.id), namesOf(after.folders, f.id)));
+}
+
+/** How to write a path to the folder `id` from a document in `from` so that it names that folder: as few of its last names as will do (at least `least`). */
+function folderPathFor(folders: readonly Folder[], id: string, from: readonly string[], least: number, absolute: boolean): string {
+  const names = namesOf(folders, id);
+  if (!absolute) {
+    for (let k = Math.min(Math.max(least, 1), names.length); k <= names.length; k++) {
+      const candidate = names.slice(names.length - k).join('/');
+      if (resolveFolder(folders, candidate, from) === id) return candidate;
+    }
+  }
+  return `${absolute ? '/' : ''}${names.join('/')}`;
+}
+
+/**
+ * The folder paths to write differently in built-in blocks (`@list:`, `@timeline:`, `@count:` of a folder), for each document that has
+ * links: `folderRenameKey(path as written)` to the new path, in the shape `retargets` gives (renamedSource reads both). `links` is the
+ * titles each document links to, as the search index lists them: a built-in block's whole address, but a count's target alone (see
+ * docx's linkTitle). A path is read as live/builtins.ts reads it (folders.ts's resolveFolder, from the linking document's folder), and
+ * left alone while it still names the folder it named; one inside a renamed folder (`Vault/Characters/Sub`) changes with it.
+ */
+export function folderRetargets(before: LibrarySnapshot, after: LibrarySnapshot, links: ReadonlyMap<string, readonly string[]>): Map<string, Map<string, string>> {
+  const out = new Map<string, Map<string, string>>();
+  if (!anyFolderMoved(before, after)) return out;
+  const beforeDocs = placedDocs(before);
+  const afterDocs = placedDocs(after);
+  const beforeByKey = new Map(beforeDocs.map((d) => [d.key, d]));
+  const afterByKey = new Map(afterDocs.map((d) => [d.key, d]));
+  const kept = new Set(after.folders.map((f) => f.id));
+  for (const [key, titles] of links) {
+    const linkerBefore = beforeByKey.get(key);
+    const linkerAfter = afterByKey.get(key);
+    if (!linkerBefore || !linkerAfter) continue;
+    for (const title of titles) {
+      const builtin = parseBuiltin(title);
+      // A count's target is listed alone: a folder only when it names no document (a count reads the document first).
+      const target = builtin ? builtin.target : findByTitle(title, beforeDocs, { folderNames: (d) => d.folders, from: linkerBefore.folders }) ? '' : title.trim();
+      if (!target) continue;
+      const id = resolveFolder(before.folders, target, linkerBefore.folders);
+      if (!id || !kept.has(id) || resolveFolder(after.folders, target, linkerAfter.folders) === id) continue;
+      const least = target.split('/').filter((s) => s.trim()).length;
+      const next = folderPathFor(after.folders, id, linkerAfter.folders, least, target.startsWith('/'));
+      if (next === target) continue;
+      if (!out.has(key)) out.set(key, new Map());
+      out.get(key)!.set(folderRenameKey(target), next);
+    }
+  }
+  return out;
+}
+
+/** Two plans (`retargets`, `folderRetargets`) as one: each document's renames together. */
+export function mergeRetargets(...plans: ReadonlyMap<string, ReadonlyMap<string, string>>[]): Map<string, Map<string, string>> {
+  const out = new Map<string, Map<string, string>>();
+  for (const plan of plans) for (const [key, renames] of plan) out.set(key, new Map([...(out.get(key) ?? []), ...renames]));
   return out;
 }

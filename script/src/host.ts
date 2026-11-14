@@ -3,6 +3,7 @@
 // that is allowed, answers its requests through the app (each checked against the grant), and ends it when it takes too
 // long or sends back too much.
 
+import { runtimeMessages, say } from './messages.ts';
 import type { FromRuntime, RunMode, ScriptEdit, ScriptToday, ToRuntime } from './runtime.ts';
 
 /** A line to and from a worker that runs the runtime. */
@@ -81,7 +82,7 @@ export function readMeta(raw: unknown, path: string): ScriptMeta {
   const weekly = typeof trigger?.weekly === 'string' && /^(mon|tue|wed|thu|fri|sat|sun)[a-z]*\s+\d{1,2}:\d{2}$/i.test(trigger.weekly.trim()) ? trigger.weekly.trim().toLowerCase() : undefined;
   const t: ScriptTrigger = { daily: time(trigger?.daily), weekly, changed: typeof trigger?.changed === 'string' ? normalizeFolder(trigger.changed) : undefined };
   const network = (typeof meta.network === 'string' ? [meta.network] : Array.isArray(meta.network) ? meta.network : []).filter((h): h is string => typeof h === 'string').map(siteName);
-  if (network.some((h) => h === null)) throw new Error('`network` lists host names, like api.example.com');
+  if (network.some((h) => h === null)) throw new Error(say('networkHosts'));
   return {
     name: typeof meta.name === 'string' && meta.name.trim() ? meta.name.trim() : stem,
     reads: folderList(meta.reads),
@@ -171,7 +172,7 @@ export function runOnChannel(channel: RuntimeChannel, path: string, options: Run
     // The time limit covers loading and running, not the time the person takes to answer the prompt.
     const startTimer = (): void => {
       clearTimeout(timer);
-      timer = setTimeout(() => finish(new ScriptRunError(`${path} took longer than ${Math.round(options.timeoutMs / 1000)} seconds`, 'timeout')), options.timeoutMs);
+      timer = setTimeout(() => finish(new ScriptRunError(say('tookTooLong', { path, seconds: Math.round(options.timeoutMs / 1000) }), 'timeout')), options.timeoutMs);
     };
     startTimer();
     channel.listen(
@@ -180,7 +181,7 @@ export function runOnChannel(channel: RuntimeChannel, path: string, options: Run
         switch (message.type) {
           case 'meta': {
             // One meta per run: a second could widen what the script asks for after it was allowed.
-            if (meta) return finish(new ScriptRunError(`${path} asked for more while it ran`, 'invalid'));
+            if (meta) return finish(new ScriptRunError(say('askedWhileRunning', { path }), 'invalid'));
             try {
               meta = readMeta(message.meta, path);
             } catch (e) {
@@ -201,9 +202,9 @@ export function runOnChannel(channel: RuntimeChannel, path: string, options: Run
             return;
           }
           case 'request': {
-            if (!meta || !approved) return finish(new ScriptRunError('asked before it started', 'invalid'));
+            if (!meta || !approved) return finish(new ScriptRunError(say('askedBeforeStart'), 'invalid'));
             // Each request reads documents on the page, so only a few are answered at a time; the rest wait their turn.
-            if (waiting.length >= MAX_REQUESTS_WAITING) return finish(new ScriptRunError(`${path} asked for more than ${MAX_REQUESTS_WAITING} things at once`, 'tooLarge'));
+            if (waiting.length >= MAX_REQUESTS_WAITING) return finish(new ScriptRunError(say('tooManyRequests', { path, count: MAX_REQUESTS_WAITING }), 'tooLarge'));
             waiting.push({ id: message.id, op: message.op, args: message.args, meta });
             answerNext();
             return;
@@ -212,20 +213,20 @@ export function runOnChannel(channel: RuntimeChannel, path: string, options: Run
             usesDate = true;
             return;
           case 'done': {
-            if (!meta || !approved) return finish(new ScriptRunError('finished before it started', 'invalid'));
+            if (!meta || !approved) return finish(new ScriptRunError(say('finishedBeforeStart'), 'invalid'));
             const size = JSON.stringify(message.result ?? null).length + JSON.stringify(message.edits ?? []).length;
-            if (size > options.maxResultChars) return finish(new ScriptRunError(`${path} sent back more than the ${Math.round(options.maxResultChars / 1_000_000)} MB a run may`, 'tooLarge'));
+            if (size > options.maxResultChars) return finish(new ScriptRunError(say('resultTooLarge', { path, mb: Math.round(options.maxResultChars / 1_000_000) }), 'tooLarge'));
             return finish(null, { meta, result: message.result, edits: Array.isArray(message.edits) ? message.edits : [], usesDate });
           }
           case 'failed': {
             const place = errorPlace(message.stack);
-            return finish(new ScriptRunError(place ? `${place.path}, line ${place.line}: ${message.error}` : `${path}: ${message.error}`, 'failed', place?.line));
+            return finish(new ScriptRunError(place ? say('atLine', { path: place.path, line: place.line, message: message.error }) : say('at', { path, message: message.error }), 'failed', place?.line));
           }
         }
       },
-      (error) => finish(new ScriptRunError(`${path}: ${error}`, 'failed')),
+      (error) => finish(new ScriptRunError(say('at', { path, message: error }), 'failed')),
     );
-    channel.send({ type: 'run', program: options.program, mode: options.mode, today: options.today, now: options.now, seed: options.seed });
+    channel.send({ type: 'run', program: options.program, mode: options.mode, today: options.today, now: options.now, seed: options.seed, messages: runtimeMessages() });
   });
 }
 

@@ -6,12 +6,12 @@
 
 import type { LiveResult } from '../live/result.ts';
 import { isScriptSource } from '../live/scriptAddress.ts';
-import { covers, grantOf } from './grants.ts';
-import type { GrantStore, ScriptGrant } from './grants.ts';
-import { normalizeFolder, within } from './host.ts';
-import type { ScriptMeta } from './host.ts';
+import { covers, grantOf } from '@golemdocs/script/grants';
+import type { GrantStore, ScriptGrant } from '@golemdocs/script/grants';
+import { normalizeFolder, within } from '@golemdocs/script/host';
+import type { RuntimeChannel, ScriptMeta } from '@golemdocs/script/host';
 import type { ScriptRunner } from './runner.ts';
-import type { ScriptFetch, ScriptResponse } from './fetch.ts';
+import type { ScriptFetch, ScriptResponse } from '@golemdocs/script/fetch';
 import type { ChangedFile, ScriptVault, VaultFile } from './vault.ts';
 import { scriptState } from './state.ts';
 import type { ScriptRun } from './state.ts';
@@ -111,7 +111,11 @@ export class ScriptsApp {
   /** One question at a time: a note with several blocks asks about each in turn. */
   private asking: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly host: ScriptsHost) {}
+  constructor(
+    private readonly host: ScriptsHost,
+    /** Where scripts run: the sandboxed frame unless a test gives a Node worker. */
+    private readonly channel?: () => RuntimeChannel,
+  ) {}
 
   private readonly grants: GrantStore = {
     get: (path) => this.onceAllowed.get(path) ?? scriptState.grants.get(path),
@@ -145,7 +149,7 @@ export class ScriptsApp {
   }
 
   private load(): Promise<ScriptRunner> {
-    return (this.runner ??= import('../live/stored.ts').then(({ ScriptRunner, sandboxChannel }) => new ScriptRunner({ vault: this.vault(), channel: sandboxChannel, grants: this.grants, ask: (path, meta) => this.host.ask(path, meta) })));
+    return (this.runner ??= import('../live/stored.ts').then(({ ScriptRunner, sandboxChannel }) => new ScriptRunner({ vault: this.vault(), channel: this.channel ?? sandboxChannel, grants: this.grants, ask: (path, meta) => this.host.ask(path, meta) })));
   }
 
   /** The vault's scripts, by path. */
@@ -242,14 +246,16 @@ export class ScriptsApp {
     const runner = await this.load();
     let files: ChangedFile[] = [];
     try {
-      const outcome = await runner.act(p, { interactive });
-      files = outcome.files;
-      // A document changed while it ran: its edits were made to what it read, so nothing is written.
-      for (const file of files) {
-        const doc = this.find(file.path);
-        const now = doc ? await this.host.read(doc.key) : null;
-        if ((now === null) !== (file.before === null) || (now && file.before && !sameBytes(now, file.before))) throw new Error(`${file.path} changed while ${outcome.meta.name} ran`);
+      let outcome = await runner.act(p, { interactive });
+      // A document changed while it ran: its edits were made to what it read. It runs once more on what is there now,
+      // without asking again; if one changes again, nothing is written.
+      let changed = await this.changedSince(outcome.files);
+      if (changed) {
+        outcome = await runner.act(p, { allowed: grantOf(outcome.meta) });
+        changed = await this.changedSince(outcome.files);
+        if (changed) throw new Error(`${changed} changed while ${outcome.meta.name} ran`);
       }
+      files = outcome.files;
       for (const file of files) {
         const key = await this.host.store(file.path, file.after, this.find(file.path)?.key ?? null);
         this.writtenBy.set(key, { script: p, depth });
@@ -269,6 +275,16 @@ export class ScriptsApp {
       this.host.error(paused ? this.host.say.paused(name) : this.host.say.failed(name, message));
       return run;
     }
+  }
+
+  /** The first of an action's files that is no longer what it read (made, removed or changed meanwhile), or null. */
+  private async changedSince(files: readonly ChangedFile[]): Promise<string | null> {
+    for (const file of files) {
+      const doc = this.find(file.path);
+      const now = doc ? await this.host.read(doc.key) : null;
+      if ((now === null) !== (file.before === null) || (now && file.before && !sameBytes(now, file.before))) return file.path;
+    }
+    return null;
   }
 
   /** Puts back what a run changed, where nothing has changed it since. */

@@ -74,10 +74,10 @@ export abstract class EditorEditing extends EditorNavigation {
   }
 
   /** Edits made outside the app (its file changed on disk), applied as someone else's are: the selection stays where it was in the text. */
-  external(ops: Operation[]): { result: CommandResult; mapping: Mapping | null } {
+  external(ops: Operation[], options: { undoable?: boolean } = {}): { result: CommandResult; mapping: Mapping | null } {
     if (ops.length === 0) return { result: NO_CHANGE, mapping: null };
     const before = this.selectionIds;
-    const { applied, mapping } = this.replica.external(ops);
+    const { applied, mapping } = this.replica.external(ops, options);
     return { result: this.changed(applied, Replica.mapSelection(before, mapping)), mapping };
   }
 

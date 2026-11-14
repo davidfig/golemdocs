@@ -3510,7 +3510,7 @@ body.wm-fullscreen .wm-keys {
   margin-bottom: 10px;
 }
 
-/* The frame a script runs in (scripts/sandbox.ts): never seen. */
+/* The frame a script runs in (script/src/sandbox.ts): never seen. */
 .wm-script-sandbox {
   position: fixed;
   width: 0;

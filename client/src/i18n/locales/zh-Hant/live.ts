@@ -1,7 +1,6 @@
 import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
-  'live.copy.noField': "點選表單欄位，即可將其複製為即時連結。",
   'live.copy.nothing': "將游標放在有標題的表格、書籤或標題下的章節中，即可將其複製為即時連結。",
   'live.readOnly': "此部分顯示 {source}，並從那裡保持更新。請在來源檔案中修改。",
   'live.notUpdated': "{name} 中的即時區塊未更新：{problem}",

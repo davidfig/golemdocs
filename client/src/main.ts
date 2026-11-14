@@ -25,6 +25,7 @@ import {
   deleteOwnedBy,
   deleteSaved,
   getSaved,
+  getUndo,
   getSavedManifest,
   getThumbnail, getImage, saveImage,
   listLocalFolders,
@@ -77,7 +78,7 @@ import { askToRun, pickScript, showScriptsDialog } from './ui/scriptDialogs.ts';
 import { ScriptsApp } from './scripts/app.ts';
 import { buttonScript } from './live/scriptAddress.ts';
 import { scriptState } from './scripts/state.ts';
-import { fetchForScript } from './scripts/fetch.ts';
+import { fetchForScript } from '@golemdocs/script/fetch';
 import { NewVersionNotice } from './ui/newVersionNotice.ts';
 import { isChunkOfOldBuild } from './buildCheck.ts';
 import { UpdateNotice } from './ui/updateNotice.ts';
@@ -1639,10 +1640,12 @@ async function keptEdits(info: SavedInfo): Promise<RecoveryPlan | null> {
 }
 
 /** A saved copy has just been opened: its journal starts from it, and what was kept from before goes back in. */
-function bringBackEdits(info: SavedInfo, source: DocumentSource, plan: RecoveryPlan | null): void {
+function bringBackEdits(info: SavedInfo, source: DocumentSource, plan: RecoveryPlan | null, undo: string | null = null): void {
   const doc = current;
   if (doc.localId !== info.id) return;
   doc.journal?.attach(info.id, info.updatedAt);
+  // The undo steps kept with this copy go back first: kept edits are replayed on top of them, as one more step.
+  if (undo && !textView.active && !sheetView.active) worker.restoreUndo(undo);
   if (!plan) return;
   for (const session of plan.discard) removeJournal(localStorage, info.id, session);
   // A kept journal is of a document, and those open in the worker: not one that has since become something else (a workbook, a big text file).
@@ -2151,10 +2154,15 @@ function renameDocument(input: string): string | null {
 /** The name a download or save gets: the format's extension, except that a text file keeps the one it came with ("config.json", "main.py"). */
 /** Edit › Copy as Live Link in a document (docs/live-blocks.md §9): the part at the caret, pasted anywhere as a live block of it. */
 async function copyDocumentLiveLink(): Promise<void> {
-  // A PDF: the form field being filled in (live/pdfLive.ts); only its fields can be shown elsewhere.
+  // A PDF: the form field being filled in, else the page in view, as a picture (live/pdfLive.ts).
   const field = annotating ? formLayer.currentFieldName() : null;
-  if ((annotating || current.kind === 'pdf') && !field) return reportError(t('live.copy.noField'));
-  const part = field !== null ? `field:${field}` : await worker.livePart();
+  let part: string | null;
+  if (field !== null) part = `field:${field}`;
+  else if (annotating || current.kind === 'pdf') {
+    const center = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2);
+    const page = nearestPage(pages, center.x, center.y);
+    part = page ? `page:${pages.indexOf(page) + 1}` : null;
+  } else part = await worker.livePart();
   if (!part) return reportError(t('live.copy.nothing'));
   const source = `${fileName()}#${part}`;
   const attr = source.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -2417,7 +2425,9 @@ function saveInBrowser(): Promise<string | null> {
       const seq = marked ? (await marked).seq : 0;
       const absorbed = doc.absorbing;
       const journal = doc.journal && marked ? { session: doc.journal.session, seq, ...(absorbed && { absorbed }) } : undefined;
-      const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner, folderId, journal });
+      // The undo steps go with the bytes they fit, so Undo still works when the document is next opened here (docs/undo-history.md).
+      const undo = marked ? (await marked).undo : undefined;
+      const info = await saveSaved({ id: doc.localId ?? undefined, name, bytes: await bytes, owner, folderId, journal, undo });
       if (journal) {
         doc.journal!.saved(info.id, info.updatedAt, seq);
         for (const session of absorbed ?? []) removeJournal(localStorage, info.id, session);
@@ -2746,6 +2756,7 @@ async function openLocal(id: string): Promise<void> {
   if (!early) await saving;
   const saved = await (early ?? getSaved(id).catch(() => null));
   const kept = saved && (await keptEdits(saved.info));
+  const undo = saved && (await getUndo(saved.info).catch(() => null));
   if (!latest()) return;
   if (!saved) {
     // Gone (deleted, or Back to where it was): nothing is open in its place.
@@ -2760,7 +2771,7 @@ async function openLocal(id: string): Promise<void> {
   // A huge text file (imported in a ZIP, say) opens in the viewer, as it does from the computer.
   if (usesTextEngine(source.kind, saved.bytes.byteLength)) return openLarge(saved.info.name, new Uint8Array(saved.bytes), { localId: id });
   open(source, { localId: id, cloudId });
-  bringBackEdits(saved.info, source, kept ?? null);
+  bringBackEdits(saved.info, source, kept ?? null, undo);
   const doc = current;
   if (cloudId && !doc.roomRequested) {
     void accountKnown.then(() => {
@@ -3385,12 +3396,14 @@ async function openCloud(id: string): Promise<void> {
       saving = Promise.all([saving, writing]).catch(() => null);
     } else if ((info.owner ?? null) === (account?.id ?? null)) library.putLocal(info);
     const kept = await keptEdits(info);
+    // Undo steps are kept only with a copy saved here: one just written from the account's has none.
+    const undo = stored ? null : await getUndo(info).catch(() => null);
     if (!latest()) return; // something else was opened meanwhile: this one is saved here, for next time
     const source = sourceFromFile(info.name, bytes) ?? { kind: 'docx', name: info.name, bytes };
     if (usesTextEngine(source.kind, bytes.byteLength)) openLarge(info.name, new Uint8Array(bytes), { localId: info.id });
     else {
       open(source, { localId: info.id, cloudId: info.cloudId });
-      bringBackEdits(info, source, kept);
+      bringBackEdits(info, source, kept, undo);
     }
     rememberInUrl(`local:${info.id}`);
     // Only the lists need the new browser copy, so they catch up after the document is on screen.
@@ -5785,6 +5798,9 @@ function pasteClipboard(clip: Clipboard, form: 'auto' | 'html' | 'text' = 'auto'
     vector!.editor.addLive(live);
     return void vector!.settled().then(() => updateLiveNow(live));
   }
+  // A live link pasted into a PDF being edited: a text box or picture showing it, filled from its source at once.
+  const pdfLive = annotating ? clipboardLiveLink(clip.text ?? '', clip.html ?? '', true) : null;
+  if (pdfLive && pdfTools.addLive(pdfLive)) return void updateLiveNow(pdfLive);
   const formatted = FORMATS[current.kind].marks.length > 0;
   if (clip.html && form !== 'text' && formatted && clip.html.length <= MAX_PASTED_HTML) send({ kind: 'pasteHtml', html: clip.html, text: clip.text ?? '' });
   else if (clip.text) send({ kind: 'insertText', text: clip.text });

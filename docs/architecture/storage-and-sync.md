@@ -23,7 +23,7 @@ Documents live in the browser's IndexedDB first. Signed out they never leave the
         Documents screen, Files Sidebar, File > Open Recent all read this one copy
 ```
 
-An autosave waits for a pause in typing, and the document is in the layout worker, so a page going away can't wait for a last save. The [edit journal](../edit-journal.md) keeps the edits since the last save in `localStorage` and replays them on opening. Each save records how far through the journal it reaches (`SavedInfo.journal`), in the same IndexedDB transaction as its bytes, and any other write of the copy clears that.
+An autosave waits for a pause in typing, and the document is in the layout worker, so a page going away can't wait for a last save. The [edit journal](../edit-journal.md) keeps the edits since the last save in `localStorage` and replays them on opening. Each save records how far through the journal it reaches (`SavedInfo.journal`), in the same IndexedDB transaction as its bytes, and any other write of the copy clears that. The open document's undo steps are written in that transaction too, and any other write drops them ([undo-history.md](../undo-history.md)).
 
 Nothing is ever overwritten. A copy that started from an older cloud version is merged with the cloud's when the two changed different things, and otherwise becomes a separate "(conflicted copy)" document (`conflictCopyName` in `client/src/library.ts`). Multi-person live editing is a different path (a room becomes the single writer; see [Collaboration](collaboration.md)).
 
@@ -53,6 +53,7 @@ Database `word`, version 9. Object stores:
 | `folders` | the guest (signed-out) folder hierarchy |
 | `search` | per-document full-text index cache (`search/searchLibrary.ts`) |
 | `images` | id -> a document's memory image (a Blob): a workbook's cells as the spreadsheet editor holds them, so the next open maps them instead of reading the `.xlsx`. Used only while it was made from exactly the stored file (its SHA-256); per device, never uploaded. See [spreadsheets.md](../spreadsheets.md) |
+| `undo`, `undoData` | id -> what a document's kept undo steps take, the save they belong to (`forUpdatedAt`) and when last used; id -> the steps as JSON (`History.saved`). Written with the bytes, dropped by any write without them, trimmed least recently used first past 50 MB (20 MB on a phone). Per device, never uploaded. See [undo-history.md](../undo-history.md) |
 
 Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/shared/folder lists as last listed, for an instant dashboard; `sync.ts`), `golem.account` (last signed-in user, so offline still shows their documents; `auth.ts`), `golem.account.lapsed` (the account whose sign-in ran out here, for the note saying so; `auth.ts`), `golem.settingsSync` (settings baseline), `golemdocs.views` (per-document scroll, zoom, caret and selection, `viewMemory.ts`, capped at 200), `golemdocs.reading` (where each book is being read, `reading.ts`, capped at 500).
 

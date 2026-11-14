@@ -13,12 +13,12 @@ import { documentToMarkdown } from '../formats/markdown.ts';
 import type { LiveResult } from '../live/result.ts';
 import { resultOf } from '../live/sources.ts';
 import type { SourceLookup } from '../live/sources.ts';
-import { normalizeFolder, ScriptRunError } from './host.ts';
-import { ScriptError } from './link.ts';
-import { nodeChannel } from './nodeChannel.ts';
+import { normalizeFolder, ScriptRunError } from '@golemdocs/script/host';
+import { ScriptError } from '@golemdocs/script/link';
+import { nodeChannel } from '@golemdocs/script/nodeChannel';
 import { ScriptRunner } from './runner.ts';
-import { fetchForScript } from './fetch.ts';
-import type { ScriptFetch } from './fetch.ts';
+import { fetchForScript } from '@golemdocs/script/fetch';
+import type { ScriptFetch } from '@golemdocs/script/fetch';
 import type { VaultFile } from './vault.ts';
 
 /** Folders a vault keeps for the apps, never a script's business. */

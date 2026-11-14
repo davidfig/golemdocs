@@ -5,7 +5,7 @@
 // The log keeps what each action changed for as long as the page is open, so "Undo this run" can put the files back;
 // once the page is closed the entries remain as a record, and undoing points to the files' version history.
 
-import type { ScriptGrant } from './grants.ts';
+import type { ScriptGrant } from '@golemdocs/script/grants';
 
 const KEY = 'golem.scripts.v1';
 

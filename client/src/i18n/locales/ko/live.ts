@@ -1,7 +1,6 @@
 import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
-  'live.copy.noField': "양식 필드를 클릭하면 라이브 링크로 복사할 수 있습니다.",
   'live.copy.nothing': "제목이 있는 표, 책갈피 또는 제목 아래 구역에 커서를 두면 라이브 링크로 복사할 수 있습니다.",
   'live.readOnly': "이 부분은 {source}을(를) 보여 주며 거기서 최신 상태로 유지됩니다. 원본에서 변경하세요.",
   'live.notUpdated': "{name}의 라이브 블록을 업데이트하지 못했습니다: {problem}",

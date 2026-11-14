@@ -58,7 +58,7 @@ Experiments against `ops` and `docx`, plus reading the code. The replay check is
 3. **No marker from this session, and `info.updatedAt` equals the journal's `base`**: nothing else has written; replay everything.
 4. **Anything else** (another tab saved, the account's newer copy arrived, the vault file changed): replaying over a different base could put text in the wrong place, and without the base there is nothing to merge against. Following "nothing is ever overwritten" (`storage-and-sync.md`), the current copy opens untouched and the edits are replayed into a new `(conflicted copy)` (`conflictCopyName`), with a notice. This should be rare.
 
-Replay is `replica.external(ops)`: Undo doesn't take recovered edits back, as after any reload. The worker sets `edited`, so a room's copy doesn't replace the document, and the page calls `documentEdited()`, so the normal save and upload follow. An entry that fails `isOperation` (a newer deploy's format, read by an older page) stops replay there, keeping what came before it, and says so.
+Replay is `editor.external(ops, { undoable: true })`, put together into one undo step (`History.mark`/`fold`) on top of the undo steps kept with the copy ([undo-history.md](undo-history.md)): Undo takes the recovered edits back, as it would have before the reload. The worker sets `edited`, so a room's copy doesn't replace the document, and the page calls `documentEdited()`, so the normal save and upload follow. An entry that fails `isOperation` (a newer deploy's format, read by an older page) stops replay there, keeping what came before it, and says so.
 
 ## What can't go in the journal: barriers
 

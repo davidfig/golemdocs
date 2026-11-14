@@ -7,5 +7,5 @@ export type { DrawingOf } from './storedUpdate.ts';
 export { newLiveExport } from './pdfLive.ts';
 // Scripts (docs/live-blocks.md §8) run from the same chunk: their blocks are live blocks.
 export { ScriptRunner } from '../scripts/runner.ts';
-export { sandboxChannel } from '../scripts/sandbox.ts';
+export { sandboxChannel } from '@golemdocs/script/sandbox';
 export { resultOf } from './sources.ts';

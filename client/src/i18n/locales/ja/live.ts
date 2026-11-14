@@ -1,7 +1,6 @@
 import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
-  'live.copy.noField': "フォームのフィールドをクリックすると、ライブリンクとしてコピーできます。",
   'live.copy.nothing': "タイトル付きの表、ブックマーク、または見出しの下のセクションにカーソルを置くと、ライブリンクとしてコピーできます。",
   'live.readOnly': "この部分は {source} を表示し、そこから自動で更新されます。変更は元のファイルで行ってください。",
   'live.notUpdated': "{name} のライブブロックを更新できませんでした: {problem}",

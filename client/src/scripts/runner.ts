@@ -9,15 +9,15 @@
 import { paragraphText, paragraphsIn, WordDocument } from '@golemdocs/docx';
 import type { LiveResult } from '../live/result.ts';
 import { isWdoc, readWdoc } from '../formats/wdoc.ts';
-import { normalizeFolder, runOnChannel, ScriptRunError, scriptToday, seedOf } from './host.ts';
-import type { RuntimeChannel, ScriptMeta } from './host.ts';
-import { covers, grantOf } from './grants.ts';
-import type { GrantStore, ScriptAnswer } from './grants.ts';
+import { normalizeFolder, runOnChannel, ScriptRunError, scriptToday, seedOf } from '@golemdocs/script/host';
+import type { RuntimeChannel, ScriptMeta } from '@golemdocs/script/host';
+import { covers, grantOf } from '@golemdocs/script/grants';
+import type { GrantStore, ScriptAnswer, ScriptGrant } from '@golemdocs/script/grants';
 
-export type { GrantStore, ScriptAnswer, ScriptGrant } from './grants.ts';
-export { covers, grantOf, triggerText } from './grants.ts';
-import { isScriptPath, linkScript, ScriptError } from './link.ts';
-import type { RunMode } from './runtime.ts';
+export type { GrantStore, ScriptAnswer, ScriptGrant } from '@golemdocs/script/grants';
+export { covers, grantOf, triggerText } from '@golemdocs/script/grants';
+import { isScriptPath, linkScript, ScriptError } from '@golemdocs/script/link';
+import type { RunMode } from '@golemdocs/script/runtime';
 import { editedFiles, ScriptRequests, scriptResult } from './vault.ts';
 import type { ChangedFile, ScriptVault } from './vault.ts';
 
@@ -45,6 +45,8 @@ export const ACTION_LIMITS: RunLimits = { timeoutMs: 30_000, maxResultChars: 5_0
 export interface RunOptions {
   /** A person started it (a button, the palette, a block just pasted): it may ask. */
   interactive?: boolean;
+  /** What the person allowed for this run already (a second try of an action): covers it without asking again. */
+  allowed?: ScriptGrant;
 }
 
 /** What an action did: the files it would change, not yet stored. */
@@ -101,7 +103,7 @@ export class ScriptRunner {
     return async (meta: ScriptMeta): Promise<true | string> => {
       if (mode === 'produce' && meta.writes.length) return `${meta.name} is a producer, which cannot ask to change files`;
       if (mode === 'produce' && meta.network?.length) return `${meta.name} is a producer, which cannot use the network`;
-      if (covers(this.deps.grants.get(path), meta)) return true;
+      if (covers(this.deps.grants.get(path), meta) || covers(options.allowed ?? null, meta)) return true;
       if (!options.interactive || !this.deps.ask) return `${meta.name} has not been allowed on this device`;
       const answer = await this.deps.ask(path, meta, mode);
       if (!answer) return `${meta.name} was not allowed`;

@@ -8,6 +8,7 @@
 import { alignOf, cellsOf, isStandardName, nearestStandard, noteRect, quadBoxes, quadsFor, textOf, type Annotation, type AnnotationKind, type Box, type FormField, type ApplyResult, type PdfEdit, type Rgb, type ShapeEdit, type TextBlock, type TextEdit, type TextStyle } from '@golemdocs/pdf';
 import { applyObjectOps, layersOf, type Keyed, type ObjectLayers, type ObjectOp } from '@golemdocs/ops';
 import type { PdfCharacter, PdfView } from '../formats/pdfPages.ts';
+import { parseLiveTag } from '../live/liveMarks.ts';
 
 /** A rectangle to show, on a page (by index), in page coordinates. */
 export interface PageRect {
@@ -670,20 +671,31 @@ export class PdfAnnotator {
     return [...pages];
   }
 
-  /** Adds a picture (a PNG or JPEG file, base64) and selects it. */
-  addImage(page: number, box: Box, data: string): number[] {
+  /** The source of the live block an added text box or picture shows, or null. */
+  liveOf(id: string): string | null {
+    const edit = this.editList.find((e) => e.id === id);
+    return edit && (edit.kind === 'textbox' || edit.kind === 'image') ? (parseLiveTag(edit.live)?.source ?? null) : null;
+  }
+
+  /** The source of the live text box picked to type in, or null: typing there is refused, and the worker says why. */
+  pickedLive(): string | null {
+    return this.picked ? this.liveOf(this.picked.id) : null;
+  }
+
+  /** Adds a picture (a PNG or JPEG file, base64) and selects it; `live`: it shows a live block (its tag). */
+  addImage(page: number, box: Box, data: string, live?: string): number[] {
     const pages = new Set<number>(this.deselect());
     this.remember();
     this.lastMerge = null;
-    const edit: PdfEdit = { id: this.newId(), page, kind: 'image', box, data };
+    const edit: PdfEdit = { id: this.newId(), page, kind: 'image', box, data, ...(live && { live }) };
     this.editList = [...this.editList, edit];
     this.pickedObject = { page, editId: edit.id, target: null, kind: 'picture', box };
     for (const p of this.showObject()) pages.add(p);
     return [...pages];
   }
 
-  /** Adds an empty text box at a point (user space) and picks it to type in. */
-  addTextBox(page: number, x: number, y: number, text = ''): number[] {
+  /** Adds an empty text box at a point (user space) and picks it to type in; `live`: it shows a live block (its tag). */
+  addTextBox(page: number, x: number, y: number, text = '', live?: string): number[] {
     const pages = new Set<number>(this.deselect());
     this.remember();
     this.pickRemembered = true;
@@ -692,8 +704,14 @@ export class PdfAnnotator {
     const media = this.view.mediaBox(page);
     const width = Math.min(240, media[2] - x - 12);
     const box: Box = [x, y - size * 1.2, x + Math.max(width, 60), y];
-    const edit: PdfEdit = { id: this.newId(), page, kind: 'textbox', box, text, font: 'Helvetica', size, color: [0, 0, 0] };
+    const edit: PdfEdit = { id: this.newId(), page, kind: 'textbox', box, text, font: 'Helvetica', size, color: [0, 0, 0], ...(live && { live }) };
     this.editList = [...this.editList, edit];
+    // A live one is filled from its source, not typed in: it is put down at once.
+    if (live) {
+      this.picked = null;
+      for (const p of this.showEdits()) pages.add(p);
+      return [...pages];
+    }
     this.picked = {
       page,
       id: edit.id,
@@ -784,6 +802,8 @@ export class PdfAnnotator {
   setPickedText(text: string): number[] {
     const p = this.picked;
     if (!p || text === p.text) return [];
+    // A text box showing a live block is filled from its source: it can be moved, not typed in.
+    if (this.liveOf(p.id)) return [];
     p.text = text;
     if (!this.pickRemembered) {
       this.remember();

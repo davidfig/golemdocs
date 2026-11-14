@@ -166,7 +166,7 @@ const color = (rgb: number): string => colorText([(rgb >> 16) & 255, (rgb >> 8) 
 const shifted = (m: Matrix, dx: number, dy: number): Matrix => [m[0], m[1], m[2], m[3], m[4] - dx, m[5] - dy];
 
 /** The clips, gradients and patterns the shapes of one drawing refer to, as the definitions of its scene. */
-class Definitions {
+export class Definitions {
   readonly elements: XmlElement[] = [];
   private readonly ids = new Map<object, string>();
   private count = 0;
@@ -257,7 +257,7 @@ function pathNode(p: DisplayPath, dx: number, dy: number, defs: Definitions): Pa
 }
 
 /** The paths as scene nodes, in a group of their own under each clip they share (nested for nested clips). */
-function nodesOf(paths: readonly DisplayPath[], dx: number, dy: number, defs: Definitions): SceneNode[] {
+export function nodesOf(paths: readonly DisplayPath[], dx: number, dy: number, defs: Definitions): SceneNode[] {
   const root: SceneNode[] = [];
   const open: { clip: DisplayClip; group: GroupNode }[] = [];
   for (const p of paths) {

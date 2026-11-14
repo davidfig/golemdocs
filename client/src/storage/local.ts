@@ -2,7 +2,7 @@
 // nothing leaves the device. Signed in, the account is where documents live and these are its
 // cache: each is marked with the account it belongs to and linked to its cloud copy (../library.ts).
 import type { DocIndex } from '@golemdocs/docx';
-import { LOCAL_LIMITS, TRASH_MS, byteBudget, shouldCheckpoint, versionsToDrop, type VersionStamp } from '@golemdocs/ops';
+import { HISTORY_SNAPSHOT_MAX, LOCAL_LIMITS, TRASH_MS, byteBudget, shouldCheckpoint, versionsToDrop, type VersionStamp } from '@golemdocs/ops';
 import type { Folder } from '../folders.ts';
 import { t } from '../i18n/index.ts';
 import { traced } from '../quietRunner.ts';
@@ -59,6 +59,10 @@ const BASES = 'bases';
 // Memory images (see docs/spreadsheets.md, "The memory image"): a document's in-memory form, kept by document id next to its file
 // so the next open maps it instead of reading the file. Per device, never uploaded; used only while it matches the file.
 const IMAGES = 'images';
+// Undo history (see "Undo history" below): what each document's undo and redo steps take (UNDO) and the steps themselves, as JSON
+// (UNDO_DATA), by document id. Per device, never uploaded; written with the bytes they belong to, and gone with any write without them.
+const UNDO = 'undo';
+const UNDO_DATA = 'undoData';
 
 /** What is stored of a document kept as chunks. */
 export interface StoredManifest {
@@ -76,7 +80,7 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 function openDb(): Promise<IDBDatabase> {
   if (!dbPromise) {
     dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 9);
+      const request = indexedDB.open(DB_NAME, 10);
       request.onupgradeneeded = (event) => {
         const from = event?.oldVersion ?? 0;
         if (from < 1) {
@@ -98,6 +102,10 @@ function openDb(): Promise<IDBDatabase> {
         if (from < 7) request.result.createObjectStore(TRASH);
         if (from < 8) request.result.createObjectStore(BASES);
         if (from < 9) request.result.createObjectStore(IMAGES);
+        if (from < 10) {
+          request.result.createObjectStore(UNDO);
+          request.result.createObjectStore(UNDO_DATA);
+        }
       };
       request.onsuccess = () => {
         // Let another tab delete (or upgrade) the database instead of blocking it.
@@ -182,6 +190,8 @@ interface WriteInput {
   folderId?: string;
   /** Written with the bytes, so a crash can't leave a copy that doesn't say which edits it holds. Absent, whatever was there goes: these bytes aren't that session's. */
   journal?: JournalMarker;
+  /** The open document's undo and redo steps as these bytes stand (see "Undo history"). Absent, whatever was kept goes: they belong to other bytes. */
+  undo?: string;
   /** Only over a copy of the same cloud document with nothing unsent (see `keepSyncedCopy` in ../library.ts): otherwise nothing is written. */
   onlyIfSent?: boolean;
 }
@@ -190,7 +200,9 @@ interface WriteInput {
 const own = (bytes: Uint8Array): ArrayBuffer => bytes.slice().buffer as ArrayBuffer;
 
 async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo> {
-  return (await writeUnlessUnsent(input, cloud))!;
+  const info = (await writeUnlessUnsent(input, cloud))!;
+  if (input.undo) void trimUndo().catch(() => undefined);
+  return info;
 }
 
 /** `write`, except that with `onlyIfSent` it writes nothing (and is null) over a copy that has changes the cloud hasn't got. */
@@ -247,7 +259,7 @@ async function letGo(tx: IDBTransaction, hashes: Iterable<string>): Promise<void
 
 /** Writes a document in one transaction: null (having written nothing) if a chunk the plan counted on is not there. */
 async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint8Array, plan: Chunked | null, cloud?: { id: string; updatedAt?: number }, previous?: DueVersion | null): Promise<SavedInfo | null | 'unsent'> {
-  const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, BASES], 'readwrite');
+  const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, BASES, UNDO, UNDO_DATA], 'readwrite');
   const meta = tx.objectStore(META);
   const manifests = tx.objectStore(MANIFESTS);
   const existing = input.id ? ((await done(meta.get(input.id))) as SavedInfo | undefined) : undefined;
@@ -315,6 +327,7 @@ async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint
     if (cloud.updatedAt !== undefined) info.cloudUpdatedAt = cloud.updatedAt;
   }
   meta.put(info);
+  keepUndo(tx, id, input.undo, info.updatedAt);
   if (write) write();
   else tx.objectStore(BYTES).put(own(view), id);
   // A copy that has just come from the cloud is the cloud copy: what a later merge starts from.
@@ -488,8 +501,9 @@ export async function deleteOwnedBy(owner: string): Promise<void> {
 
 export async function deleteSaved(id: string): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, TRASH, BASES, IMAGES], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, TRASH, BASES, IMAGES, UNDO, UNDO_DATA], 'readwrite');
   tx.objectStore(TRASH).delete(id);
+  keepUndo(tx, id, undefined);
   tx.objectStore(BASES).delete(id);
   await forgetHistory(tx, id);
   await release(tx, id);
@@ -508,7 +522,7 @@ export async function deleteSaved(id: string): Promise<void> {
  */
 export async function deleteSavedIfUnchanged(seen: SavedInfo): Promise<boolean> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, BASES, IMAGES], 'readwrite');
+  const tx = db.transaction([META, BYTES, THUMBS, SEARCH, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, BASES, IMAGES, UNDO, UNDO_DATA], 'readwrite');
   const now = (await done(tx.objectStore(META).get(seen.id))) as SavedInfo | undefined;
   const unchanged = now !== undefined && now.updatedAt === seen.updatedAt && now.updatedAt <= (now.cloudSyncedAt ?? 0);
   if (unchanged) {
@@ -520,6 +534,7 @@ export async function deleteSavedIfUnchanged(seen: SavedInfo): Promise<boolean> 
     tx.objectStore(IMAGES).delete(seen.id);
     tx.objectStore(SEARCH).delete(seen.id);
     tx.objectStore(BASES).delete(seen.id);
+    keepUndo(tx, seen.id, undefined);
   }
   await finished(tx);
   return unchanged;
@@ -588,6 +603,72 @@ export async function deleteSearchIndexes(keys: readonly string[]): Promise<void
   const db = await openDb();
   const tx = db.transaction(SEARCH, 'readwrite');
   for (const key of keys) tx.objectStore(SEARCH).delete(key);
+  await finished(tx);
+}
+
+// --- Undo history ----------------------------------------------------------------------------------------------------------
+//
+// A document's undo and redo steps are kept with its saved copy, so Undo still works after a reload, a closed tab or the next day
+// (docs/undo-history.md). They are written in the same transaction as the bytes they belong to and say which save that was
+// (`forUpdatedAt`); any other write of the document (a copy from the account, the vault file changed, a version put back) has none,
+// so they go. Each document keeps at most HISTORY_SNAPSHOT_MAX of them (the layout worker drops the oldest steps to fit), and the device
+// at most undoBudget(): past it, the documents least recently saved or opened lose theirs.
+
+/** What a document's kept undo steps take, and which save of it they belong to. */
+interface UndoRecord {
+  size: number;
+  forUpdatedAt: number;
+  /** When it was last saved or opened, for dropping the least recently used. */
+  usedAt: number;
+}
+
+
+/** The most every document's undo steps may take together: less on a phone. */
+export function undoBudget(): number {
+  const phone = typeof matchMedia === 'function' && matchMedia('(pointer: coarse) and (hover: none)').matches;
+  return (phone ? 20 : 50) * 1024 * 1024;
+}
+
+/** Writes (or, with none, forgets) a document's undo steps in a transaction that has UNDO and UNDO_DATA. */
+function keepUndo(tx: IDBTransaction, id: string, undo: string | undefined, forUpdatedAt = 0): void {
+  if (undo && undo.length <= HISTORY_SNAPSHOT_MAX) {
+    tx.objectStore(UNDO).put({ size: undo.length, forUpdatedAt, usedAt: Date.now() } satisfies UndoRecord, id);
+    tx.objectStore(UNDO_DATA).put(undo, id);
+  } else {
+    tx.objectStore(UNDO).delete(id);
+    tx.objectStore(UNDO_DATA).delete(id);
+  }
+}
+
+/** A saved copy's undo steps, if they were kept with the save `info` describes. */
+export async function getUndo(info: Pick<SavedInfo, 'id' | 'updatedAt'>): Promise<string | null> {
+  const db = await openDb();
+  const tx = db.transaction([UNDO, UNDO_DATA], 'readwrite');
+  const record = (await done(tx.objectStore(UNDO).get(info.id))) as UndoRecord | undefined;
+  if (!record || record.forUpdatedAt !== info.updatedAt) {
+    await finished(tx);
+    return null;
+  }
+  const undo = (await done(tx.objectStore(UNDO_DATA).get(info.id))) as string | undefined;
+  tx.objectStore(UNDO).put({ ...record, usedAt: Date.now() } satisfies UndoRecord, info.id);
+  await finished(tx);
+  return undo ?? null;
+}
+
+/** Drops the undo steps of the documents least recently used until what is kept fits the budget. */
+export async function trimUndo(budget = undoBudget()): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction([UNDO, UNDO_DATA], 'readwrite');
+  const store = tx.objectStore(UNDO);
+  const [keys, records] = await Promise.all([done(store.getAllKeys()), done(store.getAll() as IDBRequest<UndoRecord[]>)]);
+  let total = records.reduce((sum, r) => sum + r.size, 0);
+  const oldest = records.map((r, i) => ({ id: keys[i] as string, ...r })).sort((a, b) => a.usedAt - b.usedAt);
+  for (const r of oldest) {
+    if (total <= budget) break;
+    store.delete(r.id);
+    tx.objectStore(UNDO_DATA).delete(r.id);
+    total -= r.size;
+  }
   await finished(tx);
 }
 

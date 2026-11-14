@@ -53,6 +53,8 @@ export class LayoutClient {
   private readonly requests = new Map<number, (bytes: ArrayBuffer | null, error?: string) => void>();
   /** What a `saved` answer said of its `seq`, for `saveMarked`. */
   private readonly savedSeqs = new Map<number, number>();
+  /** The undo steps as of the last save, and of which document: the worker sends them only when they change. */
+  private lastUndo: { doc: number; undo: string | null } = { doc: -1, undo: null };
   private readonly savedChanges = new Map<number, number>();
   private readonly thesaurusRequests = new Map<number, (answer: { result: LookUp | null; failed?: boolean }) => void>();
   private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
@@ -250,16 +252,24 @@ export class LayoutClient {
   }
 
   /** `save`, and how far through the edit journal the bytes reach. */
-  saveMarked(): Promise<{ bytes: Uint8Array; seq: number }> {
+  saveMarked(): Promise<{ bytes: Uint8Array; seq: number; undo: string | undefined }> {
     let request = 0;
+    const doc = this.doc;
     return this.request((r) => {
       request = r;
-      return { type: 'save', doc: this.doc, request: r };
+      return { type: 'save', doc, request: r };
     }).then((bytes) => {
       const seq = this.savedSeqs.get(request) ?? 0;
       this.savedSeqs.delete(request);
-      return { bytes: new Uint8Array(bytes), seq };
+      const undo = this.lastUndo.doc === doc ? (this.lastUndo.undo ?? undefined) : undefined;
+      return { bytes: new Uint8Array(bytes), seq, undo };
     });
+  }
+
+  /** Puts back undo steps kept with the copy just opened (see docs/undo-history.md). Send before `replayJournal`. */
+  restoreUndo(undo: string): void {
+    this.lastUndo = { doc: this.doc, undo };
+    this.send({ type: 'restoreUndo', doc: this.doc, undo });
   }
 
   /** `save`, and how many changes the open document had had then (for a live block update made from it, `refresh`). */
@@ -373,6 +383,8 @@ export class LayoutClient {
     }
     if (message.type === 'media' || message.type === 'saved') {
       if (message.type === 'saved' && message.seq !== undefined) this.savedSeqs.set(message.request, message.seq);
+      // The worker sends the undo steps only when they have changed: the last ones are kept here for every save.
+      if (message.type === 'saved' && message.undo !== undefined && message.doc === this.doc) this.lastUndo = { doc: message.doc, undo: message.undo };
       if (message.type === 'saved' && message.changes !== undefined) this.savedChanges.set(message.request, message.changes);
       this.requests.get(message.request)?.(message.bytes, message.type === 'saved' ? message.error : undefined);
       this.requests.delete(message.request);

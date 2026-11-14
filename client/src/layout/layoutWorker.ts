@@ -5,7 +5,7 @@
 import { isMathInline, paragraphLength, sha256Hex, sharedMediaHash, sharedMediaPart, paragraphText, plainText, type DocumentProperties, type Inline, type Paragraph, runPropertiesAt, StyleResolver, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
 import { Editor, type Command } from '@golemdocs/editor';
 import { wordRange } from '@golemdocs/editor/textUnits';
-import { diffDocuments, Replica, ROOM_POLICY, type ClientMessage, type DocumentChange, type Pos, type Operation, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
+import { diffDocuments, Replica, ROOM_POLICY, type ClientMessage, type DocumentChange, type HistorySnapshot, type Pos, type Operation, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
 import { cloudRoomTransport } from '../collab/cloudRoom.ts';
 import { RoomClient, type RoomHost, type RoomStart } from '../collab/roomClient.ts';
 import {
@@ -425,6 +425,10 @@ class OpenDocument {
   replica: Replica | null = null;
   /** The last edit told to the page (see storage/editJournal.ts). */
   journalSeq = 0;
+  /** The undo history's `version` as last sent with a save (see `undoForSave`), -1 for none sent. */
+  private undoVersion = -1;
+  /** Opened from a room's copy rather than the page's: undo steps kept with the page's copy don't fit it. */
+  fromRoom = false;
   session: LayoutSession | null = null;
   editor: Editor | null = null;
   formats: FormatReader | null = null;
@@ -816,6 +820,7 @@ class OpenDocument {
       box: { x: Math.min(ax, bx), y: Math.min(ay, by), width: Math.abs(bx - ax), height: Math.abs(by - ay) },
       baseline,
       style: picked.style,
+      ...(annotator.liveOf(picked.id) && { live: annotator.liveOf(picked.id)! }),
     };
   }
 
@@ -934,9 +939,12 @@ class OpenDocument {
         void this.pickText(annotator, index, wire.x, wire.y);
         return;
       }
-      case 'pdfText':
-        changed = annotator.setPickedText(wire.text);
+      case 'pdfText': {
+        const live = annotator.pickedLive();
+        if (live) this.notice(t('live.readOnly', { source: live }));
+        else changed = annotator.setPickedText(wire.text);
         break;
+      }
       case 'pdfPutDown':
         changed = annotator.deselect();
         break;
@@ -980,7 +988,7 @@ class OpenDocument {
       }
       case 'pdfAddImage': {
         const index = this.pdfIndex(wire.page);
-        if (index >= 0) changed = annotator.addImage(index, this.userBox(index, wire.box), wire.data);
+        if (index >= 0) changed = annotator.addImage(index, this.userBox(index, wire.box), wire.data, wire.live);
         break;
       }
       case 'pdfAddText': {
@@ -988,7 +996,7 @@ class OpenDocument {
         if (index < 0) break;
         const { view } = this.pdf!;
         const [ux, uy] = view.toUser(index, wire.x, wire.y);
-        changed = annotator.addTextBox(index, ux, uy, wire.text);
+        changed = annotator.addTextBox(index, ux, uy, wire.text, wire.live);
         break;
       }
       case 'pdfPageOp':
@@ -1647,6 +1655,37 @@ class OpenDocument {
     post({ type: 'journal', doc: this.doc, seq: ++this.journalSeq, ops });
   }
 
+  /**
+   * The undo history to keep with a save, read as its body is written (see docs/undo-history.md): JSON, null for none (nothing to
+   * undo, or a shared room, whose copy is the room's), or undefined when it hasn't changed since the last save sent it.
+   */
+  undoForSave(): string | null | undefined {
+    const history = this.replica?.history;
+    if (!history || this.shared || this.fromRoom || (!history.canUndo && !history.canRedo)) {
+      this.undoVersion = -1;
+      return null;
+    }
+    if (history.version === this.undoVersion) return undefined;
+    this.undoVersion = history.version;
+    return history.saved();
+  }
+
+  /** Undo steps kept with the copy just opened, put back (in turn with the commands, before any kept edits are replayed). */
+  restoreUndo(undo: string): void {
+    if (!this.isSetUp) return this.later(() => this.setUp.then(() => this.restoreUndo(undo)));
+    const history = this.replica?.history;
+    if (!history || this.closed || this.fromRoom || this.shared || history.canUndo || history.canRedo) return;
+    try {
+      history.load(JSON.parse(undo) as HistorySnapshot);
+    } catch (e) {
+      console.error(e);
+      return;
+    }
+    // What the page holds already: the next save need not send it again.
+    this.undoVersion = history.version;
+    if (this.editor) this.sendSelection();
+  }
+
   /** Edits kept from before the page last went away, put back. They are in a journal already, so they are not told to the page again. */
   replayJournal(batches: Operation[][]): void {
     if (!this.isSetUp) return this.later(() => this.setUp.then(() => this.replayJournal(batches)));
@@ -1654,12 +1693,15 @@ class OpenDocument {
     if (!editor || !replica || this.readOnly || this.closed) return;
     const tell = replica.onTransaction;
     replica.onTransaction = null;
+    // They were this session's own edits, so Undo takes them back, all together, as one step.
+    const mark = replica.history.mark();
     try {
-      for (const ops of batches) editor.external(ops);
+      for (const ops of batches) editor.external(ops, { undoable: true });
     } catch (e) {
       console.error(e);
     } finally {
       replica.onTransaction = tell;
+      replica.history.fold(mark);
     }
     this.edited = true;
     this.typedAt = performance.now();
@@ -2783,6 +2825,7 @@ async function open(doc: number, source: DocumentSource, requestedRoom?: RoomOpt
     // A picture another person added is fetched from the room when it is first needed.
     document.fetchPart = (part) => entry.fetchRoomMedia(part);
     entry.replica = replica;
+    entry.fromRoom = start?.kind === 'room';
     replica.onTransaction = (transaction) => {
       entry.changes++;
       entry.journalEdit(transaction.ops);
@@ -2897,16 +2940,25 @@ async function save(doc: number, request: number, lens?: Format): Promise<void> 
     // What the body holds is known exactly: the edits up to this one, read in the same synchronous stretch as it is written. What is written
     // after it (styles, comments, properties) may hold later edits too, which replace rather than add, so replaying those is harmless.
     let seq = open.journalSeq;
+    // The undo steps, like `seq`, as the body is written: they fit exactly what it holds.
+    let undo: string | null | undefined = null;
     // Taken before the write: a change made while it is written counts as after it.
     const changes = open.changes;
     const bytes = await writeWdoc({
       manifest: { version: WDOC_VERSION, lens: lens ?? open.format, origin: open.origin, pagesCurrent: open.pagesCurrent && !open.edited },
-      document: open.document ? await open.document.write({ onBody: () => (seq = open.journalSeq) }) : null,
+      document: open.document
+        ? await open.document.write({
+            onBody: () => {
+              seq = open.journalSeq;
+              undo = open.undoForSave();
+            },
+          })
+        : null,
       original: open.original,
       extensions: currentExtensions(open),
     });
     const buffer = bytes.slice().buffer;
-    post({ type: 'saved', request, bytes: buffer, seq, changes }, [buffer]);
+    post({ type: 'saved', request, bytes: buffer, seq, changes, ...(undo !== undefined && { undo, doc }) }, [buffer]);
   } catch (e) {
     post({ type: 'saved', request, bytes: null, error: (e as Error).message });
   }
@@ -3188,6 +3240,9 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'save':
       void save(message.doc, message.request, message.lens);
+      break;
+    case 'restoreUndo':
+      if (current?.doc === message.doc) current.restoreUndo(message.undo);
       break;
     case 'replayJournal':
       if (current?.doc === message.doc) current.replayJournal(message.batches);

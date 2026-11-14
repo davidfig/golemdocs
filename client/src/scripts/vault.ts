@@ -10,14 +10,14 @@ import { documentToMarkdown, markdownToDocument } from '../formats/markdown.ts';
 import type { LiveResult } from '../live/result.ts';
 import { frontMatterField, readStoredText } from '../live/textSource.ts';
 import type { StoredText } from '../live/textSource.ts';
-import { normalizeFolder, within } from './host.ts';
-import type { ScriptMeta } from './host.ts';
-import { isScriptPath } from './link.ts';
-import type { RunMode, ScriptEdit, ScriptEditOp } from './runtime.ts';
-import { MAX_FETCH_CHARS } from './fetch.ts';
-import type { ScriptFetch, ScriptResponse } from './fetch.ts';
+import { normalizeFolder, within } from '@golemdocs/script/host';
+import type { ScriptMeta } from '@golemdocs/script/host';
+import { isScriptPath } from '@golemdocs/script/link';
+import type { RunMode, ScriptEdit, ScriptEditOp } from '@golemdocs/script/runtime';
+import { MAX_FETCH_CHARS } from '@golemdocs/script/fetch';
+import type { ScriptFetch, ScriptResponse } from '@golemdocs/script/fetch';
 
-export type { ScriptFetch, ScriptResponse } from './fetch.ts';
+export type { ScriptFetch, ScriptResponse } from '@golemdocs/script/fetch';
 
 export interface VaultFile {
   /** Its path in the vault: its folders and name, `Books/Dune.md`. */

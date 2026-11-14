@@ -680,7 +680,7 @@ test('a workbook keeps and recalculates what it reads from another workbook, and
 });
 
 import { PdfDocument, applyFields, readFields } from '@golemdocs/pdf';
-import type { FormField } from '@golemdocs/pdf';
+import type { FormField, PdfEdit } from '@golemdocs/pdf';
 import { WDOC_VERSION, writeWdoc } from '../src/formats/wdoc.ts';
 
 /** A one-page PDF with a text field `Total` (showing `total`) and a check box `Paid`. */
@@ -964,4 +964,74 @@ test('Stop Updating in a workbook takes away the live range’s name and keeps i
   assert.equal(removeSheetLive(book, 0, 0, 0), false);
   assert.equal(removeSheetLive(book, 0, 2, 1), true);
   assert.deepEqual(sheetLiveRanges(book).map((l) => l.tag.source), ['Budget.xlsx#Total']);
+});
+
+// --- A PDF page as a picture ---------------------------------------------------------------------
+
+import { encodePng } from '@golemdocs/pdf';
+import { pdfResult } from '../src/live/pdfLive.ts';
+import { isLiveSourceName } from '../src/live/liveMarks.ts';
+import { readFileSync } from 'node:fs';
+
+/** A page with a red box, text in a standard font and in an embedded one, and a 2×1 picture, on a second page. */
+async function contractPdf(): Promise<Uint8Array> {
+  const doc = PdfDocument.create();
+  doc.addPage([300, 200]);
+  const page = doc.addPage([300, 200]);
+  const helv = doc.standardFont('Helvetica');
+  const dejavu = doc.embedFont(new Uint8Array(readFileSync(new URL('../../pdf/test/fixtures/DejaVuSans-subset.ttf', import.meta.url))));
+  const picture = doc.embedImage(encodePng(2, 1, 3, Uint8Array.from([0, 0, 255, 0, 255, 0])));
+  page.draw({ origin: 'top-left' }).rect(10, 10, 50, 20, { fill: [1, 0, 0] }).text('Signed', 10, 60, { font: helv, size: 12 }).text('ab', 10, 90, { font: dejavu, size: 14 }).image(picture, 100, 100, 40, 20).finish();
+  return doc.save();
+}
+
+test('a page of a PDF is a picture: an SVG of its shapes, text and pictures, with a PNG beside it', async () => {
+  const bytes = await contractPdf();
+  const png = encodePng(1, 1, 4, new Uint8Array(4));
+  const result = await pdfResult(bytes, 'page:2', async () => png);
+  assert.equal(result.kind, 'picture');
+  if (result.kind !== 'picture') return;
+  assert.deepEqual([result.width, result.height, result.bytes], [300, 200, png]);
+  const svg = result.svg!;
+  // The white sheet, the red box, the embedded font's letters as outlines, the standard font's as text, and the picture.
+  assert.match(svg, /<rect[^>]*fill:#ffffff|<rect[^>]*fill="#ffffff"/i);
+  assert.match(svg, /#ff0000|rgb\(255, ?0, ?0\)|red/i);
+  assert.match(svg, />Signed<|>S<\/tspan>/);
+  assert.match(svg, /<path[^>]* d="M[^"]*C/);
+  assert.match(svg, /<image[^>]*data:image\/png;base64,/);
+  assert.deepEqual(await pdfResult(bytes, 'page:3', async () => png), { kind: 'error', code: 'notFound', detail: 'page 3' });
+  assert.equal((await pdfResult(new TextEncoder().encode('not a pdf'), 'page:1', async () => png)).kind, 'error');
+  // Written in a note, a page is a live block; the PDF itself stays an embed.
+  assert.equal(isLiveSourceName('Contract.pdf#page:2'), true);
+  assert.equal(isLiveSourceName('Contract.pdf'), false);
+});
+
+test('Edit PDF’s text boxes and pictures can show live blocks: a table as lines, a picture keeping its width', async () => {
+  const original = await returnPdf();
+  const png2x1 = encodePng(2, 1, 3, Uint8Array.from([0, 0, 255, 0, 255, 0]));
+  const edits: PdfEdit[] = [
+    { id: 'b1', page: 0, kind: 'textbox', box: [50, 500, 250, 520], text: 'Meals.csv', font: 'Helvetica', size: 12, color: [0, 0, 0], live: liveTagText({ source: 'Meals.csv', stamp: '' }) },
+    { id: 'p1', page: 0, kind: 'image', box: [50, 300, 250, 450], data: '', live: liveTagText({ source: 'Logo.png', stamp: '' }) },
+    { id: 'b2', page: 0, kind: 'textbox', box: [50, 100, 250, 120], text: 'typed', font: 'Helvetica', size: 12, color: [0, 0, 0] },
+  ];
+  const stored = await writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'pdf', origin: 'pdf', pagesCurrent: true }, document: null, original, extensions: { pdf: { annotations: [], edits } } });
+  assert.deepEqual((await segmentsFromBytes(stored))?.[0].live, ['Meals.csv', 'Logo.png']);
+  const files: Record<string, Uint8Array> = { 'Meals.csv': new TextEncoder().encode('Day,Calories\nMon,2100\n'), 'Logo.png': png2x1 };
+  const lookup = async (title: string) => (files[title] ? { name: title, bytes: files[title] } : null);
+  const first = await updateStoredLive(stored, 'Form.pdf', lookup);
+  assert.equal(first.report.updated, 2);
+  const { readWdoc } = await import('../src/formats/wdoc.ts');
+  const after = (await readWdoc(first.bytes!)).extensions.pdf!.edits!;
+  const box = after.find((e) => e.id === 'b1') as Extract<PdfEdit, { kind: 'textbox' }>;
+  assert.equal(box.text, 'Day   Calories\nMon   2100');
+  const picture = after.find((e) => e.id === 'p1') as Extract<PdfEdit, { kind: 'image' }>;
+  assert.equal(picture.data, Buffer.from(png2x1).toString('base64'));
+  // As wide as it was, from its top edge down, as tall as the picture's proportions say.
+  assert.deepEqual(picture.box, [50, 350, 250, 450]);
+  assert.equal((after.find((e) => e.id === 'b2') as Extract<PdfEdit, { kind: 'textbox' }>).text, 'typed');
+  assert.equal((await updateStoredLive(first.bytes!, 'Form.pdf', lookup)).bytes, null);
+  // A text box can't show a picture: it says so, and keeps what it had.
+  const wrong = await writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'pdf', origin: 'pdf', pagesCurrent: true }, document: null, original, extensions: { pdf: { annotations: [], edits: [{ ...edits[0], live: liveTagText({ source: 'Logo.png', stamp: '' }) }] } } });
+  const refused = await updateStoredLive(wrong, 'Form.pdf', lookup);
+  assert.deepEqual([refused.bytes, refused.report.problems], [null, [{ source: 'Logo.png', code: 'unsupported' }]]);
 });

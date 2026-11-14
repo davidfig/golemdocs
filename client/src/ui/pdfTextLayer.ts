@@ -112,9 +112,12 @@ export class PdfTextLayer {
       this.editor.textContent = picked.text;
       this.sent = picked.text;
     }
+    // A text box showing a live block is filled from its source: it can be moved, not typed in.
+    this.editor.setAttribute('contenteditable', picked.live ? 'false' : 'plaintext-only');
+    this.editor.title = picked.live ? t('live.readOnly', { source: picked.live }) : '';
     this.style(picked);
     this.position();
-    if (fresh) this.focusAtClick();
+    if (fresh && !picked.live) this.focusAtClick();
   }
 
   private drag(start: PointerEvent): void {

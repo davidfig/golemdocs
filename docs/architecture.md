@@ -47,6 +47,7 @@ These are the goals the design serves. When a change pulls against one, that is 
 | `editor` | Selection, commands and `Editor.apply`, which turns commands into operations | `docx`, `layout`, `ops` |
 | `odt` | OpenDocument reader and writer | `docx` |
 | `pdf` | PDF reader, editor and writer | none |
+| `script` | Scripts: the API they see, the TypeScript stripper and linker, the sandbox and its runtime | none |
 | `client` | The app: UI, WebGL renderer, format handlers, storage | all of the libraries |
 | `server` | The Worker: accounts, cloud documents, sharing, rooms, billing | `docx`, `ops` |
 

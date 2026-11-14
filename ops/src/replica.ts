@@ -80,12 +80,15 @@ export class Replica {
    * Applies edits made outside the app (its file changed on disk). Like someone else's, Undo doesn't take them back: the undo
    * history moves through them, as selections should (with the mapping returned). In a room they go to the server as any edit does.
    */
-  external(ops: Operation[]): { applied: Applied; mapping: Mapping } {
+  external(ops: Operation[], options: { undoable?: boolean } = {}): { applied: Applied; mapping: Mapping } {
     const applied = this.engine.apply(ops);
     const mapping = new Mapping();
     mapping.appendAll(applied.maps);
-    this.history.map(mapping, 0, mapping.length);
-    this.client?.commit(this.transaction(ops), applied.steps);
+    const transaction = this.transaction(ops);
+    // `undoable`: this session's own edits, kept from before the page went away, which Undo takes back as it would have then.
+    if (options.undoable) this.history.record(transaction.id, applied.inverse, null, null);
+    else this.history.map(mapping, 0, mapping.length);
+    this.client?.commit(transaction, applied.steps);
     return { applied, mapping };
   }
 

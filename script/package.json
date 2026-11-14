@@ -1,0 +1,30 @@
+{
+  "name": "@golemdocs/script",
+  "private": true,
+  "description": "Golem Docs scripts: the API scripts see, the TypeScript stripper and linker, and the sandbox they run in (private workspace package, not on npm)",
+  "version": "0.37.2",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fetch": "./src/fetch.ts",
+    "./grants": "./src/grants.ts",
+    "./host": "./src/host.ts",
+    "./link": "./src/link.ts",
+    "./nodeChannel": "./src/nodeChannel.ts",
+    "./runtime": "./src/runtime.ts",
+    "./sandbox": "./src/sandbox.ts",
+    "./strip": "./src/strip.ts",
+    "./tokens": "./src/tokens.ts"
+  },
+  "scripts": {
+    "test": "tsx --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  },
+  "sideEffects": false
+}

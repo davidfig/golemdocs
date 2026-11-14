@@ -1,7 +1,6 @@
 import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
-  'live.copy.noField': "Cliquez dans un champ du formulaire pour le copier comme lien dynamique.",
   'live.copy.nothing': "Placez le curseur dans un tableau avec un titre, un signet ou une section sous un titre pour la copier comme lien dynamique.",
   'live.readOnly': "Cette partie affiche {source} et reste à jour à partir de celui-ci. Modifiez-le là-bas.",
   'live.notUpdated': "Un bloc dynamique de {name} n’a pas été mis à jour : {problem}",

@@ -164,9 +164,9 @@ export type WireCommand =
   /** Adds a shape to a page (by id), in this box (page coordinates), and selects it. A whiteout is a white rectangle. */
   | { kind: 'pdfAddShape'; page: number; shape: 'rect' | 'ellipse' | 'line' | 'check' | 'cross' | 'whiteout' | 'redact'; box: WireBox; flip?: boolean }
   /** Adds a picture (a PNG or JPEG file, base64) to a page, in this box, and selects it. */
-  | { kind: 'pdfAddImage'; page: number; box: WireBox; data: string }
+  | { kind: 'pdfAddImage'; page: number; box: WireBox; data: string; /** It shows a live block: its tag. */ live?: string }
   /** Adds a text box with its top left at a point of a page, and picks it to type in. */
-  | { kind: 'pdfAddText'; page: number; x: number; y: number; /** What it says to begin with (a date, say). */ text?: string }
+  | { kind: 'pdfAddText'; page: number; x: number; y: number; /** What it says to begin with (a date, say). */ text?: string; /** It shows a live block: its tag. */ live?: string }
   /** Changes the pages of the PDF: the page (by id) is deleted, turned, moved (a step, or to index `to` of the new order), copied, or a blank one is put after it. */
   | { kind: 'pdfPageOp'; page: number; op: 'delete' | 'rotateLeft' | 'rotateRight' | 'moveUp' | 'moveDown' | 'duplicate' | 'insert' }
   | { kind: 'pdfPageOp'; page: number; op: 'move'; to: number };
@@ -207,6 +207,8 @@ export interface WirePickedText {
   /** Where the first line's baseline is, on the page. */
   baseline: number;
   style: PickedStyle;
+  /** A text box showing a live block: its source (it can be moved, not typed in). */
+  live?: string;
 }
 
 /** A form field as the page sees it: on a page (by id), its box in page coordinates (points, y down). */
@@ -270,6 +272,8 @@ export type ToWorker =
       readOnly?: boolean;
     }
   /** What was edited here and not saved when the page last went away, to put back into the open document (see storage/editJournal.ts). */
+  /** Undo steps kept with the copy just opened (see docs/undo-history.md), to put back before anything else changes it. */
+  | { type: 'restoreUndo'; doc: number; undo: string }
   | { type: 'replayJournal'; doc: number; batches: Operation[][] }
   /** The same, into a copy of what `source` holds rather than the open document: answered with `saved`. */
   | { type: 'journalCopy'; request: number; source: DocumentSource; batches: Operation[][] }
@@ -490,7 +494,19 @@ export type FromWorker =
   /** The text at the point a `textAt` asked about: paragraph index and offset, or null (no text there, or no document). */
   | { type: 'textAt'; request: number; place: [number, number] | null }
   /** `seq`: the last edit (see `journal`) the bytes hold. */
-  | { type: 'saved'; request: number; bytes: ArrayBuffer | null; error?: string; seq?: number; /** How many changes the open document had had when it was written (any, from anyone). */ changes?: number }
+  | {
+      type: 'saved';
+      request: number;
+      bytes: ArrayBuffer | null;
+      error?: string;
+      seq?: number;
+      /** How many changes the open document had had when it was written (any, from anyone). */
+      changes?: number;
+      /** The undo steps as the bytes stand (see docs/undo-history.md): null for none, absent when unchanged since the last save. */
+      undo?: string | null;
+      /** The document `undo` is of. */
+      doc?: number;
+    }
   /** An edit made here, in order, for the page to keep until a save holds it; `ops` null when what was done can't be replayed (see storage/editJournal.ts). */
   | { type: 'journal'; doc: number; seq: number; ops: Operation[] | null }
   /** `typed`: not put in, because the document was edited here meanwhile (those edits win; `ok` is true, as nothing needs opening again). */

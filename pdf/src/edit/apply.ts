@@ -66,6 +66,8 @@ export interface TextBoxEdit extends EditBase {
   italic?: boolean;
   size: number;
   color: Rgb;
+  /** Shows a live block (the app's tag, `live:<source> stamp=<hash>`): the app fills `text` from its source. */
+  live?: string;
 }
 
 /** Moves, resizes or deletes something the page draws: a picture, a painted shape, a form XObject (see `PageObject`). */
@@ -97,6 +99,8 @@ export interface ImageEdit extends EditBase {
   box: Box;
   /** A PNG or JPEG file, base64 encoded. */
   data: string;
+  /** Shows a live block (the app's tag, `live:<source> stamp=<hash>`): the app fills `data` from its source. */
+  live?: string;
 }
 
 /**

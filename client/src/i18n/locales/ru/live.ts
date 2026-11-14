@@ -1,7 +1,6 @@
 import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
-  'live.copy.noField': "Щёлкните поле формы, чтобы скопировать его как живую ссылку.",
   'live.copy.nothing': "Поставьте курсор в таблицу с названием, закладку или раздел под заголовком, чтобы скопировать его как живую ссылку.",
   'live.readOnly': "Эта часть показывает {source} и обновляется оттуда. Измените её там.",
   'live.notUpdated': "Динамический блок в {name} не обновлён: {problem}",

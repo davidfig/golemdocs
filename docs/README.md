@@ -28,6 +28,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [history.md](history.md) | Version history (this browser's and the account's), the shared retention rules, and the trash |
 | [chunked-storage.md](chunked-storage.md) | Content-defined chunking and delta uploads for files of 2 MiB or more |
 | [edit-journal.md](edit-journal.md) | Keeping the edits made since the last save through a reload, a closed tab or a crash |
+| [undo-history.md](undo-history.md) | Undo and Redo after a reload: each document's undo steps kept on the device with its saved copy |
 | [text-files.md](text-files.md) | The large text and log editor (50 MB files): design, status and measurements |
 | [pdf-editing.md](pdf-editing.md) | Fill In and Edit PDF modes |
 | [spreadsheets.md](spreadsheets.md) | Plan for `.xlsx`: column-major model, memory-image cache, formula engine, hashed tile pyramid zoomable to under 1% |
@@ -38,7 +39,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 
 ## Package READMEs
 
-[docx](../docx/README.md), [ops](../ops/README.md), [pdf](../pdf/README.md). `layout`, `editor` and `odt` have none yet; their architecture docs above stand in.
+[docx](../docx/README.md), [ops](../ops/README.md), [pdf](../pdf/README.md), [script](../script/README.md). `layout`, `editor` and `odt` have none yet; their architecture docs above stand in.
 
 ## Status and ongoing work
 

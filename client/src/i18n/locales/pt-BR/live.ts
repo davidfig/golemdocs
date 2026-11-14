@@ -1,7 +1,6 @@
 import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
-  'live.copy.noField': "Clique em um campo do formulário para copiá-lo como link dinâmico.",
   'live.copy.nothing': "Coloque o cursor em uma tabela com título, um indicador ou uma seção sob um título para copiá-la como link dinâmico.",
   'live.readOnly': "Esta parte mostra {source} e é mantida atualizada a partir dele. Altere-o lá.",
   'live.notUpdated': "Um bloco dinâmico em {name} não foi atualizado: {problem}",

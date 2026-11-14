@@ -5,6 +5,7 @@
 // that place something new. Every change goes to the layout worker (see layout/pdfAnnotator.ts).
 
 import { t } from '../i18n/index.ts';
+import { liveTagText, showsPicture } from '../live/liveMarks.ts';
 import type { WireBox, WireCommand, WirePickedObject, WirePickedText } from '../layout/protocol.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
 import { h, isFormField, modalOpen } from './dom.ts';
@@ -45,6 +46,8 @@ const MARK_SIZE = 14;
 const DEFAULT_SHAPE: [number, number] = [120, 70];
 /** Widest a picture is when it is added, points. */
 const PICTURE_WIDTH = 300;
+/** A transparent pixel: a live picture until its source fills it. */
+const EMPTY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
 const toolLabel = (tool: Tool | 'picture'): string => t(`chrome.pdfEdit.tool.${tool}` as const);
 
@@ -257,6 +260,24 @@ export class PdfEditTools {
     catcher.addEventListener('pointermove', move);
     catcher.addEventListener('pointerup', done);
     catcher.addEventListener('pointercancel', done);
+  }
+
+  /**
+   * Adds a text box or picture showing a live block (a live link pasted), on the page in the middle of the view: a picture for
+   * a source that is one (live/liveMarks.ts `showsPicture`), else a text box. Empty until it is filled from its source.
+   */
+  addLive(source: string): boolean {
+    const rect = this.layer.getBoundingClientRect();
+    const at = this.host.pageAt(rect.width / 2, rect.height / 2) || this.host.pageAt(rect.width / 2, rect.height / 3);
+    if (!at) return false;
+    const live = liveTagText({ source, stamp: '' });
+    if (showsPicture(source)) {
+      const width = Math.min(PICTURE_WIDTH, at.page.width * 0.8);
+      const height = width * 0.75;
+      const box: WireBox = { x: Math.max(0, at.x - width / 2), y: Math.max(0, at.y - height / 2), width, height };
+      this.host.send({ kind: 'pdfAddImage', page: at.page.id, box, data: EMPTY_PNG, live });
+    } else this.host.send({ kind: 'pdfAddText', page: at.page.id, x: Math.max(0, at.x - PICTURE_WIDTH / 2), y: at.y, text: source, live });
+    return true;
   }
 
   /** Adds a picture from a file, centered on the page in the middle of the view, or at `drop` (a point on the screen). */

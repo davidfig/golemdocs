@@ -13,10 +13,14 @@
 - A live block of a CSV file or spreadsheet table can show just the rows you want: in Insert › Live Block › Table, or in its address, keep rows that meet conditions, sort them, pick columns and set a limit (`![[Meals.csv?where=Calories>2000&sort=-Calories]]`).
 - PDF forms work with live blocks: paste a live link into a form field and it is filled from that source and kept up to date, so the downloaded PDF always has the current numbers. A field can be a source too: click in it and use Edit › Copy as Live Link (`![[Return.pdf#field:Total]]`).
 - Drawings can show live blocks: paste a live link into a drawing and its value, table or chart appears as a group you can move and scale, kept up to date like any other live block.
+- A live block can show a page of a PDF as a picture (`![[Contract.pdf#page:3]]`), drawn again when the PDF changes. In a PDF, Edit › Copy as Live Link copies the page in view when you aren't in a form field.
+- Paste a live link into a PDF to add a text box or a picture that stays up to date: a picture for a picture, chart or PDF page, a text box for a value or a table. It can be moved, and typing in it says where it comes from.
 - File › Live PDF Copy saves a PDF of your document beside it, and writes it again whenever the document changes, so the PDF in your vault folder is never out of date.
 - Scripts: a TypeScript or JavaScript file in your vault's Scripts folder can fill a live block (`![[Scripts/reading-list.ts]]`) or change notes for you, by hand (Tools › Run Script), from a button in a note (`![[@run:Scripts/daily-note.ts]]`), when a note in a folder changes, or every day or week. A script runs walled off from the network and the rest of the app, asks before its first run, and can only read and change the folders it names. Tools › Scripts shows each script's permissions and last runs, turns scripts off, and undoes a run.
 - A script that changes notes can fetch from websites it names (`network: ['api.example.com']`): it asks for each site before its first run, and can reach no other.
 - `pnpm golem run Scripts/x.ts --vault <folder>` runs a vault's script from the command line, for testing scripts and for ai agents.
+- When a note changes while a script is changing it (you typed in it, or it synced from another device), the script runs once more on the new note instead of failing.
+- Scripts can `import type { ActionApi } from '@golemdocs/script'` for the full list of what a script can call, with notes on each.
 - Formulas that read another workbook (`=[Bank.xlsx]Sheet1!A1`) now keep working when the sheet recalculates, and pick up the other workbook's new numbers when it changes in your vault.
 - A live block whose source shows the document it is in, directly or through other documents, says so and keeps what it last showed.
 - A live block can't be edited by mistake: typing in it says which file it comes from, so you can change it there.
@@ -29,6 +33,7 @@
 
 ### Changed
 
+- Undo and Redo keep working after a reload, a closed tab or the next day: each document's undo steps are kept on this device with its saved copy (not uploaded). Edits brought back after a reload undo as one step.
 - Until March 2027, signed-in apps send one anonymous daily total: how often live blocks were out of date when a document opened. It never says who or which document, and the pricing page now says so.
 
 ### Fixed

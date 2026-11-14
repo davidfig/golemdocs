@@ -220,6 +220,19 @@ test('a note shows a workbook’s chart as a picture', async ({ app, page }) => 
   await expect.poll(async () => (await app.download(() => app.menu('File', 'Download'))).text, { timeout: 20_000 }).toMatch(filled);
 });
 
+test('a note shows a page of a PDF as a picture', async ({ app, page }) => {
+  const contract = makePdf({ pages: [[{ text: 'Cover', x: 40, y: 240, size: 18 }], [{ text: 'Signed by both', x: 40, y: 240, size: 18 }]], extraContent: '1 0 0 rg 40 40 120 30 re f' });
+  await importVault(app, page, [
+    { name: 'Contract.pdf', data: contract },
+    { name: 'Deal.md', data: 'The signed page:\n\n![[Contract.pdf#page:2]]\n' },
+  ]);
+  await app.menu('File', 'Open…');
+  await dashboard(page).getByRole('button', { name: 'Open folder Vault' }).click();
+  await dashboard(page).getByRole('button', { name: 'Open Deal.md' }).click();
+  const filled = /<!-- golem:live Contract\.pdf#page:2 stamp=[0-9a-f]{8} -->\n\n!\[[^\]]*\]\([^)]+\)/;
+  await expect.poll(async () => (await app.download(() => app.menu('File', 'Download'))).text, { timeout: 20_000 }).toMatch(filled);
+});
+
 test('Copy as Live Link with a chart picked copies the chart', async ({ app, page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await app.goto('?doc=welcome');
@@ -332,6 +345,29 @@ test('a live link pasted into a PDF form field fills it from its source, and the
   expect(decodePdf(file.bytes)).toMatch(/\/V\s*\(3140\)/);
 });
 
+test('a live link pasted into a PDF makes a text box, or a picture, filled from its source and written into the downloaded PDF', async ({ app, page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const logo = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAEklEQVR4AQEHAPj/AAAA/wD/AAYBAf8F5AonAAAAAElFTkSuQmCC', 'base64');
+  await importVault(app, page, [
+    { name: 'Total.csv', data: '3140\n' },
+    { name: 'Logo.png', data: logo },
+    { name: 'Letter.pdf', data: makePdf({ pages: [[{ text: 'Dear reader', x: 40, y: 270, size: 16 }]] }) },
+  ]);
+  await app.menu('File', 'Open…');
+  await dashboard(page).getByRole('button', { name: 'Open folder Vault' }).click();
+  await dashboard(page).getByRole('button', { name: 'Open Letter.pdf' }).click();
+  await waitForOpen(app, 'Letter.pdf');
+  await app.focus();
+  await page.evaluate(() => navigator.clipboard.writeText('![[Total.csv]]'));
+  await page.keyboard.press('ControlOrMeta+V');
+  await expect.poll(async () => decodePdf((await app.download(() => app.menu('File', 'Download'))).bytes), { timeout: 20_000 }).toMatch(/\(3140\)/);
+  await app.focus();
+  await page.evaluate(() => navigator.clipboard.writeText('![[Logo.png]]'));
+  await page.keyboard.press('ControlOrMeta+V');
+  // The picture is the logo's 2 × 1 pixels, not the empty one it starts as.
+  await expect.poll(async () => decodePdf((await app.download(() => app.menu('File', 'Download'))).bytes), { timeout: 20_000 }).toMatch(/\/Subtype\s*\/Image[^>]*\/Width\s+2\b|\/Width\s+2\b[^>]*\/Subtype\s*\/Image/);
+});
+
 test('Copy as Live Link in a PDF form field copies the field’s address', async ({ app, page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const form = makePdf({ pages: [[{ text: 'Tax return', x: 40, y: 270, size: 16 }]], fields: [{ kind: 'text', name: 'Total', rect: [40, 220, 240, 240] }] });
@@ -344,6 +380,17 @@ test('Copy as Live Link in a PDF form field copies the field’s address', async
   await total.fill('1250');
   await app.menu('Edit', 'Copy as Live Link');
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('![[Return.pdf#field:Total]]');
+});
+
+test('Copy as Live Link in a PDF, outside a form field, copies the page in view', async ({ app, page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await importVault(app, page, [{ name: 'Contract.pdf', data: makePdf({ pages: [[{ text: 'Cover', x: 40, y: 240, size: 18 }]] }) }]);
+  await app.menu('File', 'Open…');
+  await dashboard(page).getByRole('button', { name: 'Open folder Vault' }).click();
+  await dashboard(page).getByRole('button', { name: 'Open Contract.pdf' }).click();
+  await waitForOpen(app, 'Contract.pdf');
+  await app.menu('Edit', 'Copy as Live Link');
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 10_000 }).toBe('![[Contract.pdf#page:1]]');
 });
 
 test('Insert › Live Block lists a folder’s notes with a front matter column', async ({ app, page }) => {

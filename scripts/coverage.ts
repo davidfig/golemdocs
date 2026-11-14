@@ -7,7 +7,7 @@ import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const PACKAGES = ['docx', 'layout', 'ops', 'editor', 'server', 'client', 'pdf', 'odt'];
+const PACKAGES = ['docx', 'layout', 'ops', 'editor', 'server', 'client', 'pdf', 'odt', 'script'];
 const LOW = 60;
 
 function sources(dir: string): string[] {

@@ -482,3 +482,82 @@ test('replaying what a replica told of, after a save, reaches the same document:
     assert.deepEqual(shape(back), shape(doc), `seed ${seed}`);
   }
 });
+
+test('undo steps kept with a save go back on the reopened copy, and kept edits replayed on top undo as one more step', async () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    let state = seed;
+    const random = () => (state = (state * 1103515245 + 12345) % 2147483648) / 2147483648;
+    const doc = await WordDocument.create();
+    const live = new Replica(doc, { random });
+    const told: Operation[][] = [];
+    live.onTransaction = (tx) => told.push(JSON.parse(JSON.stringify(tx.ops)));
+    const step = () => {
+      const list = paragraphsIn(doc.body);
+      const p = list[Math.floor(random() * list.length)];
+      const id = live.id(p);
+      const length = paragraphLength(p);
+      const at = Math.floor(random() * (length + 1));
+      const roll = random();
+      if (roll < 0.45) live.edit([{ type: 'insertText', paragraph: id, offset: at, text: 'abc'.slice(0, 1 + Math.floor(random() * 3)) }]);
+      else if (roll < 0.6 && length) live.edit([{ type: 'delete', paragraph: id, from: Math.min(at, length - 1), to: Math.min(at + 2, length) }]);
+      else if (roll < 0.75) live.edit([{ type: 'split', paragraph: id, offset: at, id: live.newId(), properties: {} }]);
+      else if (roll < 0.85 && length) live.edit([{ type: 'formatText', paragraph: id, from: 0, to: length, format: { bold: true } }]);
+      else if (roll < 0.95) live.undo();
+      else live.redo();
+    };
+    for (let i = 0; i < 20; i++) step();
+    // As the layout worker does it: the sequence number and the undo steps both read as the body is written.
+    let seq = -1;
+    let undo: string | null = null;
+    const saving = doc.write({
+      onBody: () => {
+        seq = told.length;
+        undo = live.history.saved();
+      },
+    });
+    step();
+    const saved = await saving;
+    for (let i = 0; i < 10; i++) step();
+    const shape = (d: WordDocument) => paragraphsIn(d.body).map((p) => [p.attrs['w14:paraId'], paragraphText(p)]);
+    // Reopened: the steps go back, then the edits made after the save, which undo together.
+    const back = await WordDocument.read(saved);
+    const again = new Replica(back);
+    if (undo) again.history.load(JSON.parse(undo));
+    const mark = again.history.mark();
+    for (const ops of told.slice(seq)) again.external(ops, { undoable: true });
+    again.history.fold(mark);
+    assert.deepEqual(shape(back), shape(doc), `seed ${seed}: the same document`);
+    // The saved copy with only its steps put back, to walk alongside.
+    const reference = await WordDocument.read(saved);
+    const plain = new Replica(reference);
+    if (undo) plain.history.load(JSON.parse(undo));
+    if (told.length > seq) assert.ok(again.undo(), `seed ${seed}: the kept edits undo`);
+    assert.deepEqual(shape(back), shape(reference), `seed ${seed}: back to the saved copy`);
+    while (plain.history.canUndo) {
+      assert.ok(plain.undo());
+      assert.ok(again.undo());
+      assert.deepEqual(shape(back), shape(reference), `seed ${seed}: each step undoes the same`);
+    }
+    assert.equal(again.history.canUndo, false);
+  }
+});
+
+test('a saved history drops its oldest steps to fit, and an unreadable one leaves nothing to undo', async () => {
+  const doc = await WordDocument.read(await sampleBytes());
+  const replica = new Replica(doc);
+  const p = replica.id(paragraphsIn(doc.body)[5]);
+  for (let i = 0; i < 100; i++) replica.edit([{ type: 'insertText', paragraph: p, offset: 0, text: 'x'.repeat(100) }]);
+  const whole = replica.history.saved()!;
+  const small = replica.history.saved(whole.length / 3)!;
+  assert.ok(small.length <= whole.length / 3);
+  const kept = JSON.parse(small).undo.length;
+  assert.ok(kept > 0 && kept < 100, `${kept} steps kept`);
+  // The newest are the ones kept.
+  assert.deepEqual(JSON.parse(small).undo.at(-1), JSON.parse(whole).undo.at(-1));
+  assert.equal(replica.history.saved(10), null);
+  const other = new Replica(await WordDocument.read(await sampleBytes()));
+  other.history.load({ v: 2 } as never);
+  assert.equal(other.history.canUndo, false);
+  other.history.load({ v: 1, undo: [{ parts: 'no' }], redo: [] } as never);
+  assert.equal(other.history.canUndo, false);
+});

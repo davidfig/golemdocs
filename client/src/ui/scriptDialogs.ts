@@ -3,8 +3,8 @@
 // any of them off.
 
 import { t } from '../i18n/index.ts';
-import type { ScriptMeta } from '../scripts/host.ts';
-import type { ScriptAnswer } from '../scripts/grants.ts';
+import type { ScriptMeta } from '@golemdocs/script/host';
+import type { ScriptAnswer } from '@golemdocs/script/grants';
 import { scriptState } from '../scripts/state.ts';
 import type { ScriptRecord, ScriptRun } from '../scripts/state.ts';
 import { h } from './dom.ts';

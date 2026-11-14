@@ -30,6 +30,7 @@ export function fakeIndexedDB(): unknown {
               return {
                 get: (key: unknown) => request(() => structuredClone(s.rows.get(key))),
                 getAll: () => request(() => [...s.rows.values()].map((v) => structuredClone(v))),
+                getAllKeys: () => request(() => [...s.rows.keys()]),
                 put(value: unknown, key?: unknown) {
                   s.rows.set(s.keyPath ? (value as Record<string, unknown>)[s.keyPath] : key, structuredClone(value));
                   return request(() => undefined);

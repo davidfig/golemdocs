@@ -118,7 +118,7 @@ export function docLinkTitles(paragraph: Paragraph): string[] {
 }
 
 /** An embed's address that only a live block can show (kept in step with isLiveSourceName in the client's live/liveMarks.ts). */
-const LIVE_ONLY = /\.(xlsx|xlsm|csv|tsv)\s*(?:[#?]|$)|#\s*(?:table|chart|field):|^\s*@(?:list|count|timeline|run):|^\s*\/?Scripts\/[^?#]+\.m?[tj]s\s*(?:\?|$)/i;
+const LIVE_ONLY = /\.(xlsx|xlsm|csv|tsv)\s*(?:[#?]|$)|#\s*(?:table|chart|field):|\.pdf\s*#\s*page:|^\s*@(?:list|count|timeline|run):|^\s*\/?Scripts\/[^?#]+\.m?[tj]s\s*(?:\?|$)/i;
 
 const TEXT_LINK = /!?\[\[([^\]\n]+)\]\]|\]\((doc:[^)\n]+)\)|<!-- golem:live (.+?) -->|data-golem-live="([^"]+)"/gi;
 

@@ -10,8 +10,11 @@ sources (sections, bookmarks, tables by title) and front matter fields, with Cop
 pictures; spreadsheets as hosts (a range under a hidden defined name whose comment holds the tag, rather than custom
 properties: one place, which Excel keeps and shows in its Name Manager); references to other workbooks refreshed through
 the graph; PDF form fields as sources and hosts (the tag kept with the document's fields; not yet written into the PDF
-itself, which waits on M0). Not yet: a PDF page as a picture (`#page:N`, which needs a page rasterizer outside the
-viewer), live text boxes and pictures in Edit PDF. Built-in blocks: a folder list, a count and a timeline (§7), with
+itself, which waits on M0). A PDF page as a picture (`#page:N`): the page drawn as a drawing scene from its own shapes,
+pictures and font outlines (`formats/pdfPageScene.ts`), so it is an SVG with a PNG, like a chart, made in the live worker
+with no viewer. Live text boxes and pictures in Edit PDF: a live link pasted into a PDF adds one (a picture for a picture,
+chart or page source, else a text box), kept as an edit with a tag (`PdfEdit.live`); a text box can be moved but not
+typed in. Built-in blocks: a folder list, a count and a timeline (§7), with
 Insert › Live Block, and a table of any source filtered, sorted and cut down by options after `?`. M3 so far: drawings as
 hosts (`live/drawingHost.ts`): a live link pasted into the drawing editor makes a group at the top left, filled at once; a
 picture keeps the box it was given and text its place and style. Live PDF exports: File › Live PDF Copy saves a PDF beside
@@ -24,9 +27,10 @@ name whose card has Run), on `changed` and on `daily`/`weekly` schedules claimed
 frame and a `data:` worker; tested in Chromium for `fetch`, the engine's own `fetch`, XHR, sockets, IndexedDB, cookies,
 `parent`, a computed `import()`, the clock, an endless loop, a huge result and reads outside the grant), per-device grants
 with Allow Once and Always Allow, Tools › Scripts (in the Tools menu rather than Settings: the app has no Settings window),
-the run log, three failures pausing a script, Undo This Run, and `pnpm golem run`. Where it differs from §8: the code is
-`client/src/scripts/`, not a `@golemdocs/script` package yet (making one is a new workspace package; say if wanted); a
-document that changed while an action ran fails the run rather than having the edits rebased; Undo This Run keeps the
+the run log, three failures pausing a script, Undo This Run, and `pnpm golem run`. The language and sandbox are the `@golemdocs/script`
+package (`script/`), with the API's types for script writers; the vault's side is `client/src/scripts/`. Where it differs
+from §8: a document that changed while an action ran is not rebased onto: the action runs once more on what is there
+now (without asking again), and fails, writing nothing, if a document changed again; Undo This Run keeps the
 before-bytes for as long as the page is open and puts back only files nothing has changed since (otherwise it points to
 version history); a producer's failures show on its block but don't pause it; there are no `picture()` results from
 scripts. M4 so far: network access for actions (§8, *Permissions and trust*). How it works: [formats](architecture/formats.md#live-blocks).
@@ -130,7 +134,8 @@ source changes, the edit's content is replaced, the pages are applied again, and
 - **Form fields** (Fill In) take their value from a source: a worksheet's totals from `Budget.xlsx`, an address or a date
   from a note's front matter. The most useful PDF block.
 - **Text boxes and pictures** added in Edit PDF can be live: a value, a drawing, a chart, another file's page. Position
-  and size stay as placed; a picture keeps its box, as in Word.
+  stays as placed; a picture keeps its width and top edge, its height following the picture, as in Word. *Built:* a text
+  box shows a value, or a table's rows as lines.
 - **Tables** have no element in a PDF and cannot push the page down, so a table would be drawn as text and lines in a box
   of fixed size, cut off or shrunk when it grows. Later; until then a table can be shown as a picture of it.
 - **Changed on disk.** A `.pdf` changed outside the app becomes a new original and the account's edits are dropped (as for
@@ -360,7 +365,8 @@ export default async function ({ today, open }) {
 append to a section, fill a table, set a field) run inside the sandbox and turn changes into operations. Nothing is
 written while the script runs. When it ends, the app checks every operation against the script's grant and applies them
 together, as one change credited to the script ("by Daily note"). A document that changed while the script ran has the
-operations rebased onto it, as in a shared room; if they no longer fit, the run fails and writes nothing.
+operations rebased onto it, as in a shared room; if they no longer fit, the run fails and writes nothing. *Built
+instead:* the action runs once more on the changed document, and the run fails only if one changes again.
 
 Triggers:
 

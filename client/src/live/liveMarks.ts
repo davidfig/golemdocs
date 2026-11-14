@@ -60,11 +60,14 @@ export function retag<T extends Block | Inline>(wrapper: Wrapper<T>, tag: LiveTa
 }
 
 /**
- * Whether an address is one only a live block can show: a spreadsheet, a script, or a `table:`, `chart:` or `field:` part of any document
+ * Whether an address is one only a live block can show: a spreadsheet, a script, or a `table:`, `chart:` or `field:` part of any document or a PDF's `page:`
  * (a plain embed of one in Markdown becomes a live block; pictures and `![[Note#Heading]]` stay embeds). Kept in step with
  * LIVE_ONLY in docx search/links.ts.
  */
-export const isLiveSourceName = (name: string): boolean => /\.(xlsx|xlsm|csv|tsv)\s*(?:[#?]|$)|#\s*(?:table|chart|field):|^\s*@(?:list|count|timeline|run):|^\s*\/?Scripts\/[^?#]+\.m?[tj]s\s*(?:\?|$)/i.test(name);
+export const isLiveSourceName = (name: string): boolean => /\.(xlsx|xlsm|csv|tsv)\s*(?:[#?]|$)|#\s*(?:table|chart|field):|\.pdf\s*#\s*page:|^\s*@(?:list|count|timeline|run):|^\s*\/?Scripts\/[^?#]+\.m?[tj]s\s*(?:\?|$)/i.test(name);
+
+/** Whether a source shows a picture (a picture or drawing file, a chart, a PDF's page) rather than text or a table. */
+export const showsPicture = (source: string): boolean => /\.(svg|png|jpe?g|gif|webp)\s*$|#\s*chart:|\.pdf\s*#\s*page:/i.test(source.split('?')[0]);
 
 /** Whether a file of this name can be a live block's source of any kind (a table, a value or a picture). */
 export const isAnySourceName = (name: string): boolean => isLiveSourceName(name) || /\.(svg|png|jpe?g|gif|webp)$/i.test(name.split('#')[0].trim());
@@ -130,10 +133,13 @@ export function hasLive(document: WordDocument): boolean {
   return walk(document.body);
 }
 
-/** The source a copied live link names (Copy as Live Link's HTML, or a lone `![[Budget.xlsx#Total]]`); null when it is none. */
-export function clipboardLiveLink(text: string, html: string): string | null {
+/**
+ * The source a copied live link names (Copy as Live Link's HTML, or a lone `![[Budget.xlsx#Total]]`); null when it is none.
+ * `pictures`: a lone embed of a picture counts too (pasted where an embed can't go, as into a PDF).
+ */
+export function clipboardLiveLink(text: string, html: string, pictures = false): string | null {
   const attr = /data-golem-live="([^"]+)"/.exec(html)?.[1];
   if (attr) return attr.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
   const embed = /^\s*!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]\s*$/.exec(text)?.[1];
-  return embed && isLiveSourceName(embed) ? embed.trim() : null;
+  return embed && (pictures ? isAnySourceName(embed) : isLiveSourceName(embed)) ? embed.trim() : null;
 }

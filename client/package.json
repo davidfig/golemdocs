@@ -21,6 +21,7 @@
     "@golemdocs/odt": "workspace:*",
     "@golemdocs/ops": "workspace:*",
     "@golemdocs/pdf": "workspace:*",
+    "@golemdocs/script": "workspace:*",
     "libheif-js": "^1.23.5",
     "polygon-clipping": "^0.15.7"
   },

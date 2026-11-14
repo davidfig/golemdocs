@@ -79,11 +79,18 @@ export interface ForcedColors {
 /** Sets the `u_forced*` uniforms DARK_PAGES_GLSL declares (they are found by name, so a program need not list them). */
 export function setForcedUniforms(gl: WebGL2RenderingContext, program: WebGLProgram, forced: ForcedColors | null): void {
   const rgb = (v: number): [number, number, number] => [(v >> 16) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
-  gl.uniform1f(gl.getUniformLocation(program, 'u_forced'), forced ? 1 : 0);
+  // Looked up once per program: this runs on every draw.
+  let at = forcedLocations.get(program);
+  if (!at) {
+    at = { on: gl.getUniformLocation(program, 'u_forced'), page: gl.getUniformLocation(program, 'u_forcedPage'), text: gl.getUniformLocation(program, 'u_forcedText') };
+    forcedLocations.set(program, at);
+  }
+  gl.uniform1f(at.on, forced ? 1 : 0);
   if (!forced) return;
-  gl.uniform3f(gl.getUniformLocation(program, 'u_forcedPage'), ...rgb(forced.page));
-  gl.uniform3f(gl.getUniformLocation(program, 'u_forcedText'), ...rgb(forced.text));
+  gl.uniform3f(at.page, ...rgb(forced.page));
+  gl.uniform3f(at.text, ...rgb(forced.text));
 }
+const forcedLocations = new WeakMap<WebGLProgram, { on: WebGLUniformLocation | null; page: WebGLUniformLocation | null; text: WebGLUniformLocation | null }>();
 
 function hexToGlsl(rgb: number): string {
   return [rgb >> 16, (rgb >> 8) & 255, rgb & 255].map((v) => (v / 255).toFixed(4)).join(', ');

@@ -31,8 +31,11 @@ const changed = () => {
   for (const listener of listeners) listener();
 };
 
-/** Calls `listener` when the caret options or the system's colors change. */
-export const onAccessibilityChange = (listener: () => void): void => void listeners.add(listener);
+/** Calls `listener` when the caret options or the system's colors change; returns what stops it. */
+export const onAccessibilityChange = (listener: () => void): (() => void) => {
+  listeners.add(listener);
+  return () => void listeners.delete(listener);
+};
 
 /** Parses a saved caret width (anything else: the default, 1). */
 export function parseCaretWidth(value: string | null): CaretWidth {

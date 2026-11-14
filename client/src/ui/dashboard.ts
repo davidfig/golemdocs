@@ -81,6 +81,12 @@ export interface DashboardHost {
 /** The folders and documents as listed before a delete took its items off the screen, which is what finding what is inside a folder needs. */
 type Listed = { folders: Folder[]; entries: LibraryEntry[] };
 
+/** A menu closed without moving the keyboard elsewhere (Escape, a click away) gives it back to where it was. */
+function giveBack(to: Element | null): void {
+  const at = document.activeElement;
+  if ((!at || at === document.body) && to instanceof HTMLElement && to.isConnected) to.focus();
+}
+
 export class Dashboard {
   private readonly root: HTMLElement;
   private readonly search: HTMLInputElement;
@@ -145,6 +151,7 @@ export class Dashboard {
       if (e.target instanceof Element && e.target.closest('input, textarea')) return;
       e.preventDefault();
       const folderId = this.folderId;
+      const before = document.activeElement;
       showPopupMenu(
         [
           ...newMenuItems((kind) => {
@@ -158,6 +165,7 @@ export class Dashboard {
         e.clientX,
         e.clientY,
         t('panels.dashboard.newBlank'),
+        () => giveBack(before),
       );
     });
     const action = (icon: string, label: string, aria: string, onClick: () => void): HTMLButtonElement => {
@@ -206,6 +214,7 @@ export class Dashboard {
         box.left,
         box.bottom,
         typeLabel,
+        () => giveBack(typeButton),
       );
     });
     const newSplit = h('span', { class: 'wm-dash-split' }, blank, typeButton);

@@ -439,8 +439,12 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
       const after = await cloud.list();
       // The first sync to do so, of a vault synced before, takes the account's folders the vault does not have for removed from
       // it: until then only folders that held files were written, so one missing here was removed from the vault or emptied in it.
+      // Only those inside a folder the vault had: one elsewhere may be new, made on another device or in the app since this one's
+      // last sync, and is brought here instead (an empty folder that comes back is better than one that is lost).
       const firstMirror = !!diskFolders && !state.mirrored && saved?.account === host.account;
-      const missing = firstMirror ? [...folderPaths(after.folders).values()].filter((path) => !onDisk.has(path)) : [];
+      const had = state.folders ?? [];
+      const insideHad = (path: string) => had.some((p) => path.startsWith(`${p}/`));
+      const missing = firstMirror ? [...folderPaths(after.folders).values()].filter((path) => !onDisk.has(path) && insideHad(path)) : [];
       const removed = new Set<string>();
       for (const { id, path } of vanishedFolders([...stillGone, ...missing], onDisk, after.docs, after.folders)) {
         if (await attempt({ kind: 'removeFolder', id, path })) {
@@ -478,7 +482,10 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
     for (const path of [...inAccount].filter((p) => !here.has(p) && !inGone(p)).sort((a, b) => depth(a) - depth(b))) {
       if (await attempt({ kind: 'makeFolder', path, where: 'local' })) here.add(path);
     }
-    return [...inAccount].filter((p) => here.has(p));
+    // What the disk lists now, not what was asked for: on a disk that ignores case, making "notes" beside "Notes" makes
+    // nothing, and remembering it would take it for removed from the vault next time.
+    const listed = new Set((await disk.folders!()) ?? [...here]);
+    return [...inAccount].filter((p) => listed.has(p));
   }
 
   state.entries = [...entries.values()];

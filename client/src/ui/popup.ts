@@ -52,12 +52,15 @@ export function closePopup(): void {
 }
 
 /** Shows `panel` under `owner` (flipping above or left to stay in the window); on a phone, as a sheet at the bottom of the screen. */
+/** Panels whose keyboard and mouse listeners are already added (`openPopup`). */
+const keyed = new WeakSet<HTMLElement>();
+
 export function openPopup(owner: HTMLElement, panel: HTMLElement, onClose?: () => void): void {
   // Popups the owner isn't inside of are closed; the ones it is inside of stay.
   while (stack.length && !stack[stack.length - 1].panel.contains(owner)) closeTop();
   listen();
   panel.classList.add('wm-popup');
-  panel.addEventListener('mousedown', (e) => e.preventDefault());
+  if (!keyed.has(panel)) panel.addEventListener('mousedown', (e) => e.preventDefault());
   const sheet = narrow().matches;
   const backdrop = sheet ? h('div', { class: 'wm-sheet-backdrop' }) : undefined;
   if (sheet) panel.classList.add('wm-sheet');
@@ -94,7 +97,8 @@ function popupItems(panel: HTMLElement): HTMLElement[] {
  */
 function popupKeys(owner: HTMLElement, panel: HTMLElement): void {
   for (const option of panel.querySelectorAll<HTMLElement>('[role="option"]')) if (!option.hasAttribute('tabindex')) option.tabIndex = -1;
-  panel.addEventListener('keydown', (e) => {
+  // A panel opened again (the toolbar's overflow) keeps the listener it got the first time: a second would press Enter twice.
+  if (!keyed.has(panel)) panel.addEventListener('keydown', (e) => {
     const target = e.target instanceof HTMLElement ? e.target : null;
     if (!target || target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
     const items = popupItems(panel);
@@ -114,6 +118,7 @@ function popupKeys(owner: HTMLElement, panel: HTMLElement): void {
       e.stopPropagation();
     }
   });
+  keyed.add(panel);
   const active = document.activeElement;
   if (!(active instanceof HTMLButtonElement) || !owner.contains(active)) return;
   const chosen = panel.querySelector<HTMLElement>('[aria-selected="true"], .current') ?? popupItems(panel)[0];

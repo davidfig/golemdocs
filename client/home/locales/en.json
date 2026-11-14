@@ -576,7 +576,7 @@
   "live.count.words": "words",
   "live.count.today": "1,140 today",
   "live.count.h": "A count with a goal.",
-  "live.count.p": "Words in a novel, notes in a folder or rows in a table, and how far you are from where you want to be.",
+  "live.count.p": "Words in a novel or notes in a folder, and how far you are from where you want to be.",
   "live.builtin.more": "There’s also a timeline of notes by a date in their front matter. For anything else, there are scripts: a small TypeScript file in your vault, written by you or your ai, that runs in a sandbox and sees only what you allow.",
   "live.safe.h": "Built to be trusted",
   "live.safe1": "<b>No code in your documents.</b> A document names where a block comes from and holds its last result. Sharing it shares no code, unlike Office macros.",

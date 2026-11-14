@@ -576,7 +576,7 @@
   "live.count.words": "palavras",
   "live.count.today": "1.140 hoje",
   "live.count.h": "Uma contagem com meta.",
-  "live.count.p": "Palavras em um romance, notas em uma pasta ou linhas em uma tabela, e quanto falta para chegar aonde você quer.",
+  "live.count.p": "Palavras em um romance ou notas em uma pasta, e quanto falta para chegar aonde você quer.",
   "live.builtin.more": "Também há uma linha do tempo de notas por uma data dos seus metadados. Para todo o resto, há scripts: um pequeno arquivo TypeScript no seu cofre, escrito por você ou pela sua IA, que roda em uma sandbox e só vê o que você permite.",
   "live.safe.h": "Feito para ser confiável",
   "live.safe1": "<b>Nenhum código nos seus documentos.</b> Um documento diz de onde vem um bloco e guarda o último resultado dele. Compartilhar o documento não compartilha código, ao contrário das macros do Office.",

@@ -631,7 +631,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   showReaderMode(screenReaderOn());
   readerButton.addEventListener('click', () => setScreenReader(!screenReaderOn()));
   // Contrast colors of the system came or went: the pages are drawn in them.
-  onAccessibilityChange(requestRender);
+  const stopContrast = onAccessibilityChange(requestRender);
 
   const resize = new ResizeObserver(([entry]) => {
     const box = entry.devicePixelContentBoxSize?.[0];
@@ -752,6 +752,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       destroyed = true;
       if (frame) win.cancelAnimationFrame(frame);
       stopReaderMode();
+      stopContrast();
       reader?.dispose();
       resize.disconnect();
       doc.removeEventListener('copy', onCopy);

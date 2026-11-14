@@ -63,7 +63,7 @@
         if (current === title) close(false);
         else open(title, e.detail === 0, e.detail === 0);
       });
-      title.addEventListener('pointerenter', function () { if (current && current !== title) open(title, false, false); });
+      title.addEventListener('pointerenter', function (e) { if (e.pointerType === 'mouse' && current && current !== title) open(title, false, false); });
       title.addEventListener('keydown', function (e) {
         if (current) return;
         if (e.key === 'ArrowDown') { e.preventDefault(); open(title, true, true); }

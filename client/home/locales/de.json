@@ -576,7 +576,7 @@
   "live.count.words": "Wörter",
   "live.count.today": "1.140 heute",
   "live.count.h": "Eine Zählung mit Ziel.",
-  "live.count.p": "Wörter in einem Roman, Notizen in einem Ordner oder Zeilen in einer Tabelle, und wie weit Sie noch von Ihrem Ziel entfernt sind.",
+  "live.count.p": "Wörter in einem Roman oder Notizen in einem Ordner, und wie weit Sie noch von Ihrem Ziel entfernt sind.",
   "live.builtin.more": "Außerdem gibt es eine Zeitleiste von Notizen nach einem Datum in ihrem Front Matter. Für alles andere gibt es Skripte: eine kleine TypeScript-Datei in Ihrem Tresor, geschrieben von Ihnen oder Ihrer KI, die in einer Sandbox läuft und nur sieht, was Sie erlauben.",
   "live.safe.h": "Darauf können Sie sich verlassen",
   "live.safe1": "<b>Kein Code in Ihren Dokumenten.</b> Ein Dokument nennt, woher ein Block stammt, und enthält sein letztes Ergebnis. Wer es teilt, teilt keinen Code, anders als bei Office-Makros.",

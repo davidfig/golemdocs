@@ -1100,7 +1100,7 @@ html.wm-titlebar .wm-format {
   border-left-color: var(--wm-border);
 }
 
-.wm-dialog .wm-segment[aria-pressed='true'] {
+.wm-dialog .wm-segment[aria-checked='true'] {
   background: var(--wm-accent-ring);
   box-shadow: none;
   font-weight: 600;

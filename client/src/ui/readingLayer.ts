@@ -151,8 +151,11 @@ export class ReadingLayer {
     }
     this.before.hidden = this.beforeId === null || first < 0;
     this.after.hidden = this.afterId === null || first < 0;
-    if (this.beforeId !== null) this.before.textContent = t('a11y.back', { number: from });
-    if (this.afterId !== null) this.after.textContent = t('a11y.continue', { number: to + 1 });
+    // Written only when it changes: this runs every frame, and a screen reader may read a button whose text was set again.
+    const back = this.beforeId !== null ? t('a11y.back', { number: from }) : null;
+    const next = this.afterId !== null ? t('a11y.continue', { number: to + 1 }) : null;
+    if (back !== null && this.before.textContent !== back) this.before.textContent = back;
+    if (next !== null && this.after.textContent !== next) this.after.textContent = next;
   }
 
   /** Asks the worker for the pages wanted that it has not described yet. */

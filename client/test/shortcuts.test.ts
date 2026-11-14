@@ -130,3 +130,10 @@ test('overrides are loaded defensively and saved only when there are some', () =
     delete (globalThis as { localStorage?: unknown }).localStorage;
   }
 });
+
+test('AltGr, which Windows reports as Ctrl+Alt, types a character rather than pressing a Ctrl+Alt shortcut', () => {
+  const altGr = { ...key('KeyZ', 'ż', { ctrl: true, alt: true }), getModifierState: (k: string) => k === 'AltGraph' } as KeyboardEvent;
+  assert.equal(matches(parsed('Ctrl+Alt+Z'), altGr), false);
+  const ctrlAlt = { ...key('KeyZ', 'z', { ctrl: true, alt: true }), getModifierState: () => false } as KeyboardEvent;
+  assert.ok(matches(parsed('Ctrl+Alt+Z'), ctrlAlt));
+});

@@ -89,11 +89,16 @@ function eventKey(e: KeyboardEvent): string {
   return e.key.length === 1 ? e.key.toLowerCase() : e.key;
 }
 
+/** AltGr is held: the key types a character (ż, [, €) rather than being a shortcut. */
+export const altGraph = (e: KeyboardEvent): boolean => e.getModifierState?.('AltGraph') ?? false;
+
 export function matches(shortcut: Shortcut, e: KeyboardEvent): boolean {
   const wantMeta = IS_MAC && shortcut.mod;
   const wantCtrl = shortcut.ctrl || (!IS_MAC && shortcut.mod);
   if (e.metaKey !== wantMeta || e.ctrlKey !== wantCtrl) return false;
   if (e.altKey !== shortcut.alt) return false;
+  // Windows reports AltGr as Ctrl+Alt: AltGr+Z types ż on a Polish keyboard, and must not be taken for Ctrl+Alt+Z.
+  if (shortcut.alt && altGraph(e)) return false;
   const key = eventKey(e);
   // Zoom in is commonly typed as Mod+Shift+= ("Mod++"); accept either.
   if (shortcut.key === '=' && key === '=' && !shortcut.shift) return true;

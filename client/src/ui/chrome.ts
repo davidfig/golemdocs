@@ -30,7 +30,7 @@ import { brushPreview } from './brushPreview.ts';
 import { dropdown, lineSample } from './dropdown.ts';
 import { shapePreview } from './shapePreview.ts';
 import { SHAPE_IDS } from '../vector/shapes.ts';
-import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, VECTOR_CONVERT_ORDER, convertTargets, formatGroup } from './formats.ts';
+import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, PICTURE_KINDS, VECTOR_CONVERT_ORDER, VECTOR_KINDS, convertTargets, formatGroup } from './formats.ts';
 import { billingPanel } from './billingPanel.ts';
 import { analyticsPanel } from './analyticsPanel.ts';
 import { feedbackPanel, showFeedbackDialog } from './feedback.ts';
@@ -407,7 +407,12 @@ export class Chrome {
       a('view.toolbars', t('chrome.view.showToolbars'), { kind: 'toggleToolbars' }, { checked: (s) => s.toolbars }),
       a('view.footer', t('chrome.view.footer'), { kind: 'toggleFooter' }, { checked: (s) => s.footer }),
       a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
-      a('view.collapsePages', t('chrome.view.collapsePages'), { kind: 'toggleCollapsePages' }, { checked: (s) => s.collapsePages, tooltip: t('chrome.view.collapsePages.tip') }),
+      a('view.collapsePages', t('chrome.view.collapsePages'), { kind: 'toggleCollapsePages' }, {
+        checked: (s) => s.collapsePages,
+        // Only Print layout shows pages one under another (main.ts: wordView).
+        enabled: (s) => s.viewMode === 'print' && !PICTURE_KINDS.includes(s.kind) && !VECTOR_KINDS.includes(s.kind),
+        tooltip: t('chrome.view.collapsePages.tip'),
+      }),
       a('view.formattingMarks', t('chrome.view.formattingMarks'), { kind: 'toggleFormattingMarks' }, {
         icon: 'paragraphMarks',
         tooltip: t('chrome.view.formattingMarks.tip'),

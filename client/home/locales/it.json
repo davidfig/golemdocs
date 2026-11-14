@@ -576,7 +576,7 @@
   "live.count.words": "parole",
   "live.count.today": "1.140 oggi",
   "live.count.h": "Un conteggio con un obiettivo.",
-  "live.count.p": "Parole in un romanzo, note in una cartella o righe in una tabella, e quanto ti manca per arrivare dove vuoi.",
+  "live.count.p": "Parole in un romanzo o note in una cartella, e quanto ti manca per arrivare dove vuoi.",
   "live.builtin.more": "C’è anche una cronologia delle note in base a una data nei loro metadati. Per tutto il resto ci sono gli script: un piccolo file TypeScript nel tuo caveau, scritto da te o dalla tua IA, che gira in un ambiente isolato e vede solo ciò che permetti.",
   "live.safe.h": "Fatto per meritare fiducia",
   "live.safe1": "<b>Nessun codice nei tuoi documenti.</b> Un documento indica da dove viene un blocco e ne conserva l’ultimo risultato. Condividerlo non condivide codice, a differenza delle macro di Office.",

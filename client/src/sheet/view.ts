@@ -10,7 +10,7 @@ import { attachTextInput, focusTextInput } from '../ui/textInput.ts';
 import { showPopupMenu } from '../ui/popupMenu.ts';
 import type { PopupItem } from '../ui/popupMenu.ts';
 import { onContextMenu } from '../ui/contextMenu.ts';
-import { IS_MAC, formatShortcut, parseShortcut } from '../ui/shortcuts.ts';
+import { IS_MAC, altGraph, formatShortcut, parseShortcut } from '../ui/shortcuts.ts';
 import { announce } from '../ui/announce.ts';
 import { onScreenReaderChange, SCREEN_READER_SHORTCUT, screenReaderOn } from '../ui/screenReader.ts';
 import type { Region } from '../ui/focusRegions.ts';
@@ -1015,7 +1015,7 @@ export class SheetEditorView {
     if (this.deps.viewKey(e)) return;
     const mod0 = IS_MAC ? e.metaKey : e.ctrlKey;
     // Mod+Alt+5 picks a chart from the keyboard (Excel's Ctrl+Alt+5 goes to the objects over the cells): the next one.
-    if (mod0 && e.altKey && e.code === 'Digit5') {
+    if (mod0 && e.altKey && !altGraph(e) && e.code === 'Digit5') {
       e.preventDefault();
       e.stopPropagation();
       this.stepChart(1);

@@ -101,7 +101,7 @@ function fakeCloud() {
  * `folders` it is today's shell, which lists folders, empty ones too (those that hold a file, and those made in `dirs`), and
  * removes the folders a deleted file leaves empty; without, a shell too old to list folders.
  */
-function fakeDisk(options: { folders?: boolean } = {}) {
+function fakeDisk(options: { folders?: boolean; caseless?: boolean } = {}) {
   let clock = 5000;
   const files = new Map<string, { bytes: Uint8Array; mtimeMs: number; created?: number }>();
   const dated: string[] = [];
@@ -117,7 +117,9 @@ function fakeDisk(options: { folders?: boolean } = {}) {
     folders: async () => allDirs(),
     async makeFolder(path) {
       const parts = path.split('/');
-      for (let i = 1; i <= parts.length; i++) dirs.add(parts.slice(0, i).join('/'));
+      // A disk that ignores case (macOS, Windows) makes nothing for a name it already has in another case.
+      const taken = (p: string) => options.caseless && allDirs().some((d) => d !== p && d.toLowerCase() === p.toLowerCase());
+      for (let i = 1; i <= parts.length; i++) if (!taken(parts.slice(0, i).join('/'))) dirs.add(parts.slice(0, i).join('/'));
     },
     async removeFolder(path) {
       if (under(path)) return false;
@@ -186,7 +188,7 @@ function fakeMemory() {
   return memory;
 }
 
-function setup(account = 'u1', options: { folders?: boolean } = {}) {
+function setup(account = 'u1', options: { folders?: boolean; caseless?: boolean } = {}) {
   const account_ = fakeCloud();
   const folder = fakeDisk(options);
   const host: VaultHost = { disk: folder.disk, memory: fakeMemory(), cloud: account_.cloud, codec, hash: async (b) => createHash('sha256').update(b).digest('hex'), account };
@@ -630,6 +632,34 @@ test('the first sync that lists folders removes the empty folders a vault synced
   assert.equal(report.foldersRemoved, 2);
   assert.deepEqual(accountFolders(s), ['Archive', 'Posts', 'Posts/Essay'], 'a folder holding a document the vault does not keep stays');
   assert.deepEqual(s.folder.folders(), ['Archive', 'Posts', 'Posts/Essay'], 'and is brought here');
+});
+
+test('the first sync that lists folders brings an empty folder made elsewhere since, rather than removing it', async () => {
+  const s = setup('u1', { folders: true });
+  s.add('Posts/Essay.md', 'essay');
+  await s.sync();
+  const memory = JSON.parse((await s.host.memory.load())!);
+  delete memory.mirrored;
+  memory.folders = ['Posts'];
+  await s.host.memory.save(JSON.stringify(memory));
+  s.folderFor(['Projects']); // made on another device, or in the app, after this one's last sync
+  s.folder.dirs.clear();
+  const report = await s.sync();
+  assert.equal(report.foldersRemoved, 0);
+  assert.deepEqual(accountFolders(s), ['Posts', 'Projects']);
+  assert.deepEqual(s.folder.folders(), ['Posts', 'Projects']);
+});
+
+test('two account folders whose names differ only in case are both kept, on a disk that ignores case', async () => {
+  const s = setup('u1', { folders: true, caseless: true });
+  s.folderFor(['Notes']);
+  s.folderFor(['notes']);
+  await s.sync();
+  await s.sync();
+  const report = await s.sync();
+  assert.equal(report.foldersRemoved, 0);
+  assert.deepEqual(accountFolders(s), ['Notes', 'notes']);
+  assert.equal(s.folder.folders().length, 1);
 });
 
 test('a vault linked for the first time gets the account\'s empty folders and removes none', async () => {

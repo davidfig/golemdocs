@@ -493,7 +493,7 @@ pre.code { margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--ch
   .entry { grid-template-columns: minmax(0, 1fr); }
   .history li { grid-template-columns: 3.6rem minmax(0, 1fr); }
   .history .btn { grid-column: 2; justify-self: start; }
-  .open-app { display: none; }
+  .open-app, .chrome .download { display: none; }
   .latest a { grid-template-columns: minmax(0, 1fr); gap: 0; }
 }
 @media (prefers-reduced-motion: reduce) {

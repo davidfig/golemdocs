@@ -382,6 +382,7 @@ export class Chrome {
       a('view.toolbars', t('chrome.view.showToolbars'), { kind: 'toggleToolbars' }, { checked: (s) => s.toolbars }),
       a('view.footer', t('chrome.view.footer'), { kind: 'toggleFooter' }, { checked: (s) => s.footer }),
       a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
+      a('view.collapsePages', t('chrome.view.collapsePages'), { kind: 'toggleCollapsePages' }, { checked: (s) => s.collapsePages, tooltip: t('chrome.view.collapsePages.tip') }),
       a('view.formattingMarks', t('chrome.view.formattingMarks'), { kind: 'toggleFormattingMarks' }, {
         icon: 'paragraphMarks',
         tooltip: t('chrome.view.formattingMarks.tip'),
@@ -837,6 +838,7 @@ export class Chrome {
           sub(t('chrome.view.colorScheme'), [...SCHEMES.map(({ id }) => cmd(`view.theme.${id}`)), sep, cmd('view.darkMode'), cmd('view.darkPages'), cmd('view.matchSystem')]),
           sep,
           cmd('view.ruler'),
+          cmd('view.collapsePages'),
           cmd('view.formattingMarks'),
           sep,
           cmd('view.fillForm'),

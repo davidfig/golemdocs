@@ -36,6 +36,8 @@ export const chrome: Partial<Messages> = {
   'chrome.view.pagesPanel': '&Seitenleiste',
   'chrome.view.filesPanel': '&Dateileiste',
   'chrome.view.ruler': 'Li&neal',
+  'chrome.view.collapsePages': 'Abstand zwischen Seiten ausblenden',
+  'chrome.view.collapsePages.tip': 'Den Abstand zwischen den Seiten ausblenden. Auch per Doppelklick zwischen zwei Seiten.',
   'chrome.view.footer': 'Stat&usleiste',
   'chrome.view.formattingMarks': 'Formatierungs&zeichen',
   'chrome.view.zoomIn': '&Vergrößern',

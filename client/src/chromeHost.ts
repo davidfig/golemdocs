@@ -175,6 +175,8 @@ export interface AppHooks {
   toggleFooter(): void;
   toggleToolbars(): void;
   toggleRuler(): void;
+  /** Hide or show the space between pages. */
+  toggleCollapsePages(): void;
   /** Show or hide formatting marks (¶, spaces, tabs). */
   toggleFormattingMarks(): void;
   /** Print layout (pages), Flow (the text reflowed to the window) or the page grid. */
@@ -229,6 +231,7 @@ const SUPPORTED = new Set<ActionKind>([
   'toggleFooter',
   'toggleToolbars',
   'toggleRuler',
+  'toggleCollapsePages',
   'toggleFormattingMarks',
   'insertText',
   'convert',
@@ -516,6 +519,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.toggleToolbars();
         case 'toggleRuler':
           return app.toggleRuler();
+        case 'toggleCollapsePages':
+          return app.toggleCollapsePages();
         case 'insertText':
           return app.engine() ? app.engine()!.insert(action.text) : app.send({ kind: 'insertText', text: action.text });
         case 'insertBreak':

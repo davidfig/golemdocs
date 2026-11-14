@@ -36,6 +36,8 @@ export const chrome: Partial<Messages> = {
   'chrome.view.pagesPanel': '페이지 사이드바(&B)',
   'chrome.view.filesPanel': '파일 사이드바(&L)',
   'chrome.view.ruler': '눈금자(&R)',
+  'chrome.view.collapsePages': '페이지 사이 공백 숨기기',
+  'chrome.view.collapsePages.tip': '페이지 사이의 공백을 숨깁니다. 두 페이지 사이를 두 번 클릭해도 됩니다.',
   'chrome.view.footer': '상태 표시줄(&U)',
   'chrome.view.formattingMarks': '서식 기호(&M)',
   'chrome.view.zoomIn': '확대(&I)',

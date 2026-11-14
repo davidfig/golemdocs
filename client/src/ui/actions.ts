@@ -236,6 +236,7 @@ export type Action =
   | { kind: 'togglePagesPanel' }
   | { kind: 'toggleFilesPanel' }
   | { kind: 'toggleRuler' }
+  | { kind: 'toggleCollapsePages' }
   | { kind: 'toggleFooter' }
   | { kind: 'toggleToolbars' }
   | { kind: 'toggleFormattingMarks' }
@@ -523,6 +524,8 @@ export interface ChromeState {
   /** The files sidebar is pulled out beside the document. */
   filesPanel: boolean;
   rulerVisible: boolean;
+  /** The space between pages is hidden (Print layout). */
+  collapsePages: boolean;
   /** The status bar is showing under the document. */
   footer: boolean;
   /** The toolbars under the menu bar are showing (each can still be turned off on its own). */
@@ -583,6 +586,7 @@ export const DEFAULT_STATE: ChromeState = {
   pagesPanel: false,
   filesPanel: false,
   rulerVisible: false,
+  collapsePages: false,
   footer: false,
   toolbars: true,
   formattingMarks: false,

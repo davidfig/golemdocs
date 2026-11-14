@@ -36,6 +36,8 @@ export const chrome: Partial<Messages> = {
   'chrome.view.pagesPanel': 'Barra laterale pa&gine',
   'chrome.view.filesPanel': 'Barra laterale dei fi&le',
   'chrome.view.ruler': '&Righello',
+  'chrome.view.collapsePages': 'Nascondi spazio tra le pagine',
+  'chrome.view.collapsePages.tip': 'Nasconde lo spazio tra le pagine. Puoi anche fare doppio clic tra due pagine.',
   'chrome.view.footer': 'Barra di &stato',
   'chrome.view.formattingMarks': 'Segni di &formattazione',
   'chrome.view.zoomIn': '&Ingrandisci',

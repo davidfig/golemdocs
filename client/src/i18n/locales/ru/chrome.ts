@@ -36,6 +36,8 @@ export const chrome: Catalog = {
   'chrome.view.pagesPanel': 'Панель стр&аниц',
   'chrome.view.filesPanel': 'Панель фа&йлов',
   'chrome.view.ruler': 'Ли&нейка',
+  'chrome.view.collapsePages': 'Скрыть промежутки между страницами',
+  'chrome.view.collapsePages.tip': 'Скрыть промежутки между страницами. Можно также дважды щёлкнуть между двумя страницами.',
   'chrome.view.footer': 'Строка со&стояния',
   'chrome.view.formattingMarks': 'Непечатаемые &знаки',
   'chrome.view.zoomIn': 'У&величить',

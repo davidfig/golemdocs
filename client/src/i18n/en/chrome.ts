@@ -34,6 +34,8 @@ export const chrome = {
   'chrome.view.pagesPanel': 'Page Side&bar',
   'chrome.view.filesPanel': 'Fi&les Sidebar',
   'chrome.view.ruler': '&Ruler',
+  'chrome.view.collapsePages': 'Hide Space Between Pages',
+  'chrome.view.collapsePages.tip': 'Hide the gap between pages. You can also double-click between two pages.',
   'chrome.view.footer': 'St&atus Bar',
   'chrome.view.formattingMarks': 'Formatting &Marks',
   'chrome.view.zoomIn': 'Zoom &In',

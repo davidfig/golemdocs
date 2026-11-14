@@ -30,6 +30,7 @@
 - Live blocks also stay up to date in a document you're editing together with other people: one of the owner's open apps updates them, and everyone sees the change.
 - Stop Updating, on a live block's card or in its right-click menu, turns the block into ordinary text, cells or shapes holding what it last showed, so you can change it there. Edit › Undo makes it live again.
 - File › Share warns when a document has live blocks: people with its public link see what the blocks showed when they were last updated on one of your devices.
+- Double-click between two pages to hide the space between them, like Word; double-click again to bring it back. View › Hide Space Between Pages does the same, and the choice follows you to your other computers.
 
 ### Changed
 

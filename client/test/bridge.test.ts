@@ -37,6 +37,15 @@ test('Show in Finder and Open Privacy Settings say the app needs updating when t
   await assert.rejects(desktopBridge()!.reveal(), ShellTooOldError);
 });
 
+test('a new install starts with the default folder, and a shell too old to have one gives none', async () => {
+  shell({ vault_use_default: '/Users/someone/GolemDocs' });
+  assert.equal(await desktopBridge()!.useDefault(), '/Users/someone/GolemDocs');
+  shell({});
+  assert.equal(await desktopBridge()!.useDefault(), null);
+  shell({ vault_use_default: Promise.reject('Permission denied') });
+  await assert.rejects(desktopBridge()!.useDefault(), /Permission denied/);
+});
+
 test('folders are listed, made and removed, and a shell too old to list them gives none', async () => {
   shell({ vault_folders: ['Notes', 'Notes/Empty'], vault_make_folder: undefined, vault_remove_folder: false });
   const bridge = desktopBridge()!;

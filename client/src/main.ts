@@ -5758,9 +5758,9 @@ async function connectVault(): Promise<void> {
     });
   }
   await vaultService?.start();
-  // First launch with no folder: show the Vault Folder dialog once (it explains the folder and has Choose), signed in or not.
-  // Closing it without choosing is an answer; File ▸ Vault Folder is
-  // still there. Per device, so not in SYNCED_KEYS.
+  // First launch with no folder: start with the default one (GolemDocs in the home folder), then show the Vault Folder dialog once
+  // (it explains the folder and has Choose or Change), signed in or not. Closing it is an answer; File ▸ Vault Folder is
+  // still there. Per device, so not in SYNCED_KEYS: a device that was asked before keeps no folder if it chose none.
   if (!vaultService || vaultService.current.root || vaultService.fixed) return;
   try {
     if (localStorage.getItem(VAULT_ASKED_KEY)) return;
@@ -5768,6 +5768,7 @@ async function connectVault(): Promise<void> {
   } catch {
     return; // no storage: better never asked than asked on every launch
   }
+  await vaultService.useDefault().catch((error: unknown) => notify(t('vault.problem.error', { message: (error as Error).message ?? String(error) })));
   vaultDialog.open();
 }
 

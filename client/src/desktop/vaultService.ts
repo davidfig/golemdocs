@@ -144,6 +144,18 @@ export class VaultService {
     return true;
   }
 
+  /** Starts keeping the folder a new desktop install uses (`GolemDocs` in the home folder). Returns false where there is none. */
+  async useDefault(): Promise<boolean> {
+    const root = await this.bridge.useDefault();
+    if (!root) return false;
+    if (root === this.status.root) return true;
+    this.signature = '';
+    this.wanted = true;
+    this.set({ root, state: 'waiting', report: null, message: undefined });
+    void this.syncNow();
+    return true;
+  }
+
   /** Shows the folder in Finder (Explorer, the file manager). */
   reveal(): Promise<void> {
     return this.bridge.reveal();

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-vault-use-default"
+description = "Enables the vault_use_default command without any pre-configured scope."
+commands.allow = ["vault_use_default"]
+
+[[permission]]
+identifier = "deny-vault-use-default"
+description = "Denies the vault_use_default command without any pre-configured scope."
+commands.deny = ["vault_use_default"]

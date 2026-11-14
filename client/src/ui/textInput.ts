@@ -81,6 +81,20 @@ function keyOfInput(type: string): EditKey | null {
   return null;
 }
 
+/**
+ * What a composition did to a textarea that held text (`was`, the caret at `caret`) and holds `now`: how many characters it took
+ * from before and after the caret, and the text it put in their place. Null when it can't be told (nothing changed).
+ */
+export function compositionEdit(was: string, caret: number, now: string): { back: number; forward: number; text: string } | null {
+  if (now === was) return null;
+  let start = 0;
+  while (start < was.length && start < now.length && was[start] === now[start]) start++;
+  let end = 0;
+  while (end < was.length - start && end < now.length - start && was[was.length - 1 - end] === now[now.length - 1 - end]) end++;
+  const removedTo = was.length - end;
+  return { back: Math.max(0, caret - start), forward: Math.max(0, removedTo - Math.max(caret, start)), text: now.slice(start, now.length - end) };
+}
+
 export interface TextInputHandlers {
   /** Text typed, dictated, dropped, or committed by an input method. */
   insert(text: string): void;
@@ -124,11 +138,23 @@ export function attachTextInput(input: HTMLTextAreaElement, h: TextInputHandlers
       if (text) h.insert(text);
     }
   });
-  input.addEventListener('compositionstart', () => h.compose?.(''));
+  // In Screen Reader Mode the textarea holds the text around the caret, and an input method may compose over some of it (Android's
+  // Gboard takes the word before the caret back): what it replaced is deleted from the document before its text goes in.
+  let before: { value: string; caret: number } | null = null;
+  input.addEventListener('compositionstart', () => {
+    before = input.value ? { value: input.value, caret: input.selectionEnd } : null;
+    h.compose?.('');
+  });
   input.addEventListener('compositionupdate', (e) => h.compose?.(e.data));
   input.addEventListener('compositionend', (e) => {
     h.compose?.(null);
-    if (e.data) h.insert(e.data);
+    const edit = before ? compositionEdit(before.value, before.caret, input.value) : null;
+    before = null;
+    if (edit) {
+      for (let i = 0; i < edit.back; i++) h.key({ kind: 'delete', direction: 'backward', unit: 'character' });
+      for (let i = 0; i < edit.forward; i++) h.key({ kind: 'delete', direction: 'forward', unit: 'character' });
+      if (edit.text) h.insert(edit.text);
+    } else if (e.data) h.insert(e.data);
     input.value = '';
   });
   input.addEventListener('copy', (e) => {

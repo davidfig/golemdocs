@@ -42,6 +42,12 @@ export function setScreenReader(value: boolean): void {
   turn(value);
 }
 
+/** Turns the mode on for this page only, without storing it: a site embedding the viewer for its own users must not
+ * change the person's setting, which follows their account into the app. */
+export function screenReaderHere(): void {
+  turn(true);
+}
+
 /** The mode as storage now has it (a choice from the account, settingsSync.ts). Reads and never writes. */
 export function rereadScreenReader(): void {
   turn(read());

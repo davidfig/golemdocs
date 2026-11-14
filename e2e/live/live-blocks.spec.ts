@@ -468,7 +468,7 @@ test('Insert › Live Block counts a folder’s words against a goal, in the lin
   await app.type(' ');
   await app.menu('Insert', 'Live Block…');
   const dialog = page.getByRole('dialog', { name: 'Insert Live Block' });
-  await dialog.getByRole('button', { name: 'Count', exact: true }).click();
+  await dialog.getByRole('radio', { name: 'Count', exact: true }).click();
   await dialog.getByRole('button', { name: 'Folder', exact: true }).click();
   await page.getByRole('option', { name: 'Vault/Novel' }).click();
   await dialog.getByRole('spinbutton', { name: 'Goal' }).fill('50000');
@@ -492,7 +492,7 @@ test('Insert › Live Block shows a CSV’s rows that meet a condition, sorted',
   await app.press('ControlOrMeta+End');
   await app.menu('Insert', 'Live Block…');
   const dialog = page.getByRole('dialog', { name: 'Insert Live Block' });
-  await dialog.getByRole('button', { name: 'Table', exact: true }).click();
+  await dialog.getByRole('radio', { name: 'Table', exact: true }).click();
   await dialog.getByRole('textbox', { name: 'Columns:' }).fill('Day, Calories');
   await dialog.getByRole('textbox', { name: 'Sort by:' }).fill('Calories');
   await dialog.getByRole('checkbox', { name: 'Reverse order' }).check();

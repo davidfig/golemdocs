@@ -22,7 +22,7 @@ import { ScreenReaderSupport } from '../screenReaderSupport.ts';
 import { announce } from '../ui/announce.ts';
 import { forcedColors, onAccessibilityChange } from '../ui/accessibilityOptions.ts';
 import { toolbarKeys } from '../ui/focusRegions.ts';
-import { onScreenReaderChange, SCREEN_READER_SHORTCUT, screenReaderOn, setScreenReader } from '../ui/screenReader.ts';
+import { onScreenReaderChange, SCREEN_READER_SHORTCUT, screenReaderHere, screenReaderOn, setScreenReader } from '../ui/screenReader.ts';
 import { matches, parseShortcut } from '../ui/shortcuts.ts';
 import { editKey } from '../ui/textInput.ts';
 import { Camera, CSS_PX_PER_POINT } from '../view/camera.ts';
@@ -45,7 +45,8 @@ export interface ViewerOptions {
   dark?: boolean;
   /** The language of the viewer's own words (a BCP 47 tag; default English). */
   locale?: string;
-  /** Screen Reader Mode starts on (the host knows its user has a screen reader); otherwise it follows `golem.screenReader`. */
+  /** Screen Reader Mode starts on for this page (the host knows its user has a screen reader), leaving the person's own
+   * `golem.screenReader` setting as it was; otherwise it follows that setting. */
   screenReader?: boolean;
   /** The High Contrast colors around the pages. */
   contrast?: boolean;
@@ -627,7 +628,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     showReaderMode(on);
     if (on) caretToView();
   });
-  if (options.screenReader) setScreenReader(true);
+  if (options.screenReader) screenReaderHere();
   showReaderMode(screenReaderOn());
   readerButton.addEventListener('click', () => setScreenReader(!screenReaderOn()));
   // Contrast colors of the system came or went: the pages are drawn in them.

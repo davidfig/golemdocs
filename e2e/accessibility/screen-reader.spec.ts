@@ -73,6 +73,19 @@ test.describe('Screen Reader Mode', () => {
     await expect.poll(() => input.evaluate((el: HTMLTextAreaElement) => [el.value, el.selectionStart]))
       .toEqual(['second line', 0]);
   });
+
+  test('an input method that composes over the word before the caret (as Android’s Gboard does) replaces it, not adds to it', async ({ app, page }) => {
+    await app.blank();
+    await screenReaderOn(app);
+    await app.type('say hell');
+    await expect.poll(() => mirror(app)).toEqual({ value: 'say hell', start: 8, end: 8 });
+    // The keyboard takes "hell" back into a composition and finishes it as "hello" (replacing chars 4 to 8 of the textarea).
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.imeSetComposition', { text: 'hello', selectionStart: 5, selectionEnd: 5, replacementStart: 4, replacementEnd: 8 });
+    await cdp.send('Input.insertText', { text: 'hello' });
+    await app.settle();
+    expect(await app.text()).toBe('say hello');
+  });
 });
 
 test.describe('Keyboard regions', () => {

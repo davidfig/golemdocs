@@ -344,7 +344,7 @@ test.describe('Clear Local Data', () => {
 });
 
 test.describe('a sign-in that runs out', () => {
-  const notice = (page: Page) => page.getByRole('status', { name: 'Sign-in expired' });
+  const notice = (page: Page) => page.getByRole('complementary', { name: 'Sign-in expired' });
   /** The session ends with nobody signing out, as when it reaches its age limit. */
   const expire = async (person: Awaited<ReturnType<typeof newPerson>>) => {
     await person.context.clearCookies({ name: 'session' });

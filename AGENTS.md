@@ -86,6 +86,16 @@ The app should look and behave the same everywhere: the same buttons, icons, fon
 - **One look everywhere.** Fonts, sizes, spacing, colors, borders and radii come from the shared styles and `--wm-*` variables in `ui.css`, never from values chosen for one place. This holds for every part of the app, dialogs and in-document cards and forms included: build them from the shared parts (`.wm-dialog` with `dialogTitleBar`, `.wm-dialog-body`, `.wm-dialog-buttons`, `.wm-button`, `.wm-input`, `.wm-find-message`), so a new one looks like the ones around it. Don't write a new font-size, font-family, button or input style; if a shared one is missing something, extend it and let everything use it. Check a new or changed UI next to an existing dialog (Find, Page Setup) before finishing.
 - **Draw icons, don't type them.** Use an SVG (`iconButton`) rather than a character such as `×` or `▸`: characters are placed differently by each font, so they don't line up with each other.
 
+## Accessibility comes with every feature
+
+A feature is not finished until people who use a screen reader, only a keyboard, or high contrast can use it too. Build it in the same change, never as a follow-up; see `docs/architecture/accessibility.md` for how each piece works.
+
+- **Keyboard:** everything a pointer does has a keyboard way to do it (a command or menu item at least, for drag and drop and double-clicks). New panels and toolbars join the F6 regions (`ui/focusRegions.ts`); dialogs and cards close with Escape and give the focus back.
+- **Names and roles:** every control has an accessible name (`aria-label` on icon-only buttons, a `<label>` on inputs) and the ARIA role of its pattern. Use the shared controls (`dropdown`, `choiceButton`, `listBox`, `segmented`, `colorButton`, `LayerTree`, `showDialog`), which already do this, rather than building new ones.
+- **The canvas:** what only shows on the canvas must reach Screen Reader Mode: the caret's text through the textarea mirror (`CaretMirror`), the structure through the reading layer, and changes the person did not type (a page turned, a cell moved to, a result found) through `announce()` (`ui/announce.ts`). Do this work only while `screenReaderOn()`.
+- **Looks:** new colours work in the High Contrast theme and Windows contrast themes (`forced-colors`, `forcedColors()` for anything drawn on a canvas), nothing is shown by colour alone, and nothing moves when the system asks for reduced motion.
+- **Tests:** add e2e checks in `e2e/accessibility/` (roles, names and the keyboard path, through `getByRole`), and say in the change if a manual screen reader pass is needed.
+
 ## Localization
 
 Every user-visible string goes through `t('area.key')` (`client/src/i18n`), never an inline literal. Add the English to `client/src/i18n/en/` and call `t()` inside functions, not at module top level. Adding an English key makes the translation-completeness test fail until every language in `client/src/i18n/locales/` has it. See `docs/localization.md` for the conventions and how to add a language.

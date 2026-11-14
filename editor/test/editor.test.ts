@@ -1105,6 +1105,21 @@ test('resizing the selected picture changes its size and keeps it selected', ski
   assert.equal(editor.selectedPicture()!.drawing.width, 144 * 12700);
 });
 
+test('alt text is set on the selected picture, taken off when empty, and undone in one step', skip, async () => {
+  const { editor, apply, clickPicture } = await withPicture();
+  await clickPicture();
+  await apply({ kind: 'describePicture', text: '  A red kite over the hills ' });
+  assert.equal(editor.selectedPicture()!.drawing.description, 'A red kite over the hills');
+  const depth = editor.undoDepth;
+  await apply({ kind: 'describePicture', text: 'A red kite over the hills' });
+  assert.equal(editor.undoDepth, depth, 'the same text changes nothing');
+  await apply({ kind: 'describePicture', text: '' });
+  assert.equal(editor.selectedPicture()!.drawing.description, undefined);
+  editor.undo();
+  const drawings = paragraphsIn(editor.doc.body).flatMap((p) => (p.children as Inline[]).flatMap((c) => (c.kind === 'run' ? c.content.filter((i) => i.kind === 'drawing') : [])));
+  assert.deepEqual(drawings.map((d) => d.description), ['A red kite over the hills']);
+});
+
 test('swapping the picture keeps its width and follows the new shape', skip, async () => {
   const { editor, apply, clickPicture, item } = await withPicture();
   await clickPicture();

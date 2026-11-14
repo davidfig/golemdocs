@@ -16,6 +16,10 @@ export type ToViewer = {
   dark?: boolean;
   /** The language of the viewer's own words (a BCP 47 tag; default English). */
   locale?: string;
+  /** The host knows its user has a screen reader: Screen Reader Mode starts on (see docs/architecture/accessibility.md). */
+  screenReader?: boolean;
+  /** The High Contrast colors around the pages (the host's own high contrast setting). */
+  contrast?: boolean;
 };
 
 /** Sent by the viewer page to its host (`window.parent`). */
@@ -61,6 +65,7 @@ export type ViewerKey =
   | 'pageDown'
   | 'first'
   | 'last'
+  | 'caret'
   | 'browser'
   | 'host';
 
@@ -75,6 +80,8 @@ export interface KeyContext {
   findOpen: boolean;
   /** The pages are wider than the view, so ← and → scroll it. */
   canScrollSideways: boolean;
+  /** Screen Reader Mode, in a document with text to move through: the arrows, Home and End move a caret (with Shift, select). */
+  caret?: boolean;
 }
 
 const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock', 'Fn', 'FnLock', 'OS', 'Hyper', 'Super', 'NumLock', 'ScrollLock']);
@@ -102,6 +109,8 @@ export function viewerKey(e: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'ctrlKey' 
   if (mod && (lower === 'c' || lower === 'x' || lower === 'v')) return 'browser';
   if (key === 'Tab') return 'browser';
   if (context.onButton && (key === 'Enter' || key === ' ')) return 'browser';
+  // Screen Reader Mode: the caret keys move a caret through the text (the hidden textarea follows it, so it is read), as the editor's do.
+  if (context.caret && (key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown' || key === 'Home' || key === 'End')) return 'caret';
   // Moving through the document: plain keys (Shift too, which selects nothing here); with another modifier they are the host's.
   if (!e.ctrlKey && !e.metaKey && !e.altKey) {
     switch (key) {
@@ -146,6 +155,8 @@ export function readToViewer(data: unknown): ToViewer | null {
     ...(typeof m.fontBase === 'string' && m.fontBase && { fontBase: m.fontBase }),
     ...(typeof m.dark === 'boolean' && { dark: m.dark }),
     ...(typeof m.locale === 'string' && m.locale && { locale: m.locale }),
+    ...(typeof m.screenReader === 'boolean' && { screenReader: m.screenReader }),
+    ...(typeof m.contrast === 'boolean' && { contrast: m.contrast }),
   };
 }
 

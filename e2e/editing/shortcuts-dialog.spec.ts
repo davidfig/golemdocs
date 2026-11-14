@@ -3,7 +3,8 @@ import { IS_MAC, MOD, tool, typeAndSelect } from './helpers';
 
 // This dialog has no accessible name (showDialog gives it none), so it is found by its content.
 const shortcuts = (app: App) => app.page.locator('dialog[open]').filter({ hasText: 'Restore Defaults' });
-const change = (app: App, label: string) => shortcuts(app).getByRole('button', { name: `Change shortcut for ${label}`, exact: true });
+// Named "Change shortcut for Bold: Ctrl+B", so a screen reader says the key it has now.
+const change = (app: App, label: string) => shortcuts(app).getByRole('button', { name: new RegExp(`^Change shortcut for ${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: `) });
 const cmd = IS_MAC ? '⌘' : 'Ctrl+';
 
 async function open(app: App) {

@@ -189,7 +189,7 @@ class MenuPopup {
       'div',
       {
         class: 'wm-item',
-        attrs: { role, 'aria-disabled': String(!enabled), id: `wm-${Math.random().toString(36).slice(2, 9)}` },
+        attrs: { role, 'aria-disabled': String(!enabled), id: `wm-${Math.random().toString(36).slice(2, 9)}`, tabindex: '-1' },
       },
       gutter,
       labelEl,
@@ -257,6 +257,8 @@ class MenuPopup {
     const row = this.rows[index];
     row?.el.classList.add('active');
     setAttr(this.el, 'aria-activedescendant', row ? row.el.id : null);
+    // Used from the keyboard, the item has the focus itself, so a screen reader says it (the menu's keys are taken on the window either way).
+    if (row && this.bar.keyboard) row.el.focus({ preventScroll: true });
   }
 
   /** Moves the highlight, skipping disabled items (as Windows does), wrapping around. */
@@ -269,6 +271,11 @@ class MenuPopup {
         return;
       }
     }
+  }
+
+  /** Gives the highlighted item the focus (the menus went over to the keyboard). */
+  focusActive(): void {
+    this.rows[this.active]?.el.focus({ preventScroll: true });
   }
 
   first(): void {
@@ -303,6 +310,7 @@ class MenuPopup {
     this.rows[this.childOf]?.el.removeAttribute('aria-expanded');
     this.child = null;
     this.childOf = -1;
+    if (this.bar.keyboard) this.focusActive();
   }
 
   close(): void {
@@ -354,6 +362,8 @@ export class MenuBar {
   private popup: MenuPopup | null = null;
   /** Mnemonic underlines are showing (the menu was reached by keyboard). */
   cues = false;
+  /** The menus are being used from the keyboard (F10, Alt, or a key while one is open): the focus follows the highlight, for screen readers. */
+  keyboard = false;
   /** Alt went down with no other key since. */
   private altAlone = false;
   /** The menus are in the system's menu bar (the desktop app on a Mac): the titles here are hidden and Alt and F10 do nothing. */
@@ -442,9 +452,20 @@ export class MenuBar {
     return this.mode !== 'idle';
   }
 
+  /** Keyboard access to the bar, as F10 gives (F6 goes here too): false while the menus are the system's. */
+  focusFromKeyboard(): boolean {
+    if (this.native || this.el.hidden || !this.el.getClientRects().length) return false;
+    const first = this.titles.findIndex((t) => !t.el.hidden);
+    if (first < 0) return false;
+    this.keyboard = true;
+    this.focusBar(first);
+    return true;
+  }
+
   private highlight(i: number): void {
     this.index = i;
     this.titles.forEach((t, j) => t.el.classList.toggle('active', j === i));
+    if (this.mode === 'focus' && this.keyboard) this.titles[i]?.el.focus({ preventScroll: true });
   }
 
   private setCues(on: boolean): void {
@@ -485,6 +506,7 @@ export class MenuBar {
     this.popup?.close();
     this.popup = null;
     this.mode = 'idle';
+    this.keyboard = false;
     this.highlight(-1);
     this.setCues(false);
     this.titles.forEach((t) => {
@@ -521,6 +543,7 @@ export class MenuBar {
       if (document.querySelector('dialog:modal')) return;
       if (e.key === 'F10' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
         this.take(e);
+        this.keyboard = true;
         this.focusBar(0);
       } else if (!IS_MAC && e.altKey && !e.ctrlKey && !e.metaKey && e.key !== 'Alt' && !isFormField(e.target)) {
         // Alt+letter opens a menu by its mnemonic (Windows/Linux; Option types characters on macOS).
@@ -528,15 +551,25 @@ export class MenuBar {
         const i = this.titles.findIndex((t) => t.mnemonic === letter && !t.el.hidden);
         if (i >= 0) {
           this.take(e);
+          this.keyboard = true;
           this.open(i, true, true);
         }
       }
       return;
     }
 
+    // F6 leaves for the next part of the window (focusRegions.ts), which takes the focus from here.
+    if (e.key === 'F6' && !e.ctrlKey && !e.metaKey && !e.altKey) return this.close(false);
     // A menu is active: every key is ours.
     this.take(e);
     if (e.key === 'Alt' || e.key === 'Meta' || e.key === 'Control' || e.key === 'Shift') return;
+    if (!this.keyboard) {
+      this.keyboard = true;
+      // A menu opened with the mouse, then used from the keyboard: the focus goes to what is highlighted now.
+      const popup = this.popup?.deepest();
+      if (popup && popup.active >= 0) popup.focusActive();
+      else if (this.mode === 'focus') this.titles[this.index]?.el.focus({ preventScroll: true });
+    }
     if (e.key === 'F10' || e.key === 'Tab') {
       this.close();
       return;
@@ -602,8 +635,10 @@ export class MenuBar {
     if (!alone || isFormField(e.target) || (this.mode === 'idle' && document.querySelector('dialog:modal'))) return;
     // Tapping Alt toggles keyboard access to the menu bar, as on Windows.
     e.preventDefault();
-    if (this.mode === 'idle') this.focusBar(0);
-    else this.close();
+    if (this.mode === 'idle') {
+      this.keyboard = true;
+      this.focusBar(0);
+    } else this.close();
   }
 
   private take(e: KeyboardEvent): void {

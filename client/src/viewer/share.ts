@@ -36,6 +36,18 @@ function say(text: string): HTMLElement {
   return more;
 }
 
+/**
+ * The person chose High Contrast in the app (`golem.theme`, ui/theme.ts, which this page doesn't load: it would restyle the page
+ * as the app). The site's page shares the app's storage; Screen Reader Mode (`golem.screenReader`) is read by the viewer itself.
+ */
+function highContrast(): boolean {
+  try {
+    return localStorage.getItem('golem.theme') === 'contrast';
+  } catch {
+    return false;
+  }
+}
+
 /** The page's own title, put back when the document is taken away. */
 const PAGE_TITLE = document.title;
 
@@ -93,6 +105,7 @@ async function start(): Promise<void> {
     dark: matchMedia('(prefers-color-scheme: dark)').matches,
     locale,
     title,
+    contrast: highContrast(),
     onError: (message) => console.error(message),
     onDownload: isPublic ? () => void download() : undefined,
     // The page is the site's: a link opens in a tab of its own.

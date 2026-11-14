@@ -1,6 +1,8 @@
 // The English catalog, the source every translation is made from. One file per area of the UI;
 // keys are `area.name` and unique across the files (test/i18n.test.ts checks).
 
+import { a11y } from './a11y.ts';
+import { a11ySheet } from './a11ySheet.ts';
 import { app } from './app.ts';
 import { chrome } from './chrome.ts';
 import { columns } from './columns.ts';
@@ -25,7 +27,7 @@ import { vector } from './vector.ts';
 import { viewer } from './viewer.ts';
 import { wordCount } from './wordCount.ts';
 
-export const catalogs = [app, chrome, columns, dialogs, history, textEditor, sheet, link, math, menus, pageSetup, panels, format, paragraph, pasteSpecial, picture, properties, spelling, table, vault, vector, viewer, wordCount] as const;
+export const catalogs = [a11y, a11ySheet, app, chrome, columns, dialogs, history, textEditor, sheet, link, math, menus, pageSetup, panels, format, paragraph, pasteSpecial, picture, properties, spelling, table, vault, vector, viewer, wordCount] as const;
 
 export const en = Object.assign({}, ...catalogs) as UnionToIntersection<(typeof catalogs)[number]>;
 

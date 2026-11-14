@@ -4,17 +4,48 @@
 
 ### Added
 
+- Screen Reader Mode (Tools › Screen Reader Mode, or Ctrl+Alt+Z; ⌘⌥Z on a Mac) lets screen readers such as NVDA, JAWS, VoiceOver and Narrator read your document. They read the text as you move the caret and select, echo what you type, and go through its headings, lists, tables, links and pictures. They also hear when bold or italic is turned on, when you move into a heading or onto another page, and when someone joins or leaves.
+- Alt Text (Format › Alt Text…, or right-click a picture) describes a picture for people who can’t see it. Word and Markdown files keep it.
+- F6 and Shift+F6 move between the menu bar, the toolbars, the document, the side panels and the status bar. In a toolbar, the arrow keys move between buttons, Enter presses one and Escape goes back to the document. A “Skip to the document” link comes first when you press Tab.
+- A High Contrast color scheme, and a new Accessibility section in Tools › Options for the caret’s width and whether it blinks. The caret no longer blinks if your system asks for reduced motion.
+- Windows contrast themes now color the document, its page thumbnails and plain text files too, not just the menus and toolbars.
+- Edit › Next Heading and Previous Heading (Ctrl+Alt+Page Down and Page Up; ⌘⌥ on a Mac) jump between headings, and Next Table and Previous Table (add Shift) between tables.
+- In Screen Reader Mode, a spelling or grammar mistake is read out when the caret moves onto it, Find says the words around what it found, and plain text files are read line by line too.
+- The layers panel of drawings and pictures can be used from the keyboard: the arrow keys move through it, Enter picks, F2 renames and Shift+F10 opens a layer’s menu. F6 reaches it.
+- In drawings, and in shapes drawn on a picture, Alt and an arrow key resize what is picked (Alt+Shift by 10), as the arrow keys already move it. In Screen Reader Mode, each press says where it is and how big.
+- Screen readers name a PDF form’s fields by the description the PDF gives them, rather than by their name in the file, and say which ones must be filled in.
+- Documents saved as PDF are now tagged PDFs: screen readers read them in order and know their headings, lists, tables and pictures (with their alt text), skip headers and footers, and know what language they are in. A PDF with no title of its own is titled by its first heading. It meets the PDF/UA accessibility standard, and says so, unless a picture has no alt text or a font has to be stood in for (Chinese, Japanese or Korean text, or a bold or italic its font lacks).
 - Double-click between two pages to hide the space between them, like Word; double-click again to bring it back. View › Hide Space Between Pages does the same, and the choice follows you to your other computers.
+- Screen Reader Mode reads spreadsheets: moving the active cell says its address, value and formula (and a note, list, filter, merge or lock on it), and selecting a range, switching sheets and picking a chart are announced.
+- In spreadsheets, F6 reaches the formula bar, the cells and the sheet tabs; the arrow keys switch sheets on the tabs; Alt+Down opens a filter, Shift+F2 a cell’s note, Shift+F10 or the menu key the cell’s or chart’s menu, and Ctrl+Alt+5 (⌘⌥5 on a Mac) picks the charts in turn.
+- Screen Reader Mode reads EPUB books: turning a page says which page you’re on and how far through the book you are, and the screen reader reads on from the top of the new page. In the mode the arrow keys move through the text; Page Down, Page Up and Space turn pages.
+- Documents shared as “Can view” and public links can be read with a screen reader: press Ctrl+Alt+Z (⌘⌥Z on a Mac), or the Screen Reader Mode button that Tab reaches first. It is on already if you turned on Screen Reader Mode in the app. Find says where it found the text, the page’s controls are named and reachable with the arrow keys, and Windows contrast themes and High Contrast apply to its pages.
 
 ### Changed
 
+- Menus opened from the keyboard (F10 or Alt) are now read by screen readers item by item, and drop-down lists and color palettes can be used with the arrow keys, Enter and Escape.
+- Screen readers name the colors in a palette (“Dark red”) instead of reading their codes, and say which one is in use. Choices such as Solid, Linear and Radial fill are read as options you pick one of, and the arrow keys move between them.
+- Screen readers no longer read the status bar’s word count after every key you type.
+- The saving indicator no longer pulses when your system asks for reduced motion.
+- Escape now closes the link form even when it opened because the pointer rested on a link.
+- Grammar mistakes are underlined with a dashed double line, so they can be told apart from spelling mistakes without relying on color.
 - A new install of the desktop app keeps your documents in a GolemDocs folder in your home folder from the start, on Mac, Windows and Linux. File › Vault Folder can change it.
+- Right-click menus (the document’s, with synonyms and spelling suggestions, the Files sidebar’s and the layers panel’s) open with Shift+F10 or the menu key and work with the arrow keys, Enter and Escape.
+- Tabs in dialogs and the Bullets and Numbering galleries move with the arrow keys, and screen readers read them as tabs and choices.
+- Screen readers read the choice a drop-down list in a dialog shows, the color a color button is set to, the style picked in Styles, and the key each shortcut has in Keyboard Shortcuts.
+- The command palette is read as a search box with a list and says how many results it found; the Thesaurus says how many meanings it found.
+- Notes at the bottom of the window (a new version, reload, sign-in expired) are read out when they appear and can be reached with F6.
+- In File › Share, each person’s access and Remove buttons say whose they are.
+- Spreadsheets follow Windows contrast themes: the cells, gridlines and selection are drawn in the system’s colors.
 
 ### Fixed
 
 - A folder deleted in your vault folder no longer stays behind, empty, in Golem Docs. Folders now match on both sides, empty ones too: an empty folder made in the app appears in the vault folder, and one made in the vault folder appears in the app. Empty folders the vault had already lost are removed on the next sync. The desktop app needs its latest update for this.
 - Files in your vault folder show when the document was made, the same on every computer, instead of the moment that computer last copied them. Renaming or moving a document on another computer no longer changes its modified date here; only a change to its content does. Creation dates need the latest app on a Mac or Windows; Linux can't set them.
 - Linking a vault folder that already holds your documents (signing in after using it signed out, or pointing another computer at it) no longer uploads every file again and adds a copy of each to its version history. Files that already match their document are just linked; only ones that differ are uploaded.
+- The spreadsheet filter card gives the keyboard back to the cells when it closes, and the Scenario Manager and Solver lists can be used from the keyboard.
+- In High Contrast’s dark form, the chosen bullet or number in Bullets and Numbering was invisible; it now shows, also in Windows contrast themes.
+- In Windows contrast themes, Screen Reader Mode’s hidden text no longer shows over the pages.
 
 ## 0.37.2 - 2026-11-11
 

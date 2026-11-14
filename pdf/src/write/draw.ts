@@ -129,6 +129,29 @@ export class PageDrawing {
     return this.restore();
   }
 
+  // --- marked content (tagged PDF, see structure.ts) -------------------------------------------
+
+  /** Runs `fn` inside a marked-content sequence (BDC ... EMC) tagged `tag` with this MCID, for a structure element to point at. */
+  marked(tag: string, mcid: number, fn: (d: this) => void): this {
+    this.op('BDC', N(tag), new PdfDict({ MCID: mcid }));
+    fn(this);
+    return this.op('EMC');
+  }
+
+  /**
+   * Runs `fn` as an artifact (§14.8.2.2): content that is not part of the document's text, such as
+   * running headers and footers, rules and backgrounds, which screen readers skip.
+   */
+  artifact(fn: (d: this) => void, kind?: { type: 'Pagination' | 'Layout' | 'Page' | 'Background'; subtype?: 'Header' | 'Footer' | 'Watermark' }): this {
+    if (kind) {
+      const props = new PdfDict({ Type: N(kind.type) });
+      if (kind.subtype) props.set('Subtype', N(kind.subtype));
+      this.op('BDC', N('Artifact'), props);
+    } else this.op('BMC', N('Artifact'));
+    fn(this);
+    return this.op('EMC');
+  }
+
   /** cm: concatenates a matrix [a b c d e f] with the current transform (PDF user space). */
   transform(a: number, b: number, c: number, d: number, e: number, f: number): this {
     return this.op('cm', a, b, c, d, e, f);

@@ -34,6 +34,7 @@ The editor itself is a WebGL canvas; everything around it (menus, toolbars, dial
 | `client/src/ui/menu.ts`, `toolbar.ts`, `toolbarLayout.ts`, `customize.ts` | Menu bar mechanics, toolbar controls, toolbar contents as data, Customize Toolbars (layout kept per device) |
 | `client/src/ui/commandPalette.ts`, `shortcuts.ts` | Searchable command list, whose searches also find documents by title (`ChromeHost.documents`); `Mod+Shift+Z`-style shortcut parsing and user rebinding |
 | `client/src/ui/popup.ts`, `dropdown.ts`, `dom.ts` | One-at-a-time popups and dialogs; the drop-down list; DOM helpers (`h`, `iconButton`, `segmented`) |
+| `client/src/ui/focusRegions.ts`, `announce.ts` | F6 between the parts of the window and arrow keys in toolbars; the app's live regions for screen readers (see [Accessibility](accessibility.md)) |
 | `client/src/ui/layerTree.ts` + `layersPanel.ts`, `pictureLayersPanel.ts` | Shared layers panel and its two adapters |
 | `client/src/ui/cursors.ts` | Cursor drawings for vector and picture tools |
 | `client/src/ui/theme.ts`, `ui.css` | Color schemes via `--wm-*` variables and `data-theme`; the UI font (`--wm-font`, `uiFont()` for canvas labels) |
@@ -91,7 +92,8 @@ Reuse before you build, and centralize what you would copy. One implementation p
 
 - The canvas has no DOM text; tests and tools read the document through `window` hooks and the worker (see [Build and testing](build-and-testing.md)).
 - Pressing toolbar controls must not steal focus from the document (`keepFocus`); only combo boxes take it and hand it back. Menus take keys in the capture phase so the IME and caret survive.
-- Only one popup is open at a time (`ui/popup.ts`), nested ones stack on their owner.
+- Only one popup is open at a time (`ui/popup.ts`), nested ones stack on their owner. Every popup gets the same keys (`popupKeys`: arrows, Home, End, Enter, Space, Tab, Escape) and gives the focus back to its button when it closes.
+- Something only the canvas shows is said to screen readers through `announce()` (`ui/announce.ts`), not a new live region.
 - Do not start dev servers yourself in the main checkout; a worktree may run its own on other ports.
 - Unimplemented actions are disabled; dev builds still show them, saying "isn't available yet" (`ChromeOptions`/`CommandSpec` flags).
 - `ui/` stays host-agnostic: if you need app state, add it to `ChromeState` or a `ChromeHost` method.
@@ -99,4 +101,4 @@ Reuse before you build, and centralize what you would copy. One implementation p
 
 ## Related docs
 
-[Rendering](rendering.md), [Layout](layout.md), [Document model](document-model.md), [Collaboration](collaboration.md), [Server](server.md), [Build and testing](build-and-testing.md); [Localization](../localization.md); [Toolbar and file actions status](../actions-status.md).
+[Rendering](rendering.md), [Accessibility](accessibility.md), [Layout](layout.md), [Document model](document-model.md), [Collaboration](collaboration.md), [Server](server.md), [Build and testing](build-and-testing.md); [Localization](../localization.md); [Toolbar and file actions status](../actions-status.md).

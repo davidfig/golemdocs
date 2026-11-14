@@ -9,7 +9,12 @@ import { attachTextInput, focusTextInput } from '../ui/textInput.ts';
 import { showPopupMenu } from '../ui/popupMenu.ts';
 import type { PopupItem } from '../ui/popupMenu.ts';
 import { onContextMenu } from '../ui/contextMenu.ts';
-import { IS_MAC } from '../ui/shortcuts.ts';
+import { IS_MAC, formatShortcut, parseShortcut } from '../ui/shortcuts.ts';
+import { announce } from '../ui/announce.ts';
+import { onScreenReaderChange, SCREEN_READER_SHORTCUT, screenReaderOn } from '../ui/screenReader.ts';
+import type { Region } from '../ui/focusRegions.ts';
+import type { ForcedColors } from '../webgl/program.ts';
+import { cellMessage, chartMessage, rangeMessage, sheetMessage } from './a11y.ts';
 import type { Action, FormatState, SheetOp } from '../ui/actions.ts';
 import { CSS_PX_PER_POINT } from '../view/camera.ts';
 import type { Camera } from '../view/camera.ts';
@@ -37,7 +42,7 @@ import { sheetThumbnail } from './thumbnail.ts';
 import { parseCells } from './scenarios.ts';
 import type { NewChartKind } from './charts/make.ts';
 import type { AnchorPoint } from './charts/model.ts';
-import { parseRange, rangeName } from './refs.ts';
+import { cellName, parseRange, rangeName } from './refs.ts';
 import { parseTabbed } from './clipboard.ts';
 import type { BookInfo, CellContent, Changed, ChartChange, ChartScene, EditOp, FromWorker, SheetInfo, TileKey, ToWorker } from './protocol.ts';
 import type { DelimitedKind } from './delimited.ts';
@@ -119,12 +124,16 @@ export class SheetEditorView {
   private readonly findInput = h('input', { class: 'wm-input', attrs: { type: 'text', placeholder: t('sheet.findPlaceholder'), 'aria-label': t('sheet.findPlaceholder'), spellcheck: 'false' } });
   private readonly findMessage = h('span', { class: 'wm-find-message', attrs: { 'aria-live': 'polite' } });
   private readonly findOptions: Record<'matchCase' | 'wholeCell' | 'formulas' | 'allSheets', HTMLInputElement>;
-  private readonly tabs = h('div', { class: 'wm-sheet-tabs', attrs: { role: 'tablist', 'aria-label': t('sheet.tabs') } });
-  private readonly tabList = h('div', { class: 'wm-sheet-tablist' });
+  private readonly tabs = h('div', { class: 'wm-sheet-tabs' });
+  private readonly tabList = h('div', { class: 'wm-sheet-tablist', attrs: { role: 'tablist', 'aria-label': t('sheet.tabs') } });
   private readonly status = h('span', { class: 'wm-sheet-status', attrs: { 'aria-live': 'polite' } });
   private readonly cellEditor = h('textarea', { class: 'wm-sheet-editor', attrs: { 'aria-label': t('sheet.cellEditor'), spellcheck: 'false', autocomplete: 'off', hidden: '' } });
   /** Takes the keyboard while no cell is being edited (typing starts editing the active cell). */
   private readonly input = h('textarea', { class: 'wm-sheet-input', attrs: { 'aria-label': t('sheet.editor'), autocapitalize: 'off', autocomplete: 'off', autocorrect: 'off', spellcheck: 'false', rows: '1', 'data-sheet-input': '' } });
+  /** The cells' part of the window for F6 (the two textareas that take the keyboard there); it lays nothing out. */
+  private readonly cells = h('div', { class: 'wm-sheet-cells', attrs: { role: 'group', 'aria-label': t('a11y.sheet.cells') } });
+  /** What Screen Reader Mode last said of the selection: the sheet, the active cell and the range (see `speak`). */
+  private said = { sheet: -1, cell: '', range: '' };
 
   private readonly renderer: SheetRenderer;
   private worker: Worker | null = null;
@@ -220,9 +229,23 @@ export class SheetEditorView {
       else return;
       e.preventDefault();
     });
-    this.el.append(this.formulaBar, this.findBar, h('div', { class: 'wm-sheet-fill' }), this.tabs, this.cellEditor, this.input);
+    this.cells.append(this.cellEditor, this.input);
+    this.el.append(this.formulaBar, this.findBar, h('div', { class: 'wm-sheet-fill' }), this.tabs, this.cells);
     parent.append(this.el);
     this.listen();
+    this.hint();
+    onScreenReaderChange(() => {
+      this.hint();
+      // Turned on with a workbook open: where the selection is, as if it had just moved there.
+      this.said = { sheet: -1, cell: '', range: '' };
+      void this.speak();
+    });
+  }
+
+  /** While Screen Reader Mode is off, the cells' textarea says how to turn it on (as the document's does). */
+  private hint(): void {
+    if (screenReaderOn()) this.input.removeAttribute('aria-description');
+    else this.input.setAttribute('aria-description', t('a11y.hint', { shortcut: formatShortcut(parseShortcut(SCREEN_READER_SHORTCUT)!) }));
   }
 
   private findCheck(label: string): HTMLInputElement {
@@ -313,6 +336,7 @@ export class SheetEditorView {
     this.close();
     this.name = name;
     this.lossNoted = false;
+    this.said = { sheet: -1, cell: '', range: '' };
     this.worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (e: MessageEvent<FromWorker>) => this.receive(e.data);
     this.worker.onerror = (e) => this.deps.openFailed(e.message ?? '');
@@ -441,7 +465,7 @@ export class SheetEditorView {
     return { x: 0, y: 0, width: g.x(cols) - g.frozenWidth + extraX, height: g.y(rows) - g.frozenHeight + extraY };
   }
 
-  draw(darkPages: boolean): void {
+  draw(darkPages: boolean, forced: ForcedColors | null = null): void {
     const g = this.geometry;
     const info = this.info;
     if (!g || !info) return;
@@ -472,6 +496,7 @@ export class SheetEditorView {
       editing: this.editing,
       copied: this.copied,
       darkPages,
+      forced,
     });
     if (pending) requestAnimationFrame(() => this.deps.render());
     this.placeEditor();
@@ -548,6 +573,53 @@ export class SheetEditorView {
     this.formulaInput.readOnly = !!reply.content.locked;
     const sel = this.selection;
     this.nameBox.value = sel.r0 === sel.r1 && sel.c0 === sel.c1 ? `${columnName(at.col)}${at.row + 1}` : rangeName(sel);
+    void this.speak();
+  }
+
+  /**
+   * Screen Reader Mode: says where the selection is now, if it moved since it was last said: the sheet when it is another,
+   * then a range selected ("B2 to D5 selected"), or else the active cell (its address, value, formula and what is on it).
+   * Called once the active cell's contents have come; does nothing while the mode is off.
+   */
+  private async speak(): Promise<void> {
+    const info = this.info;
+    if (!screenReaderOn() || !this.book || !info) return;
+    const sheet = this.sheetIndex;
+    const at = { ...this.active };
+    const sel = this.selection;
+    const merged = this.geometry?.mergeAt(at.row, at.col) ?? null;
+    const oneCell = this.ranges.length === 1 && ((sel.r0 === sel.r1 && sel.c0 === sel.c1) || (!!merged && merged.r0 === sel.r0 && merged.c0 === sel.c0 && merged.r1 === sel.r1 && merged.c1 === sel.c1));
+    const now = { sheet, cell: `${at.row}:${at.col}`, range: oneCell ? '' : `${this.ranges.length}:${rangeName(sel)}` };
+    const before = this.said;
+    if (before.sheet === now.sheet && before.cell === now.cell && before.range === now.range) return;
+    const parts: string[] = [];
+    if (now.range && now.range !== before.range) {
+      this.said = now;
+      parts.push(rangeMessage(sel, this.ranges.length));
+    } else {
+      // The cell's contents come a moment after it is moved to: said then.
+      if (this.contentOf !== `${sheet}:${at.row}:${at.col}`) return;
+      this.said = now;
+      const content = this.content;
+      const hasNote = info.notes?.some(([r, c]) => r === at.row && c === at.col);
+      const note = hasNote ? await this.ask<Extract<FromWorker, { t: 'note' }>>({ t: 'note', id: this.id(), sheet, row: at.row, col: at.col }).catch(() => null) : null;
+      if (sheet !== this.sheetIndex || at.row !== this.active.row || at.col !== this.active.col) return;
+      parts.push(
+        cellMessage({
+          ...at,
+          display: content.display,
+          formula: content.isFormula ? content.input : null,
+          merged,
+          note: note?.note?.text ?? null,
+          list: content.list,
+          filter: !!this.filterOf(at.row, at.col),
+          pivot: this.pivotAt(at.row, at.col) !== null,
+          locked: content.locked,
+        }),
+      );
+    }
+    if (before.sheet !== sheet && this.book) parts.unshift(sheetMessage(info.name, this.book.sheets.indexOf(info), this.book.sheets.length));
+    announce(parts.join('. '));
   }
 
   // --- Editing ---
@@ -557,6 +629,7 @@ export class SheetEditorView {
     // A locked cell of a protected sheet is not typed into (the worker refuses the edit too, if the content was late).
     if (this.content.locked && this.contentOf === `${this.sheetIndex}:${this.active.row}:${this.active.col}`) return this.deps.notify(t('sheet.sheetProtected'));
     this.editing = { ...this.active, mode };
+    this.cellEditor.setAttribute('aria-label', t('a11y.sheet.editing', { cell: cellName(this.active.row, this.active.col) }));
     const value = text ?? this.content.input;
     this.cellEditor.value = value;
     this.formulaInput.value = value;
@@ -683,6 +756,44 @@ export class SheetEditorView {
     if (this.chart === index) return;
     this.chart = index;
     this.deps.render();
+    const scenes = this.chartScenes();
+    const scene = index === null ? undefined : scenes[index];
+    if (scene && screenReaderOn()) announce(chartMessage(scene.kind, scene.title, index!, scenes.length));
+  }
+
+  /** Picks the next chart over the cells (or the one before), from the keyboard, and scrolls it into view. */
+  private stepChart(step: 1 | -1): void {
+    const scenes = this.chartScenes();
+    if (!scenes.length) return void (screenReaderOn() && announce(t('a11y.sheet.noCharts')));
+    const n = scenes.length;
+    const next = this.chart === null ? (step > 0 ? 0 : n - 1) : (this.chart + step + n) % n;
+    const s = scenes[next];
+    const corner = this.anchorPoint(s.x, s.y);
+    this.reveal({ row: corner.row, col: corner.col });
+    this.pickChart(next);
+    this.deps.render();
+  }
+
+  /** The menu key: the picked chart's menu beside it, or the active cell's (a pivot's commands first, as a right click). */
+  private keyboardMenu(): void {
+    const box = this.el.getBoundingClientRect();
+    if (this.chart !== null) {
+      const s = this.chartScenes()[this.chart];
+      const p = s ? this.screenOf(s.x, s.y) : null;
+      return this.menu(box.left + (p?.x ?? 0), box.top + (p?.y ?? this.offsetTop), this.chartItems(this.chart));
+    }
+    const { row, col } = this.active;
+    const p = this.pointOf(row, col) ?? { x: 0, y: this.offsetTop };
+    const pivot = this.readOnly ? null : this.pivotAt(row, col);
+    this.menu(box.left + p.x, box.top + p.y, pivot === null ? this.cellItems('cell') : [...this.pivotItems(pivot), 'separator', ...this.cellItems('cell')]);
+  }
+
+  /** A pivot's own commands, first in its cells' menu. */
+  private pivotItems(pivot: number): PopupItem[] {
+    return [
+      { label: t('sheet.op.pivotFields'), run: () => void this.editPivotFields(pivot) },
+      { label: t('sheet.op.refreshPivots'), run: () => void this.edit({ kind: 'refreshPivots' }) },
+    ];
   }
 
   /** The picked chart's menu: its kind, legend, title, or taking it away. */
@@ -880,6 +991,7 @@ export class SheetEditorView {
         this.focus();
       }
     });
+    this.tabList.addEventListener('keydown', (e) => this.tabKey(e));
     onContextMenu(this.tabList, (e) => {
       const tab = (e.target as HTMLElement).closest<HTMLElement>('[data-sheet]');
       if (!tab) return false;
@@ -896,9 +1008,33 @@ export class SheetEditorView {
 
   private key(e: KeyboardEvent): void {
     if (this.deps.viewKey(e)) return;
-    // A picked chart: Delete takes it away, Escape lets it go; any other key is the cells'.
+    const mod0 = IS_MAC ? e.metaKey : e.ctrlKey;
+    // Mod+Alt+5 picks a chart from the keyboard (Excel's Ctrl+Alt+5 goes to the objects over the cells): the next one.
+    if (mod0 && e.altKey && e.code === 'Digit5') {
+      e.preventDefault();
+      e.stopPropagation();
+      this.stepChart(1);
+      return;
+    }
+    // The menu key or Shift+F10: the menu a right click on the active cell (or the picked chart) opens.
+    if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey && !mod0 && !e.altKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.keyboardMenu();
+      return;
+    }
+    // A picked chart: Delete takes it away, Escape lets it go, Tab and Shift+Tab go to the next or previous one; any other
+    // key is the cells'.
     if (this.chart !== null) {
       const index = this.chart;
+      // A modifier on its own (the Shift of Shift+Tab or Shift+F10) leaves it picked.
+      if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return;
+      if (e.key === 'Tab' && !mod0 && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.stepChart(e.shiftKey ? -1 : 1);
+        return;
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !this.readOnly) {
         e.preventDefault();
         this.pickChart(null);
@@ -906,7 +1042,13 @@ export class SheetEditorView {
         return;
       }
       this.pickChart(null);
-      if (e.key === 'Escape') return void e.preventDefault();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        // Back on the cells: the active cell is said again.
+        this.said = { ...this.said, cell: '' };
+        void this.speak();
+        return;
+      }
     }
     const mod = IS_MAC ? e.metaKey : e.ctrlKey;
     const g = this.geometry;
@@ -919,9 +1061,16 @@ export class SheetEditorView {
         case 'ArrowDown':
         case 'ArrowLeft':
         case 'ArrowRight': {
-          // Alt+Down opens a list validation's choices, as in Excel.
+          // Alt+Down opens a list validation's choices, or the filter of a filter's header cell, as in Excel.
           if (e.key === 'ArrowDown' && e.altKey && this.content.list) {
             void this.showChoices();
+            return true;
+          }
+          if (e.key === 'ArrowDown' && e.altKey && this.filterOf(this.active.row, this.active.col)) {
+            const { row, col } = this.active;
+            const p = this.pointOf(row, col);
+            const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
+            if (p) void this.openFilter(row, col, p.x + ((g.x(col + 1) - g.x(col)) / 2) * scale, p.y + ((g.y(row + 1) - g.y(row)) / 2) * scale);
             return true;
           }
           const dRow = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
@@ -957,7 +1106,9 @@ export class SheetEditorView {
           this.move(e.shiftKey ? -1 : 1, 0, true);
           return true;
         case 'F2':
-          this.startEdit('edit', null);
+          // Shift+F2: the cell's note, to read or change (Excel's).
+          if (e.shiftKey) void this.editNote();
+          else this.startEdit('edit', null);
           return true;
         case 'Delete':
           void this.edit({ kind: 'clear', ranges: this.ranges, what: 'contents' });
@@ -976,11 +1127,13 @@ export class SheetEditorView {
           if (mod) {
             this.ranges = [{ r0: 0, c0: this.selection.c0, r1: MAX_ROWS - 1, c1: this.selection.c1 }];
             this.deps.render();
+            void this.speak();
             return true;
           }
           if (e.shiftKey) {
             this.ranges = [{ r0: this.selection.r0, c0: 0, r1: this.selection.r1, c1: MAX_COLUMNS - 1 }];
             this.deps.render();
+            void this.speak();
             return true;
           }
           return false;
@@ -1084,6 +1237,7 @@ export class SheetEditorView {
     this.ranges = [{ r0: 0, c0: 0, r1: MAX_ROWS - 1, c1: MAX_COLUMNS - 1 }];
     this.deps.render();
     this.onState?.();
+    void this.speak();
   }
 
   /** Types text into the active cell (Insert › Symbol and the like): it is edited with the text added. */
@@ -1403,6 +1557,7 @@ export class SheetEditorView {
       clientY: canvas.top + y + 8,
       sort: (descending) => void this.edit({ kind: 'sort', range: filter.range, keys: [{ col, descending }], header: true }),
       apply: (choice) => void this.edit({ kind: 'filter', col, values: choice.values, blanks: choice.blanks, table }),
+      closed: () => this.focus(),
     });
   }
 
@@ -1424,6 +1579,7 @@ export class SheetEditorView {
       fields: pivot.fields.length > 1 ? { names: pivot.fields.map((f) => f.name), current: which, choose: (i) => void this.openPivotFilter(pivot, x, y, i) } : undefined,
       sort: (descending) => void this.edit({ kind: 'pivotField', index: pivot.index, field, sort: descending ? 'descending' : 'ascending' }),
       apply: (choice) => void this.edit({ kind: 'pivotField', index: pivot.index, field, shown: choice.values }),
+      closed: () => this.focus(),
     });
   }
 
@@ -1684,12 +1840,7 @@ export class SheetEditorView {
     const pivot = hit.kind === 'cell' && !this.readOnly ? this.pivotAt(hit.row, hit.col) : null;
     if (pivot !== null) {
       this.select(hit.row, hit.col);
-      return this.menu(clientX, clientY, [
-        { label: t('sheet.op.pivotFields'), run: () => void this.editPivotFields(pivot) },
-        { label: t('sheet.op.refreshPivots'), run: () => void this.edit({ kind: 'refreshPivots' }) },
-        'separator',
-        ...this.cellItems(hit.kind),
-      ]);
+      return this.menu(clientX, clientY, [...this.pivotItems(pivot), 'separator', ...this.cellItems(hit.kind)]);
     }
     const sel = this.selection;
     const inside = hit.row >= sel.r0 && hit.row <= sel.r1 && hit.col >= sel.c0 && hit.col <= sel.c1;
@@ -1785,15 +1936,58 @@ export class SheetEditorView {
   private showTabs(): void {
     const book = this.book;
     if (!book) return;
+    // The keyboard stays on the tabs when it was there (the arrow keys switch sheets): on the new sheet's tab.
+    const hadFocus = this.tabList.contains(document.activeElement);
     this.tabList.replaceChildren(
       ...book.sheets.map((sheet, i) => {
         if (sheet.state !== 'visible') return '';
-        const tab = h('button', { class: 'wm-sheet-tab', text: sheet.name, attrs: { type: 'button', role: 'tab', 'aria-selected': String(i === this.sheetIndex), 'data-sheet': String(i) } });
-        tab.addEventListener('click', () => this.switchSheet(i));
+        const tab = h('button', { class: 'wm-sheet-tab', text: sheet.name, attrs: { type: 'button', role: 'tab', 'aria-selected': String(i === this.sheetIndex), tabindex: i === this.sheetIndex ? '0' : '-1', 'data-sheet': String(i) } });
+        tab.addEventListener('click', () => {
+          this.switchSheet(i);
+          this.focus();
+        });
         tab.addEventListener('dblclick', () => this.renameInPlace(i, tab));
         return tab;
       }),
     );
+    if (hadFocus) this.selectedTab()?.focus();
+  }
+
+  private selectedTab(): HTMLElement | null {
+    return this.tabList.querySelector<HTMLElement>(`[data-sheet="${this.sheetIndex}"]`);
+  }
+
+  /** Keys on the sheet tabs (a tab list): Left and Right (Home, End) switch sheets, F2 renames, Escape goes back to the cells. */
+  private tabKey(e: KeyboardEvent): void {
+    const tab = (e.target as HTMLElement).closest<HTMLElement>('[data-sheet]');
+    if (!tab || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tabs = [...this.tabList.querySelectorAll<HTMLElement>('[data-sheet]')];
+    const at = tabs.indexOf(tab);
+    const go = (i: number) => this.switchSheet(Number(tabs[(i + tabs.length) % tabs.length].dataset.sheet));
+    switch (e.key) {
+      case 'ArrowRight':
+        go(at + 1);
+        break;
+      case 'ArrowLeft':
+        go(at - 1);
+        break;
+      case 'Home':
+        go(0);
+        break;
+      case 'End':
+        go(tabs.length - 1);
+        break;
+      case 'F2':
+        this.renameInPlace(Number(tab.dataset.sheet), tab);
+        break;
+      case 'Escape':
+        this.focus();
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   private showStatus(): void {
@@ -1814,6 +2008,7 @@ export class SheetEditorView {
     if (this.readOnly) return;
     const field = h('input', { class: 'wm-input wm-sheet-rename', attrs: { type: 'text', value: this.book!.sheets[index].name, 'aria-label': t('sheet.op.renameSheet') } });
     tab.replaceWith(field);
+    field.focus();
     field.select();
     const done = (keep: boolean) => {
       field.remove();
@@ -2157,6 +2352,32 @@ export class SheetEditorView {
 
   get hasFocus(): boolean {
     return this.el.contains(document.activeElement);
+  }
+
+  /** The workbook's parts of the window for F6 (ui/focusRegions.ts), in place of the document's: the formula bar (its
+   * name box), the find bar while it shows, the cells, and the sheet tabs (the active sheet's). */
+  regions(): Region[] {
+    const into = (el: HTMLElement, target: () => HTMLElement | null): Region => ({
+      el,
+      focus: () => {
+        const to = target();
+        if (!to || el.hidden) return false;
+        to.focus({ preventScroll: true });
+        return document.activeElement === to;
+      },
+    });
+    return [
+      into(this.formulaBar, () => this.nameBox),
+      into(this.findBar, () => this.findInput),
+      {
+        el: this.cells,
+        focus: () => {
+          this.focus();
+          return this.cells.contains(document.activeElement);
+        },
+      },
+      into(this.tabs, () => this.selectedTab() ?? this.tabs.querySelector('button')),
+    ];
   }
 
   /** What the status bar shows: the active cell, and the selection's count. */

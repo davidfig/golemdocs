@@ -172,6 +172,24 @@ test('letters and keys the viewer has no use for are the host\'s; the browser ke
   assert.equal(press({ key: ' ' }, { onButton: true }), 'browser');
 });
 
+test('in Screen Reader Mode the caret keys move a caret, with any modifier; Page Down, Space and the rest still scroll', () => {
+  for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']) assert.equal(press({ key }, { caret: true }), 'caret', key);
+  assert.equal(press({ key: 'ArrowRight', shiftKey: true }, { caret: true }), 'caret', 'Shift selects');
+  assert.equal(press({ key: 'ArrowLeft', altKey: true }, { caret: true }), 'caret', 'a word at a time (Option on a Mac)');
+  assert.equal(press({ key: 'End', metaKey: true }, { caret: true }), 'caret', 'to the end of the document');
+  assert.equal(press({ key: 'PageDown' }, { caret: true }), 'pageDown');
+  assert.equal(press({ key: ' ' }, { caret: true }), 'pageDown');
+  assert.equal(press({ key: 'a', metaKey: true }, { caret: true }), 'selectAll');
+  // A field keeps its own arrows.
+  assert.equal(press({ key: 'ArrowLeft' }, { caret: true, inField: true }), 'browser');
+});
+
+test('a host can ask for Screen Reader Mode and High Contrast; anything but a boolean is ignored', () => {
+  const bytes = new ArrayBuffer(2);
+  assert.deepEqual(readToViewer({ type: 'golemdocs:open', name: 'a.docx', bytes, screenReader: true, contrast: false }), { type: 'golemdocs:open', name: 'a.docx', bytes, screenReader: true, contrast: false });
+  assert.deepEqual(readToViewer({ type: 'golemdocs:open', name: 'a.docx', bytes, screenReader: 'yes', contrast: 1 }), { type: 'golemdocs:open', name: 'a.docx', bytes });
+});
+
 test('a page zoomed to fit the width has no room to scroll sideways, so ← → go to the host; one zoomed past the width keeps them', () => {
   const letter = { x: 0, y: 0, width: 612, height: 792 };
   // Satchel's reading pane and wider views, at DPR 1 and 2 (CSS px are the same either way: the camera's room is in CSS px).

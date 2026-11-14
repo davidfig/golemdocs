@@ -6,10 +6,11 @@
 import type { User } from '../auth.ts';
 import { t } from '../i18n/index.ts';
 import { CLOSE_ICON, h, iconButton, keepAboveFooter } from './dom.ts';
+import { showNotice } from './notice.ts';
 import './newVersionNotice.css';
 
 export class SignInExpiredNotice {
-  readonly el = h('aside', { class: 'wm-version-notice wm-signin-notice', attrs: { 'aria-label': t('dialogs.signInExpired.label'), role: 'status' } });
+  readonly el = h('aside', { class: 'wm-version-notice wm-signin-notice', attrs: { 'aria-label': t('dialogs.signInExpired.label') } });
   private readonly message = h('p');
   private dismissed = false;
 
@@ -20,7 +21,7 @@ export class SignInExpiredNotice {
     again.addEventListener('click', signIn);
     close.addEventListener('click', () => {
       this.dismissed = true;
-      this.el.hidden = true;
+      showNotice(this.el, false);
       closed();
     });
     this.el.hidden = true;
@@ -30,9 +31,10 @@ export class SignInExpiredNotice {
 
   /** `account`: whose sign-in has run out, if anyone's. */
   update(account: User | null): void {
-    this.el.hidden = !account || this.dismissed;
-    if (!account) return;
-    const name = account.email ?? account.name;
-    this.message.textContent = name ? t('dialogs.signInExpired.messageFor', { account: name }) : t('dialogs.signInExpired.message');
+    if (account) {
+      const name = account.email ?? account.name;
+      this.message.textContent = name ? t('dialogs.signInExpired.messageFor', { account: name }) : t('dialogs.signInExpired.message');
+    }
+    showNotice(this.el, !!account && !this.dismissed);
   }
 }

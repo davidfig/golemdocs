@@ -2,12 +2,10 @@ import { packColor, RECT_INSTANCE_BYTES } from '@golemdocs/layout';
 import type { SelectionUpdate } from '../layout/protocol.ts';
 import { RectBatch } from './shapes/rectBatch.ts';
 import type { GpuPage } from './gpuPage.ts';
-import { CARET, CHANGED, changeAlpha, REMOTE_ALPHA, REMOTE_FLAG as FLAG, REMOTE_WIDTH, SELECTION, SQUIGGLE_COLORS, squiggleRects } from './overlayColors.ts';
+import { CARET, CHANGED, changeAlpha, dashRects, REMOTE_ALPHA, REMOTE_FLAG as FLAG, REMOTE_WIDTH, SELECTION, SQUIGGLE_COLORS, squiggleRects } from './overlayColors.ts';
 
 /** Commented text, under the selection. */
 const COMMENTED = packColor(0xffc83d, 0.35);
-/** Caret width in points; the rect shader keeps it at least one device pixel wide. */
-const CARET_WIDTH = 0.01;
 
 
 /** Rect instances, each with its own color. */
@@ -55,7 +53,20 @@ export class SelectionLayer {
   private changedAt = 0;
   private changeBatches: RectBatch[] = [];
 
+  /** Caret width in points (Tools › Options › Accessibility); the rect shader keeps it at least one device pixel wide. */
+  private caretWidth = 0.01;
+
   constructor(private readonly gl: WebGL2RenderingContext) {}
+
+  /** Draws the caret this wide (points) from now on, the one showing included. */
+  setCaretWidth(width: number): void {
+    if (width === this.caretWidth) return;
+    this.caretWidth = width;
+    const c = this.caret;
+    if (!c || !this.caretBatch) return;
+    this.caretBatch.dispose(this.gl);
+    this.caretBatch = rects([[c.x - width / 2, c.y, width, c.height]], CARET);
+  }
 
   update(selection: SelectionUpdate): void {
     this.clearSelection();
@@ -92,7 +103,7 @@ export class SelectionLayer {
     for (const [page, list] of remoteByPage) this.remote.set(page, coloredRects(list));
     if (selection.caret) {
       const c = selection.caret;
-      this.caretBatch = rects([[c.x - CARET_WIDTH / 2, c.y, CARET_WIDTH, c.height]], CARET);
+      this.caretBatch = rects([[c.x - this.caretWidth / 2, c.y, this.caretWidth, c.height]], CARET);
       this.caretPage = c.page;
     }
   }
@@ -117,7 +128,8 @@ export class SelectionLayer {
       if (!list) byPage.set(marks[i], (list = []));
       const [x, y, width, height] = [marks[i + 1], marks[i + 2], marks[i + 3], marks[i + 4]];
       const color = SQUIGGLE_COLORS[marks[i + 5]] ?? SQUIGGLE_COLORS[0];
-      for (const rect of squiggleRects(x, y, width, height)) list.push({ rect, color });
+      // Grammar is dashed rather than wavy, so the two differ for someone who cannot tell red from green.
+      for (const rect of marks[i + 5] === 1 ? dashRects(x, y, width, height) : squiggleRects(x, y, width, height)) list.push({ rect, color });
     }
     for (const [page, list] of byPage) this.squiggles.set(page, coloredRects(list));
   }

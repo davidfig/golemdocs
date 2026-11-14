@@ -6,10 +6,11 @@
 import { CHECK_EVERY_MS, CHECK_MIN_GAP_MS, shouldOfferReload } from '../buildCheck.ts';
 import { t } from '../i18n/index.ts';
 import { CLOSE_ICON, h, iconButton, keepAboveFooter } from './dom.ts';
+import { showNotice } from './notice.ts';
 import './newVersionNotice.css';
 
 export class UpdateNotice {
-  readonly el = h('aside', { class: 'wm-version-notice', attrs: { 'aria-label': t('dialogs.update.label'), role: 'status' } });
+  readonly el = h('aside', { class: 'wm-version-notice', attrs: { 'aria-label': t('dialogs.update.label') } });
   private lastCheck = 0;
   private checking = false;
 
@@ -24,8 +25,8 @@ export class UpdateNotice {
     const now = h('button', { class: 'wm-button', text: t('dialogs.update.reload'), attrs: { type: 'button' } });
     const later = h('button', { class: 'wm-version-notice-off', text: t('dialogs.update.later'), attrs: { type: 'button' } });
     this.el.append(close, h('p', { text: t('dialogs.update.message') }), h('div', { class: 'wm-version-notice-actions' }, now, later));
-    close.addEventListener('click', () => (this.el.hidden = true));
-    later.addEventListener('click', () => (this.el.hidden = true));
+    close.addEventListener('click', () => showNotice(this.el, false));
+    later.addEventListener('click', () => showNotice(this.el, false));
     now.addEventListener('click', () => this.reload());
     this.el.hidden = true;
     parent.append(this.el);
@@ -50,7 +51,7 @@ export class UpdateNotice {
     this.checking = true;
     this.lastCheck = now;
     try {
-      if (await shouldOfferReload(this.running, this.shellUpdateOnOffer)) this.el.hidden = false;
+      if (await shouldOfferReload(this.running, this.shellUpdateOnOffer)) showNotice(this.el, true);
     } finally {
       this.checking = false;
     }
@@ -63,6 +64,6 @@ export class UpdateNotice {
     } catch {
       /* ask no more: show the note */
     }
-    this.el.hidden = false;
+    showNotice(this.el, true);
   }
 }

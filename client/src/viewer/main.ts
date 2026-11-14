@@ -20,12 +20,15 @@ window.addEventListener('message', (event) => {
   if (!open) return;
   // A file in place of the one shown: the viewer starts over.
   viewer?.destroy();
+  document.title = open.name;
   viewer = mount(document.body, {
     bytes: open.bytes,
     name: open.name,
     fontBase: open.fontBase ?? new URLSearchParams(location.search).get('fonts') ?? 'fonts/',
     dark: open.dark,
     locale: open.locale,
+    screenReader: open.screenReader,
+    contrast: open.contrast,
     onOpened: (info) => tell({ type: 'golemdocs:opened', ...info }),
     onError: (message) => tell({ type: 'golemdocs:error', message }),
     onLink: (url) => tell({ type: 'golemdocs:link', url }),

@@ -322,6 +322,22 @@ export class PdfAnnotator {
     return out.slice(0, limit);
   }
 
+  /** A page's text line by line, in reading order, with each line's box in page points (for screen readers: see a11y.ts). */
+  pageLines(page: number): { text: string; x: number; y: number; width: number; height: number }[] {
+    const chars = this.view.characters(page);
+    const boxes = lineBoxes(chars);
+    const texts: string[] = [];
+    let line = NaN;
+    for (const c of chars) {
+      if (c.line !== line) {
+        texts.push('');
+        line = c.line;
+      }
+      texts[texts.length - 1] += c.text;
+    }
+    return boxes.map((b, i) => ({ text: texts[i] ?? '', x: b.x0, y: b.top, width: b.x1 - b.x0, height: b.bottom - b.top })).filter((l) => l.text.trim());
+  }
+
   /** The page the selection is on (for scrolling it into view), if any. */
   get selectionPage(): number | null {
     return this.selected()?.page ?? this.text?.page ?? null;

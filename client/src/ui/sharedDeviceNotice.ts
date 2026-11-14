@@ -4,7 +4,8 @@
 // document is showing, since there's nothing of theirs to clear yet.
 
 import { t } from '../i18n/index.ts';
-import { h } from './dom.ts';
+import { CLOSE_ICON, h, iconButton } from './dom.ts';
+import { showNotice } from './notice.ts';
 import './sharedDeviceNotice.css';
 
 const DISMISSED_KEY = 'golem.sharedDeviceNotice.dismissed';
@@ -17,7 +18,7 @@ export class SharedDeviceNotice {
 
   constructor(parent: HTMLElement, clear: () => void) {
     const clearButton = h('button', { class: 'wm-button', text: t('dialogs.sharedDevice.clear'), attrs: { type: 'button' } });
-    const close = h('button', { class: 'wm-shared-notice-close', text: '×', attrs: { type: 'button', 'aria-label': t('dialogs.sharedDevice.dismiss') } });
+    const close = iconButton('wm-shared-notice-close', CLOSE_ICON, t('dialogs.sharedDevice.dismiss'));
     this.el.append(
       close,
       h('p', { text: t('dialogs.sharedDevice.message') }),
@@ -30,7 +31,7 @@ export class SharedDeviceNotice {
       } catch {
         // storage blocked: dismissed for this visit only
       }
-      this.el.hidden = true;
+      showNotice(this.el, false);
     });
     this.el.hidden = true;
     parent.append(this.el);
@@ -46,6 +47,6 @@ export class SharedDeviceNotice {
     } catch {
       // storage blocked: treat as not dismissed
     }
-    this.el.hidden = this.signedIn !== false || this.welcome || dismissed;
+    showNotice(this.el, !(this.signedIn !== false || this.welcome || dismissed));
   }
 }

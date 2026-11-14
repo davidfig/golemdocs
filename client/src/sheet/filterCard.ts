@@ -27,11 +27,13 @@ export interface FilterCardRequest {
   fields?: { names: string[]; current: number; choose(index: number): void };
   sort(descending: boolean): void;
   apply(choice: FilterChoice): void;
+  /** The card closed while it had the keyboard (Escape, a button): where the keyboard goes back to. */
+  closed?(): void;
 }
 
 export class FilterCard {
   private readonly root: HTMLDivElement;
-  private readonly list = h('div', { class: 'wm-sheet-filter-list', attrs: { role: 'group' } });
+  private readonly list = h('div', { class: 'wm-sheet-filter-list', attrs: { role: 'group', 'aria-label': t('a11y.sheet.filterValues') } });
   private readonly field = h('div', { class: 'wm-sheet-filter-field' });
   private request: FilterCardRequest | null = null;
   private boxes: { value: string | null; box: HTMLInputElement; label: HTMLElement }[] = [];
@@ -106,8 +108,11 @@ export class FilterCard {
   }
 
   hide(): void {
+    const request = this.request;
+    const hadFocus = this.root.contains(document.activeElement);
     this.root.hidden = true;
     this.request = null;
+    if (hadFocus) request?.closed?.();
   }
 
   private sort(descending: boolean): void {

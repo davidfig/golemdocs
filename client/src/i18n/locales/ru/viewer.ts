@@ -18,4 +18,7 @@ export const viewer: Partial<Messages> = {
   'viewer.viewOnlyTitle': '{name} (только просмотр)',
   'viewer.download': 'Скачать',
   'viewer.linkGone': 'Эта ссылка больше не работает: документ больше не опубликован.',
+  'viewer.toolbar': 'Просмотр',
+  'viewer.zoomButton': 'Реальный размер (сейчас {zoom})',
+  'viewer.foundOnPage': 'Найдено на странице {page} из {pages}',
 };

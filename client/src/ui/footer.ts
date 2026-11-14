@@ -98,7 +98,9 @@ export function footerSegments(info: FooterInfo): FooterSegment[] {
 
 export class Footer {
   readonly el: HTMLElement;
-  private readonly items = h('div', { class: 'wm-footer-items', attrs: { role: 'status' } });
+  // Not a live region: the counts change with every keystroke, which a screen reader would read out each time. F6 reaches
+  // the status bar to read it, and Screen Reader Mode announces a change of page (screenReaderSupport.ts).
+  private readonly items = h('div', { class: 'wm-footer-items' });
   private readonly views = new Map<ViewMode, HTMLButtonElement>();
   private readonly group: HTMLElement;
   private readonly wrap: HTMLButtonElement;

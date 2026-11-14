@@ -3,7 +3,8 @@
 
 import { t, type MessageKey } from '../i18n/index.ts';
 import type { SpellIssue, WireCommand } from '../layout/protocol.ts';
-import { h } from './dom.ts';
+import { h, uniqueId } from './dom.ts';
+import { focusMenu, menuKeys } from './popupMenu.ts';
 
 export interface SpellMenuHost {
   send(command: WireCommand): void;
@@ -71,11 +72,18 @@ export class SpellMenu {
         run();
         this.host.focusEditor();
       });
+      el.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        el.click();
+      });
       return el;
     };
     const separator = () => h('div', { class: 'wm-sep', attrs: { role: 'separator' } });
-    const menu = h('div', { class: 'wm-menu wm-spell-menu', attrs: { role: 'menu', 'aria-label': t('spelling.title') } });
-    menu.append(h('div', { class: 'wm-item disabled', attrs: { 'aria-disabled': 'true' } }, h('span', { class: 'wm-gutter' }), h('span', { class: 'label', text: t(issue.message as MessageKey) })), separator());
+    // What is wrong heads the menu, and is what a screen reader says about it.
+    const about = uniqueId('wm-spell-about');
+    const menu = h('div', { class: 'wm-menu wm-spell-menu', attrs: { role: 'menu', 'aria-label': t('spelling.title'), 'aria-describedby': about } });
+    menu.append(h('div', { class: 'wm-item disabled', attrs: { role: 'menuitem', 'aria-disabled': 'true', id: about } }, h('span', { class: 'wm-gutter' }), h('span', { class: 'label', text: t(issue.message as MessageKey) })), separator());
     if (issue.suggestions.length) for (const suggestion of issue.suggestions.slice(0, MAX_SUGGESTIONS)) menu.append(
           item(
             suggestion,
@@ -86,7 +94,7 @@ export class SpellMenu {
             true,
           ),
         );
-    else menu.append(h('div', { class: 'wm-item disabled', attrs: { 'aria-disabled': 'true' } }, h('span', { class: 'wm-gutter' }), h('span', { class: 'label', text: t('spelling.noSuggestions') })));
+    else menu.append(h('div', { class: 'wm-item disabled', attrs: { role: 'menuitem', 'aria-disabled': 'true' } }, h('span', { class: 'wm-gutter' }), h('span', { class: 'label', text: t('spelling.noSuggestions') })));
     menu.append(separator());
     if (grammar) {
       if (issue.rule) menu.append(item(t('spelling.ignoreRule'), () => this.host.ignore([], [issue.rule!])));
@@ -101,6 +109,7 @@ export class SpellMenu {
     }
     menu.addEventListener('mousedown', (e) => e.preventDefault());
     menu.addEventListener('contextmenu', (e) => e.preventDefault());
+    menuKeys(menu);
     document.body.append(menu);
     const box = menu.getBoundingClientRect();
     menu.style.left = `${Math.max(2, Math.min(x, window.innerWidth - box.width - 2))}px`;
@@ -112,7 +121,7 @@ export class SpellMenu {
       this.close();
     };
     const escape = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' && !(e.key === 'Tab' && menu.contains(e.target as Node))) return;
       e.preventDefault();
       e.stopPropagation();
       this.close();
@@ -128,6 +137,9 @@ export class SpellMenu {
     }
     window.addEventListener('blur', away);
     window.addEventListener('resize', away);
+    // A menu asked for (a right click, or the menu key) takes the keyboard, as a system menu does; Escape gives it back to
+    // the document. One the pointer opened by resting leaves it where it is, so typing goes on.
+    if (!hover) focusMenu(menu);
     this.cleanup = () => {
       window.removeEventListener('pointerdown', away, true);
       window.removeEventListener('keydown', escape, true);

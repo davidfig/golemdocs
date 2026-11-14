@@ -4,7 +4,7 @@
 // only changes uniforms.
 
 import { GlyphList, RectList, packColor } from '@golemdocs/layout';
-import { DARK_PAGE_RGB } from '../webgl/program.ts';
+import { DARK_PAGE_RGB, type ForcedColors } from '../webgl/program.ts';
 import { CARET, REMOTE_ALPHA, REMOTE_FLAG, REMOTE_WIDTH, SELECTION, SQUIGGLE_COLORS, squiggleRects } from '../webgl/overlayColors.ts';
 import type { TextMark } from '../layout/protocol.ts';
 import { RectBatch, RectBatchRenderer } from '../webgl/shapes/rectBatch.ts';
@@ -52,6 +52,8 @@ export function levelColor(text: string): number {
 /** What the view says about the text on screen. */
 export interface DrawState {
   darkPages: boolean;
+  /** The system's contrast colors (Windows' contrast themes), which the text and its marks are drawn in, or null. */
+  forced?: ForcedColors | null;
   caretVisible: boolean;
   selection: Selection;
   /** Search matches to mark (a global expression), or null. */
@@ -258,7 +260,7 @@ export class LineRenderer {
     const { gl, scene } = this;
     const frame: LineFrame = { chunks: 0, glyphs: 0, drawCalls: 0, pending: false };
     this.freeOverlays();
-    const page = state.darkPages ? DARK_PAGE_RGB : 0xffffff;
+    const page = state.forced ? state.forced.page : state.darkPages ? DARK_PAGE_RGB : 0xffffff;
     gl.viewport(0, 0, camera.width, camera.height);
     gl.clearColor(((page >> 16) & 255) / 255, ((page >> 8) & 255) / 255, (page & 255) / 255, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -272,6 +274,7 @@ export class LineRenderer {
     }
     this.text.darkPages = state.darkPages;
     this.rects.darkPages = state.darkPages;
+    this.text.forced = this.rects.forced = state.forced ?? null;
 
     const scale = camera.scale;
     const top = camera.y;

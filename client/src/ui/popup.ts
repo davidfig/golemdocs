@@ -2,7 +2,7 @@
 // a time; it closes on Escape, a press outside it or its owner, window blur and resize.
 
 import { t } from '../i18n/index.ts';
-import { h } from './dom.ts';
+import { h, uniqueId } from './dom.ts';
 
 interface Open {
   panel: HTMLElement;
@@ -32,7 +32,10 @@ export function popupOpenFor(owner: HTMLElement): boolean {
 function closeTop(): void {
   const open = stack.pop();
   if (!open) return;
+  // Closed from the keyboard inside it: the keyboard goes back to the control that opened it.
+  const hadFocus = open.panel.contains(document.activeElement);
   open.panel.remove();
+  if (hadFocus) (open.owner.matches('button') ? open.owner : (open.owner.querySelector<HTMLElement>('button[aria-haspopup]') ?? open.owner)).focus({ preventScroll: true });
   // The cover stays a moment, so the tap that dismissed the sheet doesn't also land on the button under it.
   if (open.backdrop) {
     const backdrop = open.backdrop;
@@ -65,6 +68,7 @@ export function openPopup(owner: HTMLElement, panel: HTMLElement, onClose?: () =
   stack.push({ panel, owner, backdrop, onClose });
   owner.classList.add('open');
   owner.setAttribute('aria-expanded', 'true');
+  popupKeys(owner, panel);
   if (sheet) return;
   const anchor = owner.getBoundingClientRect();
   const vw = document.documentElement.clientWidth;
@@ -76,6 +80,44 @@ export function openPopup(owner: HTMLElement, panel: HTMLElement, onClose?: () =
   panel.style.left = `${x}px`;
   panel.style.top = `${y}px`;
   panel.style.minWidth = `${anchor.width}px`;
+}
+
+/** What in a popup the keyboard stops at: its options and buttons, shown and not disabled. */
+function popupItems(panel: HTMLElement): HTMLElement[] {
+  return [...panel.querySelectorAll<HTMLElement>('[role="option"], button')].filter((el) => !(el as HTMLButtonElement).disabled && el.getClientRects().length > 0);
+}
+
+/**
+ * The keyboard in a popup opened from a button that had it (Enter or Space on a toolbar control): the chosen option, or the
+ * first item, takes the focus; arrows, Home and End move it, Enter and Space pick, Tab and Escape close it and go back to the button.
+ * A popup opened by the mouse, or from a text box (a combo box's list, typed into), leaves the focus where it is.
+ */
+function popupKeys(owner: HTMLElement, panel: HTMLElement): void {
+  for (const option of panel.querySelectorAll<HTMLElement>('[role="option"]')) if (!option.hasAttribute('tabindex')) option.tabIndex = -1;
+  panel.addEventListener('keydown', (e) => {
+    const target = e.target instanceof HTMLElement ? e.target : null;
+    if (!target || target instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
+    const items = popupItems(panel);
+    const at = items.indexOf(target);
+    const go = (i: number) => items[(i + items.length) % items.length]?.focus({ preventScroll: false });
+    let handled = true;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') go(at + 1);
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') go(at - 1);
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(items.length - 1);
+    else if (e.key === 'Enter' || e.key === ' ') target.click();
+    else if (e.key === 'Tab') closePopup();
+    else handled = false;
+    // The document's own keys listen on the window: what the popup used goes no further.
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  });
+  const active = document.activeElement;
+  if (!(active instanceof HTMLButtonElement) || !owner.contains(active)) return;
+  const chosen = panel.querySelector<HTMLElement>('[aria-selected="true"], .current') ?? popupItems(panel)[0];
+  chosen?.focus({ preventScroll: true });
 }
 
 function listen(): void {
@@ -123,7 +165,17 @@ export function dialogTitleBar(title: string, onClose: () => void): HTMLElement 
   cross.append(path);
   const close = h('button', { class: 'wm-dialog-close', attrs: { type: 'button', 'aria-label': t('menus.dialog.close') } }, cross as unknown as Node);
   close.addEventListener('click', onClose);
-  return h('div', { class: 'wm-dialog-title' }, h('span', { text: title }), close);
+  const heading = h('span', { text: title, attrs: { id: uniqueId('wm-dialog-title') } });
+  const bar = h('div', { class: 'wm-dialog-title' }, heading, close);
+  // The dialog it goes in is named by this title (aria-labelledby), so the name read is the title shown. Every dialog
+  // puts its title bar in as it is built, so it is there by the time this runs; a dialog given a name of its own keeps it.
+  queueMicrotask(() => {
+    const dialog = bar.closest('dialog, [role="dialog"]');
+    if (!dialog || dialog.hasAttribute('aria-labelledby') || (dialog.hasAttribute('aria-label') && dialog.getAttribute('aria-label') !== title)) return;
+    dialog.removeAttribute('aria-label');
+    dialog.setAttribute('aria-labelledby', heading.id);
+  });
+  return bar;
 }
 
 /** A small modal dialog (About, Keyboard Shortcuts). */

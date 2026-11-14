@@ -18,4 +18,7 @@ export const viewer: Partial<Messages> = {
   'viewer.viewOnlyTitle': '{name}（閲覧のみ）',
   'viewer.download': 'ダウンロード',
   'viewer.linkGone': 'このリンクは使えなくなりました。文書は公開されていません。',
+  'viewer.toolbar': 'ビューアー',
+  'viewer.zoomButton': '実際のサイズ (現在 {zoom})',
+  'viewer.foundOnPage': '{page} / {pages} ページで見つかりました',
 };

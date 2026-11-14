@@ -8,6 +8,7 @@ import type { Pos } from './positions.ts';
 import type { Rect } from './scene.ts';
 import type { SpellIssue } from '../layout/protocol.ts';
 import type { TextEditorDeps, TextEditorView, TextRoom, TextRoomOptions } from './view.ts';
+import type { ForcedColors } from '../webgl/program.ts';
 
 export type TextSource = { encoding: TextEncoding; bom: boolean; original: Uint8Array | null };
 
@@ -130,9 +131,9 @@ export class TextEditor {
     this.view?.goTo();
   }
 
-  /** Draws the text on the canvas with the shared camera (null when nothing is open). */
-  draw(darkPages: boolean, caretOn: boolean): LineFrame | null {
-    return this.view?.draw(darkPages, caretOn) ?? null;
+  /** Draws the text on the canvas with the shared camera (null when nothing is open), in the system's contrast colors if `forced`. */
+  draw(darkPages: boolean, caretOn: boolean, forced: ForcedColors | null = null): LineFrame | null {
+    return this.view?.draw(darkPages, caretOn, forced) ?? null;
   }
 
   /** The area the text fills, in points, for the camera to be kept within. */

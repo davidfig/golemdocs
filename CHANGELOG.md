@@ -1,5 +1,12 @@
 # What’s New in Golem Docs
 
+## 0.37.3 - Unreleased
+
+### Fixed
+
+- Files in your vault folder show when the document was made, the same on every computer, instead of the moment that computer last copied them. Renaming or moving a document on another computer no longer changes its modified date here; only a change to its content does. Creation dates need the latest app on a Mac or Windows; Linux can't set them.
+- Linking a vault folder that already holds your documents (signing in after using it signed out, or pointing another computer at it) no longer uploads every file again and adds a copy of each to its version history. Files that already match their document are just linked; only ones that differ are uploaded.
+
 ## 0.37.2 - 2026-11-11
 
 ### Fixed

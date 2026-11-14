@@ -19,6 +19,7 @@
     "allow-vault-remove",
     "allow-vault-read-base64",
     "allow-vault-write-base64",
+    "allow-vault-set-times",
     "allow-set-native-menu",
     "allow-print-open-pdf",
     "allow-update-check",

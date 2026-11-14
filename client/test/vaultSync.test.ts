@@ -91,10 +91,12 @@ function fakeCloud() {
   return { cloud, docs, folders, calls, add, edit, folderFor };
 }
 
-/** A folder in memory that behaves like the native side: hidden names are not listed, and every write has a new time. */
+/** A folder in memory that behaves like the native side: hidden names are not listed, every write has a new time, a file
+ * rewritten keeps its creation date, and a creation date set later only moves earlier. */
 function fakeDisk() {
   let clock = 5000;
-  const files = new Map<string, { bytes: Uint8Array; mtimeMs: number }>();
+  const files = new Map<string, { bytes: Uint8Array; mtimeMs: number; created?: number }>();
+  const dated: string[] = [];
   const disk: VaultDisk = {
     async scan() {
       return [...files].filter(([p]) => !p.split('/').some((s) => s.startsWith('.'))).map(([path, f]) => ({ path, size: f.bytes.byteLength, mtimeMs: f.mtimeMs }));
@@ -105,17 +107,25 @@ function fakeDisk() {
       return f.bytes;
     },
     async write(path, bytes) {
-      files.set(path, { bytes, mtimeMs: ++clock });
+      files.set(path, { bytes, mtimeMs: ++clock, created: files.get(path)?.created ?? clock });
       return clock;
     },
     async remove(path) {
       files.delete(path);
     },
+    async setTimes(path, { created, modified }) {
+      const f = files.get(path);
+      if (!f) throw new Error(`no ${path}`);
+      dated.push(path);
+      if (modified !== undefined) f.mtimeMs = modified;
+      if (created !== undefined && created < (f.created ?? Infinity)) f.created = created;
+      return f.mtimeMs;
+    },
   };
-  const put = (path: string, content: string) => void files.set(path, { bytes: text(content), mtimeMs: ++clock });
+  const put = (path: string, content: string) => void files.set(path, { bytes: text(content), mtimeMs: ++clock, created: files.get(path)?.created ?? clock });
   const get = (path: string) => (files.has(path) ? read(files.get(path)!.bytes) : undefined);
   const paths = () => [...files.keys()].filter((p) => !p.startsWith('.')).sort();
-  return { disk, files, put, get, paths };
+  return { disk, files, put, get, paths, dated };
 }
 
 const codec: VaultCodec = {
@@ -451,6 +461,26 @@ test('a vault kept while signed out joins the account that signs in, matching fi
   assert.equal(s.calls.filter((c) => c.startsWith('trash')).length, 0);
 });
 
+test('a file found by path that is already its document is linked, with no upload and no version', async () => {
+  const s = setup(GUEST_ACCOUNT);
+  s.add('same.md', 'unchanged');
+  s.add('changed.md', 'before');
+  await s.sync();
+  s.folder.put('changed.md', 'edited while signed out');
+  s.calls.length = 0;
+  s.docs.clear();
+  s.add('same.md', 'unchanged', 'acct1');
+  s.add('changed.md', 'before', 'acct2');
+  const report = await syncVault({ ...s.host, account: 'u1' });
+  assert.deepEqual(report.errors, []);
+  assert.equal(report.linked, 1);
+  assert.equal(counts(report), '0,1,0,0,0,0,0', 'only the edited file is uploaded');
+  assert.deepEqual(s.calls.filter((c) => !c.startsWith('download')), ['keep acct2', 'replace acct2']);
+  s.calls.length = 0;
+  assert.equal(counts(await syncVault({ ...s.host, account: 'u1' })), quiet, 'and both stay linked');
+  assert.deepEqual(s.calls, []);
+});
+
 test('a vault linked to an account is not used while signed out', async () => {
   const s = setup('u1');
   s.add('one.md', 'x');
@@ -592,4 +622,66 @@ test('with the real converters, PDFs and pictures go out as the files they are a
   } finally {
     canvas.restore();
   }
+});
+
+test('a file that comes down has its document\'s dates, and a move in the account keeps them', async () => {
+  const s = setup();
+  const id = s.add('one.md', 'x');
+  const made = s.docs.get(id)!.createdAt;
+  await s.sync();
+  assert.deepEqual([s.folder.files.get('one.md')!.created, s.folder.files.get('one.md')!.mtimeMs], [made, s.docs.get(id)!.updatedAt]);
+  assert.equal(counts(await s.sync()), quiet, 'the dates the sync gave are not mistaken for an edit');
+
+  const before = s.folder.files.get('one.md')!.mtimeMs;
+  await s.cloud.place(id, ['Moved'], 'two.md'); // the account's time moves with a rename
+  await s.sync();
+  const moved = s.folder.files.get('Moved/two.md')!;
+  assert.deepEqual([moved.created, moved.mtimeMs], [made, before], 'neither date changes with the move');
+  assert.equal(counts(await s.sync()), quiet);
+
+  s.edit(id, 'new words');
+  await s.sync();
+  assert.deepEqual([s.folder.files.get('Moved/two.md')!.created, s.folder.files.get('Moved/two.md')!.mtimeMs], [made, s.docs.get(id)!.updatedAt]);
+  assert.equal(counts(await s.sync()), quiet);
+});
+
+test('a file made in the vault keeps its own creation date', async () => {
+  const s = setup();
+  s.folder.put('mine.md', 'mine');
+  s.folder.files.get('mine.md')!.created = 7; // earlier than the account's
+  await s.sync();
+  assert.equal(s.folder.files.get('mine.md')!.created, 7);
+});
+
+test('files a shell could not date get their creation date once it can', async () => {
+  const s = setup();
+  const id = s.add('one.md', 'x');
+  const setTimes = s.folder.disk.setTimes!;
+  s.folder.disk.setTimes = async () => null; // an older shell
+  await s.sync();
+  const file = s.folder.files.get('one.md')!;
+  assert.notEqual(file.created, s.docs.get(id)!.createdAt);
+  const mtime = file.mtimeMs;
+
+  s.folder.disk.setTimes = setTimes;
+  assert.equal(counts(await s.sync()), quiet);
+  assert.equal(file.created, s.docs.get(id)!.createdAt);
+  assert.equal(file.mtimeMs, mtime, 'only the creation date: the modification time is the file\'s own');
+  s.folder.dated.length = 0;
+  await s.sync();
+  assert.deepEqual(s.folder.dated, [], 'once');
+});
+
+test('a document with no creation time (saved in this browser) leaves the file\'s creation date alone', async () => {
+  const s = setup();
+  s.folder.put('mine.md', 'mine');
+  s.folder.files.get('mine.md')!.created = 7;
+  const list = s.cloud.list;
+  s.cloud.list = async () => {
+    const listed = await list();
+    return { ...listed, docs: listed.docs.map((d) => ({ ...d, createdAt: 0 })) };
+  };
+  await s.sync();
+  await s.sync();
+  assert.equal(s.folder.files.get('mine.md')!.created, 7);
 });

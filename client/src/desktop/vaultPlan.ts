@@ -28,6 +28,8 @@ export interface ManifestEntry {
   mtimeMs: number;
   /** The cloud document's `updatedAt` at the last sync. */
   cloudUpdatedAt: number;
+  /** The file has been given the account's creation date (`VaultDisk.setTimes`). Missing for a file linked before files were dated, or by a shell that can't date them: the next sync does it. */
+  dated?: boolean;
 }
 
 /** A document in the account, placed where it would be in the vault (see `cloudPaths`). */
@@ -35,6 +37,8 @@ export interface CloudFile {
   id: string;
   path: string;
   updatedAt: number;
+  /** When the document was made in the account, which its file is dated with. */
+  createdAt?: number;
 }
 
 export interface PlanInput {
@@ -50,8 +54,12 @@ export interface PlanInput {
 export type VaultAction =
   /** Cloud to disk: a new document, or one changed in the account while the file was not. */
   | { kind: 'download'; id: string; path: string }
-  /** Disk to an existing cloud document. `keepCloudVersion`: the account changed it too, so its bytes are kept as a version first. */
-  | { kind: 'upload'; id: string; path: string; keepCloudVersion: boolean }
+  /**
+   * Disk to an existing cloud document. `keepCloudVersion`: the account changed it too, so its bytes are kept as a version first.
+   * `unlinked`: the file was there before the vault was linked to the document (matched by path), so the driver first compares
+   * it with the account's copy and only links them when they are the same.
+   */
+  | { kind: 'upload'; id: string; path: string; keepCloudVersion: boolean; unlinked?: boolean }
   /** A file with no cloud document: make one. */
   | { kind: 'create'; path: string }
   /** The file was moved or renamed in the vault: do the same to the cloud document. */
@@ -165,7 +173,7 @@ export function planVault(input: PlanInput): VaultPlan {
     if (linkedIds.has(remote.id)) continue;
     if (localByPath.has(remote.path) && !linkedPaths.has(remote.path)) {
       // A file is already there (a vault that was filled before it was linked): the local file wins.
-      actions.push({ kind: 'upload', id: remote.id, path: remote.path, keepCloudVersion: true });
+      actions.push({ kind: 'upload', id: remote.id, path: remote.path, keepCloudVersion: true, unlinked: true });
       taken.add(remote.path);
     } else {
       actions.push({ kind: 'download', id: remote.id, path: remote.path });
@@ -247,7 +255,8 @@ export function cloudPaths(docs: readonly CloudDoc[], folders: readonly CloudFol
     let candidate = [...dir, name].join('/');
     for (let n = 2; used.has(candidate.toLowerCase()); n++) candidate = [...dir, `${stem} (${n})${extension}`].join('/');
     used.add(candidate.toLowerCase());
-    out.push({ id: doc.id, path: candidate, updatedAt: doc.updatedAt });
+    // No creation time is 0 (documents saved in this browser keep none): the file is not dated from it.
+    out.push({ id: doc.id, path: candidate, updatedAt: doc.updatedAt, ...(doc.createdAt > 0 ? { createdAt: doc.createdAt } : {}) });
   }
   return out;
 }

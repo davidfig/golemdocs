@@ -20,6 +20,7 @@ fn main() {
             "vault_remove",
             "vault_read_base64",
             "vault_write_base64",
+            "vault_set_times",
             "set_native_menu",
             "print_open_pdf",
             "update_check",

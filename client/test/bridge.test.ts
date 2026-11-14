@@ -90,6 +90,18 @@ test('a shell without the base64 commands is sent the raw bytes, and not asked f
   assert.equal(calls[2].args, file, 'the bytes are the body');
 });
 
+test('files are dated in whole milliseconds, and a shell that cannot date them is not asked again', async () => {
+  const calls = recordingShell({ vault_set_times: () => 1234 });
+  assert.equal(await desktopBridge()!.setTimes('a.md', { created: 1000.4, modified: undefined }), 1234);
+  assert.deepEqual(calls, [{ command: 'vault_set_times', args: { path: 'a.md', createdMs: 1000, modifiedMs: null } }]);
+
+  const old = recordingShell({});
+  const bridge = desktopBridge()!;
+  assert.equal(await bridge.setTimes('a.md', { created: 1 }), null);
+  assert.equal(await bridge.setTimes('b.md', { created: 1 }), null);
+  assert.equal(old.length, 1);
+});
+
 test('a real failure of the base64 commands comes through', async () => {
   recordingShell({ vault_write_base64: () => Promise.reject('No space left on device'), vault_write: () => 1 });
   await assert.rejects(desktopBridge()!.write('a.md', Uint8Array.of(1)), /No space left/);

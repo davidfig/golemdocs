@@ -68,7 +68,7 @@ export class LiveWorker {
       const timer = setTimeout(() => this.stop(new Error(`updating the live blocks of ${name} did not finish in ${Math.round(this.options.jobMs / 1000)} seconds`)), this.options.jobMs);
       this.jobs.set(job, { lookup, handed: buffer.byteLength, resolve, reject, timer });
       try {
-        worker.postMessage({ type: 'update', job, bytes: buffer, name, force: options.force === true, has: ['file', ...has] }, [buffer]);
+        worker.postMessage({ type: 'update', job, bytes: buffer, name, force: options.force === true, ...(options.owner && { owner: options.owner }), ...(options.adopt && { adopt: options.adopt }), has: ['file', ...has] }, [buffer]);
       } catch (e) {
         clearTimeout(timer);
         this.jobs.delete(job);

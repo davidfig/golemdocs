@@ -7,6 +7,8 @@
 // A table gives its cells, a value one cell; numbers are written as numbers, so formulas can use them. A picture or a part
 // of a text document has no cells to give: the block says so and keeps its last result.
 
+import type { LiveOptions } from './owner.ts';
+import { ownership } from './owner.ts';
 import { Kind, columnName } from '../sheet/model/column.ts';
 import { Engine } from '../sheet/formula/engine.ts';
 import { isWorksheet } from '../sheet/model/workbook.ts';
@@ -96,10 +98,16 @@ function fill(book: Workbook, sheet: Worksheet, old: CellRange, next: CellRange,
 }
 
 /** Brings a workbook's live ranges up to date, in place; what happened to each. */
-export async function updateSheetLive(book: Workbook, lookup: SourceLookup, options: { force?: boolean } = {}): Promise<UpdateReport> {
+export async function updateSheetLive(book: Workbook, lookup: SourceLookup, options: LiveOptions = {}): Promise<UpdateReport> {
   const report: UpdateReport = { updated: 0, problems: [] };
   const files = new Map<string, ReturnType<SourceLookup>>();
   for (const live of sheetLiveRanges(book)) {
+    // Someone else's range keeps what it came with (owner.ts).
+    const own = await ownership(live.tag, options);
+    if (!own.mine) {
+      report.problems.push({ source: live.tag.source, code: 'foreign' });
+      continue;
+    }
     const result = await resultOf(live.tag.source, lookup, files);
     if (result.kind === 'error') {
       report.problems.push({ source: live.tag.source, code: result.code, ...(result.detail !== undefined && { detail: result.detail }) });
@@ -124,7 +132,7 @@ export async function updateSheetLive(book: Workbook, lookup: SourceLookup, opti
     }
     fill(book, sheet, live.range, range, rows);
     live.name.formula = formulaOf(sheet, range);
-    live.name.attrs = { ...live.name.attrs, comment: liveTagText({ source: live.tag.source, stamp }) };
+    live.name.attrs = { ...live.name.attrs, comment: liveTagText({ source: live.tag.source, stamp, by: own.by }) };
     book.dirty = true;
     report.updated++;
   }
@@ -167,7 +175,7 @@ export async function refreshExternals(book: Workbook, lookup: SourceLookup): Pr
 }
 
 /** A stored workbook's bytes with its live ranges and the values it keeps from other workbooks up to date (null when none changed). */
-export async function updateStoredSheet(bytes: Uint8Array, lookup: SourceLookup, options: { force?: boolean } = {}): Promise<{ bytes: Uint8Array | null; report: UpdateReport }> {
+export async function updateStoredSheet(bytes: Uint8Array, lookup: SourceLookup, options: LiveOptions = {}): Promise<{ bytes: Uint8Array | null; report: UpdateReport }> {
   const none = { bytes: null, report: { updated: 0, problems: [] } };
   let book: Workbook;
   try {

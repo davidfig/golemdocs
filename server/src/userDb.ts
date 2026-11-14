@@ -214,7 +214,7 @@ class DirectoryUserDb extends UserDb {
 
   /** Table and index names are the only identifiers the per-user schema uses (see schema.ts). */
   private rewrite(sql: string): string {
-    return sql.replace(/\b(documents_updated|documents|folders|preferences|reading_places|script_claims|live_marker|versions|trash|_migrations)\b/g, `${this.prefix}$1`);
+    return sql.replace(/\b(documents_updated|documents|folders|preferences|reading_places|script_claims|live_marker|live_owner|versions|trash|_migrations)\b/g, `${this.prefix}$1`);
   }
 
   override async all<T>(sql: string, params: unknown[] = []): Promise<T[]> {

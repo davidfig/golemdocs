@@ -97,4 +97,12 @@ export const USER_MIGRATIONS: string[][] = [
        deferred   TEXT NOT NULL DEFAULT '[]'
      )`,
   ],
+  // 9: the secret that marks live blocks as the person's (client/src/live/owner.ts, docs/live-blocks.md §1): their devices
+  // sign the blocks they make with it, and update only blocks signed with it. One row, made on first use.
+  [
+    `CREATE TABLE live_owner (
+       id      INTEGER PRIMARY KEY CHECK (id = 1),
+       secret  TEXT NOT NULL
+     )`,
+  ],
 ];

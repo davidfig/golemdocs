@@ -13,6 +13,7 @@ import type { Shape } from '../formats/imageDraw.ts';
 import type { Scene } from '../vector/model.ts';
 import type { DocumentInfo, FormatState } from '../ui/actions.ts';
 import type { FormatAction } from './formatting.ts';
+import type { LiveOwner } from '../live/owner.ts';
 import type { AutoCorrectOptions } from './autocorrect.ts';
 import type { PickedStyle } from './pdfAnnotator.ts';
 import type { LookUp } from '../spelling/thesaurus.ts';
@@ -124,6 +125,8 @@ export type WireCommand =
   | { kind: 'autoFormat'; on: boolean }
   /** Which autocorrect rules are on: smart quotes, dashes, symbols and so on (see autocorrect.ts). */
   | { kind: 'autoCorrect'; options: AutoCorrectOptions; /** The user's replacement list: text, and what replaces it. */ replacements: [string, string][] }
+  /** Who live blocks pasted here belong to (live/owner.ts): they are signed as this person's. */
+  | { kind: 'liveOwner'; owner: LiveOwner }
   /** Right click at a point of a page: selects the mistake there and reports it (see `SelectionUpdate.spell`, `menu`). */
   /** The mistake under a point, for a menu. Selected in the document (a right click), unless `select` is false (the pointer only rests on it). */
   | { kind: 'spellAt'; page: number; x: number; y: number; select?: boolean; /** False while spell checking is off: only whether the point is in a table is reported. */ check?: boolean }

@@ -1,6 +1,6 @@
 // Live blocks (docs/live-blocks.md): parts of a document computed from another file in the vault and kept up to date.
 //
-// In the model a live block is a content control (a Word "sdt") tagged `live:<source> stamp=<hash>`, holding the last result:
+// In the model a live block is a content control (a Word "sdt") tagged `live:<source> by=<who> stamp=<hash>`, holding the last result:
 // block-level for a table or a picture, inline for a value. The source is a vault address (`Budget.xlsx#Expenses`); the stamp
 // is a short hash of the result it holds, so a block is rewritten only when what it shows changes. Unlike a note embed (embedMarks.ts), the result is part of the document: every format's writer keeps it.
 //
@@ -12,24 +12,31 @@ import type { Block, Inline, Paragraph, WordDocument, Wrapper, XmlElement } from
 
 export { LIVE_PREFIX };
 
-/** What a live block's tag says: where it comes from, and the stamp of the result it holds ('' when never filled). */
+/**
+ * What a live block's tag says: where it comes from, who made it (`by`, see owner.ts; absent in one typed by hand), and the
+ * stamp of the result it holds ('' when never filled).
+ */
 export interface LiveTag {
   source: string;
   stamp: string;
+  by?: string;
 }
 
 const STAMP = / stamp=([0-9a-z]*)$/;
+const BY = / by=([0-9a-z]+)$/;
 
-/** The tag's text for a source and stamp. */
-export const liveTagText = ({ source, stamp }: LiveTag): string => `${LIVE_PREFIX}${source}${stamp ? ` stamp=${stamp}` : ''}`;
+/** The tag's text: `live:<source> by=<who> stamp=<hash>`, the last two when known. */
+export const liveTagText = ({ source, stamp, by }: LiveTag): string => `${LIVE_PREFIX}${source}${by ? ` by=${by}` : ''}${stamp ? ` stamp=${stamp}` : ''}`;
 
 /** Reads a tag's text (`live:Budget.xlsx#Expenses stamp=3f9a2c1e`); null when it isn't a live block's. */
 export function parseLiveTag(text: string | undefined): LiveTag | null {
   if (!text?.startsWith(LIVE_PREFIX)) return null;
   const rest = text.slice(LIVE_PREFIX.length);
   const m = STAMP.exec(rest);
-  const source = (m ? rest.slice(0, m.index) : rest).trim();
-  return source ? { source, stamp: m?.[1] ?? '' } : null;
+  const before = m ? rest.slice(0, m.index) : rest;
+  const who = BY.exec(before);
+  const source = (who ? before.slice(0, who.index) : before).trim();
+  return source ? { source, stamp: m?.[1] ?? '', ...(who && { by: who[1] }) } : null;
 }
 
 const element = (children: XmlElement['children'], name: string): XmlElement | undefined =>

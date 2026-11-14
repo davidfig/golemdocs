@@ -28,7 +28,7 @@ const tagOf = (text: string): LiveTag | null => {
 };
 
 /** The opening marker for a block's tag. */
-export const liveOpen = ({ source, stamp }: LiveTag): string => `<!-- golem:live ${encodeSource(source)}${stamp ? ` stamp=${stamp}` : ''} -->`;
+export const liveOpen = ({ source, stamp, by }: LiveTag): string => `<!-- golem:live ${encodeSource(source)}${by ? ` by=${by}` : ''}${stamp ? ` stamp=${stamp}` : ''} -->`;
 
 /** The tag a line that is an opening marker on its own carries, or null. */
 export function liveOpenTag(line: string): LiveTag | null {

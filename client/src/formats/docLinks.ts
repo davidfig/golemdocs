@@ -150,7 +150,7 @@ export function rewriteTextLinks(text: string, renames: ReadonlyMap<string, stri
       // A Markdown live marker (live/markdownMarks.ts), read and written as Markdown writes it.
       const tag = liveOpenTag(whole);
       const renamed = tag && renamedSource(tag.source, renames);
-      if (tag && renamed !== null) next = liveOpen({ source: renamed, stamp: tag.stamp });
+      if (tag && renamed !== null) next = liveOpen({ ...tag, source: renamed });
     }
     if (next === null || next === whole) return whole;
     changed++;

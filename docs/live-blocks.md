@@ -79,6 +79,30 @@ producer is a pure function from its inputs (file bytes, settings) to a result, 
 **host** is the document a block sits in; it turns the neutral result into its own content and saves it in its own format.
 Any producer works with any host: a new source type works in every document, and a new host shows every source type.
 
+### Who a block belongs to
+
+A block reads its source from the vault of the document it is in. So a block someone else made would fill itself from
+whatever file of yours has the same name: a form sent to you tagged `live:Taxes.xlsx#Summary`, filled with your numbers and
+ready to send back. To stop that, a tag says who made it (`live:<source> by=<who> stamp=<hash>`), and only a person's own
+blocks are updated. Someone else's keeps what it came with, and the app says so (problem `foreign`).
+
+- **`by`** is 24 hex digits: a fresh random salt (8) and an HMAC-SHA256 of it under a secret (16), `live/owner.ts`. Each
+  block gets its own salt, so two documents can't be told apart as one person's, and without the secret no one can make a
+  `by` that passes as theirs.
+- **The secrets** are kept in browser storage (`live/ownerStore.ts`): one per account, made by the server and handed out
+  with `/api/live-marker` (`owner`, kept in the user database's `live_owner` table), so every device of the account signs
+  and recognizes the same blocks; and one per browser, used when signed out. A device checks a `by` against every secret it
+  holds, and signs new blocks with the account's (the browser's when signed out or before the account's has arrived).
+- **A tag with no `by`** was typed by hand (a person or an agent writing a note): in a text file (Markdown, HTML, SVG, plain
+  text) it counts as the person's and is signed the first time it is written. Word, OpenDocument, workbook and PDF files are
+  written only by the app, which always signs, so an unsigned tag in one came from elsewhere and counts as someone else's.
+- **Every block made here is signed when it is made:** pasted into a document (the layout worker is told the owner with its
+  `liveOwner` command), a sheet's live range (`addLive`'s `by`), a drawing's group (`data-golem-by`), a PDF's text box,
+  picture or form field, and a live PDF export. A pasted block that already has someone else's `by` stays theirs.
+- **Make It Mine** (on the block's card, and asked once when a document with someone else's blocks is opened) re-signs the
+  blocks, all of them or those showing one source, and updates them from this vault (`adopt` in `LiveOptions`).
+- Without an owner (tests, `golem run`) every block counts as the person's.
+
 ## 2. Sources: what a block can show
 
 | Source | Address | Result |
@@ -100,7 +124,7 @@ is for hosts that must carry the text with them (see *Decisions*).
 ## 3. Hosts: what a block can sit in
 
 Every text format is read into the same model (`WordDocument`, [Formats](architecture/formats.md)), so there a block is
-one thing: a content control (a Word "sdt") tagged `live:<source> stamp=<hash>` holding the result, block-level for a
+one thing: a content control (a Word "sdt") tagged `live:<source> by=<who> stamp=<hash>` (`by` per §1) holding the result, block-level for a
 table or picture and inline for a value. Resolved note embeds are the same kind of node (`embedMarks.ts`). The editor shows
 it read-only with a small label naming its source. Each format's writer decides how to keep it:
 
@@ -109,9 +133,9 @@ it read-only with a small label naming its source. Each format's writer decides 
 | Word (`.docx`) | the content control, as is | the table or value; Word keeps it but does not update it |
 | OpenDocument (`.odt`) | a named section (block) or a text field or span (inline), with the source and stamp in its name or a hidden attribute: M0 settles which survives LibreOffice | the content |
 | Markdown | HTML comment markers around the result (§4) | a normal table or value |
-| HTML | an element with `data-golem-live` and `data-golem-stamp` attributes | the content |
+| HTML | an element with `data-golem-live`, `data-golem-by` and `data-golem-stamp` attributes | the content |
 | Spreadsheet (`.xlsx`, `.ods`) | a range filled from the source, anchored at its top-left cell; the address and stamp in a defined name and the workbook's custom properties (M2). A source that is another workbook uses Excel's own external reference instead (§5) | values in cells |
-| Drawing (`.svg`) | a group with `data-golem-live` and `data-golem-stamp` holding the result drawn as text (a line a row) or a picture (an `<image>`); moved and scaled like any group (M3) | the drawing |
+| Drawing (`.svg`) | a group with `data-golem-live`, `data-golem-by` and `data-golem-stamp` holding the result drawn as text (a line a row) or a picture (an `<image>`); moved and scaled like any group (M3) | the drawing |
 | Plain text and the light markup formats (`.txt`, `.rst`, `.org`, ...) | the result only, with a comment marker where the format has comments; where it has none the block is lost on save, and the app says so as for any lossy conversion (`conversionIsLossy`) | the content |
 | PDF | an entry in the document's list of edits ([PDF editing](pdf-editing.md)): a form field's value, an added text box (value), an added picture. Tables come later (see *PDFs* below). The vault's `.pdf` has the edits written in, and a field's source and stamp also go on its widget (`/GolemLive`), which other apps keep (M0) | the page as edited |
 
@@ -185,6 +209,8 @@ An inline value: `So far we've spent <!-- golem:live Budget.xlsx#Total stamp=3f9
   or sync. `![[Note]]` and `![[Note#Heading]]` stay note embeds, as now.
 - A range becomes a Markdown table. Its first row is the header (Markdown tables need one); a table's header row is used
   as is. Alignment follows the cells' horizontal alignment. Cells are text only: no colors, fonts or borders in Markdown.
+- A marker the app wrote says who made it: `<!-- golem:live Budget.xlsx#Expenses by=… stamp=… -->` (§1). One typed by
+  hand has no `by`; in a note it counts as the person's own and is signed on its first update.
 - Read into the model, the markers become the content control of §3, so converting the note to Word or ODT keeps the block.
 - An edit to the result made outside the app (by hand or by an agent) is replaced at the next update. Writing changes back
   into the spreadsheet is not planned before M4.
@@ -595,7 +621,8 @@ Blocks M0 Tests/`, with a checklist for the checks done by hand (Word, Excel, VS
 - **Each scheduled run is claimed once through the account,** so two devices on one vault never both run it. The server
   keeps claims, not code.
 - **Updates run on devices first.** The cloud comes only if the out-of-date log shows it is needed.
-- **Documents shared by other people come later** (M4).
+- **Documents shared by other people come later** (M4). Until then a block made by someone else is never filled from this
+  vault unless the person makes it theirs (§1, *Who a block belongs to*).
 - **Everything works without ai.** No feature may need an agent to make or use it.
 
 ## Open questions

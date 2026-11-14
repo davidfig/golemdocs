@@ -1,5 +1,5 @@
 // A live block's label (docs/live-blocks.md §9), drawn over the document next to the caret when it goes into a block: where
-// the block comes from, Update Now, Open Source and Stop Updating. Non-modal, like the link form (linkPopover.ts): Escape, the close button
+// the block comes from, Update Now (Make It Mine for a block someone else made), Open Source and Stop Updating. Non-modal, like the link form (linkPopover.ts): Escape, the close button
 // or a press elsewhere puts it away, and it stays away while the caret stays in the same block.
 
 import { t } from '../i18n/index.ts';
@@ -23,6 +23,10 @@ export interface LiveCardActions {
   stop?(source: string): void;
   /** Whether the block can be turned into ordinary content here (the document can be edited); no when missing. */
   canStop?(source: string): boolean;
+  /** Whether someone else made the block (live/owner.ts): it is not updated from this person's files. */
+  isForeign?(source: string): boolean;
+  /** Make It Mine: the block is updated from this person's files from now on. */
+  makeMine?(source: string): void;
 }
 
 export class LiveCard {
@@ -33,6 +37,7 @@ export class LiveCard {
   private readonly runButton: HTMLButtonElement;
   private readonly updateButton: HTMLButtonElement;
   private readonly stopButton: HTMLButtonElement;
+  private readonly mineButton: HTMLButtonElement;
   private source: string | null = null;
   /** The block the card was put away for: it comes back only for another block, or once the caret has left this one. */
   private dismissed: string | null = null;
@@ -58,6 +63,12 @@ export class LiveCard {
       this.hide();
       if (source) this.actions.stop?.(source);
     });
+    this.mineButton = h('button', { class: 'wm-button wm-primary', text: t('live.card.makeMine'), attrs: { type: 'button' } });
+    this.mineButton.addEventListener('click', () => {
+      const source = this.source;
+      this.hide();
+      if (source) this.actions.makeMine?.(source);
+    });
     open.addEventListener('click', () => {
       const source = this.source;
       this.hide();
@@ -68,7 +79,7 @@ export class LiveCard {
       { class: 'wm-dialog wm-over wm-live', attrs: { role: 'dialog', 'aria-label': t('live.card.title') } },
       dialogTitleBar(t('live.card.title'), () => this.hide()),
       h('div', { class: 'wm-dialog-body' }, this.text, this.message),
-      h('div', { class: 'wm-dialog-buttons' }, this.stopButton, open, update, this.runButton),
+      h('div', { class: 'wm-dialog-buttons' }, this.stopButton, open, update, this.mineButton, this.runButton),
     );
     this.root.hidden = true;
     this.root.addEventListener('keydown', (e) => {
@@ -94,7 +105,9 @@ export class LiveCard {
     this.message.textContent = this.actions.problem(source) ?? '';
     this.openButton.hidden = !this.actions.canOpen(source);
     this.runButton.hidden = !this.actions.canRun?.(source);
-    this.updateButton.hidden = this.actions.canUpdate?.(source) === false;
+    const foreign = this.actions.isForeign?.(source) === true;
+    this.mineButton.hidden = !foreign || this.actions.canUpdate?.(source) === false;
+    this.updateButton.hidden = foreign || this.actions.canUpdate?.(source) === false;
     this.stopButton.hidden = !this.actions.canStop?.(source);
     this.root.hidden = false;
     this.place(at);
@@ -102,7 +115,12 @@ export class LiveCard {
 
   /** A block was tried again: the card, if it is showing that block, says how it went. */
   refresh(): void {
-    if (!this.root.hidden && this.source) this.message.textContent = this.actions.problem(this.source) ?? '';
+    if (this.root.hidden || !this.source) return;
+    const source = this.source;
+    this.message.textContent = this.actions.problem(source) ?? '';
+    const foreign = this.actions.isForeign?.(source) === true;
+    this.mineButton.hidden = !foreign || this.actions.canUpdate?.(source) === false;
+    this.updateButton.hidden = foreign || this.actions.canUpdate?.(source) === false;
   }
 
   hide(): void {

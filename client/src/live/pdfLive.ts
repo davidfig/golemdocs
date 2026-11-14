@@ -11,6 +11,8 @@
 // another app saved, or read back from the vault, has no list of its own: its fields' tags are read from the file. A value, or a table's cells as text, goes into a text field or a drop-down; a check
 // box is ticked when the value says yes. A picture or a part of a text document has no value to give: it says so.
 
+import type { LiveOptions } from './owner.ts';
+import { ownership } from './owner.ts';
 import type { FormField, PdfEdit } from '@golemdocs/pdf';
 import { sniffImage } from '../formats/images.ts';
 import { WDOC_VERSION, isWdoc, readWdoc, writeWdoc } from '../formats/wdoc.ts';
@@ -119,12 +121,17 @@ function valueFor(field: FormField, text: string): string {
 }
 
 /** Brings a PDF's live fields up to date, in place; what happened to each. */
-export async function updateFieldsLive(fields: FormField[], lookup: SourceLookup, options: { force?: boolean } = {}): Promise<UpdateReport> {
+export async function updateFieldsLive(fields: FormField[], lookup: SourceLookup, options: LiveOptions = {}): Promise<UpdateReport> {
   const report: UpdateReport = { updated: 0, problems: [] };
   const files = new Map<string, ReturnType<SourceLookup>>();
   for (const field of fields) {
     const tag = parseLiveTag(field.live);
     if (!tag) continue;
+    const own = await ownership(tag, options);
+    if (!own.mine) {
+      report.problems.push({ source: tag.source, code: 'foreign' });
+      continue;
+    }
     const result = await resultOf(tag.source, lookup, files);
     if (result.kind === 'error') {
       report.problems.push({ source: tag.source, code: result.code, ...(result.detail !== undefined && { detail: result.detail }) });
@@ -140,7 +147,7 @@ export async function updateFieldsLive(fields: FormField[], lookup: SourceLookup
     const value = valueFor(field, text);
     // Widgets of one field share its value (a radio group's is the on state of the button that is on).
     for (const other of fields) if (other.name === field.name) other.value = value;
-    field.live = liveTagText({ source: tag.source, stamp });
+    field.live = liveTagText({ source: tag.source, stamp, by: own.by });
     report.updated++;
   }
   return report;
@@ -157,13 +164,18 @@ function base64(bytes: Uint8Array): string {
  * Brings Edit PDF's live text boxes and pictures up to date, in place. A text box takes a value, or a table's rows as lines;
  * a picture takes a picture, keeping its width and top edge, its height following the new picture's proportions.
  */
-export async function updateEditsLive(edits: PdfEdit[], lookup: SourceLookup, options: { force?: boolean } = {}): Promise<UpdateReport> {
+export async function updateEditsLive(edits: PdfEdit[], lookup: SourceLookup, options: LiveOptions = {}): Promise<UpdateReport> {
   const report: UpdateReport = { updated: 0, problems: [] };
   const files = new Map<string, ReturnType<SourceLookup>>();
   for (const edit of edits) {
     if (edit.kind !== 'textbox' && edit.kind !== 'image') continue;
     const tag = parseLiveTag(edit.live);
     if (!tag) continue;
+    const own = await ownership(tag, options);
+    if (!own.mine) {
+      report.problems.push({ source: tag.source, code: 'foreign' });
+      continue;
+    }
     const result = await resultOf(tag.source, lookup, files);
     if (result.kind === 'error') {
       report.problems.push({ source: tag.source, code: result.code, ...(result.detail !== undefined && { detail: result.detail }) });
@@ -186,7 +198,7 @@ export async function updateEditsLive(edits: PdfEdit[], lookup: SourceLookup, op
       const h = Math.max(result.height || picture!.height, 1);
       edit.box = [x0, y1 - ((x1 - x0) * h) / w, x1, y1];
     }
-    edit.live = liveTagText({ source: tag.source, stamp });
+    edit.live = liveTagText({ source: tag.source, stamp, by: own.by });
     report.updated++;
   }
   return report;
@@ -196,7 +208,7 @@ export async function updateEditsLive(edits: PdfEdit[], lookup: SourceLookup, op
 export const pdfLiveSources = (fields: readonly FormField[] | undefined, edits: readonly PdfEdit[] = []): string[] => [...new Set([...(fields ?? []), ...edits].flatMap((f) => ('live' in f ? (parseLiveTag(f.live)?.source ?? []) : [])))];
 
 /** A stored PDF's bytes with its live fields, text boxes and pictures up to date (null when none changed, or it has none). */
-export async function updateStoredPdf(bytes: Uint8Array, lookup: SourceLookup, options: { force?: boolean } = {}): Promise<{ bytes: Uint8Array | null; report: UpdateReport }> {
+export async function updateStoredPdf(bytes: Uint8Array, lookup: SourceLookup, options: LiveOptions = {}): Promise<{ bytes: Uint8Array | null; report: UpdateReport }> {
   const wdoc = await readWdoc(bytes);
   if (wdoc.extensions.pdf?.export) return updateExport(wdoc, wdoc.extensions.pdf.export, lookup, options);
   let fields = wdoc.extensions.pdf?.fields;
@@ -230,11 +242,13 @@ export function documentStamp(bytes: Uint8Array): string {
  * A live export: the PDF made again from the document it is an export of, when that document changed since. Its pages are
  * the new export's; marks made on the old pages would not fit them, so a live export has none.
  */
-async function updateExport(wdoc: Wdoc, tag: string, lookup: SourceLookup, options: { force?: boolean }): Promise<{ bytes: Uint8Array | null; report: UpdateReport }> {
+async function updateExport(wdoc: Wdoc, tag: string, lookup: SourceLookup, options: LiveOptions): Promise<{ bytes: Uint8Array | null; report: UpdateReport }> {
   const report: UpdateReport = { updated: 0, problems: [] };
   const parsed = parseLiveTag(tag);
   if (!parsed) return { bytes: null, report };
   const { source } = parsed;
+  const own = await ownership(parsed, options);
+  if (!own.mine) return { bytes: null, report: { updated: 0, problems: [{ source, code: 'foreign' }] } };
   const file = await lookup(source).catch(() => null);
   if (!file) return { bytes: null, report: { updated: 0, problems: [{ source, code: 'missing' }] } };
   if (file.cycle) return { bytes: null, report: { updated: 0, problems: [{ source, code: 'cycle' }] } };
@@ -242,10 +256,10 @@ async function updateExport(wdoc: Wdoc, tag: string, lookup: SourceLookup, optio
   if (stamp === parsed.stamp && !options.force) return { bytes: null, report };
   const pdf = await lookup.exportPdf?.(file).catch(() => null);
   if (!pdf) return { bytes: null, report: { updated: 0, problems: [{ source, code: 'unsupported' }] } };
-  const extensions = { ...wdoc.extensions, pdf: { annotations: [], export: liveTagText({ source, stamp }) } };
+  const extensions = { ...wdoc.extensions, pdf: { annotations: [], export: liveTagText({ source, stamp, by: own.by }) } };
   return { bytes: await writeWdoc({ ...wdoc, original: pdf, extensions }), report: { updated: 1, problems: [] } };
 }
 
 /** A new stored PDF that is a live export of `source`, from its export `pdf` and the bytes it was made from. */
-export const newLiveExport = (source: string, pdf: Uint8Array, from: Uint8Array): Promise<Uint8Array> =>
-  writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'pdf', origin: 'pdf', pagesCurrent: true }, document: null, original: pdf, extensions: { pdf: { annotations: [], export: liveTagText({ source, stamp: documentStamp(from) }) } } });
+export const newLiveExport = (source: string, pdf: Uint8Array, from: Uint8Array, by?: string): Promise<Uint8Array> =>
+  writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'pdf', origin: 'pdf', pagesCurrent: true }, document: null, original: pdf, extensions: { pdf: { annotations: [], export: liveTagText({ source, stamp: documentStamp(from), by }) } } });

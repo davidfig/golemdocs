@@ -38,6 +38,8 @@ export interface FormLayerHost {
   setMode(mode: FormMode): void;
   /** A field was made to show a live block (a live link pasted into it): fill it now. */
   liveAdded?(source: string): void;
+  /** A `by` for a live block made now (live/owner.ts): whose it is. */
+  blockBy?(): Promise<string>;
 }
 
 type Box = WireField['box'];
@@ -237,10 +239,14 @@ export class FormLayer {
       const source = e.clipboardData ? clipboardLiveLink(e.clipboardData.getData('text/plain'), e.clipboardData.getData('text/html')) : null;
       if (!f || !source || f.readOnly || !this.fields) return;
       e.preventDefault();
-      this.fields = this.fields.map((o) => (o.id === id ? { ...o, live: liveTagText({ source, stamp: '' }) } : o));
-      this.host.change(this.fields);
-      this.render();
-      this.host.liveAdded?.(source);
+      void (async () => {
+        const by = await this.host.blockBy?.();
+        if (!this.fields) return;
+        this.fields = this.fields.map((o) => (o.id === id ? { ...o, live: liveTagText({ source, stamp: '', ...(by && { by }) }) } : o));
+        this.host.change(this.fields);
+        this.render();
+        this.host.liveAdded?.(source);
+      })();
     });
     return el;
   }

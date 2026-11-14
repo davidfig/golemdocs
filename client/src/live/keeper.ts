@@ -5,6 +5,7 @@
 //
 // The app's side (where documents are kept, the open one, uploads) comes in as `KeeperDeps`, so this is testable alone.
 
+import type { LiveOptions, LiveOwner } from './owner.ts';
 import { builtinReads } from './builtinAddress.ts';
 import { buttonScript, isScriptSource, scriptPathOf } from './scriptAddress.ts';
 import type { SourceFile } from './sources.ts';
@@ -28,6 +29,8 @@ export interface KeeperEntry {
 export interface KeeperDeps<E extends KeeperEntry> {
   /** The documents there are. */
   entries(): readonly E[];
+  /** Whose blocks to update (owner.ts); absent, every block counts as the person's. */
+  owner?(): Promise<LiveOwner>;
   /** For each document with live blocks, the titles of their sources as written. */
   links(): Promise<ReadonlyMap<string, readonly string[]>>;
   /** The document a title names, as written in the document `from` (its folder counts for plain and relative titles). */
@@ -90,7 +93,7 @@ export class LiveKeeper<E extends KeeperEntry> {
   }
 
   /** Brings one document's blocks up to date (opening it, or after a sync changed it); whether it was rewritten. */
-  check(key: string, options: { force?: boolean } = {}): Promise<boolean> {
+  check(key: string, options: LiveOptions = {}): Promise<boolean> {
     return this.outcome(key, options).then((outcome) => outcome === 'written');
   }
 
@@ -98,7 +101,7 @@ export class LiveKeeper<E extends KeeperEntry> {
    * The same, saying whether the document was rewritten, needed nothing, or could not be done now (it could not be read or
    * written, or the update failed): background updates try the last again later.
    */
-  outcome(key: string, options: { force?: boolean } = {}): Promise<UpdateOutcomeKind> {
+  outcome(key: string, options: LiveOptions = {}): Promise<UpdateOutcomeKind> {
     const run = this.running.then(async () => {
       const entry = this.deps.entries().find((e) => e.key === key);
       return entry ? this.update(entry, options) : 'unchanged';
@@ -194,8 +197,11 @@ export class LiveKeeper<E extends KeeperEntry> {
   }
 
   /** Updates one document's blocks from its stored bytes; whether it changed. */
-  private async update(entry: E, options: { force?: boolean } = {}): Promise<UpdateOutcomeKind> {
+  private async update(entry: E, options: LiveOptions = {}): Promise<UpdateOutcomeKind> {
     if (this.deps.writable?.(entry) === false) return 'notNow';
+    // Whose blocks to update: only the person's own (owner.ts).
+    const owner = await this.deps.owner?.();
+    if (owner) options = { ...options, owner };
     const bytes = await this.deps.read(entry);
     if (!bytes) return 'notNow';
     const links = await this.deps.links();

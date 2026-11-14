@@ -73,7 +73,7 @@ import { loadSite, site, siteUnknown } from './site.ts';
 import { checkoutUrl, fetchSubscription, portalUrl, sellsSubscriptions, SubscriptionError, waitForSubscription, type Subscription } from './subscription.ts';
 import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
-import { showConfirm } from './ui/popup.ts';
+import { showChoice, showConfirm } from './ui/popup.ts';
 import { askToRun, pickScript, showScriptsDialog } from './ui/scriptDialogs.ts';
 import { ScriptsApp } from './scripts/app.ts';
 import { buttonScript } from './live/scriptAddress.ts';
@@ -175,13 +175,14 @@ import type { StoredUpdater } from './live/storedLookup.ts';
 import { BACKGROUND_IDLE_MS, BackgroundLive } from './live/background.ts';
 import type { LiveMarker } from './live/background.ts';
 import { liveLimitBytes } from './live/backgroundLimit.ts';
+import { learnAccountOwner, liveOwner, newBlockBy, setLiveAccount } from './live/ownerStore.ts';
 import { LiveCheckLog } from './live/checkLog.ts';
 import { afterChange, anyMoved, placedDocs, retargets, shortestTitle, type LibraryChange, type LibrarySnapshot } from './linkRename.ts';
 import { decodeImage, encodeCanvas, makeCanvas, toPng, transcode } from './formats/imageCodec.ts';
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
 import { formatAllows } from './ui/formats.ts';
 import { DEFAULT_STATE, FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
-import { modalOpen, stripMnemonic } from './ui/dom.ts';
+import { h, modalOpen, stripMnemonic } from './ui/dom.ts';
 
 // Every string the UI builds goes through t(): the language has to be loaded first. Started here
 // and awaited once the worker is running, so it doesn't hold up starting the worker.
@@ -796,6 +797,7 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       startIgnored(current);
       worker.command({ kind: 'autoFormat', on: autoFormatOn() });
       worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() });
+      worker.command({ kind: 'liveOwner', owner: liveOwner() });
       if (!opening.none) setStatus(t('app.layingOut', { name }));
     },
     layout(update) {
@@ -1768,6 +1770,7 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   account = signedIn && plan?.sync !== false ? signedIn : null;
   accountResolved = true;
   markAccountKnown();
+  loadLiveOwner();
   // Signed in but no sync (never subscribed, or it ended): what they made here stays in view as this browser's own.
   if (signedIn && !account) await releaseToGuest(signedIn.id).catch(() => {});
   // Told its sign-in ran out, a lapsed account isn't also told it is a guest on a shared computer.
@@ -2942,11 +2945,38 @@ function retryRoomUpdate(key: string): void {
 /** The documents live blocks are kept in: this device's copies, and the account's (downloaded when one is updated). */
 const liveDocuments = (): LibraryEntry[] => library.entries.filter((e) => e.local || e.cloud);
 
+/**
+ * The account's live-block secret (live/owner.ts), asked for once it is known who is signed in; updates wait for the answer a
+ * few seconds at most (offline, the one this device last had is used).
+ */
+let liveOwnerLoaded: Promise<void> = Promise.resolve();
+function loadLiveOwner(): void {
+  const id = account?.id ?? null;
+  setLiveAccount(id);
+  // Blocks pasted in the open document are signed with it (the layout worker's `liveOwner`).
+  const tell = (): void => worker.command({ kind: 'liveOwner', owner: liveOwner() });
+  tell();
+  if (!id) {
+    liveOwnerLoaded = Promise.resolve();
+    return;
+  }
+  const asked = fetch('/api/live-marker')
+    .then((r) => (r.ok ? (r.json() as Promise<LiveMarker & { owner?: unknown }>) : null))
+    .then((marker) => void (marker?.owner && learnAccountOwner(id, marker.owner)))
+    .catch(() => undefined)
+    .then(tell);
+  liveOwnerLoaded = Promise.race([asked, new Promise<void>((resolve) => window.setTimeout(resolve, 5_000))]);
+}
+
 /** The `updatedAt` of the copy each live update read, by document key (-1 for none). */
 const liveReadFrom = new Map<string, number>();
 
 const liveKeeper: LiveKeeper<LibraryEntry> = new LiveKeeper<LibraryEntry>({
   entries: liveDocuments,
+  owner: async () => {
+    await liveOwnerLoaded;
+    return liveOwner();
+  },
   async links() {
     const own = searchableDocuments(library.entries, [], searchSources);
     await searchLibrary.sync(own);
@@ -3034,8 +3064,11 @@ const liveKeeper: LiveKeeper<LibraryEntry> = new LiveKeeper<LibraryEntry>({
     const say = (problem: (typeof report.problems)[number]) => t(`live.error.${problem.code}`, { source: problem.code === 'missing' ? (problem.detail ?? problem.source) : problem.source, detail: problem.detail ?? '' });
     if (open) {
       liveProblems.clear();
+      liveForeign.clear();
       for (const problem of report.problems) liveProblems.set(problem.source, say(problem));
+      for (const problem of report.problems) if (problem.code === 'foreign') liveForeign.add(problem.source);
       liveCard.refresh();
+      if (liveForeign.size) void askToMakeMine(entry, [...liveForeign]);
       // A block showing a script not allowed on this device: asked once, as a phone app asks (docs/live-blocks.md §8).
       for (const problem of report.problems.filter((p) => p.code === 'notAllowed'))
         void scriptsApp.askForBlock(problem.source.split(/[?#]/)[0].trim()).then((ok) => ok && liveKeeper.check(entry.key, { force: true }));
@@ -3134,7 +3167,33 @@ const liveCard = new LiveCard({
   // Anyone who can edit the document may turn a block into what it shows (the worker refuses where it is read-only).
   stop: (source) => worker.command({ kind: 'stopLive', source }),
   canStop: () => FORMATS[current.kind].editable && current.shared?.role !== 'viewer' && current.room?.role !== 'viewer',
+  isForeign: (source) => liveForeign.has(source),
+  makeMine: (source) => void makeLiveMine(source),
 });
+
+/** The open document's blocks someone else made (live/owner.ts), by source, from the last check. */
+const liveForeign = new Set<string>();
+/** Documents whose blocks someone else made that have been asked about on this page (asked once). */
+const foreignAsked = new Set<string>();
+
+/** Make It Mine: the open document's blocks showing `source` (all of them: undefined) are updated from this person's files. */
+async function makeLiveMine(source?: string): Promise<void> {
+  await saveNow();
+  const entry = current.localId ? library.entries.find((e) => e.local?.id === current.localId) : undefined;
+  if (!entry) return;
+  liveProblemTold = false;
+  const updated = await liveKeeper.check(entry.key, { force: true, adopt: source ?? true });
+  if (!liveProblemTold) setStatus(updated ? t('live.card.updated') : t('live.card.notNow'));
+  focusInput();
+}
+
+/** A document just opened has blocks someone else made: asked once whether they should be the person's. */
+async function askToMakeMine(entry: LibraryEntry, sources: readonly string[]): Promise<void> {
+  if (foreignAsked.has(entry.key) || current.shared || !FORMATS[current.kind].editable) return;
+  foreignAsked.add(entry.key);
+  const body = h('p', { text: t('live.foreign.body', { name: entry.name, sources: sources.join(', ') }) });
+  if ((await showChoice(t('live.foreign.title'), body, [{ label: t('live.card.makeMine'), value: true, primary: true }])) && entry.local?.id === current.localId) await makeLiveMine();
+}
 
 /** Who owns a document shared with this person, as the library lists them. */
 function sharedOwner(id: string): string {
@@ -3176,7 +3235,7 @@ async function makeLivePdf(): Promise<void> {
   let name = `${base}.pdf`;
   for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${base} (${n}).pdf`;
   // The source is named as a link in the same folder names it: by its name.
-  const bytes = await newLiveExport(entry.name, await worker.convert('pdf'), new Uint8Array(stored));
+  const bytes = await newLiveExport(entry.name, await worker.convert('pdf'), new Uint8Array(stored), await newBlockBy());
   const info = await saveSaved({ name, bytes, owner: account?.id, folderId: entry.local?.folderId ?? undefined });
   library.putLocal(info);
   void refreshLibrary();
@@ -4638,7 +4697,7 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields', 'pdfText', 'pdfStyle', 'pdfMoveText', 'pdfMove', 'pdfShape', 'pdfAddShape', 'pdfAddImage', 'pdfAddText', 'pdfPageOp']);
 
 /** Commands the app sends by itself as a document opens (spelling, word counts): they say nothing about the user having touched it. */
-const BACKGROUND_COMMANDS = new Set<WireCommand['kind']>(['spellCheck', 'spellIgnored', 'spellWords', 'countWords', 'getProperties', 'getDocumentInfo', 'autoFormat', 'autoCorrect']);
+const BACKGROUND_COMMANDS = new Set<WireCommand['kind']>(['spellCheck', 'spellIgnored', 'spellWords', 'countWords', 'getProperties', 'getDocumentInfo', 'autoFormat', 'autoCorrect', 'liveOwner']);
 
 onAutoFormat((on) => worker.command({ kind: 'autoFormat', on }));
 onAutoCorrect(() => worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() }));
@@ -5868,12 +5927,25 @@ function pasteClipboard(clip: Clipboard, form: 'auto' | 'html' | 'text' = 'auto'
   // A live link pasted into a drawing being edited: a live group, saved, then filled from its source at once.
   const live = isDrawing() && vector?.editor.active && !vector.embedded ? clipboardLiveLink(clip.text ?? '', clip.html ?? '') : null;
   if (live) {
-    vector!.editor.addLive(live);
-    return void vector!.settled().then(() => updateLiveNow(live));
+    // Signed as the person's (live/owner.ts).
+    return void newBlockBy().then((by) => {
+      vector?.editor.addLive(live, by);
+      return vector?.settled().then(() => updateLiveNow(live));
+    });
   }
   // A live link pasted into a PDF being edited: a text box or picture showing it, filled from its source at once.
   const pdfLive = annotating ? clipboardLiveLink(clip.text ?? '', clip.html ?? '', true) : null;
-  if (pdfLive && pdfTools.addLive(pdfLive)) return void updateLiveNow(pdfLive);
+  if (pdfLive) {
+    return void newBlockBy().then((by) => {
+      if (pdfTools.addLive(pdfLive, by)) void updateLiveNow(pdfLive);
+      else pasteFormatted(clip, form);
+    });
+  }
+  pasteFormatted(clip, form);
+}
+
+/** Pastes the clipboard as formatted text, or plain text where formatting can't go. */
+function pasteFormatted(clip: Clipboard, form: 'auto' | 'html' | 'text'): void {
   const formatted = FORMATS[current.kind].marks.length > 0;
   if (clip.html && form !== 'text' && formatted && clip.html.length <= MAX_PASTED_HTML) send({ kind: 'pasteHtml', html: clip.html, text: clip.text ?? '' });
   else if (clip.text) send({ kind: 'insertText', text: clip.text });
@@ -6817,6 +6889,7 @@ const sheetView: SheetEditor = new SheetEditor(document.getElementById('viewport
   author: () => commentAuthor(),
   // A live link pasted into the sheet: saved, then filled from its source at once.
   liveAdded: (source) => void updateLiveNow(source),
+  blockBy: newBlockBy,
 });
 /** The spreadsheet editor as the chrome sees it (see documentEngine.ts). */
 const sheetEngine: DocumentEngine = {
@@ -7319,6 +7392,7 @@ const formLayer = new FormLayer(document.getElementById('viewport')!, {
   notify: setStatus,
   setMode: setFormMode,
   liveAdded: (source) => void updateLiveNow(source),
+  blockBy: newBlockBy,
 });
 
 // A PDF page's own text, edited in place (see ui/pdfTextLayer.ts).

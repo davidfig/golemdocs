@@ -72,6 +72,8 @@ export interface SheetEditorDeps {
   author(): string;
   /** A live link was pasted, making a live range (docs/live-blocks.md §3): it is filled from its source. */
   liveAdded?(source: string): void;
+  /** A `by` for a live block made now (live/owner.ts): whose it is. */
+  blockBy?(): Promise<string>;
 }
 
 /** Bars over the canvas, in CSS pixels: the formula bar at the top, the sheet tabs at the bottom. */
@@ -1811,7 +1813,8 @@ export class SheetEditorView {
     // A live link (Copy as Live Link, or a plain embed only a live block can show): a live range at the active cell.
     const source = clipboardLiveLink(text, html);
     if (source) {
-      await this.edit({ kind: 'addLive', row: this.active.row, col: this.active.col, source });
+      const by = await this.deps.blockBy?.();
+      await this.edit({ kind: 'addLive', row: this.active.row, col: this.active.col, source, ...(by && { by }) });
       this.deps.liveAdded?.(source);
       return;
     }

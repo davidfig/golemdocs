@@ -31,13 +31,21 @@ function parsed(text: string): string[] {
   }
 }
 
+/** The person's live-block secret (client/src/live/owner.ts), made the first time it is asked for. */
+async function ownerSecret(db: UserDb): Promise<string> {
+  const made = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  // `all`, not `run`: this changes no documents.
+  await db.all('INSERT OR IGNORE INTO live_owner (id, secret) VALUES (1, ?)', [made]);
+  return (await db.first<{ secret: string }>('SELECT secret FROM live_owner WHERE id = 1', []))!.secret;
+}
+
 async function read(db: UserDb): Promise<{ workedTo: number | null; deferred: string[] }> {
   const row = await db.first<MarkerRow>('SELECT worked_to, deferred FROM live_marker WHERE id = 1', []);
   return row ? { workedTo: row.worked_to, deferred: parsed(row.deferred) } : { workedTo: null, deferred: [] };
 }
 
 /**
- * GET: { kept, workedTo, deferred, now }. `kept` is false without the person's own database (nothing to share).
+ * GET: { kept, workedTo, deferred, now, owner }, `owner` being the secret that marks live blocks as the person's (null without a database). `kept` is false without the person's own database (nothing to share).
  * POST { workedTo?, defer?, done? }: moves the marker on (never back), adds documents to `deferred` and takes the done ones
  * off; answers as GET does.
  */
@@ -46,7 +54,7 @@ export async function handleLiveMarker(request: Request, db: UserDb | null): Pro
   const now = Date.now();
   if (!db) {
     if (request.method === 'POST') await request.body?.cancel();
-    return json({ kept: false, workedTo: null, deferred: [], now });
+    return json({ kept: false, workedTo: null, deferred: [], now, owner: null });
   }
   if (request.method === 'POST') {
     const body = (await request.json().catch(() => null)) as { workedTo?: unknown; defer?: unknown; done?: unknown } | null;
@@ -77,5 +85,5 @@ export async function handleLiveMarker(request: Request, db: UserDb | null): Pro
     );
   }
   const marker = await read(db);
-  return json({ kept: true, ...marker, now });
+  return json({ kept: true, ...marker, now, owner: await ownerSecret(db) });
 }

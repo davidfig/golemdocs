@@ -92,6 +92,7 @@ import { livePartAddress } from '../live/partAddress.ts';
 import { findLiveIn, liveIndexAt, unwrapLive } from '../live/liveMarks.ts';
 import type { LiveTag } from '../live/liveMarks.ts';
 import type { SourceLookup } from '../live/sources.ts';
+import type { LiveOwner } from '../live/owner.ts';
 import { sourceFromFile } from '../formats/source.ts';
 import { fontFile, loadAppFonts } from '../formats/appFonts.ts';
 import { withDrawingText } from '../formats/drawingText.ts';
@@ -184,6 +185,9 @@ async function embedded(title: string, fonts: FontSet): Promise<Embedded | null>
 }
 
 /** A live block's source, asked of the page by title like an embed (docs/live-blocks.md): its bytes, and a drawing's picture. */
+/** Who the person is, for live blocks pasted (the page's `liveOwner` command); none yet: pasted blocks are left unsigned. */
+let liveOwner: LiveOwner | null = null;
+
 const liveSource: SourceLookup = async (title) => {
   const file = await askEmbed(title);
   if (!file) return null;
@@ -334,7 +338,7 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
 }
 
 /** Commands that change the editor's settings rather than the document (they work with none open). */
-const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect']);
+const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'liveOwner']);
 
 /** The settings commands with no document open (see `close`): they change what the worker does for the next one, and for plain text files. */
 function applySettings(wire: WireCommand): void {
@@ -346,12 +350,13 @@ function applySettings(wire: WireCommand): void {
     void acceptSpelling(wire.words ?? []);
   } else if (wire.kind === 'autoFormat') live.autoFormat = wire.on;
   else if (wire.kind === 'autoCorrect') setAutoCorrect(wire);
+  else if (wire.kind === 'liveOwner') liveOwner = wire.owner;
 }
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
 /** Commands that edit at the selection, refused in a live block (see `livePart`). */
 const LIVE_GUARDED = new Set<string>(['insertText', 'insertParagraph', 'insertLineBreak', 'insertContent', 'pasteContent', 'pasteHtml', 'delete', 'formatText', 'formatParagraphs', 'changeCase', 'insertTable', 'tab', 'setLink', 'removeLink', 'tableEdit', 'splitCells', 'format', 'applyPainter', 'moveDrawing', 'moveDrawingToParagraph', 'replaceDrawing', 'replacePicture', 'addComment', 'addBookmark']);
 
-const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'select', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'spellAt', 'countWords', 'getProperties', 'selectWord']);
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'select', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'liveOwner', 'spellAt', 'countWords', 'getProperties', 'selectWord']);
 
 /** A book's key: the hash of its paragraphs' text, so the same book finds its reading place on every device, and its places are the same paragraphs. */
 const bookKey = (paragraphs: string[]): Promise<string> => sha256Hex(new TextEncoder().encode(paragraphs.join('\n')));
@@ -1944,7 +1949,8 @@ class OpenDocument {
     try {
       pasted = await htmlToPaste(html, document);
       // A live block pasted (Copy as Live Link) is filled in as it goes in; one whose source can't be read keeps what was copied.
-      if (pasted && findLiveIn(pasted.blocks).length) await (await import('../live/update.ts')).updateLiveIn(pasted.blocks, document, liveSource);
+      // One with no `by` (a link copied) is signed as the person's; someone else's stays theirs (live/owner.ts).
+      if (pasted && findLiveIn(pasted.blocks).length) await (await import('../live/update.ts')).updateLiveIn(pasted.blocks, document, liveSource, { ...(liveOwner && { owner: liveOwner }), unsignedMine: true });
       if (pasted?.fonts.size) await session.ensureFonts(pasted.fonts);
     } catch {
       pasted = null;
@@ -2263,6 +2269,10 @@ class OpenDocument {
     }
     if (wire.kind === 'autoCorrect') {
       setAutoCorrect(wire);
+      return;
+    }
+    if (wire.kind === 'liveOwner') {
+      liveOwner = wire.owner;
       return;
     }
     if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y, wire.select ?? true, wire.check ?? true);

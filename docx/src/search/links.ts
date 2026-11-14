@@ -22,6 +22,9 @@ export const EMBED_PREFIX = 'embed:';
  */
 export const LIVE_PREFIX = 'live:';
 
+/** What follows a live tag's source: who made it (`by=`, optional) and its stamp (optional). */
+export const TAG_TAIL = /(?: by=[0-9a-z]+)?(?: stamp=[0-9a-z]*)?$/;
+
 /**
  * The title a live block's source names: what comes before its part (`#Expenses`) and its options (`?where=…`). A built-in
  * block (`@list:Characters?columns=role`) names no document, so the whole address stands for it.
@@ -58,7 +61,7 @@ export function linkTitle(title: string): string {
  * names (as `linkTitle` gives it) renamed by `renames`, the rest kept as it is; null when it names none of them.
  */
 export function renamedSource(source: string, renames: ReadonlyMap<string, string>): string | null {
-  const stamp = / stamp=[0-9a-z]*$/.exec(source);
+  const stamp = TAG_TAIL.exec(source);
   const body = stamp ? source.slice(0, stamp.index) : source;
   const tail = stamp ? stamp[0] : '';
   const count = COUNT.exec(body);
@@ -79,7 +82,7 @@ export function renamedSource(source: string, renames: ReadonlyMap<string, strin
 /** The title a live block's tag names, or null when the text is no live block's tag. */
 export function liveTitle(tag: string | undefined): string | null {
   if (!tag?.startsWith(LIVE_PREFIX)) return null;
-  return sourceTitle(tag.slice(LIVE_PREFIX.length).replace(/ stamp=[0-9a-z]*$/, '')) || null;
+  return sourceTitle(tag.slice(LIVE_PREFIX.length).replace(TAG_TAIL, '')) || null;
 }
 
 /** The tag of a content control (a Word sdt), or undefined. */

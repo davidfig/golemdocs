@@ -1390,3 +1390,130 @@ test('filling a live group replaces only what the last fill put there, keeping s
   assert.deepEqual(table.children.map((c) => c.kind), ['text', 'rect']);
   assert.ok(table.children[0].kind === 'text' && table.children[0].runs[0].text === '2200');
 });
+
+// --- Who a block belongs to (live/owner.ts) ------------------------------------------------------
+
+import { isHandWritten, isOwnedBy, newOwnerSecret, ownership, signedBy } from '../src/live/owner.ts';
+import type { LiveOwner } from '../src/live/owner.ts';
+
+const ownerOf = (secret = newOwnerSecret()): LiveOwner => ({ secrets: [secret], sign: secret });
+
+test('a `by` is signed by its owner’s secret: a new salt every time, and no one else’s secret passes it', async () => {
+  const mine = newOwnerSecret();
+  const a = await signedBy(mine);
+  const b = await signedBy(mine);
+  assert.match(a, /^[0-9a-f]{24}$/);
+  assert.notEqual(a, b);
+  assert.ok(await isOwnedBy(a, [mine]));
+  assert.ok(await isOwnedBy(b, [newOwnerSecret(), mine]));
+  assert.ok(!(await isOwnedBy(a, [newOwnerSecret()])));
+  assert.ok(!(await isOwnedBy(`${a.slice(0, 8)}${'0'.repeat(16)}`, [mine])));
+  assert.ok(!(await isOwnedBy('nothex', [mine])));
+});
+
+test('whose a block is: one’s own, someone else’s, typed by hand, or made one’s own', async () => {
+  const me = ownerOf();
+  const mineBy = await signedBy(me.sign);
+  const theirsBy = await signedBy(newOwnerSecret());
+  const tag = (by?: string) => ({ source: 'Budget.xlsx', stamp: '', ...(by && { by }) });
+  assert.deepEqual(await ownership(tag(mineBy), { owner: me }), { mine: true, by: mineBy });
+  assert.deepEqual(await ownership(tag(theirsBy), { owner: me }), { mine: false });
+  assert.deepEqual(await ownership(tag(), { owner: me }), { mine: false });
+  const typed = await ownership(tag(), { owner: me, unsignedMine: true });
+  assert.ok(typed.mine && (await isOwnedBy(typed.by!, me.secrets)));
+  // Someone else's is not taken for typed by hand.
+  assert.deepEqual(await ownership(tag(theirsBy), { owner: me, unsignedMine: true }), { mine: false });
+  // Make It Mine: every block, or the ones showing a source.
+  assert.ok((await ownership(tag(theirsBy), { owner: me, adopt: true })).mine);
+  assert.ok((await ownership(tag(theirsBy), { owner: me, adopt: 'Budget.xlsx' })).mine);
+  assert.ok(!(await ownership(tag(theirsBy), { owner: me, adopt: 'Other.xlsx' })).mine);
+  // No owner given (tests, `golem run`): every block is the person's, as it was.
+  assert.deepEqual(await ownership(tag(theirsBy), {}), { mine: true, by: theirsBy });
+  assert.ok(isHandWritten('Notes.md') && isHandWritten('Page.HTML') && isHandWritten('Plan.svg'));
+  assert.ok(!isHandWritten('Notes.docx') && !isHandWritten('Plan.xlsx') && !isHandWritten('Form.pdf'));
+});
+
+test('a tag keeps who made it through its text, Markdown, HTML and a rename', async () => {
+  const by = await signedBy(newOwnerSecret());
+  const tag = { source: 'My Budget.xlsx#Expenses', stamp: '3f9a2c1e', by };
+  assert.equal(liveTagText(tag), `live:My Budget.xlsx#Expenses by=${by} stamp=3f9a2c1e`);
+  assert.deepEqual(parseLiveTag(liveTagText(tag)), tag);
+  assert.deepEqual(parseLiveTag(`live:Budget.xlsx by=${by}`), { source: 'Budget.xlsx', stamp: '', by });
+  const { liveTitle } = await import('@golemdocs/docx');
+  assert.equal(liveTitle(liveTagText(tag)), 'My Budget.xlsx');
+
+  const document = await WordDocument.create();
+  document.body = [liveWrapper<Block>(tag, [])];
+  const md = documentToMarkdown(document);
+  assert.match(md, new RegExp(`<!-- golem:live My Budget.xlsx#Expenses by=${by} stamp=3f9a2c1e -->`));
+  assert.deepEqual(findLive(await markdownToDocument(md)).map((at) => at.tag), [tag]);
+  const html = await documentToHtml(document);
+  assert.match(html, new RegExp(`data-golem-by="${by}"`));
+  assert.deepEqual(findLive((await htmlToDocument(html)).document).map((at) => at.tag), [tag]);
+
+  const renames = new Map([['My Budget.xlsx', 'Money.xlsx']]);
+  const renamed = await rewriteDocumentLinks(arrayBuffer(new TextEncoder().encode(md)), renames);
+  assert.match(new TextDecoder().decode(renamed.bytes!), new RegExp(`<!-- golem:live Money.xlsx#Expenses by=${by} stamp=3f9a2c1e -->`));
+  const word = await rewriteDocumentLinks(arrayBuffer(await document.write()), renames);
+  assert.deepEqual(findLive(await WordDocument.read(word.bytes!)).map((at) => at.tag), [{ ...tag, source: 'Money.xlsx#Expenses' }]);
+});
+
+test('someone else’s block keeps what it came with and says so; one’s own, and one typed into a note, are updated and signed', async () => {
+  const me = ownerOf();
+  const lookup = async (title: string) => (title === 'Budget.xlsx' ? { name: 'Budget.xlsx', bytes: await budget() } : null);
+  const theirs = await signedBy(newOwnerSecret());
+  const md = (by?: string) => new TextEncoder().encode(`Total: <!-- golem:live Budget.xlsx#Total${by ? ` by=${by}` : ''} -->what they sent<!-- /golem:live -->\n`);
+
+  const foreign = await updateStoredLive(md(theirs), 'Form.md', lookup, { owner: me });
+  assert.equal(foreign.bytes, null);
+  assert.deepEqual(foreign.report.problems.map((p) => p.code), ['foreign']);
+
+  const typed = await updateStoredLive(md(), 'Notes.md', lookup, { owner: me });
+  assert.equal(typed.report.updated, 1);
+  const out = documentToMarkdown(await WordDocument.read((await readWdoc(typed.bytes!)).document!));
+  assert.match(out, /2740/);
+  const by = /by=([0-9a-f]+)/.exec(out)?.[1];
+  assert.ok(by && (await isOwnedBy(by, me.secrets)));
+  // Signed now, so it stays the person's from here on.
+  assert.equal((await updateStoredLive(typed.bytes!, 'Notes.md', lookup, { owner: me })).report.problems.length, 0);
+
+  // Make It Mine: updated from this vault, and signed.
+  const adopted = await updateStoredLive(md(theirs), 'Form.md', lookup, { owner: me, force: true, adopt: true });
+  assert.match(documentToMarkdown(await WordDocument.read((await readWdoc(adopted.bytes!)).document!)), /2740/);
+});
+
+test('an unsigned tag in a Word document, workbook or drawing is the app’s and so came from someone else; a signed one updates', async () => {
+  const me = ownerOf();
+  const lookup = async (title: string) => (title === 'Budget.xlsx' ? { name: 'Budget.xlsx', bytes: await budget() } : null);
+
+  const word = await (await note()).write();
+  const unsigned = await updateStoredLive(word, 'Notes.docx', lookup, { owner: me });
+  assert.equal(unsigned.bytes, null);
+  assert.deepEqual(unsigned.report.problems.map((p) => p.code), ['foreign', 'foreign']);
+  const made = await updateStoredLive(word, 'Notes.docx', lookup, { owner: me, force: true, adopt: 'Budget.xlsx#Total' });
+  assert.equal(made.report.updated, 1);
+  assert.deepEqual(made.report.problems.map((p) => p.code), ['foreign']);
+
+  const book = await hostBook('Budget.xlsx#Total');
+  assert.deepEqual((await updateStoredLive(book, 'Plan.xlsx', lookup, { owner: me })).report.problems.map((p) => p.code), ['foreign']);
+  const signedBook = new Workbook();
+  const sheet = new Worksheet('Plan', 1);
+  signedBook.sheets.push(sheet);
+  addSheetLive(signedBook, 0, 0, 0, 'Budget.xlsx#Total', await signedBy(me.sign));
+  const filled = await updateStoredLive(await writeWorkbook(signedBook, { recalculate: false }), 'Plan.xlsx', lookup, { owner: me });
+  assert.equal(filled.report.updated, 1);
+
+  const svg = (by?: string) => new TextEncoder().encode(DRAWING(`<g data-golem-live="Budget.xlsx#Total"${by ? ` data-golem-by="${by}"` : ''}><text x="5" y="20">old</text></g>`));
+  assert.deepEqual((await updateStoredDrawing(svg(await signedBy(newOwnerSecret())), lookup, { owner: me })).report.problems.map((p) => p.code), ['foreign']);
+  const drawn = await updateStoredDrawing(svg(await signedBy(me.sign)), lookup, { owner: me });
+  assert.match(new TextDecoder().decode(drawn.bytes!), />2740</);
+});
+
+test('a pasted block with no `by` is signed as the person’s even when its source can’t be read yet', async () => {
+  const me = ownerOf();
+  const document = await note();
+  const report = await updateLive(document, async () => null, { owner: me, unsignedMine: true });
+  assert.equal(report.updated, 2);
+  assert.deepEqual(report.problems.map((p) => p.code), ['missing', 'missing']);
+  for (const at of findLive(document)) assert.ok(at.tag.by && (await isOwnedBy(at.tag.by, me.secrets)));
+});

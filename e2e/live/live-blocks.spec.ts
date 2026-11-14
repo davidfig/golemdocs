@@ -34,7 +34,7 @@ test('a note embedding a CSV shows its rows, and saves them between live block m
   expect(text).toContain('2100');
 
   const file = await app.download(() => app.menu('File', 'Download'));
-  expect(file.text).toMatch(/This week:\n\n<!-- golem:live Meals\.csv stamp=[0-9a-f]{8} -->\n\n\| Day \| Calories \|\n\| --- \| ---: \|\n\| Mon \| 2100 \|\n\| Tue \| 1900 \|\n\n<!-- \/golem:live -->\n\nThat is all\./);
+  expect(file.text).toMatch(/This week:\n\n<!-- golem:live Meals\.csv by=[0-9a-f]{24} stamp=[0-9a-f]{8} -->\n\n\| Day \| Calories \|\n\| --- \| ---: \|\n\| Mon \| 2100 \|\n\| Tue \| 1900 \|\n\n<!-- \/golem:live -->\n\nThat is all\./);
 });
 
 test('a live block cannot be typed in, and says where to change it', async ({ app, page }) => {
@@ -151,6 +151,41 @@ test('a block whose source is gone keeps its last result, and its card says why'
 });
 
 
+test('a block someone else made keeps what it came with until it is made one’s own', async ({ app, page }) => {
+  // Signed by a secret this browser doesn't hold (docs/live-blocks.md §1, *Who a block belongs to*).
+  const theirs = 'deadbeef0123456789abcdef';
+  await importVault(app, page, [
+    { name: 'Meals.csv', data: 'Day,Calories\nMon,2100\nTue,1900\n' },
+    { name: 'Form.md', data: `Please fill in:\n\n<!-- golem:live Meals.csv by=${theirs} stamp=00000000 -->\n\n| Day | Calories |\n| --- | ---: |\n| Mon | sent |\n\n<!-- /golem:live -->\n\nThanks.\n` },
+  ]);
+  await app.menu('File', 'Open…');
+  await dashboard(page).getByRole('button', { name: 'Open folder Vault' }).click();
+  await dashboard(page).getByRole('button', { name: 'Open Form.md' }).click();
+
+  // Asked once; until then nothing is read from this vault.
+  const asked = page.getByRole('dialog', { name: 'Live Blocks Made by Someone Else' });
+  await expect(asked).toBeVisible({ timeout: 20_000 });
+  await expect(asked).toContainText('Meals.csv');
+  await page.keyboard.press('Escape');
+  await expect(asked).toBeHidden();
+  expect(await app.text()).toContain('sent');
+  expect(await app.text()).not.toContain('1900');
+
+  // The block's card offers Make It Mine in place of Update Now.
+  await app.focus();
+  await app.press('ControlOrMeta+Home');
+  await app.press('ArrowDown');
+  const card = page.getByRole('dialog', { name: 'Live Block' });
+  await expect(card.getByRole('alert')).toContainText('Made by someone else');
+  await expect(card.getByRole('button', { name: 'Update Now' })).toBeHidden();
+  await card.getByRole('button', { name: 'Make It Mine' }).click();
+  await expect.poll(() => app.text(), { timeout: 20_000 }).toContain('1900');
+
+  const file = await app.download(() => app.menu('File', 'Download'));
+  expect(file.text).toMatch(/<!-- golem:live Meals\.csv by=[0-9a-f]{24} stamp=[0-9a-f]{8} -->/);
+  expect(file.text).not.toContain(theirs);
+});
+
 const REPORT = '---\nstatus: draft\n---\n\n# Intro\n\nHello.\n\n# Costs\n\nWe pay rent.\n\n# Later\n\nEnd.\n';
 
 test('a note shows a section and a front matter field of another note', async ({ app, page }) => {
@@ -216,7 +251,7 @@ test('a note shows a workbook’s chart as a picture', async ({ app, page }) => 
   await dashboard(page).getByRole('button', { name: 'Open folder Vault' }).click();
   await dashboard(page).getByRole('button', { name: 'Open Plan.md' }).click();
   // Filled in on opening: the downloaded note has the chart's picture between the block's markers.
-  const filled = /<!-- golem:live charts\.xlsx#chart:Sales by month stamp=[0-9a-f]{8} -->\n\n!\[[^\]]*\]\([^)]+\)/;
+  const filled = /<!-- golem:live charts\.xlsx#chart:Sales by month by=[0-9a-f]{24} stamp=[0-9a-f]{8} -->\n\n!\[[^\]]*\]\([^)]+\)/;
   await expect.poll(async () => (await app.download(() => app.menu('File', 'Download'))).text, { timeout: 20_000 }).toMatch(filled);
 });
 
@@ -229,7 +264,7 @@ test('a note shows a page of a PDF as a picture', async ({ app, page }) => {
   await app.menu('File', 'Open…');
   await dashboard(page).getByRole('button', { name: 'Open folder Vault' }).click();
   await dashboard(page).getByRole('button', { name: 'Open Deal.md' }).click();
-  const filled = /<!-- golem:live Contract\.pdf#page:2 stamp=[0-9a-f]{8} -->\n\n!\[[^\]]*\]\([^)]+\)/;
+  const filled = /<!-- golem:live Contract\.pdf#page:2 by=[0-9a-f]{24} stamp=[0-9a-f]{8} -->\n\n!\[[^\]]*\]\([^)]+\)/;
   await expect.poll(async () => (await app.download(() => app.menu('File', 'Download'))).text, { timeout: 20_000 }).toMatch(filled);
 });
 
@@ -415,7 +450,7 @@ test('Insert › Live Block lists a folder’s notes with a front matter column'
   await expect.poll(() => app.text(), { timeout: 20_000 }).toContain('captain');
   expect(await app.text()).toContain('cook');
   const file = await app.download(() => app.menu('File', 'Download'));
-  expect(file.text).toMatch(/<!-- golem:live @list:Vault\/Characters\?columns=role stamp=[0-9a-f]{8} -->\n\n\| Characters \| role \|\n\| --- \| --- \|\n\| Ann \| captain \|\n\| Bo \| cook \|/);
+  expect(file.text).toMatch(/<!-- golem:live @list:Vault\/Characters\?columns=role by=[0-9a-f]{24} stamp=[0-9a-f]{8} -->\n\n\| Characters \| role \|\n\| --- \| --- \|\n\| Ann \| captain \|\n\| Bo \| cook \|/);
 });
 
 test('Insert › Live Block counts a folder’s words against a goal, in the line', async ({ app, page }) => {
@@ -441,7 +476,7 @@ test('Insert › Live Block counts a folder’s words against a goal, in the lin
   await dialog.getByRole('button', { name: 'Insert', exact: true }).click();
   await expect.poll(() => app.text(), { timeout: 20_000 }).toContain('Words so far: 9 / 50,000');
   const file = await app.download(() => app.menu('File', 'Download'));
-  expect(file.text).toContain('Words so far: <!-- golem:live @count:Vault/Novel?goal=50000 stamp=');
+  expect(file.text).toMatch(/Words so far: <!-- golem:live @count:Vault\/Novel\?goal=50000 by=[0-9a-f]{24} stamp=/);
 });
 
 test('Insert › Live Block shows a CSV’s rows that meet a condition, sorted', async ({ app, page }) => {

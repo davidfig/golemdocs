@@ -1,0 +1,191 @@
+      <article class="page">
+        <p class="kicker">{{live.kicker}}</p>
+        <h1>{{live.h1}}</h1>
+        <p class="lede">{{live.lede}}</p>
+        <div class="cta">
+          <a class="btn primary big" href="/">{{home.open}}</a>
+          <a class="btn big" href="{{base}}/download">{{home.download}}</a>
+        </div>
+
+        <figure class="point lead live-demo" id="liveDemo">
+          <div class="demo-tabs" role="tablist" aria-label="{{live.demo.steps}}" id="liveSteps">
+            <button role="tab" type="button" aria-selected="true" data-step="0">{{live.demo.step1}}</button>
+            <button role="tab" type="button" aria-selected="false" data-step="1">{{live.demo.step2}}</button>
+            <button role="tab" type="button" aria-selected="false" data-step="2">{{live.demo.step3}}</button>
+          </div>
+          <div class="plate">
+            <div class="editor" role="group" aria-label="{{live.demo.label}}">
+              <div class="tb" data-for="doc" aria-hidden="true"><span class="tbi" data-icon="undo"></span><span class="tbi" data-icon="redo"></span><span class="sep"></span><span class="combo">{{home.editor.style}}<i></i></span><span class="combo">Cambria<i></i></span><span class="combo">14<i></i></span><span class="sep"></span><b>B</b><em>I</em><u>U</u><span class="sep"></span><span class="tbi" data-icon="alignLeft"></span><span class="tbi" data-icon="alignCenter"></span><span class="tbi" data-icon="alignRight"></span><span class="sep"></span><span class="tbi" data-icon="bullets"></span><span class="tbi" data-icon="numbering"></span><span class="sep"></span><span class="tbi" data-icon="link"></span><span class="tbi" data-icon="table"></span><span class="tbi" data-icon="image"></span><span class="tbi" data-icon="comment"></span></div>
+              <div class="tb" data-for="sheet" aria-hidden="true" hidden><span class="tbi" data-icon="undo"></span><span class="tbi" data-icon="redo"></span><span class="sep"></span><span class="tbi" data-icon="sortAsc"></span><span class="tbi" data-icon="filter"></span><span class="sep"></span><span class="tbi" data-icon="insertRow"></span><span class="tbi" data-icon="insertColumn"></span><span class="tbi" data-icon="deleteRow"></span><span class="sep"></span><span class="tbi" data-icon="sum"></span><span class="tbi" data-icon="percent"></span><span class="sep"></span><span class="tbi" data-icon="chart"></span></div>
+              <div class="ed-body">
+                <div class="ed-files">
+                  <div class="ed-files-bar" aria-hidden="true">{{home.editor.files}}</div>
+                  <div class="ed-row" aria-hidden="true"><i><svg viewBox="0 0 8 8"><path d="M2.5 1v6L6 4z"/></svg></i>{{home.demo.f.diary}}</div>
+                  <div class="ed-row" aria-hidden="true"><i><svg viewBox="0 0 8 8"><path d="M1 2.5h6L4 6z"/></svg></i>{{home.editor.garden}}</div>
+                  <div class="ed-row d1" aria-hidden="true">{{home.editor.beds}}</div>
+                  <div class="ed-row d1 current" data-file="doc" aria-hidden="true">{{live.f.plan}}.docx</div>
+                  <div class="ed-row d1" data-file="sheet" aria-hidden="true">{{live.f.budget}}.xlsx</div>
+                  <div class="ed-row d1" aria-hidden="true">{{home.editor.seeds}}</div>
+                  <div class="ed-row" aria-hidden="true"><i><svg viewBox="0 0 8 8"><path d="M2.5 1v6L6 4z"/></svg></i>{{home.demo.f.recipes}}</div>
+                </div>
+                <div class="ed-desk">
+                  <div class="ed-page lv-doc" data-for="doc">
+                    <h4>{{live.f.plan}}</h4>
+                    <p>{{live.doc.p1}}</p>
+                    <p>{{live.doc.p2}}</p>
+                    <div class="lv-block">
+                      <span class="lv-tag" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 0 1-8.6 3.5M3 8a5 5 0 0 1 8.6-3.5M11.5 2v2.6H9M4.5 14v-2.6H7"/></svg>{{live.f.budget}}.xlsx#{{live.range}}</span>
+                      <table>
+                        <thead><tr><th>{{live.doc.item}}</th><th class="n">{{live.doc.cost}}</th></tr></thead>
+                        <tbody>
+                          <tr><td>{{live.item.seeds}}</td><td class="n">$38</td></tr>
+                          <tr><td>{{live.item.soil}}</td><td class="n" data-live="soil">$96</td></tr>
+                          <tr><td>{{live.item.boards}}</td><td class="n">$80</td></tr>
+                          <tr data-live="trellis" hidden><td>{{live.item.trellis}}</td><td class="n">$45</td></tr>
+                          <tr class="sum"><td>{{live.item.total}}</td><td class="n" data-live="total">$214</td></tr>
+                        </tbody>
+                      </table>
+                      <span class="callout" data-callout="doc">{{live.c.doc}}</span>
+                      <span class="callout agent" data-callout="updated" hidden>{{live.c.updated}}</span>
+                    </div>
+                  </div>
+                  <div class="ed-page ed-sheet lv-sheet" data-for="sheet" hidden>
+                    <div class="lv-fx" aria-hidden="true"><span class="lv-ref" data-live="ref">B3</span><span class="lv-fx-i">fx</span><span data-live="fx">96</span></div>
+                    <table>
+                      <thead><tr><th></th><th>A</th><th>B</th><th>C</th></tr></thead>
+                      <tbody>
+                        <tr class="head"><th>1</th><td>{{live.doc.item}}</td><td class="n">{{live.doc.cost}}</td><td></td></tr>
+                        <tr><th>2</th><td>{{live.item.seeds}}</td><td class="n">$38</td><td></td></tr>
+                        <tr><th>3</th><td>{{live.item.soil}}</td><td class="n" data-cell="soil">$96</td><td></td></tr>
+                        <tr><th>4</th><td>{{live.item.boards}}</td><td class="n">$80</td><td></td></tr>
+                        <tr><th>5</th><td data-cell="trellisName"></td><td class="n" data-cell="trellis"></td><td></td></tr>
+                        <tr class="head"><th>6</th><td>{{live.item.total}}</td><td class="n" data-cell="total">$214</td><td></td></tr>
+                        <tr><th>7</th><td></td><td></td><td></td></tr>
+                      </tbody>
+                    </table>
+                    <span class="callout" data-callout="edit" hidden>{{live.c.edit}}</span>
+                    <span class="callout agent" data-callout="saved" hidden>{{live.c.saved}}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption aria-live="polite">
+            <span data-cap="0"><b>{{live.cap1.h}}</b> {{live.cap1.p}}</span>
+            <span data-cap="1" hidden><b>{{live.cap2.h}}</b> {{live.cap2.p}}</span>
+            <span data-cap="2" hidden><b>{{live.cap3.h}}</b> {{live.cap3.p}}</span>
+          </figcaption>
+          <span hidden id="liveTrellis">{{live.item.trellis}}</span>
+        </figure>
+        <div class="demo-foot">
+          <button class="btn" id="liveReplay" type="button">{{live.demo.replay}}</button>
+          <span>{{live.demo.fine}}</span>
+        </div>
+
+        <h2>{{live.how.h}}</h2>
+        <ol class="setup">
+          <li><b>{{live.how1.h}}</b> {{live.how1.p}}</li>
+          <li><b>{{live.how2.h}}</b> {{live.how2.p}}</li>
+          <li><b>{{live.how3.h}}</b> {{live.how3.p}}</li>
+        </ol>
+
+        <h2>{{live.file.h}}</h2>
+        <div class="points split wide">
+          <figure class="point">
+            <div class="plate lv-md-plate">
+              <pre class="lv-md" aria-label="{{live.file.label}}"><span class="h">## {{live.file.heading}}</span>
+
+<span class="c">&lt;!-- golem:live {{live.f.budget}}.xlsx#{{live.range}} stamp=3f9a2c1e --&gt;</span>
+| {{live.doc.item}} | {{live.doc.cost}} |
+| --- | ---: |
+| {{live.item.seeds}} | $38 |
+| {{live.item.soil}} | $128 |
+| {{live.item.boards}} | $80 |
+| {{live.item.trellis}} | $45 |
+| {{live.item.total}} | $291 |
+<span class="c">&lt;!-- /golem:live --&gt;</span></pre>
+              <span class="callout agent">{{live.file.callout}}</span>
+            </div>
+          </figure>
+          <div class="split-text">
+            <p>{{live.file.p1}}</p>
+            <p>{{live.file.p2}}</p>
+            <p><a href="{{base}}/ai">{{home.demo.connect}}</a></p>
+          </div>
+        </div>
+
+        <h2>{{live.where.h}}</h2>
+        <div class="shelves">
+          <section class="shelf">
+            <h3>{{live.where.from}}</h3>
+            <ul>
+              <li><span class="ext">.xlsx .ods</span>{{live.from.sheet}}</li>
+              <li><span class="ext">.csv</span>{{live.from.csv}}</li>
+              <li><span class="ext">.docx .md</span>{{live.from.doc}}</li>
+              <li><span class="ext">.md</span>{{live.from.field}}</li>
+              <li><span class="ext">.pdf</span>{{live.from.pdf}}</li>
+              <li><span class="ext">.svg .png</span>{{live.from.pic}}</li>
+            </ul>
+          </section>
+          <section class="shelf">
+            <h3>{{live.where.to}}</h3>
+            <ul>
+              <li><span class="ext">.docx .odt</span>{{live.to.word}}</li>
+              <li><span class="ext">.md .html</span>{{live.to.md}}</li>
+              <li><span class="ext">.xlsx .ods</span>{{live.to.sheet}}</li>
+              <li><span class="ext">.pdf</span>{{live.to.pdf}}</li>
+              <li><span class="ext">.svg</span>{{live.to.svg}}</li>
+              <li><span class="ext">.pdf</span>{{live.to.export}}</li>
+            </ul>
+          </section>
+        </div>
+
+        <h2>{{live.builtin.h}}</h2>
+        <p class="lv-intro">{{live.builtin.p}}</p>
+        <div class="points">
+          <figure class="point">
+            <div class="plate">
+              <div class="lv-mini" role="img" aria-label="{{live.list.label}}">
+                <span class="lv-tag"><svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 0 1-8.6 3.5M3 8a5 5 0 0 1 8.6-3.5M11.5 2v2.6H9M4.5 14v-2.6H7"/></svg>@list:Characters?columns=role,status</span>
+                <table>
+                  <thead><tr><th>{{live.list.name}}</th><th>{{live.list.role}}</th><th>{{live.list.status}}</th></tr></thead>
+                  <tbody>
+                    <tr><td>Mara Voss</td><td>{{live.list.r1}}</td><td>{{live.list.alive}}</td></tr>
+                    <tr><td>Tobin Reyes</td><td>{{live.list.r2}}</td><td>{{live.list.alive}}</td></tr>
+                    <tr><td>Old Wen</td><td>{{live.list.r3}}</td><td>{{live.list.missing}}</td></tr>
+                    <tr><td>Pip</td><td>{{live.list.r4}}</td><td>{{live.list.alive}}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <figcaption><b>{{live.list.h}}</b> {{live.list.p}}</figcaption>
+          </figure>
+          <figure class="point">
+            <div class="plate">
+              <div class="lv-mini lv-count" role="img" aria-label="{{live.count.label}}">
+                <span class="lv-tag"><svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 0 1-8.6 3.5M3 8a5 5 0 0 1 8.6-3.5M11.5 2v2.6H9M4.5 14v-2.6H7"/></svg>@count:Novel?of=words&amp;goal=50000</span>
+                <p class="lv-count-title">{{live.count.title}}</p>
+                <p class="lv-count-n"><b>41,200</b> / 50,000 {{live.count.words}}</p>
+                <div class="lv-bar"><span style="width: 82.4%"></span></div>
+                <p class="lv-count-today">{{live.count.today}}</p>
+              </div>
+            </div>
+            <figcaption><b>{{live.count.h}}</b> {{live.count.p}}</figcaption>
+          </figure>
+        </div>
+        <p class="lv-more">{{live.builtin.more}}</p>
+
+        <h2>{{live.safe.h}}</h2>
+        <ul class="plain-list lv-safe">
+          <li>{{live.safe1}}</li>
+          <li>{{live.safe2}}</li>
+          <li>{{live.safe3}}</li>
+          <li>{{live.safe4}}</li>
+          <li>{{live.safe5}}</li>
+        </ul>
+
+        <div class="cta lv-end">
+          <a class="btn primary big" href="/">{{home.open}}</a>
+          <a class="btn big" href="{{base}}/download">{{home.download}}</a>
+        </div>
+      </article>

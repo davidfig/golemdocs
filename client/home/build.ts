@@ -20,7 +20,7 @@ export const SOURCE = 'en';
 export const ASSET_BASE = '/home';
 
 /** The pages, in menu order (those in MENU_PARENT come last and are not in the menu). */
-export const PAGES = ['home', 'ai', 'formats', 'pricing', 'journal', 'about', 'open-source', 'developers', 'download', 'self-host'] as const;
+export const PAGES = ['home', 'ai', 'live-blocks', 'formats', 'pricing', 'journal', 'about', 'open-source', 'developers', 'download', 'self-host'] as const;
 export type PageName = (typeof PAGES)[number];
 
 /** Pages reached from another page rather than from the menu bar, which marks that page while they are open. */

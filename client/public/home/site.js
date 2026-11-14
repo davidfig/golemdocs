@@ -226,6 +226,111 @@
     }
   })();
 
+  // The live-blocks demo: a Word document shows a spreadsheet's table; the spreadsheet is opened and changed, and back in
+  // the document the table and the total in its sentence have followed. It plays once when it comes into view; the step
+  // tabs jump to the end of a step, and Play again starts over.
+  (function () {
+    var demo = document.getElementById('liveDemo');
+    if (!demo) return;
+    var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var timers = [];
+    var $ = function (sel) { return demo.querySelector(sel); };
+    var $$ = function (sel) { return demo.querySelectorAll(sel); };
+    var trellis = document.getElementById('liveTrellis').textContent;
+    var cell = { soil: $('[data-cell="soil"]'), name: $('[data-cell="trellisName"]'), trellis: $('[data-cell="trellis"]'), total: $('[data-cell="total"]') };
+    var doc = { soil: $('[data-live="soil"]'), row: $('[data-live="trellis"]'), total: $('.lv-block [data-live="total"]'), inline: $('.lv-doc p [data-live="total"]') };
+    var fx = { ref: $('[data-live="ref"]'), text: $('[data-live="fx"]') };
+
+    function at(ms, fn) { timers.push(setTimeout(fn, ms)); }
+    function stop() { timers.forEach(clearTimeout); timers = []; }
+    function flash(el) { el.classList.remove('fresh'); void el.offsetWidth; el.classList.add('fresh'); }
+    function callouts(on) { $$('[data-callout]').forEach(function (el) { el.hidden = on.indexOf(el.dataset.callout) < 0; }); }
+    function step(n) {
+      $$('#liveSteps [data-step]').forEach(function (b) { b.setAttribute('aria-selected', String(+b.dataset.step === n)); });
+      $$('[data-cap]').forEach(function (el) { el.hidden = +el.dataset.cap !== n; });
+    }
+    function view(kind, click) {
+      $$('[data-for]').forEach(function (el) { el.hidden = el.dataset.for !== kind; });
+      $$('[data-file]').forEach(function (el) {
+        el.classList.toggle('current', el.dataset.file === kind);
+        if (click && el.dataset.file === kind) { el.classList.remove('click'); void el.offsetWidth; el.classList.add('click'); }
+      });
+    }
+    function select(td, ref, text) {
+      $$('.lv-sheet td').forEach(function (el) { el.classList.remove('on', 'typing'); });
+      if (td) td.classList.add('on');
+      fx.ref.textContent = ref;
+      fx.text.textContent = text;
+    }
+    // Types text into a cell (and the formula bar), then shows it as committed.
+    function type(td, text, from, speed, shown) {
+      for (var i = 1; i <= text.length; i++) (function (i) {
+        at(from + i * speed, function () { td.classList.add('typing'); td.textContent = text.slice(0, i); fx.text.textContent = text.slice(0, i); });
+      })(i);
+      at(from + (text.length + 1) * speed, function () { td.classList.remove('typing'); td.textContent = shown; });
+      return from + (text.length + 1) * speed;
+    }
+
+    // The three resting states: before, the spreadsheet changed, and the document after.
+    function before() {
+      view('doc');
+      step(0);
+      callouts(['doc']);
+      select(cell.soil, 'B3', '96');
+      cell.soil.textContent = '$96'; cell.name.textContent = ''; cell.trellis.textContent = ''; cell.total.textContent = '$214';
+      doc.soil.textContent = '$96'; doc.row.hidden = true; doc.total.textContent = '$214'; doc.inline.textContent = '$214';
+      $$('.fresh').forEach(function (el) { el.classList.remove('fresh'); });
+    }
+    function edited() {
+      cell.soil.textContent = '$128'; cell.name.textContent = trellis; cell.trellis.textContent = '$45'; cell.total.textContent = '$291';
+      select(cell.trellis, 'B5', '45');
+      view('sheet');
+      step(1);
+      callouts(['saved']);
+    }
+    function after(animate) {
+      edited();
+      view('doc', animate);
+      step(2);
+      callouts(['updated']);
+      doc.soil.textContent = '$128'; doc.row.hidden = false; doc.total.textContent = '$291'; doc.inline.textContent = '$291';
+      if (animate) [doc.soil, doc.row, doc.total, doc.inline].forEach(flash);
+    }
+
+    function play() {
+      stop();
+      before();
+      var t = 3800;
+      at(t, function () { view('sheet', true); step(1); callouts(['edit']); select(cell.soil, 'B3', '$96'); });
+      t = type(cell.soil, '128', t + 900, 220, '$128');
+      at(t, function () { cell.total.textContent = '$246'; flash(cell.total); });
+      t += 700;
+      at(t, function () { select(cell.name, 'A5', ''); });
+      t = type(cell.name, trellis, t + 300, 55, trellis);
+      at(t, function () { select(cell.trellis, 'B5', ''); });
+      t = type(cell.trellis, '45', t + 300, 220, '$45');
+      at(t, function () { cell.total.textContent = '$291'; flash(cell.total); });
+      at(t + 900, function () { callouts(['saved']); });
+      at(t + 3000, function () { after(true); });
+    }
+
+    $$('#liveSteps [data-step]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        stop();
+        var n = +b.dataset.step;
+        if (n === 0) before(); else if (n === 1) { before(); edited(); } else after(true);
+      });
+    });
+    document.getElementById('liveReplay').addEventListener('click', play);
+    before();
+    if (reduce) return;
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (entries, observer) {
+        if (entries[0].isIntersecting) { observer.disconnect(); play(); }
+      }, { threshold: 0.5 }).observe(demo);
+    } else play();
+  })();
+
   // Clips load and play only when they are near the screen, and stay still for visitors who ask for less motion.
   document.querySelectorAll('video[data-src]').forEach(function (video) {
     function load() {

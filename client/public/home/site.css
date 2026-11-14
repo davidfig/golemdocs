@@ -485,3 +485,72 @@ pre.code { margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--ch
   .caret::before, .term .cur { animation: none; }
   .tree [data-at].shown { animation: none; }
 }
+
+/* Live blocks: the home page's callout, and the live-blocks page's demo (a Word document showing a spreadsheet's table;
+   the spreadsheet changes and the document follows) and its smaller pictures. A live block is drawn as the app draws a
+   read-only block: a thin frame with a label naming its source. */
+.live-callout { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 30px; padding: 14px 18px; border: 1px solid var(--rule); border-left: 3px solid var(--agent); background: var(--chrome); color: var(--ink); text-decoration: none; }
+.live-callout:hover { border-color: var(--hot-border); background: color-mix(in srgb, var(--hot) 35%, var(--chrome)); }
+.live-callout .lv-text { flex: 1 1 18rem; font-size: 1.05rem; }
+.live-callout u { color: var(--brand); text-decoration: none; white-space: nowrap; }
+.lv-badge { display: inline-block; margin-right: 4px; padding: 1px 6px; border-radius: 3px; background: var(--agent); color: var(--page); font: 700 11px/1.5 var(--ui); letter-spacing: 0.04em; text-transform: uppercase; vertical-align: 2px; }
+.lv-flow { display: flex; align-items: center; gap: 8px; flex: none; font: 12.5px/1.2 var(--ui); }
+.lv-file { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px 5px 5px; border: 1px solid var(--rule); background: var(--page); }
+.lv-file .ft { width: 2.6rem; }
+.lv-arrow { width: 32px; height: 12px; fill: none; stroke: var(--agent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+.point.lead.live-demo .plate { height: 410px; }
+.live-demo .demo-tabs { margin: 0 0 10px; }
+.live-demo figcaption { min-height: 3.2em; }
+.lv-block { position: relative; margin-top: 4px; padding: 6px 6px 4px; border: 1px dashed color-mix(in srgb, var(--agent) 60%, var(--rule)); border-radius: 2px; }
+.lv-tag { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 4px; padding: 1px 6px 1px 4px; border-radius: 2px; background: var(--agent-tint); color: var(--agent); font: 600 10.5px/1.4 var(--ui); white-space: nowrap; }
+.lv-tag svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.lv-block table, .lv-mini table { width: 100%; border-collapse: collapse; font: 13px/1.3 var(--body); }
+.lv-block th, .lv-block td, .lv-mini th, .lv-mini td { padding: 3px 8px; border: 1px solid var(--rule); text-align: left; }
+.lv-block th, .lv-mini th { background: color-mix(in srgb, var(--brand) 10%, var(--page)); font-weight: 700; }
+.lv-block .n { text-align: right; font-variant-numeric: tabular-nums; }
+.lv-block .sum td { font-weight: 700; border-top: 2px solid var(--ink); }
+.lv-block .callout { right: 8px; bottom: -13px; }
+.lv-inline { padding: 0 2px; border-bottom: 1px dashed var(--agent); background: var(--agent-tint); }
+.lv-doc { max-width: 26rem; padding: 16px 22px; }
+.fresh { animation: fresh 2.4s ease-out; }
+@keyframes fresh { 0%, 40% { background: color-mix(in srgb, var(--agent) 35%, transparent); } 100% { background: transparent; } }
+.lv-inline.fresh { animation-name: fresh-inline; }
+@keyframes fresh-inline { 0%, 40% { background: color-mix(in srgb, var(--agent) 35%, transparent); } 100% { background: var(--agent-tint); } }
+.lv-sheet { position: relative; max-width: 26rem; align-self: flex-start; }
+.lv-fx { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--rule); font: 12.5px/1.3 var(--ui); }
+.lv-ref { min-width: 2.6rem; padding: 1px 4px; border: 1px solid var(--rule); text-align: center; }
+.lv-fx-i { font-style: italic; color: var(--muted); }
+.lv-sheet td { height: 23px; }
+.lv-sheet td.on { outline: 2px solid var(--brand); outline-offset: -1px; }
+.lv-sheet td.typing::after { content: ''; display: inline-block; width: 1px; height: 1em; margin-left: 1px; background: var(--ink); vertical-align: -0.15em; animation: blink 1.1s steps(1) infinite; }
+.lv-sheet .callout { right: 8px; top: 4px; }
+.ed-row.click { animation: click 0.5s ease-out; }
+@keyframes click { 0% { box-shadow: inset 0 0 0 2px var(--hot-border); } 100% { box-shadow: inset 0 0 0 0 transparent; } }
+
+.lv-md-plate { height: auto; align-content: start; }
+.lv-md-plate > .callout { position: static; justify-self: end; margin-top: 8px; }
+.lv-md { margin: 0; padding: 12px 14px; overflow: hidden; background: var(--page); border: 1px solid var(--rule); font: 12px/1.55 var(--mono); color: var(--ink); white-space: pre; font-variant-ligatures: none; }
+.lv-md .h { color: var(--brand); font-weight: 700; }
+.lv-md .c { color: var(--muted); }
+.lv-intro, .lv-more { max-width: 40rem; }
+.lv-more { margin-top: 26px; color: var(--muted); }
+.lv-mini { padding: 12px 14px; background: var(--page); border: 1px solid var(--rule); font: 13px/1.35 var(--body); }
+.lv-count p { margin: 0; }
+.lv-count-title { margin-top: 4px !important; font: 400 1.2rem/1.2 var(--display); color: var(--brand); }
+.lv-count-n { margin-top: 6px !important; font-size: 1.05rem; }
+.lv-count-n b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.lv-bar { height: 10px; margin: 8px 0 6px; border-radius: 5px; background: var(--rule); overflow: hidden; }
+.lv-bar span { display: block; height: 100%; background: var(--agent); }
+.lv-count-today { color: var(--muted); font: 12px/1.3 var(--ui); }
+.lv-safe { gap: 10px; }
+.lv-end { margin-top: 40px; }
+
+@media (max-width: 34rem) {
+  .point.lead.live-demo .plate { height: 470px; }
+  .lv-block .callout, .lv-sheet .callout { position: static; display: inline-block; margin-top: 6px; transform: none; }
+  .lv-md { font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fresh, .lv-inline.fresh, .ed-row.click, .lv-sheet td.typing::after { animation: none; }
+}

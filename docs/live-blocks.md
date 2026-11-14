@@ -9,8 +9,8 @@ totals until April 2027, `server/src/liveChecks.ts`); the public link's note in 
 sources (sections, bookmarks, tables by title) and front matter fields, with Copy as Live Link in documents; charts as
 pictures; spreadsheets as hosts (a range under a hidden defined name whose comment holds the tag, rather than custom
 properties: one place, which Excel keeps and shows in its Name Manager); references to other workbooks refreshed through
-the graph; PDF form fields as sources and hosts (the tag kept with the document's fields; not yet written into the PDF
-itself, which waits on M0). A PDF page as a picture (`#page:N`): the page drawn as a drawing scene from its own shapes,
+the graph; PDF form fields as sources and hosts (the tag kept with the document's fields, and written on the field's
+widget in the PDF itself, `/GolemLive`, so a field stays live after another app saves the file). A PDF page as a picture (`#page:N`): the page drawn as a drawing scene from its own shapes,
 pictures and font outlines (`formats/pdfPageScene.ts`), so it is an SVG with a PNG, like a chart, made in the live worker
 with no viewer. Live text boxes and pictures in Edit PDF: a live link pasted into a PDF adds one (a picture for a picture,
 chart or page source, else a text box), kept as an edit with a tag (`PdfEdit.live`); a text box can be moved but not
@@ -113,7 +113,7 @@ it read-only with a small label naming its source. Each format's writer decides 
 | Spreadsheet (`.xlsx`, `.ods`) | a range filled from the source, anchored at its top-left cell; the address and stamp in a defined name and the workbook's custom properties (M2). A source that is another workbook uses Excel's own external reference instead (§5) | values in cells |
 | Drawing (`.svg`) | a group with `data-golem-live` and `data-golem-stamp` holding the result drawn as text (a line a row) or a picture (an `<image>`); moved and scaled like any group (M3) | the drawing |
 | Plain text and the light markup formats (`.txt`, `.rst`, `.org`, ...) | the result only, with a comment marker where the format has comments; where it has none the block is lost on save, and the app says so as for any lossy conversion (`conversionIsLossy`) | the content |
-| PDF | an entry in the document's list of edits ([PDF editing](pdf-editing.md)): a form field's value, an added text box (value), an added picture. Tables come later (see *PDFs* below). The vault's `.pdf` has the edits written in, and each block's source and stamp also go into the PDF itself (`/PieceInfo`, to be confirmed in M0) | the page as edited |
+| PDF | an entry in the document's list of edits ([PDF editing](pdf-editing.md)): a form field's value, an added text box (value), an added picture. Tables come later (see *PDFs* below). The vault's `.pdf` has the edits written in, and a field's source and stamp also go on its widget (`/GolemLive`), which other apps keep (M0) | the page as edited |
 
 The neutral result is turned into each host's content by the host, not the producer: a table becomes a Word table, a
 Markdown table, cells in a sheet; a value becomes a run or one cell; a picture becomes an inline drawing.
@@ -139,8 +139,13 @@ source changes, the edit's content is replaced, the pages are applied again, and
 - **Tables** have no element in a PDF and cannot push the page down, so a table would be drawn as text and lines in a box
   of fixed size, cut off or shrunk when it grows. Later; until then a table can be shown as a picture of it.
 - **Changed on disk.** A `.pdf` changed outside the app becomes a new original and the account's edits are dropped (as for
-  any edit today), which would drop its blocks. So each block's source and stamp are also written into the PDF (private
-  application data, `/PieceInfo`, or a marked-content tag), and a changed file's blocks are found and kept. M0 checks this.
+  any edit today), which would drop its blocks. M0 found that Preview keeps extra keys only on annotations (not
+  `/PieceInfo`, marked content or the document info), so a field's source and stamp are written on its widget
+  (`/GolemLive`, `pdf/src/write/forms.ts`). A PDF kept as the file alone reads its fields' tags from it
+  (`live/pdfFileTags.ts`, looked for only when the bytes name `/GolemLive`): the vault graph still links it, and the next
+  update keeps its fields with the document again. A live text box or picture is drawn into the page, so once another app
+  has saved the file it is ordinary content there: it keeps what it last showed and stops updating (nothing is lost).
+  Keeping those live would mean drawing them as annotations, which nothing asks for yet.
 
 **PDFs as sources:** a page as a picture (`Contract.pdf#page:3`), a form field's value (`Return.pdf#field:Total`), and
 the text the reader extracts.
@@ -530,6 +535,9 @@ Blocks M0 Tests/`, with a checklist for the checks done by hand (Word, Excel, VS
   source and stamp go on annotations: a field's on its widget, a text box's or picture's on a hidden annotation over it.
   It also writes each field twice (the page's widget and an identical copy in the form's field list), which our reader
   did not follow, so a form saved in Preview showed no fields. Fixed in `pdf/src/write/forms.ts` (`Entry.stray`).
+- **Word** (16.115) and **Excel**, each file edited and saved by Word or Excel: both survive. Word keeps both tags with
+  their stamps, the control around the whole table and the lock. Excel keeps the hidden defined name with its comment and
+  range, and a source's names. Not seen on screen: how Word shows the controls, and Excel's Name Manager.
 - **LibreOffice** (26.8, each file opened and written again through its own filters): ODT keeps both blocks, tags and
   stamps. A `.docx` keeps both tags, but Writer has no content control around a table: it moves the table's tag into the
   first cell, as a plain-text control around the cell's text, which would have made the next update put the whole table
@@ -540,8 +548,8 @@ Blocks M0 Tests/`, with a checklist for the checks done by hand (Word, Excel, VS
   `e2e/live/scripts.spec.ts` passes, including the escapes. The spec now also tries the shells' bridges
   (`__TAURI_INTERNALS__`, `webkit.messageHandlers`, `ipc://`), blocked in the browser; it has not yet been run inside a
   real shell, which needs a desktop build pointed at a local dev server.
-- **Still to do:** Word, Excel and VS Code's preview (by hand, with the checklist), a place for a workbook's tag that Calc
-  keeps, Obsidian, Preview itself (not only PDFKit; Preview stands in for Acrobat, which is not checked), the real desktop
+- **Still to do:** a look at VS Code's preview and Obsidian (which need someone at the screen), a place for a workbook's
+  tag that Calc keeps (not urgent, since Excel keeps it and nothing is lost), Preview itself (not only PDFKit; Preview stands in for Acrobat, which is not checked), the real desktop
   and iOS shells, and loading a large workbook on a phone.
 
 ## Tests

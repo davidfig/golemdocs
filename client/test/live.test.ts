@@ -757,6 +757,27 @@ test('a PDF’s form fields are filled from live sources, and the vault’s file
   assert.deepEqual(readFields(PdfDocument.load(file)).map((f) => f.value), ['3140', 'Yes']);
 });
 
+test('a PDF’s live field keeps its tag in the file, so it stays live once another app has saved the PDF', async () => {
+  const original = await returnPdf('');
+  const fields = readFields(PdfDocument.load(original)).map((f) => (f.name === 'Total' ? { ...f, live: liveTagText({ source: 'Budget.xlsx#Total', stamp: '' }) } : f));
+  const filled = await updateStoredLive(await storedPdf(original, fields), 'Return.pdf', async () => ({ name: 'Budget.xlsx', bytes: await budget() }));
+  const { readWdoc } = await import('../src/formats/wdoc.ts');
+  const { annotatedPdf } = await import('../src/formats/pdfFile.ts');
+  const wdoc = await readWdoc(filled.bytes!);
+  const file = await annotatedPdf(wdoc.original!, wdoc.extensions, async () => { throw new Error('no edits'); });
+  assert.match(readFields(PdfDocument.load(file))[0].live!, /^live:Budget\.xlsx#Total stamp=[0-9a-f]{8}$/);
+  // Another app saved it (or the vault's file was read back): the account keeps the file itself, with nothing beside it.
+  const { fromVaultFile } = await import('../src/desktop/vaultCodec.ts');
+  const plain = await fromVaultFile(file, 'Return.pdf');
+  assert.equal((await readWdoc(plain)).extensions.pdf, undefined);
+  assert.deepEqual((await segmentsFromBytes(plain))?.[0].live, ['Budget.xlsx'], 'the vault graph still links it to the workbook');
+  const updated = await updateStoredLive(plain, 'Return.pdf', async () => ({ name: 'Budget.xlsx', bytes: await budget(2500) }));
+  assert.equal(updated.report.updated, 1);
+  const after = (await readWdoc(updated.bytes!)).extensions.pdf!;
+  assert.deepEqual(after.fields!.map((f) => [f.name, f.value]), [['Total', '3140'], ['Paid', '']]);
+  assert.deepEqual(after.annotations, [], 'the file’s own annotations are kept, and it has none');
+});
+
 import { builtinResult } from '../src/live/builtins.ts';
 import { builtinAddress, parseBuiltin } from '../src/live/builtinAddress.ts';
 import type { SourceLookup } from '../src/live/sources.ts';

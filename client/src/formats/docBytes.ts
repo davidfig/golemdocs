@@ -3,6 +3,7 @@
 
 import { LIVE_PREFIX, WordDocument, ZipArchive, isPlainText, liveTitle, paragraphSegments, textSegments, type Segment } from '@golemdocs/docx';
 import { isWdoc, readWdoc } from './wdoc.ts';
+import { fileLiveFields } from '../live/pdfFileTags.ts';
 
 /** Whether stored bytes are a workbook (a ZIP with xl/workbook.xml): kept as the .xlsx itself, edited in the spreadsheet editor. */
 export function isWorkbook(bytes: ArrayBuffer | Uint8Array): boolean {
@@ -48,12 +49,14 @@ export async function segmentsFromBytes(bytes: ArrayBuffer): Promise<Segment[] |
   }
   let live: string[] = [];
   if (isWdoc(bytes)) {
-    const { delimited, extensions } = await readWdoc(new Uint8Array(bytes));
+    const { delimited, extensions, original } = await readWdoc(new Uint8Array(bytes));
     // A CSV or TSV file kept with its layout: the file's lines, as when it is kept alone.
     if (delimited) return textSegments(delimited);
     // A PDF's form fields, text boxes and pictures and a drawing's groups that show live blocks: their sources, on a line of their own (the vault
     // graph, docs/live-blocks.md §5).
-    live = [...new Set([...[...(extensions.pdf?.fields ?? []), ...(extensions.pdf?.edits ?? [])].flatMap((f) => ('live' in f ? (liveTitle(f.live) ?? []) : [])), ...[liveTitle(extensions.pdf?.export) ?? []].flat(), ...drawnLive(extensions.svg?.source ?? '')])];
+    // A PDF with no fields of its own kept (another app saved it): the tags on its file's fields.
+    const fields = extensions.pdf?.fields ?? (original && extensions.pdf?.fields === undefined ? (await fileLiveFields(original))?.fields : undefined);
+    live = [...new Set([...[...(fields ?? []), ...(extensions.pdf?.edits ?? [])].flatMap((f) => ('live' in f ? (liveTitle(f.live) ?? []) : [])), ...[liveTitle(extensions.pdf?.export) ?? []].flat(), ...drawnLive(extensions.svg?.source ?? '')])];
   }
   const doc = await wordDocumentFromBytes(bytes);
   const segments = doc ? paragraphSegments(doc) : null;

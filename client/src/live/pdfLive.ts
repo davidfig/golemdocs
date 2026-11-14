@@ -7,7 +7,8 @@
 //
 // As a host: a form field can show a live block's result. Its tag (`FormField.live`) is kept with the document's fields,
 // so the update rewrites only the stored document's list of fields; the vault's `.pdf` is written from it with the value
-// filled in, as any filled-in field is. A value, or a table's cells as text, goes into a text field or a drop-down; a check
+// filled in, as any filled-in field is, and the tag on the field's widget (`/GolemLive`), where other apps keep it. A PDF
+// another app saved, or read back from the vault, has no list of its own: its fields' tags are read from the file. A value, or a table's cells as text, goes into a text field or a drop-down; a check
 // box is ticked when the value says yes. A picture or a part of a text document has no value to give: it says so.
 
 import type { FormField, PdfEdit } from '@golemdocs/pdf';
@@ -15,6 +16,7 @@ import { sniffImage } from '../formats/images.ts';
 import { WDOC_VERSION, isWdoc, readWdoc, writeWdoc } from '../formats/wdoc.ts';
 import type { Wdoc } from '../formats/wdoc.ts';
 import { liveTagText, parseLiveTag } from './liveMarks.ts';
+import { fileLiveFields } from './pdfFileTags.ts';
 import type { LiveResult } from './result.ts';
 import { resultOf, stampOf } from './sources.ts';
 import type { SourceLookup } from './sources.ts';
@@ -197,8 +199,16 @@ export const pdfLiveSources = (fields: readonly FormField[] | undefined, edits: 
 export async function updateStoredPdf(bytes: Uint8Array, lookup: SourceLookup, options: { force?: boolean } = {}): Promise<{ bytes: Uint8Array | null; report: UpdateReport }> {
   const wdoc = await readWdoc(bytes);
   if (wdoc.extensions.pdf?.export) return updateExport(wdoc, wdoc.extensions.pdf.export, lookup, options);
-  const fields = wdoc.extensions.pdf?.fields;
+  let fields = wdoc.extensions.pdf?.fields;
   const edits = wdoc.extensions.pdf?.edits;
+  // Fields the file itself says are live: once filled in, they are kept with the document, as fields filled in the app are.
+  if (!fields && wdoc.original && isPdf(wdoc.original)) {
+    const found = await fileLiveFields(wdoc.original);
+    if (found) {
+      fields = found.fields;
+      wdoc.extensions = { ...wdoc.extensions, pdf: { annotations: found.annotations, ...wdoc.extensions.pdf, fields } };
+    }
+  }
   const report: UpdateReport = { updated: 0, problems: [] };
   for (const part of [fields?.some((f) => f.live) && (await updateFieldsLive(fields!, lookup, options)), edits?.some((e) => 'live' in e && e.live) && (await updateEditsLive(edits!, lookup, options))]) {
     if (!part) continue;

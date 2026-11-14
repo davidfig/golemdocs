@@ -43,11 +43,14 @@ export interface FormField {
   /** Text size in points; 0 or missing: fit the box. */
   fontSize?: number;
   /**
-   * The field shows a live block's result (Golem Docs, docs/live-blocks.md): its tag, `live:<source> stamp=<hash>`. Kept
-   * with the document's fields; writing the file writes only the value.
+   * The field shows a live block's result (Golem Docs, docs/live-blocks.md): its tag, `live:<source> stamp=<hash>`. Written
+   * on the field's widget as `/GolemLive`, where other apps keep it (Preview does: docs/live-blocks.md, M0).
    */
   live?: string;
 }
+
+/** The widget key that holds a field's live tag (see FormField.live). */
+const LIVE_KEY = 'GolemLive';
 
 // Field flags (§12.7.4, Table 226, 228, 230).
 const READ_ONLY = 1 << 0;
@@ -174,6 +177,8 @@ function entries(doc: PdfDocument): Map<string, Entry> {
         rect: [Math.min(nums[0], nums[2]), Math.min(nums[1], nums[3]), Math.max(nums[0], nums[2]), Math.max(nums[1], nums[3])],
         value: '',
       };
+      const live = text(doc, widget.get(LIVE_KEY));
+      if (live) field.live = live;
       const da = text(doc, widget.get('DA')) ?? here.da;
       const size = da ? /(-?\d*\.?\d+)\s+Tf/.exec(da) : null;
       if (size) field.fontSize = Math.max(0, Number(size[1]));
@@ -313,6 +318,7 @@ export function applyFields(doc: PdfDocument, fields: readonly FormField[]): voi
     if (options) e.terminal.set('Opt', optArray(want));
     const moved = !sameBox(want.rect, was.rect);
     if (moved) e.widget.set('Rect', [...want.rect]);
+    if (want.live !== was.live) e.widget.set(LIVE_KEY, want.live ? PdfString.text(want.live) : undefined);
     if (want.kind === 'checkbox' || want.kind === 'radio') {
       if (valueChanged) e.widget.set('AS', N(want.onState && want.value === want.onState ? want.onState : 'Off'));
     } else if (valueChanged || moved || shape || options || want.fontSize !== was.fontSize) {
@@ -333,6 +339,7 @@ export function applyFields(doc: PdfDocument, fields: readonly FormField[]): voi
       T: PdfString.text(f.name),
       Rect: [...f.rect],
       MK: new PdfDict({ BC: [0.45, 0.45, 0.45] }),
+      ...(f.live && { [LIVE_KEY]: PdfString.text(f.live) }),
     });
     const flags = (f.readOnly ? READ_ONLY : 0) | (f.kind === 'text' && f.multiline ? MULTILINE : 0) | (f.kind === 'radio' ? RADIO : 0) | (f.kind === 'choice' && f.combo ? COMBO : 0);
     if (flags) dict.set('Ff', flags);

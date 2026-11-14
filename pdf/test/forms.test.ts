@@ -148,3 +148,15 @@ test('a form saved by Preview, whose field list names copies of the widgets on i
   const acro = back.dict(back.catalog.get('AcroForm'))!;
   assert.equal(String((back.array(acro.get('Fields'))![0] as { num: number }).num), String((back.array(back.pages[0].dict.get('Annots'))![0] as { num: number }).num));
 });
+
+test('a field’s live tag is written on its widget and read back, and goes when the field stops being live', async () => {
+  const doc = PdfDocument.create();
+  doc.addPage([600, 800]);
+  const tag = 'live:Budget.xlsx#Total stamp=0a0b0c0d';
+  applyFields(doc, [{ id: 'a', name: 'Total', kind: 'text', page: 0, rect: [100, 700, 300, 720], value: '2740', live: tag }]);
+  const loaded = PdfDocument.load(await doc.save());
+  const [field] = readFields(loaded);
+  assert.equal(field.live, tag);
+  applyFields(loaded, [{ ...field, live: undefined }]);
+  assert.equal(readFields(PdfDocument.load(await loaded.save()))[0].live, undefined);
+});

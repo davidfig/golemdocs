@@ -23,6 +23,10 @@ use tauri::{AppHandle, Manager, State};
 pub const STATE_DIR: &str = ".golemdocs";
 /// The file (in the app's config folder) that remembers which folder is the vault.
 const REMEMBERED: &str = "vault.json";
+/// The vault a new desktop install starts with, in the home folder rather than Documents: macOS asks no permission for
+/// it, and on Windows Documents is often synced by OneDrive (files turn into online-only placeholders) or guarded by
+/// Controlled Folder Access.
+const DEFAULT_FOLDER: &str = "GolemDocs";
 
 #[derive(Default)]
 pub struct Vault {
@@ -269,6 +273,24 @@ async fn choose(app: AppHandle, vault: State<'_, Vault>) -> Result<Option<String
     use tauri_plugin_dialog::DialogExt;
     let Some(picked) = app.dialog().file().blocking_pick_folder() else { return Ok(None) };
     let root = picked.into_path().map_err(|e| e.to_string())?;
+    remember(&app, Some(&root))?;
+    let shown = root.to_string_lossy().into_owned();
+    vault.set(Some(root));
+    Ok(Some(shown))
+}
+
+/// The folder a new desktop install uses before the person chooses one: `GolemDocs` in the home folder (made if
+/// missing). Null where the folder is fixed (iCloud Drive on a phone). A folder already in use is kept and returned as it is.
+#[tauri::command]
+pub fn vault_use_default(app: AppHandle, vault: State<'_, Vault>) -> Result<Option<String>, String> {
+    if let Ok(root) = vault.root() {
+        return Ok(Some(root.to_string_lossy().into_owned()));
+    }
+    if vault.fixed() {
+        return Ok(None);
+    }
+    let root = app.path().home_dir().map_err(|e| e.to_string())?.join(DEFAULT_FOLDER);
+    fs::create_dir_all(&root).map_err(|e| e.to_string())?;
     remember(&app, Some(&root))?;
     let shown = root.to_string_lossy().into_owned();
     vault.set(Some(root));

@@ -46,9 +46,9 @@ Another person and another device of the same account are the same thing: a seco
 
 `docs/README.md` indexes the docs, and `docs/architecture.md` with `docs/architecture/*.md` explains how each area works. When a change alters how an area works (a key file added, moved or removed, a changed data flow or protocol, a new invariant or rule), update that area's doc in the same change; a rule added to this file belongs in the matching doc too. Update `docs/actions-status.md` when you hook up an action. Skip it for changes that leave the design as it was (a bug fix, new copy, a new menu item).
 
-## Marketing clip
+## Marketing clips
 
-The home page's "It opens everything" picture plays `client/public/home/war-and-peace.webm`, a recording of the real app. When the app's look changes in a way the clip shows (toolbars, menus, the status bar, Page Grid), re-record it with `pnpm record:home` (`scripts/marketing/record-war-and-peace.ts`). It needs the user's dev server on :5173 and takes about a minute; see the script's header for options.
+Two pictures on the home page are recordings of the real app, each in the app's light theme and, for the site's dark theme, in its dark theme with dark pages (`-dark.webm`). The "It opens everything" picture plays `client/public/home/war-and-peace.webm` (War and Peace in Page Grid), re-recorded with `pnpm record:home` (`scripts/marketing/record-war-and-peace.ts`). The spreadsheet section plays `client/public/home/workbook.webm` (a workbook of a million orders zooming out to its whole width and back), re-recorded with `pnpm record:workbook` (`scripts/marketing/record-workbook.ts`); it opens a workbook that `scripts/marketing/make-workbook.ts` writes to `.cache/marketing/orders.xlsx` the first time (about 80 MB, never committed). When the app's look changes in a way the clips show (toolbars, menus, the status bar, Page Grid, the spreadsheet view, the dark theme), re-record them. Each script records both themes, needs the user's dev server on :5173 (or `--url` to a worktree's own) and takes a minute or two; see the scripts' headers for options, and `scripts/marketing/clip.ts` for what they share.
 
 ## Settings that follow the account
 

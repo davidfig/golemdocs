@@ -114,7 +114,7 @@ Hit-testing splits across the thread boundary. The main thread owns only geometr
 - Adding a font or charset changes committed binaries under `client/public/fonts/`; run `pnpm fonts` and check the manifest. The `.ttf` copies exist for PDF export. Emoji pages are made separately (`pnpm fonts:emoji`).
 - Every renderer that draws `GlyphList`s must handle a color face (`FaceMetrics.color`): draw it through a `GpuFace` (which knows from `FaceDescriptor.color`), or as a picture, never as a distance field.
 - Dark Pages is a shader-side colour mapping (`DARK_PAGES_GLSL`), not a different layout; thumbnails pass `darkPages` explicitly.
-- After changing the look the marketing clip shows, re-record it (see AGENTS.md, `pnpm record:home`).
+- After changing the look the marketing clips show, re-record them (see AGENTS.md, `pnpm record:home` and `pnpm record:workbook`).
 
 ## Related docs
 

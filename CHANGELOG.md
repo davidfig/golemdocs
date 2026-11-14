@@ -8,6 +8,8 @@
 
 ### Changed
 
+- The website’s home page now says Golem Docs opens Excel files, and plays a recording of the app zooming out over a workbook of a million rows and back; the Formats page lists .xlsx.
+- In dark mode, the website’s home page plays its workbook and War and Peace clips in the app’s dark theme too, instead of bright white pages.
 - A new install of the desktop app keeps your documents in a GolemDocs folder in your home folder from the start, on Mac, Windows and Linux. File › Vault Folder can change it.
 
 ### Fixed

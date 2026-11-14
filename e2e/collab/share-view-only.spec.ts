@@ -50,10 +50,10 @@ test('the owner shares a document with "Can view", and the other person opens it
   await owner.app.menu('File', 'Share');
   const dialog = owner.page.locator('dialog.wm-share');
   await dialog.getByLabel('Email address').fill(guest.email);
-  await dialog.locator('form').getByRole('button', { name: 'Can view' }).click();
+  await dialog.locator('form').getByRole('radio', { name: 'Can view' }).click();
   await dialog.getByRole('button', { name: 'Share', exact: true }).click();
   const row = dialog.getByRole('listitem').filter({ hasText: guest.email });
-  await expect(row.getByRole('button', { name: 'Can view' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(row.getByRole('radio', { name: 'Can view' })).toHaveAttribute('aria-checked', 'true');
   const shares = (await (await owner.page.request.get(`/api/documents/${doc.id}/shares`)).json()) as { email: string; role: string }[];
   expect(shares.map((s) => [s.email, s.role])).toEqual([[guest.email, 'viewer']]);
 

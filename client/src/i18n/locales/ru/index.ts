@@ -1,6 +1,8 @@
 // Russian. One entry module so the whole language builds as a single chunk.
 
 import type { Catalog } from '../../index.ts';
+import { a11y } from './a11y.ts';
+import { a11ySheet } from './a11ySheet.ts';
 import { app } from './app.ts';
 import { chrome } from './chrome.ts';
 import { columns } from './columns.ts';
@@ -25,4 +27,4 @@ import { pasteSpecial } from './pasteSpecial.ts';
 import { properties } from './properties.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Catalog = { ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };
+export const messages: Catalog = { ...a11y, ...a11ySheet, ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };

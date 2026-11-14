@@ -4,6 +4,7 @@
 import { t } from '../i18n/index.ts';
 import { h } from './dom.ts';
 import { choiceButton } from './dropdown.ts';
+import { pickOption } from './listBox.ts';
 import { dialogTitleBar } from './popup.ts';
 import { SEPARATOR, cloneLayout, toolbarTitle, type ToolbarLayout } from './toolbarLayout.ts';
 
@@ -119,16 +120,17 @@ export function showCustomize(options: CustomizeOptions): void {
   };
 
   // --- Rendering ---
-  const row = (id: string, text: string) => h('div', { class: 'wm-crow', title: text, attrs: { role: 'option' } }, id === SEPARATOR ? h('span', { class: 'wm-crow-sep' }) : options.icon(id), h('span', { text }));
+  const row = (id: string, text: string) => h('div', { class: 'wm-crow', title: text, attrs: { role: 'option', 'aria-selected': 'false' } }, id === SEPARATOR ? h('span', { class: 'wm-crow-sep' }) : options.icon(id), h('span', { text }));
 
   const renderCatalog = () => {
     catalogList.replaceChildren();
     const onToolbar = new Set(items());
     let lastCategory = '';
+    let picked: HTMLElement | null = null;
     for (const item of options.catalog) {
       if (category !== ALL && item.category !== category) continue;
       if (category === ALL && item.category !== lastCategory) {
-        catalogList.append(h('div', { class: 'wm-cheader', text: item.category }));
+        catalogList.append(h('div', { class: 'wm-cheader', text: item.category, attrs: { role: 'presentation' } }));
         lastCategory = item.category;
       }
       const el = row(item.id, item.label);
@@ -136,8 +138,13 @@ export function showCustomize(options: CustomizeOptions): void {
       if (used) {
         el.classList.add('used');
         el.title = t('menus.customize.alreadyOn', { toolbar: toolbarTitle(layout[current].name) });
+        // Said too, not only greyed: it can't be added again.
+        el.setAttribute('aria-description', el.title);
       }
-      if (item.id === catalogSelection) el.classList.add('selected');
+      if (item.id === catalogSelection) {
+        el.classList.add('selected');
+        picked = el;
+      }
       el.draggable = !used;
       el.addEventListener('click', () => {
         catalogSelection = item.id;
@@ -150,6 +157,8 @@ export function showCustomize(options: CustomizeOptions): void {
       });
       catalogList.append(el);
     }
+    // The list keeps the focus; the picked row is read as the arrows move (aria-activedescendant).
+    pickOption(catalogList, picked);
   };
 
   const renderToolbar = () => {
@@ -189,6 +198,7 @@ export function showCustomize(options: CustomizeOptions): void {
       });
       toolbarList.append(el);
     });
+    pickOption(toolbarList, toolbarList.querySelector<HTMLElement>('.selected'));
     toolbarList.querySelector('.selected')?.scrollIntoView({ block: 'nearest' });
   };
 

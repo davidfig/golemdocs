@@ -7,7 +7,7 @@
 import type { CellIcon } from './protocol.ts';
 import { GlyphList, RectList, isInvisible, packColor } from '@golemdocs/layout';
 import { CSS_PX_PER_POINT, Camera } from '../view/camera.ts';
-import { DARK_PAGES_GLSL, createProgram, uniforms } from '../webgl/program.ts';
+import { DARK_PAGES_GLSL, createProgram, setForcedUniforms, uniforms, type ForcedColors } from '../webgl/program.ts';
 import { SYNTHETIC_EMBOLDEN, SYNTHETIC_SKEW } from '../webgl/gpuPage.ts';
 import { RectBatch, RectBatchRenderer } from '../webgl/shapes/rectBatch.ts';
 import { TextBatch } from '../webgl/text/textBatch.ts';
@@ -170,6 +170,8 @@ export interface SheetFrame {
   /** A chart being resized: where it will be (sheet points), drawn dashed. */
   chartGhost: { x0: number; y0: number; x1: number; y1: number } | null;
   darkPages: boolean;
+  /** The system's high contrast colours (forced-colors), or null: the cells, gridlines and selection are drawn in them. */
+  forced?: ForcedColors | null;
 }
 
 /** A chart's GPU batches, kept while its scene is the same. */
@@ -208,6 +210,7 @@ class OverviewRenderer {
   private readonly program: WebGLProgram;
   private readonly u: Record<'u_origin' | 'u_size' | 'u_viewport' | 'u_alpha' | 'u_darkPages' | 'u_tex', WebGLUniformLocation>;
   darkPages = false;
+  forced: ForcedColors | null = null;
 
   constructor(private readonly gl: WebGL2RenderingContext) {
     this.program = createProgram(
@@ -243,6 +246,7 @@ class OverviewRenderer {
     gl.uniform2f(this.u.u_viewport, camera.width, camera.height);
     gl.uniform1f(this.u.u_alpha, alpha);
     gl.uniform1f(this.u.u_darkPages, this.darkPages ? 1 : 0);
+    setForcedUniforms(gl, this.program, this.forced);
     gl.uniform1i(this.u.u_tex, 0);
     gl.activeTexture(gl.TEXTURE0);
     for (const q of quads) {
@@ -285,6 +289,8 @@ export class SheetRenderer {
   headerWidth = 0;
   /** The last frame's top inset (CSS pixels): regions are relative to it. */
   private top = 0;
+  /** The system's high contrast colours for this frame (null: the sheet's own). */
+  private forced: ForcedColors | null = null;
 
   constructor(
     private readonly gl: WebGL2RenderingContext,
@@ -415,6 +421,8 @@ export class SheetRenderer {
     // Charts may overlap: each is drawn whole (its shapes, then its text) before the next, over it.
     this.triangles.darkPages = false;
     this.text.darkPages = false;
+    // Charts keep their own colours in forced colours too (their text over their own fills).
+    this.text.forced = null;
     for (const scene of scenes) {
       if (scene.x > right || scene.y > bottom || scene.x + scene.width < left || scene.y + scene.height < top) continue;
       let built = this.charts.get(scene.id);
@@ -428,6 +436,7 @@ export class SheetRenderer {
       this.text.render(view, sortByFace(built.text));
     }
     this.text.darkPages = dark;
+    this.text.forced = this.forced;
   }
 
   private buildChart(scene: ChartScene): BuiltChart {
@@ -497,10 +506,13 @@ export class SheetRenderer {
     const scale = camera.zoom * CSS_PX_PER_POINT;
     const darkDesk = frame.darkPages;
     this.text.darkPages = this.rects.darkPages = this.overview.darkPages = frame.darkPages;
+    // Windows' contrast themes: the shaders map light colours to the system's page colour and the rest to its text colour.
+    this.forced = frame.forced ?? null;
+    this.text.forced = this.rects.forced = this.overview.forced = this.forced;
 
     gl.disable(gl.SCISSOR_TEST);
     gl.viewport(0, 0, camera.width, camera.height);
-    const desk = darkDesk ? 0x1e1f22 : 0xe8e8e8;
+    const desk = this.forced ? this.forced.page : darkDesk ? 0x1e1f22 : 0xe8e8e8;
     gl.clearColor(((desk >> 16) & 255) / 255, ((desk >> 8) & 255) / 255, (desk & 255) / 255, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
@@ -722,7 +734,8 @@ export class SheetRenderer {
 
   /** Lines between the cells in view, one device pixel wide whatever the zoom. */
   private gridlines(list: RectList, g: SheetGeometry, r0: number, r1: number, c0: number, c1: number, px: number, alpha: number): void {
-    const color = packColor(COLOR.grid, alpha);
+    // In forced colours the light grey would become the page colour and vanish: a darker grey becomes the text colour.
+    const color = packColor(this.forced ? 0x808080 : COLOR.grid, alpha);
     const top = g.y(r0);
     const bottom = g.y(r1 + 1);
     const left = g.x(c0);

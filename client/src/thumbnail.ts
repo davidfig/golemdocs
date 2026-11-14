@@ -6,6 +6,7 @@
 import { Camera } from './view/camera.ts';
 import type { GpuPage } from './webgl/gpuPage.ts';
 import type { PageRenderer } from './webgl/pageRenderer.ts';
+import type { ForcedColors } from './webgl/program.ts';
 
 /** Thumbnails are at most this many pixels wide and tall (about 2x their size on the dashboard). */
 export const THUMB_WIDTH = 320;
@@ -36,10 +37,11 @@ export function toTopDownOpaque(pixels: Uint8Array, width: number, height: numbe
 
 /**
  * Draws a page into an offscreen framebuffer at a pixel size and reads it back, top row first and
- * opaque (dark with light letters if `darkPages`, as the pages sidebar shows under Dark Pages). Null if the framebuffer can't be made. Leaves the GL state the editor's frame loop relies on
+ * opaque (dark with light letters if `darkPages`, as the pages sidebar shows under Dark Pages; in the system's contrast colors if
+ * `forced`, which only what is shown on this screen asks for: a saved picture of a page never has them). Null if the framebuffer can't be made. Leaves the GL state the editor's frame loop relies on
  * as found.
  */
-export function readPage(gl: WebGL2RenderingContext, renderer: PageRenderer, page: GpuPage, width: number, height: number, darkPages = false): Uint8ClampedArray<ArrayBuffer> | null {
+export function readPage(gl: WebGL2RenderingContext, renderer: PageRenderer, page: GpuPage, width: number, height: number, darkPages = false, forced: ForcedColors | null = null): Uint8ClampedArray<ArrayBuffer> | null {
   const camera = new Camera();
   camera.width = width;
   camera.height = height;
@@ -51,6 +53,8 @@ export function readPage(gl: WebGL2RenderingContext, renderer: PageRenderer, pag
   const framebuffer = gl.createFramebuffer();
   const pixels = new Uint8Array(width * height * 4);
   let ok = false;
+  const screenForced = renderer.forced;
+  renderer.forced = forced;
   try {
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -64,6 +68,7 @@ export function readPage(gl: WebGL2RenderingContext, renderer: PageRenderer, pag
       ok = true;
     }
   } finally {
+    renderer.forced = screenForced;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindTexture(gl.TEXTURE_2D, previousTexture);
     gl.deleteFramebuffer(framebuffer);

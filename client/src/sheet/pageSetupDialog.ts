@@ -5,7 +5,7 @@
 
 import { getLocale, t } from '../i18n/index.ts';
 import type { MessageKey } from '../i18n/index.ts';
-import { h, segmented } from '../ui/dom.ts';
+import { h, segmented, tabList } from '../ui/dom.ts';
 import { choiceButton } from '../ui/dropdown.ts';
 import { button, field, message, modal } from './dialogParts.ts';
 import { columnName } from './model/column.ts';
@@ -171,6 +171,7 @@ export function askSheetPageSetup(current: SheetPageChoice): Promise<SheetPageCh
       panes.push([b, pane]);
     });
     select(0);
+    tabList(tabs, panes.map(([, pane]) => pane));
 
     const problem = message();
     const ok = button(t('pageSetup.ok'), true);

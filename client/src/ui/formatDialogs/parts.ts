@@ -3,7 +3,8 @@
 
 import { getLocale, t } from '../../i18n/index.ts';
 import type { FontChoice } from '../actions.ts';
-import { h } from '../dom.ts';
+import { colorName } from '../colorName.ts';
+import { h, roving, tabList, uniqueId } from '../dom.ts';
 import { choiceButton } from '../dropdown.ts';
 import { closePopup, dialogTitleBar, openPopup, popupOpenFor } from '../popup.ts';
 import { paletteContents, PALETTE } from '../toolbar.ts';
@@ -51,7 +52,8 @@ export interface ColorField {
 export function colorField(label: string, noneLabel: string, value: string | null | undefined, onPick?: (color: string | null) => void): ColorField {
   const chip = h('span', { class: 'wm-fd-chip' });
   const name = h('span', { class: 'wm-fd-chip-name' });
-  const button = h('button', { class: 'wm-dropdown wm-fd-color', title: label, attrs: { type: 'button', 'aria-label': label.replace(/[:：]$/, ''), 'aria-haspopup': 'dialog' } }, chip, name, h('span', { class: 'wm-dropdown-caret' }));
+  const spoken = h('span', { attrs: { id: uniqueId('wm-color'), hidden: '' } });
+  const button = h('button', { class: 'wm-dropdown wm-fd-color', title: label, attrs: { type: 'button', 'aria-label': label.replace(/[:：]$/, ''), 'aria-describedby': spoken.id, 'aria-haspopup': 'dialog' } }, chip, name, h('span', { class: 'wm-dropdown-caret' }), spoken);
   const field: ColorField = {
     el: button,
     value: value ?? null,
@@ -60,6 +62,8 @@ export function colorField(label: string, noneLabel: string, value: string | nul
       chip.style.background = color ?? 'transparent';
       chip.classList.toggle('wm-fd-chip-none', !color);
       name.textContent = color ?? noneLabel;
+      // Described by the colour's name ("Dark red"), as the palette's swatches are, rather than by its code.
+      spoken.textContent = color ? colorName(color) : noneLabel;
     },
   };
   field.set(value ?? null);
@@ -103,7 +107,7 @@ export function numberInput(label: string, value: string, step = '1', min?: stri
 /** A label, its control, and what goes after it (a unit), on one line. */
 export const field = (label: string, control: HTMLElement, after?: string): HTMLElement => h('label', { class: 'wm-page-field' }, h('span', { text: label }), control, after === undefined ? null : h('span', { class: 'wm-page-unit', text: after }));
 
-/** Tabs over panes; returns the tab strip. */
+/** Tabs over panes; returns the tab strip (a tab list: Left and Right go from tab to tab). */
 export function tabStrip(panes: readonly (readonly [string, HTMLElement])[]): HTMLElement {
   const strip = h('div', { class: 'wm-find-tabs', attrs: { role: 'tablist' } });
   const buttons = panes.map(([label], i) => {
@@ -117,7 +121,18 @@ export function tabStrip(panes: readonly (readonly [string, HTMLElement])[]): HT
     panes.forEach(([, pane], k) => (pane.hidden = k !== i));
   };
   show(0);
+  tabList(strip, panes.map(([, pane]) => pane));
   return strip;
+}
+
+/**
+ * Makes `group` (holding `role="radio"` buttons, such as a gallery of tiles) a radio group: one Tab stop on the chosen
+ * one, and every arrow key, Home and End to choose another, since a gallery wraps onto several rows.
+ */
+export function gallery(group: HTMLElement): HTMLElement {
+  group.setAttribute('role', 'radiogroup');
+  roving(group, '[role="radio"]', 'aria-checked', true);
+  return group;
 }
 
 export interface FormSpec<T> {

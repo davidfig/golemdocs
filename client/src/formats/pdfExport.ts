@@ -11,13 +11,19 @@
 // anything else becomes '?' (or a close ASCII equivalent, see ASCII_FALLBACKS). That includes all
 // CJK text: embedding those fonts would mean shipping multi-MB files, so each CJK character
 // exports as a visible '?' in its laid-out position and a warning is logged once.
+//
+// The PDF is tagged (see pdfTags.ts): each paragraph's text on a page is one marked-content sequence in its
+// structure element, pictures are Figures with their descriptions, and headers, footers, rules and shading are
+// artifacts, so screen readers read it in order with its headings, lists and tables.
 
 import type { WordDocument } from '@golemdocs/docx';
 import { layoutDocument, type FaceMetrics, type FontSet, type GlyphList, type PageLayout, type ResolvedFont } from '@golemdocs/layout';
 import { commentAnnotations } from './pdfExportComments.ts';
+import { DocumentTags, documentLanguageTag } from './pdfTags.ts';
 import { standardFamily } from './standardFonts.ts';
 import { emojiBox, EmojiSprites } from './emojiSprites.ts';
-import { PdfDocument, applyAnnotations, type EmbeddedFont, type PageDrawing, type PdfFont, type PdfImage, type RunGlyph } from '@golemdocs/pdf';
+import { getLocale } from '../i18n/index.ts';
+import { PdfDocument, StructureTree, applyAnnotations, type EmbeddedFont, type MarkedContent, type PageDrawing, type PdfFont, type PdfImage, type PdfPage, type RunGlyph, setXmpMetadata } from '@golemdocs/pdf';
 
 /** Characters WinAnsi lacks, with a close ASCII stand-in. */
 const ASCII_FALLBACKS: Record<number, string> = {
@@ -132,11 +138,12 @@ function collect(page: PageLayout, math: boolean, embeddedFor: EmbeddedFor): Pla
 
 /**
  * Puts glyphs into reading order: each glyph goes to the laid-out line it sits on (nearest in
- * x among lines whose vertical band holds its baseline), lines keep layout order, and glyphs
- * within a line go left to right. Glyph lists are per face, so their own order interleaves
- * bold and regular text and can't be used directly.
+ * x among lines whose vertical band holds its baseline), and glyphs within a line go left to
+ * right. Glyph lists are per face, so their own order interleaves bold and regular text and
+ * can't be used directly. `lines` is indexed like `page.lines`; `strays` are the glyphs no line
+ * holds, a group per baseline.
  */
-function readingOrder(page: PageLayout, glyphs: PlacedGlyph[]): PlacedGlyph[][] {
+function readingOrder(page: PageLayout, glyphs: PlacedGlyph[]): { lines: PlacedGlyph[][]; strays: PlacedGlyph[][] } {
   const lines = page.lines;
   const buckets: PlacedGlyph[][] = lines.map(() => []);
   const strays: PlacedGlyph[] = [];
@@ -169,20 +176,59 @@ function readingOrder(page: PageLayout, glyphs: PlacedGlyph[]): PlacedGlyph[][] 
     if (best >= 0) buckets[best].push(g);
     else strays.push(g);
   }
-  const result = buckets.filter((b) => b.length);
-  for (const b of result) b.sort((p, q) => p.x - q.x);
+  for (const b of buckets) b.sort((p, q) => p.x - q.x);
   // Unattached glyphs (nothing recorded a line for them): group by baseline.
   strays.sort((p, q) => p.y - q.y || p.x - q.x);
+  const groups: PlacedGlyph[][] = [];
   let current: PlacedGlyph[] = [];
   for (const g of strays) {
     if (current.length && Math.abs(current[0].y - g.y) > 1) {
-      result.push(current);
+      groups.push(current);
       current = [];
     }
     current.push(g);
   }
-  if (current.length) result.push(current);
-  return result;
+  if (current.length) groups.push(current);
+  return { lines: buckets, strays: groups };
+}
+
+/** A paragraph's lines on a page: drawn as a marked sequence of its structure element, or as an artifact (a header or footer, or text tagged already). */
+interface LineGroup {
+  mark: MarkedContent | null;
+  /** The marked sequence's tag: its element's type. */
+  tag?: string;
+  furniture?: 'Header' | 'Footer';
+  lines: PlacedGlyph[][];
+}
+
+/**
+ * A page's text by paragraph, in reading order, each with where it is tagged. Each paragraph's mark goes in its
+ * element now, before a list nested in it can, so an item's text reads before its sublist.
+ */
+function lineGroups(page: PageLayout, pdfPage: PdfPage, lines: PlacedGlyph[][], tags: DocumentTags): LineGroup[] {
+  const withPictures = new Set(page.images.map((item) => tags.paragraphOf(item.drawing)));
+  const groups: LineGroup[] = [];
+  const records = page.lines;
+  for (let i = 0; i < records.length; ) {
+    const first = records[i];
+    const { paragraph } = first;
+    const glyphs: PlacedGlyph[][] = [];
+    let j = i;
+    for (; j < records.length && records[j].paragraph === paragraph; j++) if (lines[j].length) glyphs.push(lines[j]);
+    const last = records[j - 1];
+    i = j;
+    // A paragraph with only a picture still gets its element here, so its Figure is in reading order.
+    if (!glyphs.length && !withPictures.has(paragraph)) continue;
+    if (tags.isFurniture(paragraph)) groups.push({ mark: null, furniture: first.y < page.height / 2 ? 'Header' : 'Footer', lines: glyphs });
+    else if (tags.repeated(paragraph, first.start, last.end)) groups.push({ mark: null, lines: glyphs });
+    else {
+      const element = tags.element(paragraph);
+      let mark: MarkedContent | null = null;
+      if (glyphs.length) element.children.push((mark = tags.tree.mark(pdfPage)));
+      groups.push({ mark, tag: element.type, lines: glyphs });
+    }
+  }
+  return groups;
 }
 
 export interface Run {
@@ -270,7 +316,10 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
   const layout = await layoutDocument(doc, fonts);
   lostCount = 0;
   const pdf = PdfDocument.create();
-  const title = await coreTitle(doc);
+  const tree = new StructureTree(pdf);
+  const tags = new DocumentTags(doc, tree);
+  // A title is what a viewer and a screen reader announce: the document's, else its first heading or opening words.
+  const title = (await coreTitle(doc)) ?? tags.fallbackTitle();
   if (title) pdf.setMetadata('Title', title);
   pdf.setMetadata('Creator', 'Golem Docs');
   pdf.setMetadata('Producer', 'Golem Docs PDF export');
@@ -312,6 +361,8 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
     if (!f) pdfFonts.set(name, (f = pdf.standardFont(name)));
     return f;
   };
+  /** Pictures with no description: a Figure without alternate text, which PDF/UA does not allow. */
+  let undescribed = 0;
   const images = new Map<string, PdfImage | null>();
   const imageFor = async (part: string): Promise<PdfImage | null> => {
     if (images.has(part)) return images.get(part)!;
@@ -351,32 +402,64 @@ export async function documentToPdf(doc: WordDocument, fonts: FontSet): Promise<
     const page = pdf.addPage(laid ? [laid.width, laid.height] : [612, 792]);
     if (!laid) continue;
     const d = page.draw({ origin: 'top-left' });
+    const { lines, strays } = readingOrder(laid, collect(laid, mathFont !== undefined, embeddedFor));
+    const groups = lineGroups(laid, page, lines, tags);
 
-    drawRects(d, laid.background);
+    if (laid.background.count) d.artifact(() => drawRects(d, laid.background));
     const drawImages = async (behind: boolean) => {
       for (const item of laid.images) {
         if (item.behind !== behind) continue;
         const image = await imageFor(item.part);
-        if (image) d.image(image, item.x, item.y, item.width, item.height);
+        if (!image) continue;
+        const draw = () => d.image(image, item.x, item.y, item.width, item.height);
+        const parent = tags.figureParent(item.drawing);
+        if (!parent) {
+          d.artifact(draw, { type: 'Pagination' });
+          continue;
+        }
+        const mark = tree.mark(page);
+        const alt = item.drawing?.description?.trim();
+        if (!alt) undescribed++;
+        const bbox = [item.x, laid.height - item.y - item.height, item.x + item.width, laid.height - item.y];
+        parent.children.push({ type: 'Figure', children: [mark], ...(alt && { alt }), attributes: { Layout: { BBox: bbox } } });
+        d.marked('Figure', mark.mcid, draw);
       }
     };
     await drawImages(true);
 
-    for (const line of readingOrder(laid, collect(laid, mathFont !== undefined, embeddedFor))) {
-      for (const run of lineRuns(line)) {
-        const { color } = unpack(run.first.color);
-        d.textRun(run.pieces, run.first.x, run.first.y, { font: fontFor(run.first.font), size: run.first.size, color });
+    const drawLines = (glyphLines: PlacedGlyph[][]) => {
+      for (const line of glyphLines) {
+        for (const run of lineRuns(line)) {
+          const { color } = unpack(run.first.color);
+          d.textRun(run.pieces, run.first.x, run.first.y, { font: fontFor(run.first.font), size: run.first.size, color });
+        }
       }
+    };
+    for (const group of groups) {
+      if (!group.lines.length) continue;
+      if (group.mark) d.marked(group.tag!, group.mark.mcid, () => drawLines(group.lines));
+      else d.artifact(() => drawLines(group.lines), { type: 'Pagination', ...(group.furniture && { subtype: group.furniture }) });
+    }
+    // Text no line holds (nothing recorded where it belongs) reads after the page's paragraphs.
+    for (const stray of strays) {
+      const mark = tree.mark(page);
+      tree.root.children.push({ type: 'P', children: [mark] });
+      d.marked('P', mark.mcid, () => drawLines([stray]));
     }
 
     await drawEmoji(d, laid);
     await drawImages(false);
-    drawRects(d, laid.foreground);
+    if (laid.foreground.count) d.artifact(() => drawRects(d, laid.foreground));
     d.finish();
   }
   sprites.close();
   const notes = commentAnnotations(doc, layout.pages);
   if (notes.length) applyAnnotations(pdf, notes);
+  const lang = documentLanguageTag(doc, getLocale());
+  tree.write({ lang });
+  // Declared PDF/UA only when it is: a title, every font embedded (no standard fonts) and every picture described.
+  const pdfua = !!title && !pdfFonts.size && !undescribed;
+  setXmpMetadata(pdf, { title, lang, creator: 'Golem Docs', producer: 'Golem Docs PDF export', pdfua });
   if (lostCount) {
     console.warn(`PDF export: ${lostCount} character(s) the PDF standard fonts can't show (e.g. Japanese or Chinese text) were written as '?'.`);
     lostCount = 0;

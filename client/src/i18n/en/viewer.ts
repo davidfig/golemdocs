@@ -18,4 +18,7 @@ export const viewer = {
   'viewer.viewOnlyTitle': '{name} (view only)',
   'viewer.download': 'Download',
   'viewer.linkGone': 'This link no longer works: the document isn’t shared publicly any more.',
+  'viewer.toolbar': 'Viewer',
+  'viewer.zoomButton': 'Actual Size (now {zoom})',
+  'viewer.foundOnPage': 'Found on page {page} of {pages}',
 } as const;

@@ -34,6 +34,9 @@ const KEYS = [
   'word.fullScreenMenus', // Tools › Options: keep the menu bar in full screen
   'word.scrollPastEnd', // Tools › Options: scroll half a screen past the end of the document
   'golem.macInAppMenu', // Tools › Options: menus in the window on a Mac
+  'golem.screenReader', // Tools › Screen Reader Mode
+  'golem.caretWidth', // Tools › Options › Accessibility
+  'golem.caretBlink',
   'word.toolbarsShown', // View › Toolbars › Show Toolbars
   'wm.largeWrap',
   'vector.selectAfterPencil', // drawing options (Tools › Options)

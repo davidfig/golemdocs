@@ -18,4 +18,7 @@ export const viewer: Partial<Messages> = {
   'viewer.viewOnlyTitle': '{name}（仅查看）',
   'viewer.download': '下载',
   'viewer.linkGone': '此链接已失效：该文档已不再公开共享。',
+  'viewer.toolbar': '查看器',
+  'viewer.zoomButton': '实际大小（当前 {zoom}）',
+  'viewer.foundOnPage': '在第 {page} 页找到，共 {pages} 页',
 };

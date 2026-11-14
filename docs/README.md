@@ -16,7 +16,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [Releasing the desktop app](architecture/desktop-release.md) | Installer builds on a tag, Apple signing and notarization, what is not done yet |
 | [Server](architecture/server.md) | Worker routing, sign-in, D1 and R2 layout, sharing, billing, search, environments |
 | [Collaboration](architecture/collaboration.md) | Rooms, the central log, handoff and settle, one gateway and one transport |
-| [Accessibility](architecture/accessibility.md) | Screen readers and the canvas: the plan (textarea mirror, reading layer, phases); not built yet |
+| [Accessibility](architecture/accessibility.md) | Screen readers and the canvas: the textarea mirror, the reading layer, contrast and motion |
 | [UI](architecture/ui.md) | App shell, actions and commands, shared components, spelling, the home site |
 | [Build and testing](architecture/build-and-testing.md) | Workspace, lazy chunks, unit and e2e tests, CI, deploy, release |
 | [Embeddable viewer](architecture/viewer.md) | The read-only viewer: in other apps (satchel.email) and for documents shared view-only; its API and messages, build, font set, running it sandboxed |

@@ -3,7 +3,7 @@
 // Sizes are shown in inches, or in centimetres in every language but English.
 
 import { getLocale, t } from '../i18n/index.ts';
-import { h } from './dom.ts';
+import { h, tabList } from './dom.ts';
 import { choiceButton } from './dropdown.ts';
 import { dialogTitleBar } from './popup.ts';
 
@@ -136,6 +136,7 @@ export function showPageSetupDialog(current: PageState): Promise<PageChoice | un
       panes.push([button, pane as HTMLElement]);
     });
     select(0);
+    tabList(tabs, panes.map(([, pane]) => pane));
 
     const ok = h('button', { class: 'wm-button', text: t('pageSetup.ok'), attrs: { type: 'submit' } });
     const cancel = h('button', { class: 'wm-button', text: t('pageSetup.cancel'), attrs: { type: 'button' } });

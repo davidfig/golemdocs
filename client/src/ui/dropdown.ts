@@ -5,7 +5,8 @@
 
 import type { Action, ChromeState } from './actions.ts';
 import type { CommandRegistry } from './commands.ts';
-import { h } from './dom.ts';
+import { h, uniqueId } from './dom.ts';
+import { optionGroup } from './listBox.ts';
 import { closePopup, openPopup, popupOpenFor } from './popup.ts';
 import type { Control } from './toolbar.ts';
 
@@ -63,9 +64,10 @@ export interface ChoiceSpec {
  */
 export function choiceButton(spec: ChoiceSpec, pick: (value: string) => void): { el: HTMLButtonElement; value: string; set(value: string): void } {
   const { label } = spec;
-  const text = h('span', { class: 'wm-dropdown-name' });
+  // The choice it shows is its description: the label is its name, which would otherwise hide what it is set to.
+  const text = h('span', { class: 'wm-dropdown-name', attrs: { id: uniqueId('wm-choice') } });
   const sample = h('span', { class: 'wm-dropdown-sample' });
-  const button = h('button', { class: spec.fill ? 'wm-dropdown wm-dropdown-fill' : 'wm-dropdown', title: label, attrs: { type: 'button', 'aria-label': label, 'aria-haspopup': 'listbox', 'aria-expanded': 'false' } }, sample, text, h('span', { class: 'wm-dropdown-caret' }));
+  const button = h('button', { class: spec.fill ? 'wm-dropdown wm-dropdown-fill' : 'wm-dropdown', title: label, attrs: { type: 'button', 'aria-label': label, 'aria-describedby': text.id, 'aria-haspopup': 'listbox', 'aria-expanded': 'false' } }, sample, text, h('span', { class: 'wm-dropdown-caret' }));
   if (spec.width) button.style.width = `${spec.width}px`;
   const control = {
     el: button,
@@ -107,7 +109,12 @@ export function choiceButton(spec: ChoiceSpec, pick: (value: string) => void): {
     const list = h('div', { class: 'wm-list wm-dropdown-list', attrs: { role: 'listbox', 'aria-label': label } });
     let chosenRow: HTMLElement | null = null;
     for (const group of spec.groups(control.value)) {
-      if (group.heading) list.append(h('div', { class: 'wm-list-heading', text: group.heading }));
+      // A group with a heading is a group of options named by it.
+      let into: HTMLElement = list;
+      if (group.heading) {
+        into = optionGroup(group.heading).group;
+        list.append(into);
+      }
       for (const value of group.values) {
         const chosen = value === control.value;
         const picture = spec.sample?.(value);
@@ -121,7 +128,7 @@ export function choiceButton(spec: ChoiceSpec, pick: (value: string) => void): {
           closePopup();
           pick(value);
         });
-        list.append(row);
+        into.append(row);
       }
     }
     openPopup(button, list);

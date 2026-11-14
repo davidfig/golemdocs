@@ -145,10 +145,10 @@ test.describe('colors', () => {
     await typeAndSelect(app, 'sample');
     await app.page.getByRole('toolbar').getByRole('button', { name: 'Font Color options' }).click();
     const palette = app.page.getByRole('dialog', { name: 'Font Color' });
-    await expect(palette.getByRole('button', { name: '#FF0000', exact: true })).toBeVisible();
+    await expect(palette.locator('.wm-swatch[title="#FF0000"]')).toBeVisible();
     await expect(palette.getByRole('button', { name: 'More Colors…' })).toBeVisible();
     expect(await palette.locator('.wm-swatch').count()).toBeGreaterThanOrEqual(40);
-    await palette.getByRole('button', { name: '#008000', exact: true }).click();
+    await palette.locator('.wm-swatch[title="#008000"]').click();
     await expect(palette).toBeHidden();
   });
 
@@ -170,7 +170,7 @@ test.describe('colors', () => {
       .poll(async () => {
         await app.press(`${MOD}+a`);
         await button.click();
-        const found = await reopened.getByRole('button', { name: '#123456', exact: true }).count();
+        const found = await reopened.locator('.wm-swatch[title="#123456"]').count();
         await app.press('Escape');
         return found;
       })

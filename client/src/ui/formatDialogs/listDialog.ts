@@ -4,7 +4,7 @@
 import { t } from '../../i18n/index.ts';
 import type { ListFormat } from '../actions.ts';
 import { h } from '../dom.ts';
-import { check, choice, field, numberInput, round, showForm, tabStrip, twipsPerUnit, unitName } from './parts.ts';
+import { check, choice, field, gallery, numberInput, round, showForm, tabStrip, twipsPerUnit, unitName } from './parts.ts';
 
 /** Bullets every core font page has (see scripts/fonts/charset.txt). */
 const BULLETS = ['•', '◦', '▪', '■', '○', '◆', '→', '–'];
@@ -71,7 +71,7 @@ export function showListDialog(current: ListFormat | null | undefined, inList: b
     numberFields.hidden = chosen?.kind !== 'number';
   };
 
-  const bullets = h('div', { class: 'wm-fd-gallery', attrs: { role: 'radiogroup', 'aria-label': t('format.list.bullets') } });
+  const bullets = gallery(h('div', { class: 'wm-fd-gallery', attrs: { 'aria-label': t('format.list.bullets') } }));
   const noBullet = none();
   bulletTiles.push([noBullet, null]);
   bullets.append(noBullet);
@@ -80,7 +80,7 @@ export function showListDialog(current: ListFormat | null | undefined, inList: b
     bulletTiles.push([button, b]);
     bullets.append(button);
   }
-  const numbers = h('div', { class: 'wm-fd-gallery', attrs: { role: 'radiogroup', 'aria-label': t('format.list.numbers') } });
+  const numbers = gallery(h('div', { class: 'wm-fd-gallery', attrs: { 'aria-label': t('format.list.numbers') } }));
   const noNumber = none();
   bulletTiles.push([noNumber, null]);
   numbers.append(noNumber);

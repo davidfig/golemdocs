@@ -224,8 +224,13 @@ export class FormLayer {
   }
 
   private syncInput(el: HTMLElement, field: WireField): void {
-    el.title = field.name;
-    el.setAttribute('aria-label', field.name);
+    // Named by what the field is for, where the PDF says (its TU), rather than by its name in the file ("f1_01[0]").
+    // Each of a group's radio buttons also says its own choice.
+    const label = field.description || field.name;
+    el.title = label;
+    el.setAttribute('aria-label', field.kind === 'radio' && field.onState ? `${label}, ${field.onState}` : label);
+    if (field.required && field.kind !== 'checkbox' && field.kind !== 'radio') el.setAttribute('aria-required', 'true');
+    else el.removeAttribute('aria-required');
     if (el instanceof HTMLButtonElement) {
       const on = !!field.onState && field.value === field.onState;
       el.setAttribute('aria-checked', String(on));

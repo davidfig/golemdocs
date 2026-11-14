@@ -15,8 +15,8 @@ test.describe('opening a PDF', () => {
     await openPdf(app, threePages());
     expect(await pageCount(app.page)).toBe(3);
     await expect(app.page.locator('.wm-format-field input')).toHaveValue('PDF');
-    await expect(modeButton(app.page, 'Fill In')).toHaveAttribute('aria-pressed', 'true');
-    await expect(modeButton(app.page, 'Edit PDF')).toHaveAttribute('aria-pressed', 'false');
+    await expect(modeButton(app.page, 'Fill In')).toHaveAttribute('aria-checked', 'true');
+    await expect(modeButton(app.page, 'Edit PDF')).toHaveAttribute('aria-checked', 'false');
   });
 
   test('pages are stacked top to bottom at their own size', async ({ app }) => {

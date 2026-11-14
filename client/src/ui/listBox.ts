@@ -2,7 +2,30 @@
 // a field showing a few rows, with optional headings, picked with the pointer or the arrow keys.
 // Enter or a double click chooses the picked row.
 
-import { h } from './dom.ts';
+import { h, uniqueId } from './dom.ts';
+
+/**
+ * Marks `row` as the picked option of a list whose rows don't take the focus themselves: it alone is `aria-selected`, and
+ * `owner` (the list, or the text box that steers it, as in the command palette) points at it with `aria-activedescendant`,
+ * so a screen reader reads each row as it is picked. Shared by `listBox`, the command palette and Customize Toolbars.
+ */
+export function pickOption(list: HTMLElement, row: HTMLElement | null, owner: HTMLElement = list): void {
+  for (const option of list.querySelectorAll<HTMLElement>('[role="option"][aria-selected="true"]')) if (option !== row) option.setAttribute('aria-selected', 'false');
+  if (!row) {
+    owner.removeAttribute('aria-activedescendant');
+    return;
+  }
+  row.id ||= uniqueId('wm-option');
+  row.setAttribute('aria-selected', 'true');
+  owner.setAttribute('aria-activedescendant', row.id);
+}
+
+/** A heading over the rows after it, and the group they go in, so a screen reader says which group a row is in. */
+export function optionGroup(heading: string): { heading: HTMLElement; group: HTMLElement } {
+  const el = h('div', { class: 'wm-list-heading', text: heading, attrs: { id: uniqueId('wm-list-heading'), role: 'presentation' } });
+  const group = h('div', { class: 'wm-list-group', attrs: { role: 'group', 'aria-labelledby': el.id } }, el);
+  return { heading: el, group };
+}
 
 /** A row: a choice, a heading over the rows after it, or a row that can't be picked (a note such as "(no suggestions)"). */
 export type ListRow = string | { heading: string } | { note: string };
@@ -33,12 +56,10 @@ export function listBox(label: string, options: { rows?: number; onPick?: (value
   const show = (index: number, notify: boolean) => {
     if (index < 0 || index >= choices.length) return;
     choices[picked]?.classList.remove('active');
-    choices[picked]?.setAttribute('aria-selected', 'false');
     picked = index;
     const row = choices[index];
     row.classList.add('active');
-    row.setAttribute('aria-selected', 'true');
-    el.setAttribute('aria-activedescendant', row.id);
+    pickOption(el, row);
     row.scrollIntoView({ block: 'nearest' });
     if (notify) options.onPick?.(row.dataset.value ?? '');
   };
@@ -62,18 +83,24 @@ export function listBox(label: string, options: { rows?: number; onPick?: (value
       choices = [];
       picked = -1;
       el.removeAttribute('aria-activedescendant');
+      // Rows under a heading go in a group named by it.
+      let into: HTMLElement = el;
       for (const row of rows) {
         if (typeof row !== 'string') {
-          el.append('heading' in row ? h('div', { class: 'wm-list-heading', text: row.heading, attrs: { role: 'presentation' } }) : h('div', { class: 'wm-option disabled', text: row.note, attrs: { role: 'option', 'aria-disabled': 'true' } }));
+          if ('heading' in row) {
+            const { group } = optionGroup(row.heading);
+            el.append(group);
+            into = group;
+          } else into.append(h('div', { class: 'wm-option disabled', text: row.note, attrs: { role: 'option', 'aria-disabled': 'true' } }));
           continue;
         }
         const index = choices.length;
-        const option = h('div', { class: 'wm-option', text: row, attrs: { role: 'option', id: `wm-list-${Math.random().toString(36).slice(2)}`, 'aria-selected': 'false' } });
+        const option = h('div', { class: 'wm-option', text: row, attrs: { role: 'option', 'aria-selected': 'false' } });
         option.dataset.value = row;
         option.addEventListener('mousedown', () => show(index, true));
         option.addEventListener('dblclick', () => options.onChoose?.(row));
         choices.push(option);
-        el.append(option);
+        into.append(option);
       }
       if (choices.length) show(0, false);
       el.scrollTop = 0;

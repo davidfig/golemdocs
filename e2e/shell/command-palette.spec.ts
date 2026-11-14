@@ -3,7 +3,7 @@ import { expect, MOD, test, type App } from '../fixtures';
 import { choose, isMac, menuTitle, stored } from './helpers';
 
 const palette = (page: Page) => page.getByRole('dialog', { name: 'Command palette' });
-const search = (page: Page) => palette(page).getByRole('textbox', { name: 'Search commands' });
+const search = (page: Page) => palette(page).getByRole('combobox', { name: 'Search commands' });
 const options = (page: Page) => palette(page).getByRole('option');
 const option = (page: Page, label: string) => options(page).filter({ has: page.locator('.wm-palette-label', { hasText: new RegExp(`^${label}$`) }) });
 const button = (page: Page) => page.getByRole('button', { name: 'Command palette' });

@@ -60,6 +60,10 @@ export default async function ({ table }) {
   // A computed address, which the linker cannot see: the frame's policy stops it.
   const away = ['https:', '', 'example.com', 'x.js'].join('/');
   await attempt('import', () => import(away));
+  // The desktop and iOS shells' bridges to the app (Tauri's, and the web view's message handlers), which a frame of the page could see.
+  await attempt('tauri', () => (globalThis as any).__TAURI_INTERNALS__.invoke('plugin:fs|read_dir', {}));
+  await attempt('webview', () => (globalThis as any).webkit.messageHandlers.ipc.postMessage('{}'));
+  await attempt('ipc', () => fetch('ipc://localhost/plugin%3Afs%7Cread_dir'));
   await attempt('clock', () => Date.now());
   await attempt('newdate', () => new Date());
   return table(['Try', 'Result'], tries);
@@ -71,7 +75,7 @@ export default async function ({ table }) {
   await allow(page);
   await expect.poll(() => app.text(), { timeout: 20_000 }).toContain('newdate');
   const text = await app.text();
-  for (const name of ['fetch', 'protofetch', 'xhr', 'socket', 'indexeddb', 'cookies', 'parent', 'import', 'clock', 'newdate']) expect(text).toMatch(new RegExp(`${name}\\s+blocked`));
+  for (const name of ['fetch', 'protofetch', 'xhr', 'socket', 'indexeddb', 'cookies', 'parent', 'import', 'tauri', 'webview', 'ipc', 'clock', 'newdate']) expect(text).toMatch(new RegExp(`${name}\\s+blocked`));
   expect(text).not.toContain('reached');
 });
 

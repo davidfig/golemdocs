@@ -38,6 +38,8 @@
 
 ### Fixed
 
+- A PDF form filled in and saved in Preview showed no form fields. Its fields now open and can be filled in again.
+- A Word document with a live table, saved in LibreOffice, keeps the table live. The next update used to put the whole table in its first cell.
 - An SVG file imported from a ZIP or a dropped folder now opens as a drawing. It used to be renamed to a PNG.
 - The Down arrow on the line above a table goes into the table's first row, and Up from below it into the last row. It used to jump over the whole table.
 

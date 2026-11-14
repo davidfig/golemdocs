@@ -514,6 +514,36 @@ works without them.
 - **M4. Later.** The cloud fallback (if M1's log asks for it), documents shared by others, writing back into the source,
   network access for scripts, shared rooms.
 
+### M0 results so far (2026-11-14)
+
+Test files (made by the app's own writers: a Word, ODT, HTML and Markdown report with a live table and a live value, a
+workbook host, and a PDF with a filled field and every candidate place for a tag) are in the vault, in `Golem Docs/Live
+Blocks M0 Tests/`, with a checklist for the checks done by hand (Word, Excel, VS Code), and its results.
+
+- **GitHub** (its Markdown API, GitHub-flavored): the `<!-- golem:live … -->` markers are hidden; the table and the
+  value show as ordinary content.
+- **PDFs through Apple's PDFKit** (what Preview uses to save), opened and saved, with a note added, and with the field
+  typed into: PDFKit redraws every page's content and keeps only the keys it knows on the catalog, the pages and the
+  document info. It drops `/PieceInfo` (catalog and page), marked content (`/GolemLive <<…>> BDC … EMC`, even around
+  something drawn), and extra keys on the catalog, the page and `/Info`. It keeps extra keys on annotations: on a form
+  field's widget, and on a hidden annotation (`/F 2`), whether a standard kind (`/Square`) or one of our own. So a block's
+  source and stamp go on annotations: a field's on its widget, a text box's or picture's on a hidden annotation over it.
+  It also writes each field twice (the page's widget and an identical copy in the form's field list), which our reader
+  did not follow, so a form saved in Preview showed no fields. Fixed in `pdf/src/write/forms.ts` (`Entry.stray`).
+- **LibreOffice** (26.8, each file opened and written again through its own filters): ODT keeps both blocks, tags and
+  stamps. A `.docx` keeps both tags, but Writer has no content control around a table: it moves the table's tag into the
+  first cell, as a plain-text control around the cell's text, which would have made the next update put the whole table
+  in that cell. The Word reader puts such a tag back around the table (`docx/src/docx/liveRepair.ts`). Calc keeps the
+  hidden defined name of a workbook's live range but drops its comment, where the tag is, so the range stops being live:
+  the tag needs a place Calc keeps.
+- **The script sandbox in WebKit** (Safari's engine, which the macOS and iOS shells use): every test in
+  `e2e/live/scripts.spec.ts` passes, including the escapes. The spec now also tries the shells' bridges
+  (`__TAURI_INTERNALS__`, `webkit.messageHandlers`, `ipc://`), blocked in the browser; it has not yet been run inside a
+  real shell, which needs a desktop build pointed at a local dev server.
+- **Still to do:** Word, Excel and VS Code's preview (by hand, with the checklist), a place for a workbook's tag that Calc
+  keeps, Obsidian, Preview itself (not only PDFKit; Preview stands in for Acrobat, which is not checked), the real desktop
+  and iOS shells, and loading a large workbook on a phone.
+
 ## Tests
 
 - Unit: for each host, the block's reader and writer (round trip, an edited result, a damaged marker, conversion between

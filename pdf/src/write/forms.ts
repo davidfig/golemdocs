@@ -70,6 +70,11 @@ interface Entry {
   parent: PdfDict | undefined;
   /** The name of the parent field ('' for a top-level field). */
   parentName: string;
+  /**
+   * The field tree's own copy of a widget that is on its page as another object with the same contents (Apple's PDFKit, and so
+   * Preview, saves a form this way). The page's object is the widget and the field; applyFields points the tree at it.
+   */
+  stray?: PdfRef;
 }
 
 interface Inherited {
@@ -102,9 +107,20 @@ function entries(doc: PdfDocument): Map<string, Entry> {
   const acro = acroForm(doc);
   if (!acro) return out;
   const pageOf = new Map<string, number>();
+  const onPages: PdfRef[] = [];
   doc.pages.forEach((page, index) => {
-    for (const ref of doc.array(page.dict.get('Annots')) ?? []) if (ref instanceof PdfRef) pageOf.set(idOf(ref), index);
+    for (const ref of doc.array(page.dict.get('Annots')) ?? []) {
+      if (!(ref instanceof PdfRef)) continue;
+      pageOf.set(idOf(ref), index);
+      onPages.push(ref);
+    }
   });
+  // A widget the field tree names that is not on any page, but whose copy is (see Entry.stray).
+  const copyOnPage = (widget: PdfDict): PdfRef | undefined =>
+    onPages.find((r) => {
+      const other = doc.dict(r);
+      return !!other && other !== widget && other.name('Subtype') === 'Widget' && sameEntries(doc, widget, other);
+    });
   const seen = new Set<string>();
 
   const visit = (ref: PdfObject, parent: PdfDict | undefined, parentName: string, inherited: Inherited, depth: number) => {
@@ -132,9 +148,20 @@ function entries(doc: PdfDocument): Map<string, Entry> {
     const widgets: PdfObject[] = kids.length ? kids : [ref];
     const kind = kindOf(here);
     if (!kind) return;
-    for (const w of widgets) {
-      if (!(w instanceof PdfRef)) continue;
-      const widget = doc.dict(w);
+    for (const listed of widgets) {
+      if (!(listed instanceof PdfRef)) continue;
+      let w = listed;
+      let widget = doc.dict(w);
+      let stray: PdfRef | undefined;
+      if (widget && !pageOf.has(idOf(w))) {
+        const copy = copyOnPage(widget);
+        if (copy && !seen.has(idOf(copy))) {
+          stray = w;
+          w = copy;
+          widget = doc.dict(copy);
+          seen.add(idOf(copy));
+        }
+      }
       const page = pageOf.get(idOf(w));
       if (!widget || page === undefined) continue;
       const nums = (doc.array(widget.get('Rect')) ?? []).map((x) => doc.number(x) ?? 0);
@@ -173,7 +200,9 @@ function entries(doc: PdfDocument): Map<string, Entry> {
           });
         }
       }
-      out.set(field.id, { field, widgetRef: w, widget, terminal: dict, terminalRef: ref, parent, parentName });
+      // A merged field's stray copy: the page's object is the field too.
+      const merged = stray && stray === ref;
+      out.set(field.id, { field, widgetRef: w, widget, terminal: merged ? widget : dict, terminalRef: merged ? w : ref, parent, parentName, ...(stray && { stray }) });
     }
   };
 
@@ -226,6 +255,15 @@ export function applyFields(doc: PdfDocument, fields: readonly FormField[]): voi
   if (!current.size && !fields.length) return;
   const acro = ensureAcroForm(doc);
   let valuesChanged = false;
+
+  // The field tree names the page's widgets, not copies of them, so a change made to one is the change a viewer shows.
+  for (const e of current.values()) {
+    if (!e.stray) continue;
+    const holder = e.stray.equals(e.terminalRef) || e.widget === e.terminal ? (e.parent ?? acro) : e.terminal;
+    const key = holder === acro ? 'Fields' : 'Kids';
+    const list = doc.array(holder.get(key)) ?? [];
+    holder.set(key, list.map((k) => (k instanceof PdfRef && k.equals(e.stray) ? e.widgetRef : k)));
+  }
 
   // Removed widgets: off their page and out of the field tree.
   const removedFromPage = new Map<number, Set<string>>();
@@ -469,3 +507,19 @@ function wrap(font: PdfFont, text: string, size: number, width: number): string[
 
 const hex = (bytes: Uint8Array) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 const fmt = (n: number) => String(Math.round(n * 1000) / 1000);
+
+/** Whether two dictionaries hold the same entries: equal values, or references to the same objects. */
+function sameEntries(doc: PdfDocument, a: PdfDict, b: PdfDict): boolean {
+  const keys = [...a.keys()];
+  if (keys.length !== [...b.keys()].length) return false;
+  const same = (x: PdfObject | undefined, y: PdfObject | undefined): boolean => {
+    if (x === y) return true;
+    if (x instanceof PdfRef) return y instanceof PdfRef && x.equals(y);
+    if (x instanceof PdfName || typeof x !== 'object' || x === null) return x === y;
+    if (x instanceof PdfString) return y instanceof PdfString && x.text === y.text;
+    if (Array.isArray(x)) return Array.isArray(y) && x.length === y.length && x.every((v, i) => same(v, y[i]));
+    if (x instanceof PdfDict) return y instanceof PdfDict && sameEntries(doc, x, y);
+    return false;
+  };
+  return keys.every((k) => b.has(k) && same(a.get(k), b.get(k)));
+}

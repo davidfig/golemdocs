@@ -128,3 +128,23 @@ test('the renderer can leave fields out, for the app to draw them', async () => 
   assert.equal(shown, 'Visible');
   assert.equal(interpretPage(page, { hideFields: true }).glyphRuns.length, 0);
 });
+
+test('a form saved by Preview, whose field list names copies of the widgets on its pages, is read and filled in', async () => {
+  const doc = PdfDocument.create();
+  doc.addPage([600, 800]);
+  applyFields(doc, [{ id: 'a', name: 'Total', kind: 'text', page: 0, rect: [100, 700, 300, 720], value: '2740' }]);
+  // As Apple's PDFKit writes it: the page lists one object, the form's field list an identical other one.
+  const page = doc.pages[0];
+  const listed = doc.array(page.dict.get('Annots'))![0];
+  const copy = doc.add((doc.dict(listed) as PdfDict).clone());
+  page.dict.set('Annots', [copy]);
+  const loaded = PdfDocument.load(await doc.save());
+  const fields = readFields(loaded);
+  assert.deepEqual(fields.map((f) => [f.name, f.value]), [['Total', '2740']]);
+  applyFields(loaded, [{ ...fields[0], value: '3140' }]);
+  const back = PdfDocument.load(await loaded.save());
+  assert.deepEqual(readFields(back).map((f) => [f.name, f.value]), [['Total', '3140']]);
+  // The field list now names the page's widget, so every viewer shows the new value.
+  const acro = back.dict(back.catalog.get('AcroForm'))!;
+  assert.equal(String((back.array(acro.get('Fields'))![0] as { num: number }).num), String((back.array(back.pages[0].dict.get('Annots'))![0] as { num: number }).num));
+});

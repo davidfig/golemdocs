@@ -174,6 +174,31 @@ test('a Word document keeps its live blocks through a save, tag, lock and result
   assert.deepEqual(await updateLive(back, async () => ({ name: 'Budget.xlsx', bytes })), { updated: 0, problems: [] });
 });
 
+test('a table’s live tag that LibreOffice moved into its first cell goes back around the table, and updates it', async () => {
+  const { OpcPackage } = await import('@golemdocs/docx');
+  const bytes = await budget();
+  const document = await note();
+  await updateLive(document, async () => ({ name: 'Budget.xlsx', bytes }));
+  // As LibreOffice Writer saves it: no control around the table, a plain-text one around the first cell's text instead.
+  const pkg = await OpcPackage.read(await document.write());
+  const xml = await pkg.text('word/document.xml');
+  const tag = /<w:tag w:val="(live:Budget\.xlsx#Expenses[^"]*)"\/>/.exec(xml)![1];
+  const moved = xml
+    .replace(/<w:sdt><w:sdtPr><w:tag w:val="live:Budget\.xlsx#Expenses[^"]*"\/><w:lock w:val="sdtContentLocked"\/><\/w:sdtPr><w:sdtContent>(<w:tbl>[\s\S]*?<\/w:tbl>)<\/w:sdtContent><\/w:sdt>/, '$1')
+    .replace(/(<w:tc>(?:(?!<w:p[ >]).)*<w:p(?: [^>]*)?>(?:<w:pPr>[\s\S]*?<\/w:pPr>)?)(<w:r>(?:(?!<\/w:r>)[\s\S])*<w:t>Item<\/w:t><\/w:r>)/, `$1<w:sdt><w:sdtPr><w:tag w:val="${tag}"/><w:lock w:val="sdtContentLocked"/><w:text/></w:sdtPr><w:sdtContent><w:r></w:r>$2</w:sdtContent></w:sdt>`);
+  assert.notEqual(moved, xml);
+  assert.match(moved, /<w:tc>[\s\S]*<w:text\/>[\s\S]*Item/);
+  pkg.set('word/document.xml', moved);
+  const back = await WordDocument.read(await pkg.write());
+  const live = findLive(back);
+  assert.deepEqual(live.map((at) => [at.kind, at.tag.source]), [['block', 'Budget.xlsx#Expenses'], ['inline', 'Budget.xlsx#Total']]);
+  assert.equal((live[0].wrapper.children[0] as Block).kind, 'table');
+  // The workbook changes: the table is replaced, not put in a cell.
+  await updateLive(back, async () => ({ name: 'Budget.xlsx', bytes: await budget(2500) }));
+  const table = findLive(back)[0].wrapper.children[0] as Table;
+  assert.deepEqual(cellTexts(table), [['Item', 'Amount'], ['Rent', '2500'], ['Food', '640']]);
+});
+
 // --- HTML --------------------------------------------------------------------------------------
 
 import { documentToHtml, htmlToDocument } from '../src/formats/html.ts';

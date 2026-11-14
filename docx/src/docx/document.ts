@@ -19,6 +19,7 @@ import { readComments, writeComments, type CommentsPart } from './comments.ts';
 import { hasAppProperties, readAppProperties, readCoreProperties, writeAppProperties, writeCoreProperties, type DocumentProperties } from './metadata.ts';
 import { readBlocks, writeBlocks, type ContentWriteContext } from './content.ts';
 import { readSection, writeSection } from './properties.ts';
+import { liftMovedLiveTags } from './liveRepair.ts';
 import { readNumbering, readSettings, readStyles, readThemeFonts, writeNumbering, writeStyles } from './styles.ts';
 
 export class WordDocument {
@@ -86,6 +87,7 @@ export class WordDocument {
       const last = children[children.length - 1];
       const sectPr = last && typeof last !== 'string' && last.name === 'w:sectPr' ? last : undefined;
       doc.body = readBlocks({ ...body, children: children.filter((c) => c !== sectPr) }, ctx);
+      liftMovedLiveTags(doc.body);
       if (sectPr) doc.section = readSection(sectPr, ctx);
       else doc.sectionAbsent = true;
     }

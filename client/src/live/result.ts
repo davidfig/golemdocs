@@ -12,11 +12,20 @@ export type Align = 'left' | 'center' | 'right';
 export const MAX_ROWS = 2000;
 export const MAX_COLUMNS = 50;
 
+/** A number cell of a workbook: its value and its number format's code (`#,##0.00 "€"`, `yyyy-mm-dd`, `General`). */
+export interface LiveNumber {
+  n: number;
+  format: string;
+}
+
 export type LiveResult =
-  /** Rows of cells as shown (number formats applied); the first row is a header when `header` is set. */
-  | { kind: 'table'; rows: string[][]; header: boolean; align: Align[] }
-  /** One value, as shown. */
-  | { kind: 'value'; text: string }
+  /**
+   * Rows of cells as shown (number formats applied); the first row is a header when `header` is set. From a workbook, `values`
+   * has each number cell's number and format (null for other cells), so a workbook it fills keeps numbers, currency and dates.
+   */
+  | { kind: 'table'; rows: string[][]; header: boolean; align: Align[]; values?: (LiveNumber | null)[][] }
+  /** One value, as shown; `number` as for a table's `values`. */
+  | { kind: 'value'; text: string; number?: LiveNumber }
   /** A picture: its bytes, and for a drawing its SVG beside them; its size in pixels. */
   | { kind: 'picture'; bytes: Uint8Array; svg?: string; width: number; height: number }
   /** Part of a text document: its blocks, the document they are from (for their styles and lists), and their pictures' bytes by part. */
@@ -25,7 +34,7 @@ export type LiveResult =
   | { kind: 'error'; code: LiveError; detail?: string };
 
 /** Why a block could not be updated. */
-export type LiveError = 'unreadable' | 'empty' | 'noTable' | 'notRange' | 'notFound' | 'notSheet' | 'missing' | 'cycle' | 'unsupported' | 'script' | 'notAllowed' | 'blocked';
+export type LiveError = 'unreadable' | 'empty' | 'noTable' | 'notRange' | 'notFound' | 'notSheet' | 'missing' | 'cycle' | 'unsupported' | 'script' | 'notAllowed' | 'blocked' | 'foreign';
 
 const HAIRLINE: Border = { val: 'single', sz: 4, space: 0, color: 'BFBFBF' };
 const EMU_PER_PIXEL = 9525;

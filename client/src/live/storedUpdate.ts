@@ -4,6 +4,8 @@
 // format is kept as the one model. Free of the page: the live worker (liveWorker.ts) runs it, and the page does where
 // there is no worker (stored.ts is the page's entry to it).
 
+import type { LiveOptions } from './owner.ts';
+import { isHandWritten } from './owner.ts';
 import { isWdoc, readWdoc } from '../formats/wdoc.ts';
 import { hasLive } from './liveMarks.ts';
 import { readStoredText } from './textSource.ts';
@@ -18,9 +20,11 @@ import { updateLive } from './update.ts';
 import type { UpdateReport } from './update.ts';
 
 /** The stored document's bytes with its live blocks up to date (null when none changed), and what happened to each. */
-export async function updateStoredLive(bytes: ArrayBuffer | Uint8Array, name: string, lookup: SourceLookup, options: { force?: boolean } = {}): Promise<{ bytes: Uint8Array | null; report: UpdateReport }> {
+export async function updateStoredLive(bytes: ArrayBuffer | Uint8Array, name: string, lookup: SourceLookup, options: LiveOptions = {}): Promise<{ bytes: Uint8Array | null; report: UpdateReport }> {
   const none = { bytes: null, report: { updated: 0, problems: [] } };
   const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  // A tag typed by hand (no `by`) counts as the person's only in a text file (owner.ts).
+  options = { ...options, unsignedMine: isHandWritten(name) };
   // A workbook holds its blocks as ranges of cells (sheetHost.ts).
   if (isWorkbook(data)) return updateStoredSheet(data, lookup, options);
   // A PDF holds them in its form fields (pdfLive.ts), a drawing in groups (drawingHost.ts).
@@ -110,6 +114,6 @@ export function sourceLookupOf(stored: StoredLookup, drawing: DrawingOf): Source
 }
 
 /** A stored document's blocks brought up to date from stored sources. */
-export function updateFromStored(bytes: Uint8Array, name: string, stored: StoredLookup, drawing: DrawingOf, options: { force?: boolean } = {}): Promise<UpdateOutcome> {
+export function updateFromStored(bytes: Uint8Array, name: string, stored: StoredLookup, drawing: DrawingOf, options: LiveOptions = {}): Promise<UpdateOutcome> {
   return updateStoredLive(bytes, name, sourceLookupOf(stored, drawing), options);
 }

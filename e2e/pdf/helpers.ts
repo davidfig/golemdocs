@@ -43,7 +43,7 @@ export interface PdfOptions {
 }
 
 export type FormField =
-  | { kind: 'text'; name: string; rect: [number, number, number, number]; value?: string }
+  | { kind: 'text'; name: string; rect: [number, number, number, number]; value?: string; description?: string; required?: boolean }
   | { kind: 'checkbox'; name: string; rect: [number, number, number, number]; checked?: boolean }
   | { kind: 'radio'; name: string; rect: [number, number, number, number][]; states: string[]; value?: string }
   | { kind: 'choice'; name: string; rect: [number, number, number, number]; options: string[]; value?: string };
@@ -74,7 +74,7 @@ export function makePdf(options: PdfOptions = {}): Buffer {
   const page1 = firstPage;
   for (const f of fields) {
     if (f.kind === 'text') {
-      { const r = add(`<< /Type /Annot /Subtype /Widget /FT /Tx /T (${esc(f.name)}) /V (${esc(f.value ?? '')}) /Rect ${rectStr(f.rect)} /P ${page1} 0 R /F 4 /DA (/Helv 12 Tf 0 g) /MK << /BC [0 0 0] >> >>`); widgetRefs.push(r); fieldRefs.push(r); }
+      { const r = add(`<< /Type /Annot /Subtype /Widget /FT /Tx /T (${esc(f.name)})${f.description ? ` /TU (${esc(f.description)})` : ''}${f.required ? ' /Ff 2' : ''} /V (${esc(f.value ?? '')}) /Rect ${rectStr(f.rect)} /P ${page1} 0 R /F 4 /DA (/Helv 12 Tf 0 g) /MK << /BC [0 0 0] >> >>`); widgetRefs.push(r); fieldRefs.push(r); }
     } else if (f.kind === 'checkbox') {
       const on = f.checked ? '/Yes' : '/Off';
       const r = add(`<< /Type /Annot /Subtype /Widget /FT /Btn /T (${esc(f.name)}) /V ${on} /AS ${on} /Rect ${rectStr(f.rect)} /P ${page1} 0 R /F 4 /MK << /BC [0 0 0] >> /AP << /N << /Yes ${next + 1} 0 R /Off ${next + 2} 0 R >> >> >>`);
@@ -284,11 +284,12 @@ export async function readBack(app: App, bytes: Buffer, index = 0): Promise<stri
 }
 
 /** The Fill In / Edit PDF buttons at the top right. */
-export const modeButton = (page: Page, mode: 'Fill In' | 'Edit PDF') => page.getByRole('button', { name: mode, exact: true });
+/** One of the form palette's modes: a radio button of its radio group. */
+export const modeButton = (page: Page, mode: 'Fill In' | 'Edit PDF') => page.getByRole('radio', { name: mode, exact: true });
 
 export async function editMode(page: Page): Promise<void> {
   await modeButton(page, 'Edit PDF').click();
-  await expect(modeButton(page, 'Edit PDF')).toHaveAttribute('aria-pressed', 'true');
+  await expect(modeButton(page, 'Edit PDF')).toHaveAttribute('aria-checked', 'true');
 }
 
 /** A tool button of the Edit PDF palette (`text`, `rect`, `ellipse`, `line`, `whiteout`, `redact`, `check`, `cross`, `date`). */

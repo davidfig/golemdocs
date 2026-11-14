@@ -5,7 +5,7 @@
 
 import { mathInline, parseLatex, toLatex, toMathML, type MathEquation, type Raw } from '@golemdocs/docx';
 import { t } from '../i18n/index.ts';
-import { h } from './dom.ts';
+import { h, tabList } from './dom.ts';
 import { insertKey, PALETTE, PALETTE_TABS, type PaletteId } from './mathPalette.ts';
 import { dialogTitleBar } from './popup.ts';
 
@@ -53,6 +53,7 @@ export function showMathDialog(current: MathEquation | null = null): Promise<Raw
       tabButtons.set(id, tab);
       tabs.append(tab);
     }
+    tabList(tabs);
 
     const form = h(
       'form',

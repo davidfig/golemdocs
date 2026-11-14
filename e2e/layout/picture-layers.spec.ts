@@ -78,6 +78,29 @@ test.describe('the pointer follows the tool', () => {
     expect(await cursorAt(app, [100, 140])).toBe('ew-resize');
     expect(await cursorAt(app, [200, 180])).toBe('nwse-resize');
   });
+
+  test('a picked shape moves with the arrow keys and resizes with Alt, and Screen Reader Mode says where it is', async ({ app }) => {
+    await openPicture(app, CANVAS);
+    await app.menu('Tools', 'Screen Reader Mode');
+    await pick(app, 'Rectangle');
+    await drag(app, [100, 100], [200, 180]);
+    await pick(app, 'Move');
+    await click(app, [100, 140]);
+    // What was said last: "Left x, top y, width by height" (the box takes in the line's width, so it is not whole pixels).
+    const box = async () => {
+      let said = '';
+      await expect.poll(async () => (said = (await app.page.locator('.wm-sr-only[aria-live]').allTextContents()).join(''))).toMatch(/^Left /);
+      const [x, y, width, height] = said.match(/[\d.]+/g)!.map(Number);
+      return { x, y, width, height };
+    };
+    await app.press('Alt+Shift+ArrowRight');
+    const first = await box();
+    expect(first.x).toBeCloseTo(100, -0.5);
+    expect(first.width).toBeGreaterThan(105);
+    await app.press('ArrowLeft');
+    await expect.poll(async () => (await box()).x).toBeCloseTo(first.x - 1, 5);
+    expect((await box()).width).toBeCloseTo(first.width, 5);
+  });
 });
 
 test.describe('Photoshop keys', () => {
@@ -274,7 +297,7 @@ test.describe('more tools', () => {
     await pick(app, 'Rectangle');
     await app.toolbarButton(/^Fill Shapes$/).click();
     await app.page.getByRole('button', { name: 'Fill Color' }).last().click();
-    await app.page.getByRole('button', { name: 'Linear', exact: true }).click();
+    await app.page.getByRole('radio', { name: 'Linear', exact: true }).click();
     await app.page.keyboard.press('Escape');
     await drag(app, [100, 50], [300, 250]);
     // The fill fades from red across to white, so the two ends differ in their green and blue.

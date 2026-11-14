@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "タイトル付きの表、ブックマーク、または見出しの下のセクションにカーソルを置くと、ライブリンクとしてコピーできます。",
+  'live.insideLive': "このセルはすでにライブブロックの一部なので、ここにはライブリンクを貼り付けられません。ブロックの外の空のセルに貼り付けてください。",
   'live.readOnly': "この部分は {source} を表示し、そこから自動で更新されます。変更は元のファイルで行ってください。",
   'live.notUpdated': "{name} のライブブロックを更新できませんでした: {problem}",
   'live.resultsOnly': "ライブブロックはここでは引き続き更新されます。ダウンロードした {extension} ファイルには現在の表示内容だけが含まれます。",
@@ -61,6 +62,10 @@ export const live: Partial<Messages> = {
   'live.error.script': "{source} を実行できませんでした: {detail}",
   'live.error.notAllowed': "{source} は要求したものを読み取る許可がありません: {detail}",
   'live.error.blocked': "{source} にはもっと場所が必要です。{detail} が空でないため、前回の結果のままです。広がる先のセルを空にしてください。",
+  'live.error.foreign': "他の人が作成したため、届いたときの内容のままで、あなたのファイルから {source} を読み込みません。「自分のものにする」を選ぶと、あなたのファイルから最新の状態に保たれます。",
+  'live.card.makeMine': "自分のものにする",
+  'live.foreign.title': "他の人が作成したライブブロック",
+  'live.foreign.body': "{name} には他の人が作成したライブブロックがあり、{sources} を表示しています。届いたときの内容のままで、あなたのファイルからは何も読み込みません。自分のものにすると、同じ名前のあなたのファイルから最新の状態に保たれます。",
   'live.script.wholeVault': "保管庫全体",
   'live.script.daily': "毎日 {time} に実行",
   'live.script.weekly': "毎週{day}の {time} に実行",

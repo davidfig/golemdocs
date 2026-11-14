@@ -11,7 +11,7 @@ import type { Segment } from '../edit/segments.ts';
 import { normalizeTag, readTag } from './tags.ts';
 
 /** Bumped when the tokenizer or the format changes, so every kept index is made again. */
-export const INDEX_VERSION = 4;
+export const INDEX_VERSION = 5;
 
 /** A paragraph's text is kept up to this long (for the snippet of a hit); its words are all indexed. */
 const PARAGRAPH_CHARS = 400;

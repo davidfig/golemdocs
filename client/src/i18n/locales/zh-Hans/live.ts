@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "将光标放在带标题的表格、书签或标题下的章节中，即可将其复制为实时链接。",
+  'live.insideLive': "此单元格已属于一个实时块，因此不能在这里粘贴实时链接。请粘贴到块外的空单元格中。",
   'live.readOnly': "此部分显示 {source}，并从那里保持更新。请在源文件中修改。",
   'live.notUpdated': "{name} 中的实时块未更新：{problem}",
   'live.resultsOnly': "实时块在这里仍会更新；下载的 {extension} 文件只包含它们当前显示的内容。",
@@ -61,6 +62,10 @@ export const live: Partial<Messages> = {
   'live.error.script': "{source} 无法运行：{detail}",
   'live.error.notAllowed': "{source} 无权读取它请求的内容：{detail}",
   'live.error.blocked': "{source} 需要更多空间：{detail} 不为空，因此保留上次的结果。请清空它要扩展到的单元格。",
+  'live.error.foreign': "由他人创建，因此显示的是它带来的内容，不会从你的文件读取 {source}。选择“设为我的”以根据你的文件保持更新。",
+  'live.card.makeMine': "设为我的",
+  'live.foreign.title': "由他人创建的实时块",
+  'live.foreign.body': "{name} 中有他人创建的实时块，显示 {sources}。它们保留带来的内容，不会读取你的任何文件。将它们设为你的，即可根据你同名的文件保持更新。",
   'live.script.wholeVault': "整个保管库",
   'live.script.daily': "每天 {time} 运行",
   'live.script.weekly': "每{day} {time} 运行",

@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "Placez le curseur dans un tableau avec un titre, un signet ou une section sous un titre pour la copier comme lien dynamique.",
+  'live.insideLive': "Cette cellule fait déjà partie d’un bloc dynamique : impossible d’y coller un lien dynamique. Collez-le dans une cellule vide hors du bloc.",
   'live.readOnly': "Cette partie affiche {source} et reste à jour à partir de celui-ci. Modifiez-le là-bas.",
   'live.notUpdated': "Un bloc dynamique de {name} n’a pas été mis à jour : {problem}",
   'live.resultsOnly': "Ses blocs dynamiques restent à jour ici ; un fichier {extension} téléchargé ne contient que ce qu’ils affichent maintenant.",
@@ -61,6 +62,10 @@ export const live: Partial<Messages> = {
   'live.error.script': "{source} n’a pas pu s’exécuter : {detail}",
   'live.error.notAllowed': "{source} n’est pas autorisé à lire ce qu’il a demandé : {detail}",
   'live.error.blocked': "{source} a besoin de plus de place : {detail} n’est pas vide, il garde donc son dernier résultat. Videz les cellules où il s’étendrait.",
+  'live.error.foreign': "Créé par quelqu’un d’autre : il montre ce qu’il contenait à son arrivée et ne lit pas {source} dans vos fichiers. Choisissez « En faire le mien » pour le tenir à jour à partir d’eux.",
+  'live.card.makeMine': "En faire le mien",
+  'live.foreign.title': "Blocs dynamiques créés par quelqu’un d’autre",
+  'live.foreign.body': "{name} contient des blocs dynamiques créés par quelqu’un d’autre, qui montrent {sources}. Ils gardent ce qu’ils contenaient et ne lisent rien dans vos fichiers. Faites-en les vôtres pour les tenir à jour à partir de vos fichiers portant ces noms.",
   'live.script.wholeVault': "tout le coffre",
   'live.script.daily': "S’exécute tous les jours à {time}",
   'live.script.weekly': "S’exécute chaque {day} à {time}",

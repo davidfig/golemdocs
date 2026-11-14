@@ -5,6 +5,8 @@
 import type { SheetLayout } from '../formats/wdoc.ts';
 import type { Action, FormatState, SheetOp } from '../ui/actions.ts';
 import type { SheetEditorDeps, SheetEditorView } from './view.ts';
+import type { Region } from '../ui/focusRegions.ts';
+import type { ForcedColors } from '../webgl/program.ts';
 
 export class SheetEditor {
   private view: SheetEditorView | null = null;
@@ -109,8 +111,8 @@ export class SheetEditor {
     return this.view?.isOpen ? this.view.printPdf() : null;
   }
 
-  draw(darkPages: boolean): void {
-    this.view?.draw(darkPages);
+  draw(darkPages: boolean, forced: ForcedColors | null = null): void {
+    this.view?.draw(darkPages, forced);
   }
 
   bounds(): { x: number; y: number; width: number; height: number } {
@@ -155,6 +157,11 @@ export class SheetEditor {
 
   focus(): void {
     this.view?.focus();
+  }
+
+  /** The workbook's parts of the window for F6 (none while nothing is open). */
+  regions(): Region[] {
+    return this.view?.isOpen ? this.view.regions() : [];
   }
 
   sheetOp(op: SheetOp): void {

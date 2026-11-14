@@ -237,6 +237,10 @@ export type Action =
   | { kind: 'toggleFilesPanel' }
   | { kind: 'toggleRuler' }
   | { kind: 'toggleCollapsePages' }
+  /** Move the caret to the next (or previous) heading or table. */
+  | { kind: 'jump'; to: 'heading' | 'table'; backward: boolean }
+  /** Write the selected picture's description for screen readers. */
+  | { kind: 'altText' }
   | { kind: 'toggleFooter' }
   | { kind: 'toggleToolbars' }
   | { kind: 'toggleFormattingMarks' }
@@ -514,6 +518,8 @@ export interface ChromeState {
   renamable: boolean;
   kind: DocumentKind;
   hasSelection: boolean;
+  /** A picture of the text is selected. */
+  pictureSelected?: boolean;
   canUndo: boolean;
   canRedo: boolean;
   /** 1 = 100%. */

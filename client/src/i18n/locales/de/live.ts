@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "Setzen Sie den Cursor in eine Tabelle mit Titel, eine Textmarke oder einen Abschnitt unter einer Überschrift, um ihn als Live-Link zu kopieren.",
+  'live.insideLive': "Diese Zelle gehört schon zu einem Live-Block, daher kann hier kein Live-Link eingefügt werden. Fügen Sie ihn in eine leere Zelle außerhalb des Blocks ein.",
   'live.readOnly': "Dieser Teil zeigt {source} und wird von dort aktuell gehalten. Ändern Sie ihn dort.",
   'live.notUpdated': "Ein Live-Block in {name} wurde nicht aktualisiert: {problem}",
   'live.resultsOnly': "Die Live-Blöcke bleiben hier aktuell; eine heruntergeladene {extension}-Datei enthält nur, was sie gerade zeigen.",
@@ -61,6 +62,10 @@ export const live: Partial<Messages> = {
   'live.error.script': "{source} konnte nicht ausgeführt werden: {detail}",
   'live.error.notAllowed': "{source} darf nicht lesen, was es angefragt hat: {detail}",
   'live.error.blocked': "{source} braucht mehr Platz: {detail} ist nicht leer, daher bleibt das letzte Ergebnis. Leeren Sie die Zellen, in die es wachsen würde.",
+  'live.error.foreign': "Von jemand anderem erstellt: Es zeigt, was es mitbrachte, und liest {source} nicht aus Ihren Dateien. Wählen Sie „Zu meinem machen“, um es aus ihnen aktuell zu halten.",
+  'live.card.makeMine': "Zu meinem machen",
+  'live.foreign.title': "Live-Blöcke von jemand anderem",
+  'live.foreign.body': "{name} enthält Live-Blöcke, die jemand anderes erstellt hat, mit {sources}. Sie behalten, was sie mitbrachten, und lesen nichts aus Ihren Dateien. Machen Sie sie zu Ihren, um sie aus Ihren Dateien mit diesen Namen aktuell zu halten.",
   'live.script.wholeVault': "den gesamten Tresor",
   'live.script.daily': "Läuft jeden Tag um {time}",
   'live.script.weekly': "Läuft jeden {day} um {time}",

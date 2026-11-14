@@ -6,10 +6,12 @@ import type { Action, ChromeState, DocumentKind } from './actions.ts';
 import type { CommandRegistry } from './commands.ts';
 import { t } from '../i18n/index.ts';
 import { h, keepFocus, setAttr, toggleClass } from './dom.ts';
+import { colorName } from './colorName.ts';
 import { ICONS, iconElement } from './icons.ts';
 import { closePopup, narrow, openPopup, popupOpenFor } from './popup.ts';
 import { toolbarTitle } from './toolbarLayout.ts';
 import { lastNewKind, newKindIconElement, newKindLabel, newKindOrder } from './newKinds.ts';
+import { toolbarKeys } from './focusRegions.ts';
 
 export interface Control {
   el: HTMLElement;
@@ -64,6 +66,8 @@ export class Toolbar {
     this.overflow = h('div', { class: 'wm-overflow' });
     this.more.addEventListener('click', () => (popupOpenFor(this.more) ? closePopup() : openPopup(this.more, this.overflow)));
     this.el.append(this.more);
+    // From the keyboard (F6 brings it here): arrows between the controls, Escape back to the document.
+    this.el.addEventListener('keydown', (e) => toolbarKeys(this.el, e, () => registry.focusEditor()));
     this.resizeObserver.observe(this.el);
     narrow().addEventListener('change', this.onNarrowChange);
   }
@@ -408,9 +412,10 @@ export function paletteContents(o: { noneLabel: string; noneEmpty?: boolean; non
     const grid = h('div', { class: 'wm-palette-grid' });
     grid.style.setProperty('--palette-columns', String(o.rows[0].length));
     for (const c of colors) {
-      const cell = h('button', { class: 'wm-swatch', title: c, attrs: { type: 'button', 'aria-label': c } });
+      // Said by its name ("dark blue"), not its code, and the one in use is said to be current.
+      const cell = h('button', { class: 'wm-swatch', title: c, attrs: { type: 'button', 'aria-label': colorName(c) } });
       cell.style.background = c;
-      if (o.color && c.toLowerCase() === o.color.toLowerCase()) cell.classList.add('current');
+      if (o.color && c.toLowerCase() === o.color.toLowerCase()) markCurrent(cell, true);
       cell.addEventListener('click', () => o.choose(c));
       cells.push(cell);
       grid.append(cell);
@@ -457,6 +462,12 @@ export interface PaletteControl {
   setColor(color: string | null): void;
 }
 
+/** The swatch of the colour in use: drawn as such, and said to be (aria-current). */
+function markCurrent(cell: HTMLElement, on: boolean): void {
+  toggleClass(cell, 'current', on);
+  setAttr(cell, 'aria-current', on ? 'true' : null);
+}
+
 export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control {
   let color: string | null = spec.initial;
   const main = h('button', { class: 'wm-tbutton wm-split-main', title: spec.label, attrs: { type: 'button', tabindex: '-1', 'aria-label': spec.label } }, iconElement(spec.icon));
@@ -486,7 +497,7 @@ export function colorButton(spec: ColorSpec, registry: CommandRegistry): Control
     // The popup opens on the colour the selection really has.
     if (spec.shown) color = spec.shown(registry.state()).color ?? color;
     const cells: HTMLElement[] = [];
-    const mark = () => cells.forEach((cell) => toggleClass(cell, 'current', !!color && cell.title.toLowerCase() === color.toLowerCase()));
+    const mark = () => cells.forEach((cell) => markCurrent(cell, !!color && cell.title.toLowerCase() === color.toLowerCase()));
     const header = spec.header?.(registry.state(), {
       close: closePopup,
       setColor: (c) => {

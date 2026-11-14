@@ -58,13 +58,13 @@ export function sheetLiveSources(book: Workbook): string[] {
 }
 
 /** Adds a live range to a workbook at a cell (empty until it is first updated); its name, or null when the cell is in
- * another live range (whose next update would write over it). */
-export function addSheetLive(book: Workbook, sheet: number, row: number, col: number, source: string): DefinedName | null {
+ * another live range (whose next update would write over it). `by` says who made it (live/owner.ts). */
+export function addSheetLive(book: Workbook, sheet: number, row: number, col: number, source: string, by?: string): DefinedName | null {
   if (liveRangeIn(book, sheet, [{ r0: row, c0: col, r1: row, c1: col }])) return null;
   const used = new Set(book.names.map((n) => n.name));
   let n = 1;
   while (used.has(`${PREFIX}${n}`)) n++;
-  const name: DefinedName = { name: `${PREFIX}${n}`, formula: formulaOf(book.sheets[sheet] as Worksheet, { r0: row, c0: col, r1: row, c1: col }), hidden: true, attrs: { comment: liveTagText({ source, stamp: '' }) } };
+  const name: DefinedName = { name: `${PREFIX}${n}`, formula: formulaOf(book.sheets[sheet] as Worksheet, { r0: row, c0: col, r1: row, c1: col }), hidden: true, attrs: { comment: liveTagText({ source, stamp: '', ...(by && { by }) }) } };
   book.names.push(name);
   book.dirty = true;
   return name;

@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "將游標放在有標題的表格、書籤或標題下的章節中，即可將其複製為即時連結。",
+  'live.insideLive': "此儲存格已屬於一個即時區塊，因此不能在這裡貼上即時連結。請貼到區塊外的空白儲存格中。",
   'live.readOnly': "此部分顯示 {source}，並從那裡保持更新。請在來源檔案中修改。",
   'live.notUpdated': "{name} 中的即時區塊未更新：{problem}",
   'live.resultsOnly': "即時區塊在這裡仍會更新；下載的 {extension} 檔案只包含它們目前顯示的內容。",
@@ -61,6 +62,10 @@ export const live: Partial<Messages> = {
   'live.error.script': "{source} 無法執行：{detail}",
   'live.error.notAllowed': "{source} 無權讀取它要求的內容：{detail}",
   'live.error.blocked': "{source} 需要更多空間：{detail} 不是空的，因此保留上次的結果。請清空它要擴展到的儲存格。",
+  'live.error.foreign': "由他人建立，因此顯示的是它帶來的內容，不會從你的檔案讀取 {source}。選擇「設為我的」以根據你的檔案保持更新。",
+  'live.card.makeMine': "設為我的",
+  'live.foreign.title': "由他人建立的即時區塊",
+  'live.foreign.body': "{name} 中有他人建立的即時區塊，顯示 {sources}。它們保留帶來的內容，不會讀取你的任何檔案。將它們設為你的，即可根據你同名的檔案保持更新。",
   'live.script.wholeVault': "整個保管庫",
   'live.script.daily': "每天 {time} 執行",
   'live.script.weekly': "每{day} {time} 執行",

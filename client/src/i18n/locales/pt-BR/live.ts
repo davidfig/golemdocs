@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "Coloque o cursor em uma tabela com título, um indicador ou uma seção sob um título para copiá-la como link dinâmico.",
+  'live.insideLive': "Esta célula já faz parte de um bloco dinâmico, então não é possível colar um link dinâmico aqui. Cole-o em uma célula vazia fora do bloco.",
   'live.readOnly': "Esta parte mostra {source} e é mantida atualizada a partir dele. Altere-o lá.",
   'live.notUpdated': "Um bloco dinâmico em {name} não foi atualizado: {problem}",
   'live.resultsOnly': "Seus blocos dinâmicos continuam atualizados aqui; um arquivo {extension} baixado tem só o que eles mostram agora.",
@@ -61,6 +62,10 @@ export const live: Partial<Messages> = {
   'live.error.script': "{source} não pôde ser executado: {detail}",
   'live.error.notAllowed': "{source} não tem permissão para ler o que pediu: {detail}",
   'live.error.blocked': "{source} precisa de mais espaço: {detail} não está vazia, então mantém o último resultado. Limpe as células para onde ele cresceria.",
+  'live.error.foreign': "Criado por outra pessoa: mostra o que trouxe e não lê {source} dos seus arquivos. Escolha “Tornar meu” para mantê-lo atualizado a partir deles.",
+  'live.card.makeMine': "Tornar meu",
+  'live.foreign.title': "Blocos dinâmicos criados por outra pessoa",
+  'live.foreign.body': "{name} tem blocos dinâmicos criados por outra pessoa, mostrando {sources}. Eles mantêm o que trouxeram e não leem nada dos seus arquivos. Torne-os seus para mantê-los atualizados a partir dos seus arquivos com esses nomes.",
   'live.script.wholeVault': "todo o cofre",
   'live.script.daily': "Executa todo dia às {time}",
   'live.script.weekly': "Executa toda {day} às {time}",

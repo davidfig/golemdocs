@@ -15,8 +15,9 @@ export interface MenuRequest {
 }
 
 /**
- * Calls `open` on a right click (or the menu key) on `el`, and on a long press with a finger or pen. Return false from
- * `open` to leave the event alone (the system's own menu shows, and a long press does nothing).
+ * Calls `open` on a right click (or the menu key) on `el`, on Shift+F10 (the menu key's stand-in, and the only one a Mac
+ * has), and on a long press with a finger or pen. Return false from `open` to leave the event alone (the system's own menu
+ * shows, and a long press does nothing). From the keyboard the menu opens under what has the focus.
  */
 export function onContextMenu(el: HTMLElement, open: (at: MenuRequest) => boolean | void): void {
   /** A long press opened the menu, and the native event for the same press (Android) is still to come. */
@@ -30,6 +31,16 @@ export function onContextMenu(el: HTMLElement, open: (at: MenuRequest) => boolea
     e.preventDefault();
     // Android's own long press: no timed one after it.
     cancel?.();
+  });
+
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'F10' || !e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+    const target = e.target instanceof HTMLElement ? e.target : el;
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+    const box = target.getBoundingClientRect();
+    if (open({ clientX: box.left + Math.min(16, box.width / 2), clientY: box.bottom, target }) === false) return;
+    // Handled: a menu for what holds this one (the panel around a row) doesn't open too, and Windows sends no `contextmenu`.
+    e.preventDefault();
   });
 
   let cancel: (() => void) | null = null;

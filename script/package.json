@@ -11,6 +11,7 @@
     "./grants": "./src/grants.ts",
     "./host": "./src/host.ts",
     "./link": "./src/link.ts",
+    "./messages": "./src/messages.ts",
     "./nodeChannel": "./src/nodeChannel.ts",
     "./runtime": "./src/runtime.ts",
     "./sandbox": "./src/sandbox.ts",

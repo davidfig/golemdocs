@@ -19,6 +19,8 @@ export { covers, grantOf, triggerText } from '@golemdocs/script/grants';
 import { isScriptPath, linkScript, ScriptError } from '@golemdocs/script/link';
 import type { RunMode } from '@golemdocs/script/runtime';
 import { editedFiles, ScriptRequests, scriptResult } from './vault.ts';
+import { useScriptMessages } from './messages.ts';
+import { say } from '@golemdocs/script/messages';
 import type { ChangedFile, ScriptVault } from './vault.ts';
 
 /** The app's side, as the runner needs it. */
@@ -81,6 +83,7 @@ export class ScriptRunner {
   }
 
   private async program(path: string): Promise<{ url: string; files: string[] }> {
+    useScriptMessages();
     return linkScript(path, async (p) => {
       const file = await this.deps.vault.file(p);
       return file ? scriptText(file.bytes) : null;
@@ -120,7 +123,7 @@ export class ScriptRunner {
     try {
       program = await this.program(path);
     } catch (e) {
-      if (e instanceof ScriptError && e.message === `${path}: there is no such script`) return { kind: 'error', code: 'missing', detail: path };
+      if (e instanceof ScriptError && e.message === say('at', { path, message: say('noScript') })) return { kind: 'error', code: 'missing', detail: path };
       return { kind: 'error', code: 'script', detail: (e as Error).message };
     }
     const vault: ScriptVault = {

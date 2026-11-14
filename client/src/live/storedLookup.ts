@@ -4,6 +4,7 @@
 // on the page comes back here: the vault graph, scripts (their sandbox is the page's), and PDF exports (the layout worker's).
 // Types only, so the keeper can name them without loading the live chunk.
 
+import type { LiveOptions } from './owner.ts';
 import type { LiveResult } from './result.ts';
 import type { UpdateReport } from './update.ts';
 
@@ -36,4 +37,4 @@ export interface UpdateOutcome {
 }
 
 /** Brings a stored document's blocks up to date from what `lookup` hands out. */
-export type StoredUpdater = (bytes: Uint8Array, name: string, lookup: StoredLookup, options: { force?: boolean }) => Promise<UpdateOutcome>;
+export type StoredUpdater = (bytes: Uint8Array, name: string, lookup: StoredLookup, options: LiveOptions) => Promise<UpdateOutcome>;

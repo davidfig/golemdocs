@@ -36,6 +36,7 @@ import { isWdoc, readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../f
 import type { FormField } from '@golemdocs/pdf';
 import type { PdfAnnotator } from './pdfAnnotator.ts';
 import { getLocale, loadLocale, t } from '../i18n/index.ts';
+import { caretContext, CONTEXT_RADIUS, headings, HeadingReader, jumpTarget, pageNodes, type A11yPage, type CaretContext } from './a11y.ts';
 
 /** The welcome text in the current language (`welcome/<locale>.md`), else English. Each is its own small chunk. */
 const WELCOMES = import.meta.glob<string>('./welcome/*.md', { query: '?raw', import: 'default' });
@@ -92,6 +93,7 @@ import { livePartAddress } from '../live/partAddress.ts';
 import { findLiveIn, liveIndexAt, unwrapLive } from '../live/liveMarks.ts';
 import type { LiveTag } from '../live/liveMarks.ts';
 import type { SourceLookup } from '../live/sources.ts';
+import type { LiveOwner } from '../live/owner.ts';
 import { sourceFromFile } from '../formats/source.ts';
 import { fontFile, loadAppFonts } from '../formats/appFonts.ts';
 import { withDrawingText } from '../formats/drawingText.ts';
@@ -184,6 +186,9 @@ async function embedded(title: string, fonts: FontSet): Promise<Embedded | null>
 }
 
 /** A live block's source, asked of the page by title like an embed (docs/live-blocks.md): its bytes, and a drawing's picture. */
+/** Who the person is, for live blocks pasted (the page's `liveOwner` command); none yet: pasted blocks are left unsigned. */
+let liveOwner: LiveOwner | null = null;
+
 const liveSource: SourceLookup = async (title) => {
   const file = await askEmbed(title);
   if (!file) return null;
@@ -333,8 +338,11 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
   }
 }
 
+/** Screen Reader Mode is on: selections carry the text around the caret (see a11y.ts). */
+let screenReader = false;
+
 /** Commands that change the editor's settings rather than the document (they work with none open). */
-const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect']);
+const SETTINGS_COMMANDS = new Set<WireCommand['kind']>(['spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'liveOwner']);
 
 /** The settings commands with no document open (see `close`): they change what the worker does for the next one, and for plain text files. */
 function applySettings(wire: WireCommand): void {
@@ -346,12 +354,13 @@ function applySettings(wire: WireCommand): void {
     void acceptSpelling(wire.words ?? []);
   } else if (wire.kind === 'autoFormat') live.autoFormat = wire.on;
   else if (wire.kind === 'autoCorrect') setAutoCorrect(wire);
+  else if (wire.kind === 'liveOwner') liveOwner = wire.owner;
 }
 /** Commands that only look: allowed on a document shown as PDF, which can't be edited. */
 /** Commands that edit at the selection, refused in a live block (see `livePart`). */
 const LIVE_GUARDED = new Set<string>(['insertText', 'insertParagraph', 'insertLineBreak', 'insertContent', 'pasteContent', 'pasteHtml', 'delete', 'formatText', 'formatParagraphs', 'changeCase', 'insertTable', 'tab', 'setLink', 'removeLink', 'tableEdit', 'splitCells', 'format', 'applyPainter', 'moveDrawing', 'moveDrawingToParagraph', 'replaceDrawing', 'replacePicture', 'addComment', 'addBookmark']);
 
-const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'select', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'spellAt', 'countWords', 'getProperties', 'selectWord']);
+const VIEW_COMMANDS = new Set<WireCommand['kind']>(['pointer', 'select', 'move', 'selectAll', 'find', 'spellNext', 'spellWords', 'spellIgnored', 'spellCheck', 'autoFormat', 'autoCorrect', 'liveOwner', 'spellAt', 'countWords', 'getProperties', 'selectWord']);
 
 /** A book's key: the hash of its paragraphs' text, so the same book finds its reading place on every device, and its places are the same paragraphs. */
 const bookKey = (paragraphs: string[]): Promise<string> => sha256Hex(new TextEncoder().encode(paragraphs.join('\n')));
@@ -723,8 +732,11 @@ class OpenDocument {
       footerStats: this.footerStats,
       docProperties: this.props,
       documentInfo: this.documentInfo,
+      ...(screenReader && { context: this.caretContext(editor), mistake: this.caretMistake(editor) }),
+      ...(this.jumpMissed && { jumpMissed: this.jumpMissed }),
     };
     this.search = null;
+    this.jumpMissed = undefined;
     this.spell = null;
     this.stats = undefined;
     this.footerStats = undefined;
@@ -735,6 +747,82 @@ class OpenDocument {
     this.sendPresence();
     this.scheduleSelectionHtml(editor, update.text);
     return update;
+  }
+
+  /** The text around the caret for the hidden textarea (Screen Reader Mode). */
+  private caretContext(editor: Editor): CaretContext | null {
+    if (editor.selectedPicture()) return null;
+    const at = editor.selectionIndex();
+    if (at) return caretContext(editor.paragraphs(), at.anchor, at.focus);
+    // In a header, footer or text box: the paragraph the caret is in.
+    const { anchor, focus } = editor.selection;
+    if (anchor.paragraph !== focus.paragraph) return caretContext([focus.paragraph], [0, focus.offset], [0, focus.offset]);
+    return caretContext([focus.paragraph], [0, anchor.offset], [0, focus.offset]);
+  }
+
+  /** The mistake a collapsed caret is in or at the end of (Screen Reader Mode), from the check-as-you-type results. */
+  private caretMistake(editor: Editor): SelectionUpdate['mistake'] {
+    const at = editor.selectionIndex();
+    if (!at || !editor.collapsed || editor.selectedPicture()) return null;
+    const [index, offset] = at.focus;
+    const paragraph = editor.paragraphs()[index];
+    if (!paragraph) return null;
+    const issue = issuesOf(paragraph, documentLanguageOf(editor), () => undefined).find((i) => i.start <= offset && offset <= i.end);
+    return issue ? { kind: issue.kind, text: issue.text, paragraph: index, start: issue.start } : null;
+  }
+
+  private headingReader: HeadingReader | null = null;
+  private jumpMissed: SelectionUpdate['jumpMissed'];
+
+  /** Next / Previous Heading or Table: the caret goes to the start of it, or the page hears there is none. */
+  private jump(to: 'heading' | 'table', backward: boolean): void | Promise<void> {
+    const { editor, document } = this;
+    if (!editor || !document || this.closed || this.annotator) return;
+    if (this.headingReader?.doc !== document) this.headingReader = new HeadingReader(document);
+    const reader = this.headingReader;
+    const paragraphs = editor.paragraphs();
+    const at = editor.selectionIndex();
+    const from = at ? (backward ? Math.min(at.anchor[0], at.focus[0]) : Math.max(at.anchor[0], at.focus[0])) : backward ? paragraphs.length : -1;
+    const target = jumpTarget(
+      paragraphs.length,
+      from,
+      to,
+      backward,
+      (i) => reader.level(paragraphs[i]) > 0 && !editor.paragraphInTable(paragraphs[i]),
+      (i) => (editor.paragraphInTable(paragraphs[i]) ? (editor.replica.engine.index.locate(paragraphs[i])?.table ?? null) : null),
+    );
+    if (target < 0) {
+      this.jumpMissed = to;
+      return this.sendSelection();
+    }
+    return this.runCommand({ kind: 'select', paragraph: target, from: 0, to: 0 });
+  }
+
+  /** The reading layer's pages (those of `ids` still shown), and the document's headings when asked for (Screen Reader Mode). */
+  a11yPages(ids: number[], withHeadings: boolean): void {
+    const { editor, session, document, annotator } = this;
+    // A PDF shown as its own pages: each page's lines of text.
+    if (annotator && !this.closed) {
+      const pages: A11yPage[] = [];
+      this.pdfPages.forEach((page, i) => {
+        if (!ids.includes(page.id)) return;
+        const nodes = annotator.pageLines(i).map((l): A11yPage['nodes'][number] => ({ kind: 'paragraph', parts: [{ text: l.text }], x: l.x, y: l.y, width: Math.max(l.width, 1), height: Math.max(l.height, 1), paragraph: -1, offset: 0 }));
+        pages.push({ id: page.id, number: i + 1, nodes });
+      });
+      post({ type: 'a11yPages', doc: this.doc, pages, ...(withHeadings && { headings: [] }) });
+      return;
+    }
+    if (!editor || !session || !document || this.closed) {
+      post({ type: 'a11yPages', doc: this.doc, pages: [] });
+      return;
+    }
+    if (this.headingReader?.doc !== document) this.headingReader = new HeadingReader(document);
+    const reader = this.headingReader;
+    const wanted = new Set(ids);
+    const pages: A11yPage[] = [];
+    for (const page of session.displayPages) if (wanted.has(page.id)) pages.push({ id: page.id, number: page.number, nodes: pageNodes(page, editor, reader) });
+    const list = withHeadings ? headings(editor.paragraphs(), reader, (p) => editor.paragraphInTable(p)) : undefined;
+    post({ type: 'a11yPages', doc: this.doc, pages, ...(list && { headings: list }) });
   }
 
   private selectionHtmlTimer: ReturnType<typeof setTimeout> | undefined;
@@ -764,7 +852,13 @@ class OpenDocument {
     if (!picture || !picture.drawing.image) return null;
     const { item } = picture;
     const [start] = editor.ordered();
-    return { page: picture.page.id, at: { paragraph: editor.paragraphs().indexOf(start.paragraph), offset: start.offset }, x: item.x, y: item.y, width: item.width, height: item.height, floating: !picture.drawing.inline, part: picture.drawing.image, ...(picture.drawing.svg && { svg: picture.drawing.svg }) };
+    return { page: picture.page.id, at: { paragraph: editor.paragraphs().indexOf(start.paragraph), offset: start.offset }, x: item.x, y: item.y, width: item.width, height: item.height, floating: !picture.drawing.inline, part: picture.drawing.image, ...(picture.drawing.svg && { svg: picture.drawing.svg }), ...(picture.drawing.description && { description: picture.drawing.description }) };
+  }
+
+  /** A PDF's selected text, all selected, for the hidden textarea (Screen Reader Mode). */
+  private pdfContext(annotator: PdfAnnotator): CaretContext | null {
+    const text = annotator.selectedText(2 * CONTEXT_RADIUS);
+    return text ? { text, anchor: 0, focus: text.length } : null;
   }
 
   private pdfSelection(annotator: PdfAnnotator): SelectionUpdate {
@@ -783,6 +877,7 @@ class OpenDocument {
       focus: first && this.pdfPages[first.page] ? { page: this.pdfPages[first.page].id, x: first.x, y: first.y, height: first.height } : null,
       reveal: this.reveal,
       text: annotator.selectedText(CLIPBOARD_LIMIT),
+      ...(screenReader && { context: this.pdfContext(annotator) }),
       format: {},
       canUndo: annotator.canUndo,
       canRedo: annotator.canRedo,
@@ -1944,7 +2039,8 @@ class OpenDocument {
     try {
       pasted = await htmlToPaste(html, document);
       // A live block pasted (Copy as Live Link) is filled in as it goes in; one whose source can't be read keeps what was copied.
-      if (pasted && findLiveIn(pasted.blocks).length) await (await import('../live/update.ts')).updateLiveIn(pasted.blocks, document, liveSource);
+      // One with no `by` (a link copied) is signed as the person's; someone else's stays theirs (live/owner.ts).
+      if (pasted && findLiveIn(pasted.blocks).length) await (await import('../live/update.ts')).updateLiveIn(pasted.blocks, document, liveSource, { ...(liveOwner && { owner: liveOwner }), unsignedMine: true });
       if (pasted?.fonts.size) await session.ensureFonts(pasted.fonts);
     } catch {
       pasted = null;
@@ -2063,12 +2159,14 @@ class OpenDocument {
    * Selects the mistake under the point (unless `select` is false) and reports it for the menu (nothing, if there is none).
    * With no mistake there, a point in a table moves the caret into its cell (unless it is in the selection already) and says so, for the table's commands.
    */
-  private async spellAt(pageId: number, x: number, y: number, select: boolean, check: boolean): Promise<void> {
+  private async spellAt(pageId: number, x: number, y: number, select: boolean, check: boolean, atCaret = false): Promise<void> {
     const editor = this.editor;
     const session = this.session;
     if (!editor || !session || this.closed || this.annotator) return;
     const page = session.displayPages.find((p) => p.id === pageId);
-    const hit = page && editor.hitTest(page, x, y);
+    // The menu key asks about the caret (where a selection ends), not a point.
+    const caret = atCaret ? editor.ordered()[1] : null;
+    const hit = caret ? { paragraph: caret.paragraph, offset: caret.offset } : page && editor.hitTest(page, x, y);
     const documentLang = documentLanguageOf(editor);
     const language = hit && check && paragraphLanguageOf(hit.paragraph, documentLang);
     const dictionary = language && language !== 'none' ? await loadDictionary(language) : null;
@@ -2265,7 +2363,12 @@ class OpenDocument {
       setAutoCorrect(wire);
       return;
     }
-    if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y, wire.select ?? true, wire.check ?? true);
+    if (wire.kind === 'liveOwner') {
+      liveOwner = wire.owner;
+      return;
+    }
+    if (wire.kind === 'jump') return this.jump(wire.to, wire.backward);
+    if (wire.kind === 'spellAt') return this.spellAt(wire.page, wire.x, wire.y, wire.select ?? true, wire.check ?? true, wire.caret ?? false);
     if (wire.kind === 'spellNext') return this.spellNext(wire.from, wire.grammar);
     if (this.annotator) return this.pdfCommand(this.annotator, wire);
     if (isPdfCommand(wire)) return;
@@ -3164,6 +3267,13 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       current?.leave();
       current?.controller.abort();
       current = null;
+      break;
+    case 'a11y':
+      screenReader = message.on;
+      current?.sendSelection();
+      break;
+    case 'a11yPages':
+      if (current?.doc === message.doc) current.a11yPages(message.pages, message.headings);
       break;
     case 'marks':
       setFormattingMarks(message.on);

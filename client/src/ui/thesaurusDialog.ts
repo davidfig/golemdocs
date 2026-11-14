@@ -4,6 +4,7 @@
 
 import { t, type MessageKey } from '../i18n/index.ts';
 import { inCaseOf, meaningLabel, synonymsOf, type LookUp } from '../spelling/thesaurus.ts';
+import { announce } from './announce.ts';
 import { h, makeDraggable } from './dom.ts';
 import { listBox, type ListBox } from './listBox.ts';
 import { dialogTitleBar } from './popup.ts';
@@ -153,6 +154,8 @@ export class ThesaurusDialog {
     if (result.meanings.some((m) => m.opposite.length)) rows.push(t('spelling.thesaurus.antonyms'));
     this.meanings.set(rows);
     this.showSynonyms();
+    // What was found shows only in the lists, while the focus stays in the box the word was typed in: say it.
+    announce(t('a11y.thesaurus.found', { count: result.meanings.length, word: result.word }));
   }
 
   /** The words for the meaning picked (or the antonyms of all of them, for the last row). */

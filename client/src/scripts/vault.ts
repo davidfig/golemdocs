@@ -15,6 +15,8 @@ import type { ScriptMeta } from '@golemdocs/script/host';
 import { isScriptPath } from '@golemdocs/script/link';
 import type { RunMode, ScriptEdit, ScriptEditOp } from '@golemdocs/script/runtime';
 import { MAX_FETCH_CHARS } from '@golemdocs/script/fetch';
+import { t } from '../i18n/index.ts';
+import type { MessageKey } from '../i18n/index.ts';
 import type { ScriptFetch, ScriptResponse } from '@golemdocs/script/fetch';
 
 export type { ScriptFetch, ScriptResponse } from '@golemdocs/script/fetch';
@@ -71,7 +73,7 @@ export async function noteData(file: VaultFile): Promise<NoteData | null> {
 }
 
 /** A result as plain data for a script: a table's rows, a value's text. */
-function plainResult(result: LiveResult): unknown {
+function plainResult(result: LiveResult, source: string): unknown {
   switch (result.kind) {
     case 'table':
       return { kind: 'table', rows: result.rows, header: result.header };
@@ -82,7 +84,7 @@ function plainResult(result: LiveResult): unknown {
     case 'picture':
       return { kind: 'picture', width: result.width, height: result.height };
     case 'error':
-      throw new Error(result.detail ? `${result.code}: ${result.detail}` : result.code);
+      throw new Error(t(`live.error.${result.code}` as MessageKey, { source, detail: result.detail ?? '' }));
   }
 }
 
@@ -97,7 +99,7 @@ export class ScriptRequests {
   ) {}
 
   private canRead(path: string, meta: ScriptMeta): void {
-    if (!within(path, [...meta.reads, ...meta.writes])) throw new Error(`${meta.name} did not ask to read ${path || 'the whole vault'}: add it to \`reads\` in its meta`);
+    if (!within(path, [...meta.reads, ...meta.writes])) throw new Error(path ? t('scripts.vault.notAsked', { name: meta.name, path }) : t('scripts.vault.notAskedVault', { name: meta.name }));
   }
 
   async handle(op: string, args: unknown[], meta: ScriptMeta): Promise<unknown> {
@@ -108,7 +110,7 @@ export class ScriptRequests {
         this.canRead(folder, meta);
         this.read.add(`${folder}/`);
         const files = await this.vault.list(folder);
-        if (!files) throw new Error(`There is no folder ${folder}`);
+        if (!files) throw new Error(t('scripts.vault.noFolder', { folder }));
         // Scripts are code, not notes.
         const notes = await Promise.all(files.filter((f) => !isScriptPath(f.path)).map(noteData));
         return notes.filter((n): n is NoteData => n !== null).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
@@ -124,47 +126,47 @@ export class ScriptRequests {
         const path = normalizeFolder(arg.split('#')[0]);
         this.canRead(path, meta);
         this.read.add(path);
-        return plainResult(await this.vault.produce(arg));
+        return plainResult(await this.vault.produce(arg), arg);
       }
       case 'result': {
         const path = normalizeFolder(arg);
-        if (!isScriptPath(path) || !plainPath(path)) throw new Error(`${path} is not a script`);
+        if (!isScriptPath(path) || !plainPath(path)) throw new Error(t('scripts.vault.notScript', { path }));
         this.read.add(path);
-        return plainResult(await this.vault.produce(path));
+        return plainResult(await this.vault.produce(path), path);
       }
       case 'fetch': {
-        if (this.mode !== 'act') throw new Error('A producer cannot use the network: its block must show the same for the same files');
+        if (this.mode !== 'act') throw new Error(t('scripts.vault.producerNetwork'));
         let url: URL;
         try {
           url = new URL(arg);
         } catch {
-          throw new Error(`${arg} is not an address`);
+          throw new Error(t('scripts.vault.notAddress', { address: arg }));
         }
-        if (url.protocol !== 'https:') throw new Error(`Scripts fetch only https:// addresses, not ${arg}`);
-        if (!(meta.network ?? []).includes(url.hostname.toLowerCase())) throw new Error(`${meta.name} did not ask to fetch from ${url.hostname}: add it to \`network\` in its meta`);
-        if (!this.vault.fetch) throw new Error('Scripts cannot use the network here');
+        if (url.protocol !== 'https:') throw new Error(t('scripts.vault.httpsOnly', { address: arg }));
+        if (!(meta.network ?? []).includes(url.hostname.toLowerCase())) throw new Error(t('scripts.vault.notAskedFetch', { name: meta.name, host: url.hostname }));
+        if (!this.vault.fetch) throw new Error(t('scripts.vault.noNetwork'));
         const raw = (args[1] && typeof args[1] === 'object' ? args[1] : {}) as Partial<ScriptFetch>;
         const headers = Object.fromEntries(Object.entries(raw.headers && typeof raw.headers === 'object' ? raw.headers : {}).map(([k, v]) => [String(k), String(v)]));
         const response = await this.vault.fetch(url.href, { method: typeof raw.method === 'string' ? raw.method.toUpperCase() : 'GET', headers, body: typeof raw.body === 'string' ? raw.body : null });
-        if (response.body.length > MAX_FETCH_CHARS) throw new Error(`${url.hostname} sent back more than a script may read`);
+        if (response.body.length > MAX_FETCH_CHARS) throw new Error(t('scripts.vault.fetchTooLarge', { host: url.hostname }));
         return response;
       }
       case 'open': {
-        if (this.mode !== 'act') throw new Error('A producer cannot open documents to change them');
+        if (this.mode !== 'act') throw new Error(t('scripts.vault.producerOpen'));
         const path = normalizeFolder(arg);
-        if (!within(path, meta.writes)) throw new Error(`${meta.name} did not ask to change ${path}: add its folder to \`writes\` in its meta`);
+        if (!within(path, meta.writes)) throw new Error(t('scripts.vault.notAskedChange', { name: meta.name, path }));
         const file = await this.vault.file(path);
         if (file) {
           const note = await noteData(file);
-          if (!note) throw new Error(`${path} is not a text document`);
+          if (!note) throw new Error(t('scripts.vault.notText', { path }));
           return { ...note, exists: true };
         }
-        if (!args[1]) throw new Error(`There is no document ${path}`);
-        if (!/\.md$/i.test(path)) throw new Error(`A new document is a Markdown note: ${path} should end in .md`);
+        if (!args[1]) throw new Error(t('scripts.vault.noDocument', { path }));
+        if (!/\.md$/i.test(path)) throw new Error(t('scripts.vault.newIsMarkdown', { path }));
         return { path, title: stem(path), text: '', fields: {}, exists: false };
       }
     }
-    throw new Error(`Scripts cannot ${op}`);
+    throw new Error(t('scripts.vault.cannot', { op }));
   }
 }
 
@@ -245,7 +247,7 @@ export async function applyOps(stored: StoredText, ops: readonly ScriptEditOp[],
         doc.body = await blocksFor(op.markdown, doc);
         break;
       case 'setField': {
-        if (!stored.extensions.md && !/\.md$/i.test(path)) throw new Error(`${path}: only a Markdown note has fields`);
+        if (!stored.extensions.md && !/\.md$/i.test(path)) throw new Error(t('scripts.vault.noFields', { path }));
         const md = stored.extensions.md ?? {};
         stored.extensions.md = { ...md, frontMatter: setFrontMatterField(md.frontMatter ?? '', op.key, op.value) };
         break;
@@ -253,7 +255,7 @@ export async function applyOps(stored: StoredText, ops: readonly ScriptEditOp[],
       case 'appendToSection':
       case 'replaceSection': {
         const section = sectionOf(doc, op.heading);
-        if (!section) throw new Error(`${path} has no heading “${op.heading}”`);
+        if (!section) throw new Error(t('scripts.vault.noHeading', { path, heading: op.heading }));
         const blocks = await blocksFor(op.markdown, doc);
         if (op.op === 'appendToSection') insertBlocks(doc, section.end, blocks);
         else doc.body.splice(section.at + 1, section.end - section.at - 1, ...blocks);
@@ -279,14 +281,14 @@ export async function editedFiles(edits: readonly ScriptEdit[], meta: ScriptMeta
   const out: ChangedFile[] = [];
   for (const edit of edits) {
     const path = normalizeFolder(edit.path);
-    if (!within(path, meta.writes)) throw new Error(`${meta.name} did not ask to change ${path}`);
+    if (!within(path, meta.writes)) throw new Error(t('scripts.vault.notAskedChange', { name: meta.name, path }));
     if (!edit.ops.length && !edit.create) continue;
     const existing = await vault.file(path);
-    if (!existing && !edit.create) throw new Error(`There is no document ${path}`);
-    if (!existing && !/\.md$/i.test(path)) throw new Error(`A new document is a Markdown note: ${path} should end in .md`);
+    if (!existing && !edit.create) throw new Error(t('scripts.vault.noDocument', { path }));
+    if (!existing && !/\.md$/i.test(path)) throw new Error(t('scripts.vault.newIsMarkdown', { path }));
     const name = path.split('/').pop()!;
     const stored = await readStoredText(existing?.bytes ?? new Uint8Array(), name, false);
-    if (!stored) throw new Error(`${path} is not a text document`);
+    if (!stored) throw new Error(t('scripts.vault.notText', { path }));
     await applyOps(stored, edit.ops, path);
     out.push({ path, before: existing?.bytes ?? null, after: await stored.store(await stored.doc.write()) });
   }

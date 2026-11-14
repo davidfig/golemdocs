@@ -14,7 +14,7 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
@@ -125,6 +125,56 @@ fn walk(dir: &Path, prefix: &str, found: &mut Vec<Entry>) -> std::io::Result<()>
     Ok(())
 }
 
+/// Every folder in the vault, empty ones included, sorted by path. Hidden names and links are left out, and so is
+/// everything under them, as `scan` does.
+pub fn folders(root: &Path) -> Result<Vec<String>, String> {
+    fn walk_dirs(dir: &Path, prefix: &str, found: &mut Vec<String>) -> std::io::Result<()> {
+        for item in fs::read_dir(dir)? {
+            let item = item?;
+            let name = item.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') || !item.file_type()?.is_dir() {
+                continue;
+            }
+            let relative = if prefix.is_empty() { name } else { format!("{prefix}/{name}") };
+            walk_dirs(&item.path(), &relative, found)?;
+            found.push(relative);
+        }
+        Ok(())
+    }
+    let mut found = Vec::new();
+    walk_dirs(root, "", &mut found).map_err(|e| e.to_string())?;
+    found.sort();
+    Ok(found)
+}
+
+/// Makes a folder (and the ones it is in) inside the vault; one that is already there is left as it is.
+pub fn make_folder(root: &Path, relative: &str) -> Result<(), String> {
+    let target = resolve(root, relative, false)?;
+    fs::create_dir_all(&target).map_err(|e| e.to_string())
+}
+
+/// Removes a folder that holds nothing (Finder's `.DS_Store` aside). True when it is gone, or was never there; false when
+/// something is in it, which is then left as it is.
+pub fn remove_folder(root: &Path, relative: &str) -> Result<bool, String> {
+    let target = resolve(root, relative, false)?;
+    if !target.is_dir() {
+        return Ok(!target.exists());
+    }
+    let mut litter = Vec::new();
+    for item in fs::read_dir(&target).map_err(|e| e.to_string())? {
+        let item = item.map_err(|e| e.to_string())?;
+        if item.file_name() != ".DS_Store" {
+            return Ok(false);
+        }
+        litter.push(item.path());
+    }
+    for file in litter {
+        fs::remove_file(file).map_err(|e| e.to_string())?;
+    }
+    fs::remove_dir(&target).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 fn modified_ms(meta: &fs::Metadata) -> u64 {
     meta.modified()
         .ok()
@@ -133,19 +183,75 @@ fn modified_ms(meta: &fs::Metadata) -> u64 {
         .unwrap_or(0)
 }
 
+/// Whether this system lets a program set a file's creation date (macOS, iOS and Windows do; Linux and Android don't).
+pub const CAN_SET_CREATED: bool = cfg!(any(target_os = "macos", target_os = "ios", windows));
+
+fn at_ms(ms: u64) -> SystemTime {
+    UNIX_EPOCH + Duration::from_millis(ms)
+}
+
+#[allow(unused_variables)]
+fn with_created(times: fs::FileTimes, created: SystemTime) -> fs::FileTimes {
+    #[cfg(target_os = "macos")]
+    return std::os::macos::fs::FileTimesExt::set_created(times, created);
+    #[cfg(target_os = "ios")]
+    return std::os::ios::fs::FileTimesExt::set_created(times, created);
+    #[cfg(windows)]
+    return std::os::windows::fs::FileTimesExt::set_created(times, created);
+    #[allow(unreachable_code)]
+    times
+}
+
+/// Sets a file's dates. A creation date only ever moves earlier: the account's date for a document is when it reached the
+/// account, which is later than when a file made on this computer was really made, so that file keeps its own. Where the
+/// system can't set a creation date (`CAN_SET_CREATED`), `created` is ignored.
+fn apply_times(path: &Path, created: Option<SystemTime>, modified: Option<SystemTime>) -> std::io::Result<()> {
+    // Windows needs write access to change a file's dates; elsewhere owning the file is enough, so a read-only file works too.
+    let file = fs::OpenOptions::new().write(true).open(path).or_else(|_| fs::File::open(path))?;
+    let mut times = fs::FileTimes::new();
+    let mut any = false;
+    if let Some(modified) = modified {
+        times = times.set_modified(modified);
+        any = true;
+    }
+    if let Some(created) = created.filter(|_| CAN_SET_CREATED) {
+        if file.metadata()?.created().map_or(true, |now| created < now) {
+            times = with_created(times, created);
+            any = true;
+        }
+    }
+    if any {
+        file.set_times(times)?;
+    }
+    Ok(())
+}
+
+/// Gives a file in the vault its dates (milliseconds since 1970; see `apply_times`). Returns its modification time after.
+pub fn set_times(root: &Path, relative: &str, created: Option<u64>, modified: Option<u64>) -> Result<u64, String> {
+    let target = resolve(root, relative, false)?;
+    apply_times(&target, created.map(at_ms), modified.map(at_ms)).map_err(|e| e.to_string())?;
+    let meta = fs::metadata(&target).map_err(|e| e.to_string())?;
+    Ok(modified_ms(&meta))
+}
+
 /// Writes through a hidden temporary file in the same folder and renames it into place, so a crash or a
-/// reader never sees half a file. Returns the new modification time.
+/// reader never sees half a file. The file keeps the creation date of the one it replaces (the rename makes a new
+/// file, which would otherwise be dated now). Returns the new modification time.
 pub fn write(root: &Path, relative: &str, bytes: &[u8]) -> Result<u64, String> {
     let target = resolve(root, relative, true)?;
     let parent = target.parent().ok_or("no folder")?;
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     let name = target.file_name().ok_or("no name")?.to_string_lossy().into_owned();
     let temporary = parent.join(format!(".{name}.golemtmp"));
+    let created = fs::metadata(&target).and_then(|m| m.created()).ok();
     fs::write(&temporary, bytes).map_err(|e| e.to_string())?;
     fs::rename(&temporary, &target).map_err(|e| {
         let _ = fs::remove_file(&temporary);
         e.to_string()
     })?;
+    if created.is_some() {
+        let _ = apply_times(&target, created, None); // only a date: the file is written either way
+    }
     let meta = fs::metadata(&target).map_err(|e| e.to_string())?;
     Ok(modified_ms(&meta))
 }
@@ -461,6 +567,28 @@ pub fn vault_remove(path: String, vault: State<'_, Vault>) -> Result<(), String>
     remove(&vault.root()?, &path)
 }
 
+#[tauri::command]
+pub fn vault_folders(vault: State<'_, Vault>) -> Result<Vec<String>, String> {
+    folders(&vault.root()?)
+}
+
+#[tauri::command]
+pub fn vault_make_folder(path: String, vault: State<'_, Vault>) -> Result<(), String> {
+    make_folder(&vault.root()?, &path)
+}
+
+#[tauri::command]
+pub fn vault_remove_folder(path: String, vault: State<'_, Vault>) -> Result<bool, String> {
+    remove_folder(&vault.root()?, &path)
+}
+
+/// Gives a document's file the account's dates, so it shows when the document was made (and last changed) on every computer
+/// rather than when this one wrote it. Either may be null to leave it as it is. Returns the modification time after.
+#[tauri::command]
+pub fn vault_set_times(path: String, created_ms: Option<u64>, modified_ms: Option<u64>, vault: State<'_, Vault>) -> Result<u64, String> {
+    set_times(&vault.root()?, &path, created_ms, modified_ms)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,6 +656,67 @@ mod tests {
         assert!(!root.join("Notes").exists(), "the empty folder goes too");
         assert!(root.exists());
         assert!(remove(root, ".golemdocs/state.json").is_err());
+    }
+
+    fn created_ms(path: &Path) -> u64 {
+        fs::metadata(path).unwrap().created().unwrap().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
+    }
+
+    #[test]
+    fn set_times_dates_a_file() {
+        let dir = vault();
+        let root = dir.path();
+        write(root, "a.md", b"hello").unwrap();
+        let made = 1_600_000_000_000; // 2020-09-13
+        let changed = 1_700_000_000_000; // 2023-11-14
+        assert_eq!(set_times(root, "a.md", Some(made), Some(changed)).unwrap(), changed);
+        assert_eq!(scan(root).unwrap()[0].mtime_ms, changed);
+        if CAN_SET_CREATED {
+            assert_eq!(created_ms(&root.join("a.md")), made);
+            // Only earlier: a later date leaves it, and so does none.
+            set_times(root, "a.md", Some(changed), None).unwrap();
+            assert_eq!(created_ms(&root.join("a.md")), made);
+            assert_eq!(scan(root).unwrap()[0].mtime_ms, changed, "the modification time is left alone");
+        }
+        assert!(set_times(root, ".golemdocs/state.json", Some(made), None).is_err());
+        assert!(set_times(root, "missing.md", Some(made), None).is_err());
+    }
+
+    #[test]
+    fn a_rewritten_file_keeps_its_creation_date() {
+        if !CAN_SET_CREATED {
+            return;
+        }
+        let dir = vault();
+        let root = dir.path();
+        write(root, "a.md", b"one").unwrap();
+        let made = 1_600_000_000_000;
+        set_times(root, "a.md", Some(made), None).unwrap();
+        write(root, "a.md", b"two").unwrap();
+        assert_eq!(created_ms(&root.join("a.md")), made);
+    }
+
+    #[test]
+    fn folders_are_listed_made_and_removed_only_when_empty() {
+        let dir = vault();
+        let root = dir.path();
+        write(root, "Notes/Deep/one.md", b"x").unwrap();
+        make_folder(root, "Empty/Inner").unwrap();
+        make_folder(root, "Empty/Inner").unwrap();
+        fs::create_dir_all(root.join(".obsidian/plugins")).unwrap();
+        write(root, ".golemdocs/state.json", b"{}").unwrap();
+        assert_eq!(folders(root).unwrap(), ["Empty", "Empty/Inner", "Notes", "Notes/Deep"]);
+        assert!(make_folder(root, ".hidden").is_err());
+
+        assert_eq!(remove_folder(root, "Notes/Deep").unwrap(), false, "a folder with a file stays");
+        assert!(root.join("Notes/Deep/one.md").exists());
+        assert_eq!(remove_folder(root, "Empty").unwrap(), false, "a folder with a folder in it stays");
+        fs::write(root.join("Empty/Inner/.DS_Store"), b"").unwrap();
+        assert_eq!(remove_folder(root, "Empty/Inner").unwrap(), true, "Finder's .DS_Store does not count");
+        assert_eq!(remove_folder(root, "Empty").unwrap(), true);
+        assert_eq!(remove_folder(root, "Empty").unwrap(), true, "one that is gone already is fine");
+        assert_eq!(folders(root).unwrap(), ["Notes", "Notes/Deep"]);
+        assert!(remove_folder(root, ".obsidian").is_err());
     }
 
     #[test]

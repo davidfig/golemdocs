@@ -247,3 +247,34 @@
 .wm-live-address {
   overflow-wrap: anywhere;
 }
+
+/* High Contrast: the accent is the title bar's colour, which is black in the dark form and would hide what is chosen. A chosen
+   tile, a side that has a line and the shown tab use the scheme's own colours, with a thicker edge, so not colour alone. */
+:root[data-scheme='contrast'] .wm-fd-tile[aria-checked='true'] {
+  border-color: var(--wm-hot-border);
+  box-shadow: 0 0 0 2px var(--wm-hot-border);
+  background: var(--wm-checked);
+}
+
+:root[data-scheme='contrast'] .wm-fd-side[aria-pressed='true'] {
+  background: var(--wm-checked);
+  box-shadow: inset 0 0 0 2px var(--wm-hot-border);
+}
+
+/* Windows' contrast themes drop backgrounds and shadows: the chosen tile and the sides with a line get an edge of the system's
+   highlight colour. */
+@media (forced-colors: active) {
+  .wm-fd-tile[aria-checked='true'],
+  .wm-fd-side[aria-pressed='true'] {
+    outline: 3px solid Highlight;
+    outline-offset: -3px;
+  }
+
+  .wm-fd-tile-bar {
+    background: CanvasText;
+  }
+
+  .wm-fd-chip {
+    forced-color-adjust: none;
+  }
+}

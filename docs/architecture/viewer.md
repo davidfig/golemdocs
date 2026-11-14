@@ -24,6 +24,7 @@ It opens everything `sourceFromFile` recognises (`client/src/formats/source.ts`)
 - **The page** (`src/viewer/viewer.ts`) is the editor's render loop without its chrome: `GpuPage`s from layout updates, `arrangePages` in one column, a `Camera` placed as the editor places it (the first page at 100%, or zoomed out to fit its width; a picture fitted whole), and `PageRenderer.render` on demand. `PageRenderer` takes its desk colour as a function, so the viewer doesn't load the app's colour-scheme module (which reads browser storage).
 - **Input.** A hidden textarea holds the focus (`inputmode="none"`, so no on-screen keyboard), for copy and the keys; whatever is typed in it is dropped. A press sends `pointer` commands (a double click a word, a triple a paragraph, a drag extends), a click that didn't move asks `linkAt`, and a link that passes `linkForHost` (http, https, mailto, tel, ftp) goes to `onLink`. Wheel scrolls, Ctrl/⌘ + wheel or a pinch zooms. Copy (and cut, which only copies) puts the selection's text and HTML on the clipboard.
 - **Keys, and which are the host's.** `viewerKey` (`protocol.ts`, unit-tested in `viewer.test.ts`) decides each key press, and the handler does what it says. The viewer's own: Ctrl/⌘ + − 0 zoom; Ctrl/⌘ F opens the find bar, F3 or Ctrl/⌘ G finds again (Shift: back), Escape closes the find bar while it is open; Ctrl/⌘ A selects all; ↑ ↓ Page Up/Down Space (Shift+Space back) Home End move through the document, and ← → too, but only when there is room to scroll sideways. That is the camera's own room (`Camera.sideRoom`, the same math as its clamp, over 2 px to allow for rounding; `canScrollSideways` in `protocol.ts`). Sideways the view may run only half the fit-to-width margin past the pages (`SIDE_PADDING_X`, 8 px), so a page opened zoomed to fit a narrow frame (a mail client's reading pane) has none, and ← → go to the host. The browser's: Ctrl/⌘ C X V, Tab, everything typed in the find or page field, Enter and Space on a focused button, an input method's composing, and keys that only modify others. Every other key goes to the host (`onKey`, or the `golemdocs:key` message), so the page around the viewer can act on it while the focus is in the frame: Escape with the find bar closed, letters (Satchel's `f`), ← → over pages that fit, and combinations the viewer doesn't use. Its default isn't stopped.
+- **Screen readers.** The viewer uses the app's Screen Reader Mode (`ScreenReaderSupport`, the same setting `golem.screenReader`): the reading layer over the pages, the textarea mirroring a caret the arrows move, and announcements, built only while the mode is on. It is turned on by the setting, a host's `screenReader`, Mod+Alt+Z, or a button that is the first thing Tab reaches. The bar is a named toolbar with arrow keys, the find bar a named search region, the pages a `<main>` named by the document; Find says where it found the text; Windows contrast themes draw the pages in the system's colours. See [Accessibility](accessibility.md#the-viewer).
 - **The bar** is built from the shared parts (`iconButton` with `.wm-tbutton`, `.wm-input`, `.wm-find-message`, the `--wm-*` colours) and its words go through `t('viewer.*')` (with `dialogs.find.*` reused). The UI font is the system's: the app's Atkinson Hyperlegible is a web font of the site's, so the viewer's build strips its `@font-face` rules (`noUiFont` in `vite.viewer.config.ts`).
 
 ## Shared view-only: the site's own host
@@ -61,7 +62,9 @@ A document may also have one **public link** (File › Share, *Public link*): `/
 | `onError(message)` | It can't be shown (an unknown kind, a damaged file, no WebGL 2). |
 | `onLink(url)` | A link was clicked. |
 | `onKey(key)` | A key the viewer has no use for was pressed while it had the focus: `{ key, code, shiftKey, ctrlKey, altKey, metaKey, repeat }`, as `KeyboardEvent` has them (see Keys above). |
-| `title` | Shown in the bar beside the page number. |
+| `title` | Shown in the bar beside the page number, and the name of the pages' region. |
+| `screenReader` | Screen Reader Mode starts on (otherwise it follows `golem.screenReader`, where the page can read storage). |
+| `contrast` | The High Contrast colours around the pages. |
 
 `destroy()` stops the worker, frees the GPU (`WEBGL_lose_context`) and removes what it added. `reload(bytes)` shows a newer version of the same file in place, keeping the view where it was.
 
@@ -71,7 +74,7 @@ A document may also have one **public link** (File › Share, *Public link*): `/
 
 | Direction | Message |
 | --- | --- |
-| host → viewer | `{ type: 'golemdocs:open', bytes: ArrayBuffer, name, fontBase?, dark?, locale? }`. Transfer `bytes`. A second `open` replaces the file. `fontBase` defaults to `?fonts=` in the page's address, else `fonts/` beside the page. |
+| host → viewer | `{ type: 'golemdocs:open', bytes: ArrayBuffer, name, fontBase?, dark?, locale?, screenReader?, contrast? }`. Transfer `bytes`. The page's title becomes the file's name. A second `open` replaces the file. `fontBase` defaults to `?fonts=` in the page's address, else `fonts/` beside the page. |
 | viewer → host | `{ type: 'golemdocs:ready' }` once loaded; `{ type: 'golemdocs:opened', name, format, pages }`; `{ type: 'golemdocs:error', message }`; `{ type: 'golemdocs:link', url }`; `{ type: 'golemdocs:key', key, code, shiftKey, ctrlKey, altKey, metaKey, repeat }` for a key the viewer has no use for (see Keys above). |
 
 ## Building it
@@ -152,6 +155,7 @@ Not checked: the real WKWebView inside Tauri (Playwright's WebKit is the same en
 | `client/src/viewer/viewer.css` | The bar and the view |
 | `client/vite.viewer.config.ts` | The viewer's build |
 | `client/src/layout/layoutClient.ts` | `openReadOnly`, `terminate`, the `fontBase` and `startWorker` options |
+| `e2e/accessibility/viewer.spec.ts` | Landmarks, names and keys, Find's announcement, Screen Reader Mode and its caret, forced colours |
 | `e2e/viewer/viewer.spec.ts`, `e2e/viewer/sandbox.spec.ts` | The viewer page in the dev server; the built viewer sandboxed, in Chromium and WebKit |
 | `e2e/collab/share-view-only.spec.ts` | Sharing as Can view, opening it in the viewer under its token (no response names the document), catching up with a save, refused writes, a dead token |
 

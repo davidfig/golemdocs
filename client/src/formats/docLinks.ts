@@ -2,12 +2,16 @@
 // renamed or moved (see ../linkRename.ts). Works on the model, so it is the same for a document of any
 // format: a link is a hyperlink to `doc:Title`, and an embed is an unresolved link or a drawing or content
 // control named `embed:Title...` (see embedMarks.ts). A file kept as plain text (Markdown as uploaded, an SVG drawing)
-// has its links rewritten in its text instead. Free of the browser.
+// has its links rewritten in its text instead. Live blocks kept outside a document's text are rewritten where they are kept:
+// a workbook's live ranges (the comments of its hidden names, sheetRanges.ts), a PDF's live fields, text boxes and pictures
+// and a live export's tag (live/pdfLive.ts), a drawing's live groups. Free of the browser.
 
-import { EMBED_PREFIX, LIVE_PREFIX, WordDocument, docAddress, isPlainText, paragraphsIn, parseDocAddress, renamedSource } from '@golemdocs/docx';
-import type { Block, Hyperlink, Inline, XmlElement } from '@golemdocs/docx';
+import { EMBED_PREFIX, LIVE_PREFIX, WordDocument, ZipArchive, docAddress, isPlainText, paragraphsIn, parseDocAddress, renamedSource, writeZip } from '@golemdocs/docx';
+import type { Block, Hyperlink, Inline, XmlElement, ZipInput } from '@golemdocs/docx';
 import { liveOpen, liveOpenTag } from '../live/markdownMarks.ts';
-import { isWdoc, readWdoc, writeWdoc } from './wdoc.ts';
+import { fileLiveFields } from '../live/pdfFileTags.ts';
+import { isWorkbook } from './docBytes.ts';
+import { isWdoc, readWdoc, writeWdoc, type Wdoc } from './wdoc.ts';
 
 /** An embed's body (`Plan#Heading|300`) with the title it names renamed, the rest kept; null when it names none of `renames`. */
 function renamedEmbed(body: string, renames: ReadonlyMap<string, string>): string | null {
@@ -150,7 +154,7 @@ export function rewriteTextLinks(text: string, renames: ReadonlyMap<string, stri
       // A Markdown live marker (live/markdownMarks.ts), read and written as Markdown writes it.
       const tag = liveOpenTag(whole);
       const renamed = tag && renamedSource(tag.source, renames);
-      if (tag && renamed !== null) next = liveOpen({ source: renamed, stamp: tag.stamp });
+      if (tag && renamed !== null) next = liveOpen({ ...tag, source: renamed });
     }
     if (next === null || next === whole) return whole;
     changed++;
@@ -171,26 +175,142 @@ function rewritePlainText(bytes: Uint8Array, renames: ReadonlyMap<string, string
   return changed ? { bytes: new TextEncoder().encode(next), changed } : { bytes: null, changed: 0 };
 }
 
+/** A live tag (`live:Budget.xlsx#Expenses by=… stamp=…`) pointing at its source's new title, `by=` and stamp kept; null when it names none of `renames`. */
+function renamedTag(tag: string | undefined, renames: ReadonlyMap<string, string>): string | null {
+  if (!tag?.startsWith(LIVE_PREFIX)) return null;
+  const next = renamedSource(tag.slice(LIVE_PREFIX.length), renames);
+  return next === null ? null : `${LIVE_PREFIX}${next}`;
+}
+
+/** Rewrites the `live` tags of `items` (a PDF's fields, its edits) in place; how many changed. */
+function rewriteLiveItems(items: readonly object[] | undefined, renames: ReadonlyMap<string, string>): number {
+  let changed = 0;
+  for (const item of items ?? []) {
+    if (!('live' in item) || typeof item.live !== 'string') continue;
+    const next = renamedTag(item.live, renames);
+    if (next === null) continue;
+    (item as { live: string }).live = next;
+    changed++;
+  }
+  return changed;
+}
+
+/** A drawing's SVG with the sources of its live groups (`data-golem-live`, live/drawingHost.ts) renamed, and how many changed. */
+function rewriteDrawn(svg: string, renames: ReadonlyMap<string, string>): { svg: string; changed: number } {
+  let changed = 0;
+  const out = svg.replace(/data-golem-live="([^"]+)"/g, (whole, drawn: string) => {
+    const renamed = renamedSource(unescapeAttribute(drawn), renames);
+    if (renamed === null) return whole;
+    changed++;
+    return `data-golem-live="${escapeAttribute(renamed)}"`;
+  });
+  return { svg: out, changed };
+}
+
+/**
+ * The live blocks a .wdoc keeps beside its document (none of them in its text): a PDF's live form fields (kept with it, or, when it
+ * keeps none, the ones its file's widgets name, which are then kept with it as an update keeps them), Edit PDF's text boxes and
+ * pictures, a live export's tag, and a drawing's live groups. Rewritten in place; how many changed.
+ */
+async function rewriteWdocLive(wdoc: Wdoc, renames: ReadonlyMap<string, string>): Promise<number> {
+  let changed = 0;
+  const pdf = wdoc.extensions.pdf;
+  if (pdf) {
+    changed += rewriteLiveItems(pdf.fields, renames) + rewriteLiveItems(pdf.edits, renames);
+    const exported = renamedTag(pdf.export, renames);
+    if (exported !== null) {
+      pdf.export = exported;
+      changed++;
+    }
+  }
+  if (!pdf?.fields && !pdf?.export && wdoc.original) {
+    const found = await fileLiveFields(wdoc.original);
+    const own = found ? rewriteLiveItems(found.fields, renames) : 0;
+    if (found && own) {
+      wdoc.extensions = { ...wdoc.extensions, pdf: { annotations: found.annotations, ...wdoc.extensions.pdf, fields: found.fields } };
+      changed += own;
+    }
+  }
+  const svg = wdoc.extensions.svg;
+  if (svg?.source?.includes('data-golem-live')) {
+    const drawn = rewriteDrawn(svg.source, renames);
+    if (drawn.changed) {
+      svg.source = drawn.svg;
+      changed += drawn.changed;
+    }
+  }
+  return changed;
+}
+
+const unescapeXml = (s: string) =>
+  s.replace(/&(#x[0-9a-f]+|#\d+|quot|apos|lt|gt|amp);/gi, (whole, e: string) => {
+    const lower = e.toLowerCase();
+    if (lower.startsWith('#x')) return String.fromCodePoint(parseInt(lower.slice(2), 16));
+    if (lower.startsWith('#')) return String.fromCodePoint(parseInt(lower.slice(1), 10));
+    return ({ quot: '"', apos: "'", lt: '<', gt: '>', amp: '&' } as Record<string, string>)[lower] ?? whole;
+  });
+const escapeXml = (s: string, quote: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(quote === '"' ? /"/g : /'/g, quote === '"' ? '&quot;' : '&apos;');
+
+/** The workbook part of an .xlsx: where its package's relationships say, else the usual place. */
+async function workbookPart(zip: ZipArchive): Promise<string> {
+  const rels = await zip.entries.get('_rels/.rels')?.text();
+  const target = rels && /<Relationship\b[^>]*Type="[^"]*\/officeDocument"[^>]*>/.exec(rels)?.[0].match(/Target="([^"]+)"/)?.[1];
+  const part = target?.replace(/^\//, '');
+  return part && zip.entries.has(part) ? part : 'xl/workbook.xml';
+}
+
+/**
+ * A stored workbook's bytes with its live ranges (hidden names `_golem_live_<n>`, whose comment is the block's tag: live/sheetRanges.ts)
+ * naming their sources' new titles. Only those comments change: the workbook part's text is edited where they are, and every other
+ * part is copied as it was, so the workbook is otherwise byte for byte the same.
+ */
+async function rewriteWorkbookLinks(bytes: Uint8Array, renames: ReadonlyMap<string, string>): Promise<{ bytes: Uint8Array | null; changed: number }> {
+  const zip = ZipArchive.read(bytes);
+  const part = await workbookPart(zip);
+  const xml = await zip.entries.get(part)?.text();
+  if (!xml?.includes('_golem_live_')) return { bytes: null, changed: 0 };
+  let changed = 0;
+  const next = xml.replace(/<definedName\b[^>]*>/g, (start) => {
+    if (!/\sname=(["'])_golem_live_/.test(start)) return start;
+    return start.replace(/(\scomment=)(["'])(.*?)\2/s, (whole, attr: string, quote: string, value: string) => {
+      const renamed = renamedTag(unescapeXml(value), renames);
+      if (renamed === null) return whole;
+      changed++;
+      return `${attr}${quote}${escapeXml(renamed, quote)}${quote}`;
+    });
+  });
+  if (!changed) return { bytes: null, changed: 0 };
+  const inputs: ZipInput[] = [...zip.entries.values()].map((entry) => (entry.name === part ? { name: part, data: new TextEncoder().encode(next) } : { name: entry.name, entry }));
+  return { bytes: await writeZip(inputs), changed };
+}
+
 /**
  * The stored document's bytes with its links to the titles in `renames` pointing at the new ones, and how many links changed. Null
- * bytes when none did, or when there is nothing here it can change (a PDF not turned into text yet, a workbook, bytes it cannot
- * read), so the document is left as it is. Never throws: one document it cannot read must not keep the others from being updated.
+ * bytes when none did, or when there is nothing here it can change (bytes it cannot read), so the document is left as it is. A
+ * workbook's and a PDF's live blocks are rewritten too (see the top of this file). Never throws: one document it cannot read must
+ * not keep the others from being updated.
  */
 export async function rewriteDocumentLinks(bytes: ArrayBuffer, renames: ReadonlyMap<string, string>): Promise<{ bytes: Uint8Array | null; changed: number }> {
   try {
     const plain = new Uint8Array(bytes);
     if (isPlainText(plain)) return rewritePlainText(plain, renames);
+    if (isWorkbook(plain)) return await rewriteWorkbookLinks(plain, renames);
     const wdoc = isWdoc(bytes) ? await readWdoc(new Uint8Array(bytes)) : null;
-    const docx = wdoc ? wdoc.document : new Uint8Array(bytes);
-    if (!docx) return { bytes: null, changed: 0 };
-    const doc = await WordDocument.read(docx);
-    let changed = rewriteEmbeds(doc.body, renames);
-    for (const paragraph of paragraphsIn(doc.body)) changed += rewriteInlines(paragraph.children, renames);
+    let changed = wdoc ? await rewriteWdocLive(wdoc, renames) : 0;
+    const docx = wdoc ? wdoc.document : plain;
+    let written: Uint8Array | null = null;
+    if (docx) {
+      const doc = await WordDocument.read(docx);
+      let inDoc = rewriteEmbeds(doc.body, renames);
+      for (const paragraph of paragraphsIn(doc.body)) inDoc += rewriteInlines(paragraph.children, renames);
+      if (inDoc) written = await doc.write();
+      changed += inDoc;
+    }
     if (!changed) return { bytes: null, changed: 0 };
-    const written = await doc.write();
-    return { bytes: wdoc ? await writeWdoc({ ...wdoc, document: written }) : written, changed };
+    if (!wdoc) return { bytes: written, changed };
+    return { bytes: await writeWdoc({ ...wdoc, ...(written && { document: written }) }), changed };
   } catch {
-    // A workbook (no main document part), a PDF, damaged bytes: its links stay as they are.
+    // Damaged bytes, a format it cannot read: its links stay as they are.
     return { bytes: null, changed: 0 };
   }
 }

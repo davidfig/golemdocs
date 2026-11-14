@@ -14,6 +14,7 @@ import type { ScriptRunner } from './runner.ts';
 import type { ScriptFetch, ScriptResponse } from '@golemdocs/script/fetch';
 import type { ChangedFile, ScriptVault, VaultFile } from './vault.ts';
 import { scriptState } from './state.ts';
+import { t } from '../i18n/index.ts';
 import type { ScriptRun } from './state.ts';
 
 /** A document in the vault, by its key in the library and its path (`Books/Dune.md`). */
@@ -255,7 +256,7 @@ export class ScriptsApp {
       if (changed) {
         outcome = await runner.act(p, { allowed: grantOf(outcome.meta) });
         changed = await this.changedSince(outcome.files);
-        if (changed) throw new Error(`${changed} changed while ${outcome.meta.name} ran`);
+        if (changed) throw new Error(t('scripts.vault.changedWhileRunning', { path: changed, name: outcome.meta.name }));
       }
       files = outcome.files;
       for (const file of files) await this.storeFor(p, depth, file.path, file.after);

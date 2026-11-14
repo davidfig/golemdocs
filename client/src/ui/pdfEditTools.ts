@@ -266,11 +266,11 @@ export class PdfEditTools {
    * Adds a text box or picture showing a live block (a live link pasted), on the page in the middle of the view: a picture for
    * a source that is one (live/liveMarks.ts `showsPicture`), else a text box. Empty until it is filled from its source.
    */
-  addLive(source: string): boolean {
+  addLive(source: string, by?: string): boolean {
     const rect = this.layer.getBoundingClientRect();
     const at = this.host.pageAt(rect.width / 2, rect.height / 2) || this.host.pageAt(rect.width / 2, rect.height / 3);
     if (!at) return false;
-    const live = liveTagText({ source, stamp: '' });
+    const live = liveTagText({ source, stamp: '', ...(by && { by }) });
     if (showsPicture(source)) {
       const width = Math.min(PICTURE_WIDTH, at.page.width * 0.8);
       const height = width * 0.75;

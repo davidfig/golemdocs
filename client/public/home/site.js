@@ -388,10 +388,14 @@
     } else play();
   })();
 
-  // Clips load and play only when they are near the screen, and stay still for visitors who ask for less motion.
+  // Clips load and play only when they are near the screen, and stay still for visitors who ask for less motion. A clip with
+  // `data-src-dark` (recorded in the app's dark theme) plays that in the dark theme, and swaps if the theme changes.
   document.querySelectorAll('video[data-src]').forEach(function (video) {
+    var loaded = false;
+    function source() { return (document.documentElement.dataset.theme === 'dark' && video.dataset.srcDark) || video.dataset.src; }
     function load() {
-      video.src = video.dataset.src;
+      loaded = true;
+      video.src = source();
       if (reduce) video.controls = true;
       else video.play().catch(function () { video.controls = true; });
     }
@@ -400,6 +404,11 @@
         if (entries[0].isIntersecting) { observer.disconnect(); load(); }
       }, { rootMargin: '200px' }).observe(video);
     } else load();
+    if (video.dataset.srcDark) {
+      new MutationObserver(function () {
+        if (loaded && video.getAttribute('src') !== source()) load();
+      }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    }
   });
 
   // Copy buttons: data-copy names the element whose text they copy.

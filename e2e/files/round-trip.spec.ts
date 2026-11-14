@@ -2,6 +2,7 @@
 
 import { expect, test } from './fixtures';
 import { blankWith, convertTo, formatLabel, importFile, readZip } from './helpers';
+import { decodePdf } from '../pdf/helpers';
 
 interface Target {
   menu: string;
@@ -64,12 +65,18 @@ for (const target of TARGETS) {
   });
 }
 
-test('PDF: a downloaded PDF is a PDF, opens as its own pages, and reflows as Word', async ({ app }) => {
+test('PDF: a downloaded PDF is a tagged PDF, opens as its own pages, and reflows as Word', async ({ app }) => {
   await blankWith(app, 'Round trip text', 'Second line');
   await convertTo(app, 'PDF (.pdf)', 'PDF');
   const file = await app.download(() => app.menu('File', 'Download'));
   expect(file.name).toBe('Document1.pdf');
   expect(file.bytes.subarray(0, 5).toString()).toBe('%PDF-');
+  // Tagged, for screen readers: a structure tree, each paragraph's text marked as a P, and the language.
+  const pdf = decodePdf(file.bytes);
+  expect(pdf).toMatch(/\/StructTreeRoot\s+\d+ 0 R/);
+  expect(pdf).toMatch(/\/MarkInfo\s*<<\s*\/Marked\s+true/);
+  expect(pdf).toMatch(/\/P\s*<<\s*\/MCID\s+1\s*>>\s*BDC/);
+  expect(pdf).toMatch(/\/Lang\s*\(/);
 
   await importFile(app, { name: 'again.pdf', buffer: file.bytes });
   expect(await formatLabel(app.page)).toBe('PDF');

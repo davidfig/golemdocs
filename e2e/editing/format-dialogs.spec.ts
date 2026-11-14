@@ -84,7 +84,7 @@ test.describe('Format › Font', () => {
     await app.page.keyboard.press('Shift+ArrowRight');
     await app.page.keyboard.press('Shift+ArrowRight');
     await app.toolbarButton('Font Color options').click();
-    await app.page.getByRole('button', { name: '#FF0000', exact: true }).click();
+    await app.page.locator('.wm-swatch[title="#FF0000"]').click();
     await app.focus();
     await app.page.keyboard.press(`${MOD}+a`);
     await app.menu('Format', 'Font');
@@ -114,15 +114,15 @@ test.describe('Format › Borders and Shading', () => {
     await app.menu('Format', 'Borders and Shading');
     const box = dialog(app, 'Borders and Shading');
     await expect(box).toBeVisible();
-    await box.getByRole('group', { name: 'Setting' }).getByRole('button', { name: 'Box' }).click();
+    await box.getByRole('radiogroup', { name: 'Setting' }).getByRole('radio', { name: 'Box' }).click();
     await pick(box, 'Style', 'Double line');
     await expect(box.getByRole('button', { name: 'Left' })).toHaveAttribute('aria-pressed', 'true');
     await box.getByRole('button', { name: 'Right' }).click();
-    await expect(box.getByRole('group', { name: 'Setting' }).getByRole('button', { name: 'Custom' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(box.getByRole('radiogroup', { name: 'Setting' }).getByRole('radio', { name: 'Custom' })).toHaveAttribute('aria-checked', 'true');
     await shot(box, 'borders');
     await box.getByRole('tab', { name: 'Shading' }).click();
     await box.getByRole('button', { name: 'Fill' }).click();
-    await app.page.getByRole('button', { name: '#FFFF99', exact: true }).click();
+    await app.page.locator('.wm-swatch[title="#FFFF99"]').click();
     await box.getByRole('button', { name: 'OK' }).click();
 
     let xml = await documentXml(app);
@@ -132,7 +132,7 @@ test.describe('Format › Borders and Shading', () => {
     expect(xml).toContain('w:fill="FFFF99"');
 
     await app.menu('Format', 'Borders and Shading');
-    await box.getByRole('group', { name: 'Setting' }).getByRole('button', { name: 'None' }).click();
+    await box.getByRole('radiogroup', { name: 'Setting' }).getByRole('radio', { name: 'None' }).click();
     await box.getByRole('tab', { name: 'Shading' }).click();
     await box.getByRole('button', { name: 'Fill' }).click();
     await app.page.getByRole('button', { name: 'No color', exact: true }).click();
@@ -153,10 +153,10 @@ test('a box on several paragraphs is one box', async ({ app, page }) => {
   await page.keyboard.press(`${MOD}+a`);
   await app.menu('Format', 'Borders and Shading');
   const box = dialog(app, 'Borders and Shading');
-  await box.getByRole('group', { name: 'Setting' }).getByRole('button', { name: 'Box' }).click();
+  await box.getByRole('radiogroup', { name: 'Setting' }).getByRole('radio', { name: 'Box' }).click();
   await box.getByRole('tab', { name: 'Shading' }).click();
   await box.getByRole('button', { name: 'Fill' }).click();
-  await page.getByRole('button', { name: '#FFFF99', exact: true }).click();
+  await page.locator('.wm-swatch[title="#FFFF99"]').click();
   await box.getByRole('button', { name: 'OK' }).click();
   await expect(box).toBeHidden();
   await app.focus();

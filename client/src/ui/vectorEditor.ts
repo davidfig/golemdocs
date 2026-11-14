@@ -39,6 +39,7 @@ import { parseColor, parseLength, colorText, urlReference } from '../vector/styl
 import { t } from '../i18n/index.ts';
 import { PENCIL_CURSOR, RESIZE_CURSORS, ROTATE_CURSOR, badgedCursor } from './cursors.ts';
 import { isFormField, modalOpen } from './dom.ts';
+import { announceBox, arrowEdit, resizedBox } from './shapeKeys.ts';
 import { accentColor, uiFont } from './theme.ts';
 import { drawHandle, drawKnob } from './handles.ts';
 import { pathsByUid } from '../vector/nodes.ts';
@@ -583,11 +584,11 @@ export class VectorEditor {
    * Puts a live block on the drawing (a live link pasted, docs/live-blocks.md §3): a group showing `source`, at the drawing's top
    * left, holding a mark until it is filled from its source (live/drawingHost.ts) and then moved where it should go.
    */
-  addLive(source: string): void {
+  addLive(source: string, by?: string): void {
     if (!this.scene) return;
     const placeholder: SceneNode = { kind: 'text', x: 0, y: 16, runs: [{ text: '…', x: 0, y: 16, style: {} }], style: { 'font-size': '16px', 'font-family': 'sans-serif' }, attrs: {} };
     const next = cloneScene(this.scene);
-    const path = addNode(next, { kind: 'group', tag: 'g', children: [placeholder], style: {}, attrs: { 'data-golem-live': source } }, this.container(next));
+    const path = addNode(next, { kind: 'group', tag: 'g', children: [placeholder], style: {}, attrs: { 'data-golem-live': source, ...(by && { 'data-golem-by': by }) } }, this.container(next));
     this.commit(next, [path]);
   }
 
@@ -752,6 +753,19 @@ export class VectorEditor {
   nudge(dx: number, dy: number): void {
     this.edit((scene, selection) => {
       translateNodes(scene, selection, dx, dy);
+      return selection;
+    });
+  }
+
+  /** Makes the selection (dx, dy) wider and taller, its top-left corner staying where it is. */
+  resizeBy(dx: number, dy: number): void {
+    this.edit((scene, selection) => {
+      const box = selectionBounds(scene, selection);
+      if (!box) return selection;
+      const to = resizedBox(box, dx, dy);
+      const sx = box.width > 1e-9 ? to.width / box.width : 1;
+      const sy = box.height > 1e-9 ? to.height / box.height : 1;
+      transformNodes(scene, selection, multiply(multiply(translation(box.x, box.y), scaling(sx, sy)), translation(-box.x, -box.y)));
       return selection;
     });
   }
@@ -1186,12 +1200,12 @@ export class VectorEditor {
     if (mod && k === 'g') return e.shiftKey ? (this.ungroup(), true) : (this.group(), true);
     if (e.key === 'Delete' || e.key === 'Backspace') return this.delete(), true;
     if (e.key === 'Escape') return this.select([]), true;
-    const step = e.shiftKey ? 10 : 1;
-    if (e.key === 'ArrowLeft') return this.nudge(-step, 0), true;
-    if (e.key === 'ArrowRight') return this.nudge(step, 0), true;
-    if (e.key === 'ArrowUp') return this.nudge(0, -step), true;
-    if (e.key === 'ArrowDown') return this.nudge(0, step), true;
-    return false;
+    const arrow = arrowEdit(e);
+    if (!arrow) return false;
+    if (arrow.kind === 'move') this.nudge(arrow.dx, arrow.dy);
+    else this.resizeBy(arrow.dx, arrow.dy);
+    announceBox(this.selectionBox());
+    return true;
   }
 
   // --- Pointer -----------------------------------------------------------------------------

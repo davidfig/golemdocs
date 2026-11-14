@@ -10,6 +10,7 @@ const BOB = 'bob@example.com';
 
 interface Marker {
   kept: boolean;
+  owner: string | null;
   workedTo: number | null;
   deferred: string[];
   now: number;
@@ -67,4 +68,12 @@ test('two devices posting at once keep each other’s deferred documents', async
   assert.deepEqual([...(await get(ALICE)).deferred].sort(), ['b', 'c']);
   await post(ALICE, { defer: ['b', 'd'] });
   assert.deepEqual((await get(ALICE)).deferred.slice(-1), ['d']);
+});
+
+test('each person has one secret that marks their live blocks, the same on every call', async () => {
+  const first = await get(ALICE);
+  assert.match(first.owner ?? '', /^[0-9a-f]{32}$/);
+  assert.equal((await get(ALICE)).owner, first.owner);
+  assert.equal((await (await post(ALICE, { workedTo: 1 })).json() as Marker).owner, first.owner);
+  assert.notEqual((await get(BOB)).owner, first.owner);
 });

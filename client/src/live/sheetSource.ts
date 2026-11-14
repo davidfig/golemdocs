@@ -17,7 +17,7 @@ import { displayText } from '../sheet/format/display.ts';
 import { parseRange } from '../sheet/refs.ts';
 import { loadSheet, readWorkbook } from '../sheet/xlsx/read.ts';
 import { MAX_COLUMNS, MAX_ROWS } from './result.ts';
-import type { Align, LiveResult } from './result.ts';
+import type { Align, LiveNumber, LiveResult } from './result.ts';
 
 
 /** Where an address points in a workbook: a sheet, a range on it, and whether its first row is a header. */
@@ -99,18 +99,20 @@ export async function sheetResult(bytes: Uint8Array, fragment: string): Promise<
   const c1 = Math.min(where.range.c1, c0 + MAX_COLUMNS - 1);
   const rows = Array.from({ length: r1 - r0 + 1 }, () => Array<string>(c1 - c0 + 1).fill(''));
   const kinds = Array.from({ length: r1 - r0 + 1 }, () => Array<Kind>(c1 - c0 + 1).fill(Kind.Empty));
+  const values = Array.from({ length: r1 - r0 + 1 }, () => Array<LiveNumber | null>(c1 - c0 + 1).fill(null));
   const aligned = Array.from({ length: c1 - c0 + 1 }, () => ({ left: 0, center: 0, right: 0 }));
   for (let c = c0; c <= c1; c++) {
     sheet.grid.columns[c]?.forEach(r0, r1 + 1, (row, kind, value, style) => {
       rows[row - r0][c - c0] = displayText(book, kind, value, style, 255).text;
       kinds[row - r0][c - c0] = kind;
+      if (kind === Kind.Number) values[row - r0][c - c0] = { n: value, format: book.styles.formatCode(book.styles.format(style).numFmt) };
       const horizontal = book.styles.format(style)?.alignment?.horizontal;
       const align: Align = horizontal === 'center' || horizontal === 'centerContinuous' ? 'center' : horizontal === 'right' ? 'right' : horizontal === 'left' ? 'left' : kind === Kind.Number ? 'right' : 'left';
       if (row > r0 || where.range.r0 === where.range.r1) aligned[c - c0][align]++;
     });
   }
-  if (r0 === r1 && c0 === c1) return { kind: 'value', text: rows[0][0] };
+  if (r0 === r1 && c0 === c1) return { kind: 'value', text: rows[0][0], ...(values[0][0] && { number: values[0][0] }) };
   const header = where.header === 'guess' ? looksLikeHeader(kinds) : where.header;
   const align = aligned.map((n): Align => (n.right > n.left && n.right >= n.center ? 'right' : n.center > n.left ? 'center' : 'left'));
-  return { kind: 'table', rows, header, align };
+  return { kind: 'table', rows, header, align, ...(values.some((row) => row.some(Boolean)) && { values }) };
 }

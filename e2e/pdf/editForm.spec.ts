@@ -134,7 +134,7 @@ test.describe('Edit PDF: form fields', () => {
   test('a field added in Edit PDF can be filled in under Fill In', async ({ app }) => {
     await app.page.locator('.wm-forms-add[data-kind="text"]').click();
     await clickOnPage(app.page, 0, 100, 160);
-    await app.page.getByRole('button', { name: 'Fill In', exact: true }).click();
+    await app.page.getByRole('radio', { name: 'Fill In', exact: true }).click();
     const input = app.page.locator('.wm-field[aria-label="Text1"]');
     await input.fill('typed here');
     await expect(input).toHaveValue('typed here');

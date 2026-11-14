@@ -6,6 +6,7 @@ import type { Pointer } from '@golemdocs/ops';
 import type { Format } from '../formats/convert.ts';
 import { t } from '../i18n/index.ts';
 import type { LookUp } from '../spelling/thesaurus.ts';
+import type { A11yHeading, A11yPage } from './a11y.ts';
 import { layoutWorkerName, type DocumentSource, type FromWorker, type LayoutTimings, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireCommand } from './protocol.ts';
 
 /** Callbacks for one document. None fire after another document is opened. */
@@ -68,6 +69,9 @@ export class LayoutClient {
   private readonly partRequests = new Map<number, (part: string | null) => void>();
   private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
   private readonly refreshRequests = new Map<number, (done: boolean | 'typed') => void>();
+
+  /** Takes the reading layer's pages for the open document (Screen Reader Mode: see `a11yPages`). */
+  onA11yPages: ((pages: A11yPage[], headings: A11yHeading[] | undefined) => void) | null = null;
 
   /** Finds the stored document an embed (`![[Note]]`) names, as its name and bytes (set by the page, which knows what is stored). */
   embeds: ((title: string) => Promise<{ name: string; bytes: ArrayBuffer } | null>) | null = null;
@@ -157,6 +161,16 @@ export class LayoutClient {
   /** Show or hide formatting marks (paragraph marks, spaces, tabs) on the pages. */
   setMarks(on: boolean): void {
     this.send({ type: 'marks', on });
+  }
+
+  /** Screen Reader Mode: selections carry the text around the caret, and `a11yPages` is answered. */
+  setScreenReader(on: boolean): void {
+    this.send({ type: 'a11y', on });
+  }
+
+  /** Asks for the structure of these pages of the open document (and its headings), answered through `onA11yPages`. */
+  a11yPages(pages: number[], headings: boolean): void {
+    this.send({ type: 'a11yPages', doc: this.doc, pages, headings });
   }
 
   /** Lay pages out `width` points wide (Flow view), or at the document's own sizes (null). */
@@ -422,6 +436,10 @@ export class LayoutClient {
     // Faces are registered whatever document they came with: the worker won't send them again.
     if (message.type === 'layout' && message.faces.length) this.onFaces(message.faces);
     if (message.doc !== this.doc || !this.listener) return;
+    if (message.type === 'a11yPages') {
+      this.onA11yPages?.(message.pages, message.headings);
+      return;
+    }
     switch (message.type) {
       case 'opened':
         this.listener.opened(message.name, message.format, message.annotating, message.outdated);

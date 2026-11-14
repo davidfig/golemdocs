@@ -2268,12 +2268,13 @@ const TYPE_ATTRS: Record<string, string> = { lowerLetter: 'a', upperLetter: 'A',
 
 const escText = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\u00a0/g, '&nbsp;');
 /** A live block's source and stamp as an element's attributes. */
-const liveAttrs = ({ source, stamp }: LiveTag): string => ` data-golem-live="${escAttr(source)}"${stamp ? ` data-golem-stamp="${escAttr(stamp)}"` : ''}`;
+const liveAttrs = ({ source, stamp, by }: LiveTag): string => ` data-golem-live="${escAttr(source)}"${by ? ` data-golem-by="${escAttr(by)}"` : ''}${stamp ? ` data-golem-stamp="${escAttr(stamp)}"` : ''}`;
 
-/** The live block an element is (its `data-golem-live` and `data-golem-stamp`), or null. */
+/** The live block an element is (its `data-golem-live`, `data-golem-by` and `data-golem-stamp`), or null. */
 function htmlLiveTag(el: HElement): LiveTag | null {
   const source = el.attrs['data-golem-live'];
-  return source ? parseLiveTag(`live:${source}${el.attrs['data-golem-stamp'] ? ` stamp=${el.attrs['data-golem-stamp']}` : ''}`) : null;
+  const by = el.attrs['data-golem-by'];
+  return source ? parseLiveTag(`live:${source}${by && /^[0-9a-z]+$/.test(by) ? ` by=${by}` : ''}${el.attrs['data-golem-stamp'] ? ` stamp=${el.attrs['data-golem-stamp']}` : ''}`) : null;
 }
 
 const escAttr = (s: string): string => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

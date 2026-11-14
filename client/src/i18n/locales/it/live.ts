@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "Posiziona il cursore in una tabella con titolo, in un segnalibro o in una sezione sotto un titolo per copiarla come collegamento dinamico.",
+  'live.insideLive': "Questa cella fa già parte di un blocco dinamico, quindi qui non si può incollare un collegamento dinamico. Incollalo in una cella vuota fuori dal blocco.",
   'live.readOnly': "Questa parte mostra {source} e viene tenuta aggiornata da lì. Modificala lì.",
   'live.notUpdated': "Un blocco dinamico in {name} non è stato aggiornato: {problem}",
   'live.resultsOnly': "I suoi blocchi dinamici restano aggiornati qui; un file {extension} scaricato contiene solo ciò che mostrano ora.",
@@ -61,6 +62,10 @@ export const live: Partial<Messages> = {
   'live.error.script': "{source} non è stato eseguito: {detail}",
   'live.error.notAllowed': "{source} non può leggere ciò che ha chiesto: {detail}",
   'live.error.blocked': "{source} ha bisogno di più spazio: {detail} non è vuota, quindi mantiene l’ultimo risultato. Svuota le celle in cui si estenderebbe.",
+  'live.error.foreign': "Creato da qualcun altro: mostra ciò che conteneva all’arrivo e non legge {source} dai tuoi file. Scegli «Rendilo mio» per tenerlo aggiornato da essi.",
+  'live.card.makeMine': "Rendilo mio",
+  'live.foreign.title': "Blocchi dinamici creati da qualcun altro",
+  'live.foreign.body': "{name} contiene blocchi dinamici creati da qualcun altro, che mostrano {sources}. Mantengono ciò che contenevano e non leggono nulla dai tuoi file. Rendili tuoi per tenerli aggiornati dai tuoi file con quei nomi.",
   'live.script.wholeVault': "tutto il caveau",
   'live.script.daily': "Viene eseguito ogni giorno alle {time}",
   'live.script.weekly': "Viene eseguito ogni {day} alle {time}",

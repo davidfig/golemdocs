@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "Coloque el cursor en una tabla con título, un marcador o una sección bajo un encabezado para copiarla como vínculo dinámico.",
+  'live.insideLive': "Esta celda ya forma parte de un bloque dinámico, así que aquí no se puede pegar un vínculo dinámico. Péguelo en una celda vacía fuera del bloque.",
   'live.readOnly': "Esta parte muestra {source} y se mantiene al día desde allí. Cámbiela allí.",
   'live.notUpdated': "Un bloque en vivo de {name} no se actualizó: {problem}",
   'live.resultsOnly': "Sus bloques en vivo siguen activos aquí; un archivo {extension} descargado solo tiene lo que muestran ahora.",
@@ -61,6 +62,10 @@ export const live: Partial<Messages> = {
   'live.error.script': "{source} no se pudo ejecutar: {detail}",
   'live.error.notAllowed': "{source} no tiene permiso para leer lo que pidió: {detail}",
   'live.error.blocked': "{source} necesita más espacio: {detail} no está vacía, así que conserva su último resultado. Vacía las celdas en las que crecería.",
+  'live.error.foreign': "Lo creó otra persona: muestra lo que traía y no lee {source} de tus archivos. Elige «Hacerlo mío» para mantenerlo al día a partir de ellos.",
+  'live.card.makeMine': "Hacerlo mío",
+  'live.foreign.title': "Bloques en vivo creados por otra persona",
+  'live.foreign.body': "{name} tiene bloques en vivo que creó otra persona y que muestran {sources}. Conservan lo que traían y no leen nada de tus archivos. Hazlos tuyos para mantenerlos al día a partir de tus archivos con esos nombres.",
   'live.script.wholeVault': "toda la bóveda",
   'live.script.daily': "Se ejecuta todos los días a las {time}",
   'live.script.weekly': "Se ejecuta cada {day} a las {time}",

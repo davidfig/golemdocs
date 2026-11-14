@@ -84,6 +84,8 @@ export class Editor extends EditorTables {
         return this.moveDrawing(command);
       case 'resizeDrawing':
         return this.resizeDrawing(command);
+      case 'describePicture':
+        return this.describePicture(command);
       case 'selectAll': {
         const list = this.paragraphs();
         const last = list[list.length - 1];

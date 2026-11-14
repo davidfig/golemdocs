@@ -1,7 +1,7 @@
 // The document inside a stored document's bytes: a .docx, or this app's own .wdoc around one. Free of
 // the browser, so a worker can use it (the search index is made in one, see ../search/indexWorker.ts).
 
-import { LIVE_PREFIX, WordDocument, ZipArchive, isPlainText, liveTitle, paragraphSegments, textSegments, type Segment } from '@golemdocs/docx';
+import { LIVE_PREFIX, WordDocument, ZipArchive, isPlainText, linkTitle, liveTitle, paragraphSegments, textSegments, type Segment } from '@golemdocs/docx';
 import { isWdoc, readWdoc } from './wdoc.ts';
 import { fileLiveFields } from '../live/pdfFileTags.ts';
 
@@ -30,6 +30,13 @@ function drawnLive(svg: string): string[] {
   return [...new Set(sources.flatMap((source) => liveTitle(`${LIVE_PREFIX}${source}`) ?? []))];
 }
 
+/**
+ * The line that lists the sources of live blocks kept outside a document's text: as written for the vault graph (`live`, a built-in
+ * block's whole address), and as a rename sees them for its links (`links`: a count's document, see docx's linkTitle), so renaming or
+ * moving a source (or a built-in block's folder) finds this document to rewrite (formats/docLinks.ts).
+ */
+const liveLine = (live: string[]): Segment => ({ text: '', links: [...new Set(live.map(linkTitle))], live });
+
 /** The paragraphs in a stored document's bytes; null when it has no text to read (a PDF not turned into text yet). */
 export async function segmentsFromBytes(bytes: ArrayBuffer): Promise<Segment[] | null> {
   // A plain text file is kept as it is: its lines are its paragraphs.
@@ -37,7 +44,7 @@ export async function segmentsFromBytes(bytes: ArrayBuffer): Promise<Segment[] |
     const segments = textSegments(new Uint8Array(bytes));
     // An SVG drawing kept as it is (written by an agent, say) with live groups: their sources too.
     const live = drawnLive(new TextDecoder().decode(bytes));
-    return live.length ? [{ text: '', links: live, live }, ...segments] : segments;
+    return live.length ? [liveLine(live), ...segments] : segments;
   }
   // A workbook: a paragraph a row, of its active sheet's cells as shown.
   if (isWorkbook(bytes)) {
@@ -45,7 +52,7 @@ export async function segmentsFromBytes(bytes: ArrayBuffer): Promise<Segment[] |
     const { rows, live } = await workbookIndexed(new Uint8Array(bytes));
     const segments: Segment[] = rows.map((row) => ({ text: row.filter(Boolean).join(' ') })).filter((s) => s.text);
     // The sources of its live ranges, on a line of their own (the vault graph: docs/live-blocks.md §5).
-    return live.length ? [{ text: '', links: live, live }, ...segments] : segments;
+    return live.length ? [liveLine(live), ...segments] : segments;
   }
   let live: string[] = [];
   if (isWdoc(bytes)) {
@@ -60,5 +67,5 @@ export async function segmentsFromBytes(bytes: ArrayBuffer): Promise<Segment[] |
   }
   const doc = await wordDocumentFromBytes(bytes);
   const segments = doc ? paragraphSegments(doc) : null;
-  return live.length ? [{ text: '', links: live, live }, ...(segments ?? [])] : segments;
+  return live.length ? [liveLine(live), ...(segments ?? [])] : segments;
 }

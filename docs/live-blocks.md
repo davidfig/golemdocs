@@ -79,11 +79,35 @@ producer is a pure function from its inputs (file bytes, settings) to a result, 
 **host** is the document a block sits in; it turns the neutral result into its own content and saves it in its own format.
 Any producer works with any host: a new source type works in every document, and a new host shows every source type.
 
+### Who a block belongs to
+
+A block reads its source from the vault of the document it is in. So a block someone else made would fill itself from
+whatever file of yours has the same name: a form sent to you tagged `live:Taxes.xlsx#Summary`, filled with your numbers and
+ready to send back. To stop that, a tag says who made it (`live:<source> by=<who> stamp=<hash>`), and only a person's own
+blocks are updated. Someone else's keeps what it came with, and the app says so (problem `foreign`).
+
+- **`by`** is 24 hex digits: a fresh random salt (8) and an HMAC-SHA256 of it under a secret (16), `live/owner.ts`. Each
+  block gets its own salt, so two documents can't be told apart as one person's, and without the secret no one can make a
+  `by` that passes as theirs.
+- **The secrets** are kept in browser storage (`live/ownerStore.ts`): one per account, made by the server and handed out
+  with `/api/live-marker` (`owner`, kept in the user database's `live_owner` table), so every device of the account signs
+  and recognizes the same blocks; and one per browser, used when signed out. A device checks a `by` against every secret it
+  holds, and signs new blocks with the account's (the browser's when signed out or before the account's has arrived).
+- **A tag with no `by`** was typed by hand (a person or an agent writing a note): in a text file (Markdown, HTML, SVG, plain
+  text) it counts as the person's and is signed the first time it is written. Word, OpenDocument, workbook and PDF files are
+  written only by the app, which always signs, so an unsigned tag in one came from elsewhere and counts as someone else's.
+- **Every block made here is signed when it is made:** pasted into a document (the layout worker is told the owner with its
+  `liveOwner` command), a sheet's live range (`addLive`'s `by`), a drawing's group (`data-golem-by`), a PDF's text box,
+  picture or form field, and a live PDF export. A pasted block that already has someone else's `by` stays theirs.
+- **Make It Mine** (on the block's card, and asked once when a document with someone else's blocks is opened) re-signs the
+  blocks, all of them or those showing one source, and updates them from this vault (`adopt` in `LiveOptions`).
+- Without an owner (tests, `golem run`) every block counts as the person's.
+
 ## 2. Sources: what a block can show
 
 | Source | Address | Result |
 | --- | --- | --- |
-| Spreadsheet (`.xlsx`, `.ods`, `.csv`) | `Budget.xlsx#Expenses` (table), `#Total` (defined name), `#Summary!A1:D10` (range), a single cell | table or value, with the sheet's number formats applied |
+| Spreadsheet (`.xlsx`, `.ods`, `.csv`) | `Budget.xlsx#Expenses` (table), `#Total` (defined name), `#Summary!A1:D10` (range), a single cell | table or value, with the sheet's number formats applied; each number cell also carries its number and format code (`values`), so a workbook it fills gets numbers, currency and dates, not text |
 | Spreadsheet chart | `Budget.xlsx#chart:Spending` | picture (M2) |
 | PDF | `Contract.pdf#page:3`, `Return.pdf#field:Total` | picture of a page, or a form field's value (M2) |
 | A whole document, exported | `Report.docx` as the source of `Report.pdf` | the PDF (M3) |
@@ -100,18 +124,18 @@ is for hosts that must carry the text with them (see *Decisions*).
 ## 3. Hosts: what a block can sit in
 
 Every text format is read into the same model (`WordDocument`, [Formats](architecture/formats.md)), so there a block is
-one thing: a content control (a Word "sdt") tagged `live:<source> stamp=<hash>` holding the result, block-level for a
+one thing: a content control (a Word "sdt") tagged `live:<source> by=<who> stamp=<hash>` (`by` per §1) holding the result, block-level for a
 table or picture and inline for a value. Resolved note embeds are the same kind of node (`embedMarks.ts`). The editor shows
 it read-only with a small label naming its source. Each format's writer decides how to keep it:
 
 | Host | How the block is saved | Other apps see |
 | --- | --- | --- |
 | Word (`.docx`) | the content control, as is | the table or value; Word keeps it but does not update it |
-| OpenDocument (`.odt`) | a named section (block) or a text field or span (inline), with the source and stamp in its name or a hidden attribute: M0 settles which survives LibreOffice | the content |
+| OpenDocument (`.odt`) | a section named with the tag (block; a repeated tag gets ` copy=2`, `copy=3`… since section names must be unique), a text-input field described by it (a value in one format), or a `text:meta` with the tag in its RDFa `xhtml:content` (a value with formatting, a picture or a link inside): what LibreOffice keeps (M0) | the content |
 | Markdown | HTML comment markers around the result (§4) | a normal table or value |
-| HTML | an element with `data-golem-live` and `data-golem-stamp` attributes | the content |
+| HTML | an element with `data-golem-live`, `data-golem-by` and `data-golem-stamp` attributes | the content |
 | Spreadsheet (`.xlsx`, `.ods`) | a range filled from the source, anchored at its top-left cell; the address and stamp in a defined name and the workbook's custom properties (M2). A source that is another workbook uses Excel's own external reference instead (§5) | values in cells |
-| Drawing (`.svg`) | a group with `data-golem-live` and `data-golem-stamp` holding the result drawn as text (a line a row) or a picture (an `<image>`); moved and scaled like any group (M3) | the drawing |
+| Drawing (`.svg`) | a group with `data-golem-live`, `data-golem-by` and `data-golem-stamp` holding the result drawn as text (a line a row) or a picture (an `<image>`); moved and scaled like any group (M3) | the drawing |
 | Plain text and the light markup formats (`.txt`, `.rst`, `.org`, ...) | the result only, with a comment marker where the format has comments; where it has none the block is lost on save, and the app says so as for any lossy conversion (`conversionIsLossy`) | the content |
 | PDF | an entry in the document's list of edits ([PDF editing](pdf-editing.md)): a form field's value, an added text box (value), an added picture. Tables come later (see *PDFs* below). The vault's `.pdf` has the edits written in, and a field's source and stamp also go on its widget (`/GolemLive`), which other apps keep (M0) | the page as edited |
 
@@ -185,6 +209,8 @@ An inline value: `So far we've spent <!-- golem:live Budget.xlsx#Total stamp=3f9
   or sync. `![[Note]]` and `![[Note#Heading]]` stay note embeds, as now.
 - A range becomes a Markdown table. Its first row is the header (Markdown tables need one); a table's header row is used
   as is. Alignment follows the cells' horizontal alignment. Cells are text only: no colors, fonts or borders in Markdown.
+- A marker the app wrote says who made it: `<!-- golem:live Budget.xlsx#Expenses by=… stamp=… -->` (§1). One typed by
+  hand has no `by`; in a note it counts as the person's own and is signed on its first update.
 - Read into the model, the markers become the content control of §3, so converting the note to Word or ODT keeps the block.
 - An edit to the result made outside the app (by hand or by an agent) is replaced at the next update. Writing changes back
   into the spreadsheet is not planned before M4.
@@ -195,7 +221,19 @@ An inline value: `So far we've spent <!-- golem:live Budget.xlsx#Total stamp=3f9
   read, alongside the search index (`docIndex.ts`). From it, the reverse map: source → documents depending on it. Kept on
   the device (IndexedDB in the browser, beside the vault on desktop) and rebuildable from the files, so it is a cache,
   never the truth.
-- **Renames** follow, as wikilinks do: renaming `Budget.xlsx` rewrites the sources that name it.
+- **Renames** follow, as wikilinks do: renaming or moving `Budget.xlsx` rewrites the sources that name it, wherever the
+  block is kept (`rewriteDocumentLinks` in `formats/docLinks.ts`): a content control's tag, a Markdown marker, an embed, a
+  drawing's `data-golem-live`, a workbook's live range (the comment of its hidden name; only the workbook part's text is
+  edited, every other part is copied byte for byte), a PDF's live fields (the ones kept with it, or the file's own, which
+  are then kept with it), Edit PDF's text boxes and pictures, and a Live PDF Copy's `pdf.export` tag. Who made the block
+  (`by=`) and its stamp are kept as they were. Renaming or moving a *folder* rewrites the built-in blocks that read it
+  (`@list:Vault/Characters?…`, `@timeline:`, a count of a folder), and those reading a folder inside it
+  (`@list:Vault/Characters/Sub`): `folderRetargets` in `linkRename.ts` resolves each path as the block does (`resolveFolder`,
+  from the host's folder) before and after, and writes a path that finds the same folder again, escaped as
+  `builtinAddress.ts` writes it. The rename finds the hosts through the search index, which lists every kind of host's
+  sources as a rename sees them (a count's document rather than its whole address: `linkTitle`), so a workbook, a PDF or a
+  drawing that shows a renamed source is found as a note is. A workbook formula's reference to another workbook
+  (`[Bank.xlsx]Sheet1!A1`) is not rewritten.
 - **Chains.** A workbook's references to another workbook (`[Bank.xlsx]Sheet1!A1`) read the values it keeps in its
   external link parts (`sheet/externals.ts`). They are edges of the graph: the workbook's index lists the other
   workbook's title among its live sources (`workbookIndexed`), so a new bank export makes the keeper refresh the kept
@@ -411,6 +449,11 @@ error.
 
 ### The sandbox
 
+**What a script is told** when it can't be read or run is in the person's language: the script package's messages
+(`script/src/messages.ts`, English) are replaced by the app's (`scripts.error.*`, set by `client/src/scripts/messages.ts`
+before each run), the sandbox's runtime is handed the ones it says with each run (it can't import), and the app's answers
+to a script's requests are `scripts.vault.*`. The command line keeps the English.
+
 Golem Docs runs in a web view everywhere (the browser, Tauri's WebView on desktop, the phone apps), so one sandbox serves
 every platform, with no dependencies:
 
@@ -553,6 +596,30 @@ Blocks M0 Tests/`, with a checklist for the checks done by hand (Word, Excel, VS
   in that cell. The Word reader puts such a tag back around the table (`docx/src/docx/liveRepair.ts`). Calc keeps the
   hidden defined name of a workbook's live range but drops its comment, where the tag is, so the range stops being live:
   the tag needs a place Calc keeps.
+- **LibreOffice and ODT, in detail** (26.8, opened and saved once and twice; `odt/test/live.test.ts`):
+  - Two sections with the same name: Writer renames the second to `Section1`, losing its tag. So a repeated tag is
+    written `<tag> copy=2` (then 3...), which Writer keeps, and the reader drops the suffix.
+  - A text-input field keeps only text, so formatting inside a value was lost. A `text:span` with an attribute of our
+    own loses the attribute; a bookmark range named with the tag survives but would need unique names too. A `text:meta`
+    survives with its spans and its `xhtml:content` (the tag), but only with an RDFa property whose prefix is declared
+    (`xmlns:golem="urn:golemdocs:"`, `xhtml:property="golem:live"`, and an `xhtml:about`): an undeclared or full-IRI
+    property makes Writer drop all three RDFa attributes. Writer renames the prefix (`gen:live`), so the reader goes by
+    `xhtml:content` alone. A value in one format stays a field (inside a span for its format); anything else is a meta.
+  - A field inside a link is kept as it is (the reader used to skip it). A meta that fills a link's whole text is moved
+    outside the link, so the value comes back holding the link rather than inside it; its next update drops the link.
+  - Writer's own ODT holds Word's content controls as `loext:content-control` with `loext:tag` (and
+    `loext:plain-text` for the one it moved into a table): a `.docx` converted to ODT in LibreOffice keeps its live tags
+    there. The ODT reader reads them as live blocks and puts a moved table tag back around its table, as the Word reader
+    does (`liftMovedLiveTags`).
+- **LibreOffice and a live table in `.docx`, in detail** (`docx/test/liveRepair.test.ts`): Writer keeps a live table's
+  tag only when the first cell starts with text, formatted or not, or is empty; it then moves it there as described
+  above, and the repair puts it back (at any depth). When the first cell starts with anything else (a live value, a
+  link, a bookmark, another content control, a nested table), Writer's import drops the table's tag altogether, so
+  there is nothing in the file to repair: the table becomes ordinary content (a live value in that cell keeps its own
+  tag, which Writer writes without `<w:text/>`, so the repair never mistakes it for a moved one).
+  A second copy of the tag in the table's caption or description (`w:tblCaption`, `w:tblDescription`) does not help:
+  Writer drops both on import, so neither survives docx → docx nor docx → ODT → docx (nor shows in its ODT). Still
+  open: another place for the tag that Writer keeps.
 - **The script sandbox in WebKit** (Safari's engine, which the macOS and iOS shells use): every test in
   `e2e/live/scripts.spec.ts` passes, including the escapes. The spec now also tries the shells' bridges
   (`__TAURI_INTERNALS__`, `webkit.messageHandlers`, `ipc://`), blocked in the browser; it has not yet been run inside a
@@ -595,7 +662,8 @@ Blocks M0 Tests/`, with a checklist for the checks done by hand (Word, Excel, VS
 - **Each scheduled run is claimed once through the account,** so two devices on one vault never both run it. The server
   keeps claims, not code.
 - **Updates run on devices first.** The cloud comes only if the out-of-date log shows it is needed.
-- **Documents shared by other people come later** (M4).
+- **Documents shared by other people come later** (M4). Until then a block made by someone else is never filled from this
+  vault unless the person makes it theirs (§1, *Who a block belongs to*).
 - **Everything works without ai.** No feature may need an agent to make or use it.
 
 ## Open questions

@@ -166,7 +166,7 @@ test.describe('editing a drawing', () => {
     await app.page.mouse.click(centre.x, centre.y);
     await app.page.getByRole('button', { name: 'Fill Color options' }).click();
     const popup = app.page.locator('.wm-palette');
-    await popup.getByRole('button', { name: 'Radial' }).click();
+    await popup.getByRole('radio', { name: 'Radial' }).click();
     await expect(popup.locator('.wm-grad-stop')).toHaveCount(2); // the editor is drawn when the state follows
     const bar = await popup.locator('.wm-grad-bar').boundingBox();
     await app.page.mouse.click(bar!.x + bar!.width / 2, bar!.y + bar!.height / 2); // a stop halfway out
@@ -181,7 +181,7 @@ test.describe('editing a drawing', () => {
     // The ring stays picked: a palette colour changes that stop only.
     await app.page.getByRole('button', { name: 'Fill Color options' }).click();
     await expect(popup.getByLabel('Position')).toHaveValue('75');
-    await popup.getByRole('button', { name: '#0000FF' }).click();
+    await popup.locator('.wm-swatch[title="#0000FF"]').click();
     await expect.poll(async () => /offset="0\.75[0-9]*"[^>]*stop-color="#0000FF"/i.test(await currentSvg(app)), { timeout: 15_000 }).toBe(true);
   });
 
@@ -190,9 +190,9 @@ test.describe('editing a drawing', () => {
     const at = await onPage(app, 0.75, 0.5); // the green circle
     await app.page.mouse.click(at.x, at.y);
     await app.page.getByRole('button', { name: 'Fill Color options' }).click();
-    const used = app.page.locator('.wm-palette').getByRole('button', { name: '#e53935' });
+    const used = app.page.locator('.wm-palette').locator('.wm-swatch[title="#e53935"]');
     await expect(used).toHaveCount(1);
-    await expect(app.page.locator('.wm-palette').getByRole('button', { name: '#000000' })).toHaveCount(2); // in the palette and in the drawing
+    await expect(app.page.locator('.wm-palette').locator('.wm-swatch[title="#000000"]')).toHaveCount(2); // in the palette and in the drawing
     await expect(app.page.locator('.wm-swatch.current')).toHaveAttribute('title', '#43a047');
   });
 
@@ -202,7 +202,7 @@ test.describe('editing a drawing', () => {
     await app.page.mouse.click(at.x, at.y);
     await app.page.getByRole('button', { name: 'Fill Color options' }).click();
     const popup = app.page.locator('.wm-palette');
-    await popup.getByRole('button', { name: 'Linear' }).click();
+    await popup.getByRole('radio', { name: 'Linear' }).click();
     // The popup stays open and now shows the gradient's two stops.
     const stops = popup.locator('.wm-grad-stop');
     await expect(stops).toHaveCount(2);
@@ -214,7 +214,7 @@ test.describe('editing a drawing', () => {
     // Its position is typed, and a colour from the palette is its colour (the popup stays open).
     await popup.getByLabel('Position').fill('25');
     await popup.getByLabel('Position').press('Tab');
-    await popup.getByRole('button', { name: '#FF0000' }).click();
+    await popup.locator('.wm-swatch[title="#FF0000"]').click();
     await expect(stops).toHaveCount(3);
     await expect(popup.getByLabel('Position')).toHaveValue('25');
     // Reverse turns the gradient around: the red stop is now at 75%.
@@ -233,13 +233,13 @@ test.describe('editing a drawing', () => {
     await openDrawing(app);
     await app.page.getByRole('button', { name: 'Fill Color options' }).click();
     const popup = app.page.locator('.wm-palette');
-    await popup.getByRole('button', { name: 'Linear' }).click();
+    await popup.getByRole('radio', { name: 'Linear' }).click();
     // The gradient for new shapes shows its two stops: the second picked and coloured, and a third added.
     const stops = popup.locator('.wm-grad-stop');
     await expect(stops).toHaveCount(2);
     await popup.getByRole('button', { name: 'Color stop 2' }).click();
     await expect(popup.getByRole('button', { name: 'Color stop 2' })).toHaveAttribute('aria-pressed', 'true');
-    await popup.getByRole('button', { name: '#FF0000' }).click();
+    await popup.locator('.wm-swatch[title="#FF0000"]').click();
     await expect.poll(() => popup.getByRole('button', { name: 'Color stop 2' }).evaluate((e) => (e as HTMLElement).style.getPropertyValue('--stop').toLowerCase())).toBe('#ff0000');
     const bar = (await popup.locator('.wm-grad-bar').boundingBox())!;
     await app.page.mouse.click(bar.x + bar.width * 0.4, bar.y + bar.height / 2);
@@ -269,16 +269,16 @@ test.describe('editing a drawing', () => {
     await app.page.mouse.click(at.x, at.y);
     await app.page.getByRole('button', { name: 'Fill Color options' }).click();
     const popup = app.page.locator('.wm-palette');
-    const types = popup.getByRole('group', { name: 'Fill Type' });
-    await types.getByRole('button', { name: 'Linear' }).click();
-    await expect(types.getByRole('button', { name: 'Linear' })).toHaveAttribute('aria-pressed', 'true');
+    const types = popup.getByRole('radiogroup', { name: 'Fill Type' });
+    await types.getByRole('radio', { name: 'Linear' }).click();
+    await expect(types.getByRole('radio', { name: 'Linear' })).toHaveAttribute('aria-checked', 'true');
     // Held down while the change just made is saved (the save status changes under it), then let go.
-    const solid = (await types.getByRole('button', { name: 'Solid' }).boundingBox())!;
+    const solid = (await types.getByRole('radio', { name: 'Solid' }).boundingBox())!;
     await app.page.mouse.move(solid.x + solid.width / 2, solid.y + solid.height / 2);
     await app.page.mouse.down();
     await app.page.waitForTimeout(1500);
     await app.page.mouse.up();
-    await expect(types.getByRole('button', { name: 'Solid' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(types.getByRole('radio', { name: 'Solid' })).toHaveAttribute('aria-checked', 'true');
     await expect(popup.locator('.wm-grad-bar')).toHaveCount(0);
     // With a solid fill too, the swatches flow across the popup's width, centred.
     const spread = await popup.locator('.wm-palette-grid').first().evaluate((grid) => {
@@ -288,8 +288,8 @@ test.describe('editing a drawing', () => {
     });
     expect(spread.right).toBeLessThan(24);
     expect(Math.abs(spread.left - spread.right)).toBeLessThanOrEqual(1);
-    await types.getByRole('button', { name: 'Radial' }).click();
-    await expect(types.getByRole('button', { name: 'Radial' })).toHaveAttribute('aria-pressed', 'true');
+    await types.getByRole('radio', { name: 'Radial' }).click();
+    await expect(types.getByRole('radio', { name: 'Radial' })).toHaveAttribute('aria-checked', 'true');
     await expect(popup.locator('.wm-grad-stop')).toHaveCount(2);
   });
 
@@ -299,7 +299,7 @@ test.describe('editing a drawing', () => {
     await app.page.mouse.click(at.x, at.y);
     await app.page.getByRole('button', { name: 'Fill Color options' }).click();
     const popup = app.page.locator('.wm-palette');
-    await popup.getByRole('button', { name: 'Linear' }).click();
+    await popup.getByRole('radio', { name: 'Linear' }).click();
     const stops = popup.locator('.wm-grad-stop');
     await expect(stops).toHaveCount(2);
     // Under the gradient's editor the swatches flow across the popup's whole width, centred, leaving no empty strip.
@@ -328,7 +328,7 @@ test.describe('editing a drawing', () => {
     await popup.getByRole('button', { name: 'Color stop 1' }).click();
     await expect(popup.getByRole('button', { name: 'Color stop 1' })).toHaveAttribute('aria-pressed', 'true');
     await expect(popup.getByLabel('Position')).toHaveValue('0');
-    await popup.getByRole('button', { name: '#0000FF' }).click();
+    await popup.locator('.wm-swatch[title="#0000FF"]').click();
     await expect.poll(() => popup.getByRole('button', { name: 'Color stop 1' }).evaluate((e) => (e as HTMLElement).style.getPropertyValue('--stop').toLowerCase())).toBe('#0000ff');
     // With three stops, even an end can be deleted; two always stay.
     await popup.getByRole('button', { name: 'Delete Stop' }).click();

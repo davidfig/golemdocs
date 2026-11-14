@@ -18,4 +18,7 @@ export const viewer: Partial<Messages> = {
   'viewer.viewOnlyTitle': '{name} (sola lettura)',
   'viewer.download': 'Scarica',
   'viewer.linkGone': 'Questo link non funziona più: il documento non è più condiviso pubblicamente.',
+  'viewer.toolbar': 'Visualizzatore',
+  'viewer.zoomButton': 'Dimensioni effettive (ora {zoom})',
+  'viewer.foundOnPage': 'Trovato a pagina {page} di {pages}',
 };

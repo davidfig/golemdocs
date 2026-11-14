@@ -7,13 +7,14 @@ import { addShare, listShares, publicLink, publicLinkUrl, removeShare, type Shar
 import { t } from '../i18n/index.ts';
 import { avatar } from './avatar.ts';
 import { writeClipboardText } from './clipboard.ts';
+import { announce } from './announce.ts';
 import { CLOSE_ICON, h, iconButton, segmented } from './dom.ts';
 import { dialogTitleBar } from './popup.ts';
 
 /** Can edit | Can view: the shared segmented control, set to `value`, with `pick` told of a change. */
-function roleChoice(value: ShareRole, pick: (role: ShareRole) => void): { el: HTMLElement; set(role: ShareRole): void } {
+function roleChoice(value: ShareRole, pick: (role: ShareRole) => void, label = t('dialogs.share.access')): { el: HTMLElement; set(role: ShareRole): void } {
   const choice = segmented<ShareRole>(
-    t('dialogs.share.access'),
+    label,
     [
       { value: 'editor', text: t('dialogs.share.canEdit') },
       { value: 'viewer', text: t('dialogs.share.canView') },
@@ -129,25 +130,37 @@ export function showShareDialog(target: ShareTarget): void {
     // The name above the address, each cut short on its own if it has to be; the tooltip has both whole.
     const lines = [share.name, share.email].filter((line): line is string => !!line);
     const label = h('div', { class: 'wm-share-person', title: lines.join('\n') }, ...(lines.length ? lines : [t('dialogs.share.unknown')]).map((text) => h('span', { text })));
-    const access = roleChoice(share.role, (next) => {
-      if (!share.email) return access.set(share.role);
-      addShare(personId, share.email, next).then(
-        () => {
-          share.role = next;
-          say('');
-        },
-        (error: Error) => {
-          // It didn't change: show the access they still have.
-          access.set(share.role);
-          say(error.message, true);
-        },
-      );
-    });
+    // Each person's controls say whose they are: a list of "Access" and "Remove" alone can't be told apart.
+    const who = share.name ?? share.email ?? t('dialogs.share.unknown');
+    const access = roleChoice(
+      share.role,
+      (next) => {
+        if (!share.email) return access.set(share.role);
+        addShare(personId, share.email, next).then(
+          () => {
+            share.role = next;
+            say('');
+          },
+          (error: Error) => {
+            // It didn't change: show the access they still have.
+            access.set(share.role);
+            say(error.message, true);
+          },
+        );
+      },
+      t('a11y.share.access', { name: who }),
+    );
     const remove = iconButton('wm-dialog-close', CLOSE_ICON, t('dialogs.share.remove'));
+    remove.setAttribute('aria-label', t('a11y.share.remove', { name: who }));
     remove.addEventListener('click', () => {
       remove.disabled = true;
       removeShare(personId, share.userId).then(
-        () => void refresh(),
+        () =>
+          void refresh().then(() => {
+            // The row with the focus is gone: the keyboard goes back to the address box, and the removal is said.
+            announce(t('a11y.share.removed', { name: who }));
+            email.focus();
+          }),
         (error: Error) => {
           remove.disabled = false;
           say(error.message, true);

@@ -216,6 +216,7 @@ test.describe('squiggles and the right-click menu', () => {
     await app.press('ArrowLeft', 0);
     const gaps = await lineGaps(app, text.length);
     await clickAt(app, { x: (gaps[from].x + gaps[to].x) / 2, y: gaps[0].y }, { button: 'right' });
+    return gaps;
   }
 
   test('right-clicking a misspelled word offers suggestions, Ignore All and Add to Dictionary', async ({ app }) => {
@@ -281,9 +282,9 @@ test.describe('squiggles and the right-click menu', () => {
   });
 
   test('typing still works after clicking away from the menu', async ({ app }) => {
-    await rightClickWord(app, 'I recieve mail.', 2, 9);
+    // The open menu has the keyboard, so the line is measured before it opens.
+    const gaps = await rightClickWord(app, 'I recieve mail.', 2, 9);
     await expect(menu(app)).toBeVisible();
-    const gaps = await lineGaps(app, 15);
     await clickAt(app, { x: gaps[15].x + 300, y: gaps[0].y });
     await expect(menu(app)).toBeHidden();
     await app.page.keyboard.type('X');

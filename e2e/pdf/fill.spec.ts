@@ -13,6 +13,8 @@ const form = () =>
   });
 
 const field = (app: { page: import('@playwright/test').Page }, name: string) => app.page.locator(`.wm-field[aria-label="${name}"]`);
+/** The form's radio buttons (not the palette's Fill In and Edit PDF, which are a radio group too). */
+const radios = (app: { page: import('@playwright/test').Page }) => app.page.locator('.wm-field[role="radio"]');
 
 async function download(app: import('../fixtures').App): Promise<string> {
   return decodePdf((await app.download(() => app.menu('File', 'Download'))).bytes);
@@ -28,8 +30,19 @@ test.describe('Fill In mode', () => {
     await expect(app.page.locator('.wm-field')).toHaveCount(6);
     await expect(field(app, 'FullName')).toBeVisible();
     await expect(field(app, 'Agree')).toHaveAttribute('role', 'checkbox');
-    await expect(app.page.getByRole('radio')).toHaveCount(3);
+    await expect(radios(app)).toHaveCount(3);
     await expect(app.page.getByRole('combobox', { name: 'Country' })).toBeVisible();
+  });
+
+  test('a field is named by its description where the PDF has one, says when it is required, and a radio button names its choice', async ({ app }) => {
+    await openPdf(app, makePdf({ fields: [
+      { kind: 'text', name: 'f1_01[0]', rect: [40, 220, 240, 240], description: 'Your full name', required: true },
+      { kind: 'radio', name: 'Size', rect: [[40, 160, 52, 172], [80, 160, 92, 172]], states: ['Small', 'Large'], value: 'Small' },
+    ] }));
+    await showPage(app.page, 0);
+    const name = app.page.getByRole('textbox', { name: 'Your full name' });
+    await expect(name).toHaveAttribute('aria-required', 'true');
+    await expect(app.page.getByRole('radio', { name: 'Size, Large' })).toHaveAttribute('aria-checked', 'false');
   });
 
   test('typing in a text field shows the text, and the downloaded PDF holds it', async ({ app }) => {
@@ -49,14 +62,14 @@ test.describe('Fill In mode', () => {
   });
 
   test('choosing a radio button turns the others off, and clicking the chosen one keeps it on', async ({ app }) => {
-    const radios = app.page.getByRole('radio');
-    await expect(radios.nth(0)).toHaveAttribute('aria-checked', 'true');
-    await radios.nth(2).click();
-    await expect(radios.nth(2)).toHaveAttribute('aria-checked', 'true');
-    await expect(radios.nth(0)).toHaveAttribute('aria-checked', 'false');
-    await expect(radios.nth(1)).toHaveAttribute('aria-checked', 'false');
-    await radios.nth(2).click();
-    await expect(radios.nth(2)).toHaveAttribute('aria-checked', 'true');
+    const size = radios(app);
+    await expect(size.nth(0)).toHaveAttribute('aria-checked', 'true');
+    await size.nth(2).click();
+    await expect(size.nth(2)).toHaveAttribute('aria-checked', 'true');
+    await expect(size.nth(0)).toHaveAttribute('aria-checked', 'false');
+    await expect(size.nth(1)).toHaveAttribute('aria-checked', 'false');
+    await size.nth(2).click();
+    await expect(size.nth(2)).toHaveAttribute('aria-checked', 'true');
     expect(await download(app)).toMatch(/\/V\s*\/Large/);
   });
 
@@ -70,13 +83,13 @@ test.describe('Fill In mode', () => {
   test('a filled-in form, downloaded and opened again, still holds what was filled in', { tag: '@heavy' }, async ({ app }) => {
     await field(app, 'FullName').fill('Bob');
     await field(app, 'Agree').click();
-    await app.page.getByRole('radio').nth(1).click();
+    await radios(app).nth(1).click();
     await app.page.getByRole('combobox', { name: 'Country' }).selectOption('Japan');
     const { bytes } = await app.download(() => app.menu('File', 'Download'));
     await openPdf(app, bytes, 'filled.pdf');
     await expect(field(app, 'FullName')).toHaveValue('Bob');
     await expect(field(app, 'Agree')).toHaveAttribute('aria-checked', 'true');
-    await expect(app.page.getByRole('radio').nth(1)).toHaveAttribute('aria-checked', 'true');
+    await expect(radios(app).nth(1)).toHaveAttribute('aria-checked', 'true');
     await expect(app.page.getByRole('combobox', { name: 'Country' })).toHaveValue('Japan');
   });
 

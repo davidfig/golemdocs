@@ -46,6 +46,19 @@ test('a new install starts with the default folder, and a shell too old to have 
   await assert.rejects(desktopBridge()!.useDefault(), /Permission denied/);
 });
 
+test('folders are listed, made and removed, and a shell too old to list them gives none', async () => {
+  shell({ vault_folders: ['Notes', 'Notes/Empty'], vault_make_folder: undefined, vault_remove_folder: false });
+  const bridge = desktopBridge()!;
+  assert.deepEqual(await bridge.folders(), ['Notes', 'Notes/Empty']);
+  await bridge.makeFolder('New');
+  assert.equal(await bridge.removeFolder('Notes'), false);
+  shell({});
+  assert.equal(await desktopBridge()!.folders(), null);
+  await assert.rejects(desktopBridge()!.makeFolder('New'), ShellTooOldError);
+  shell({ vault_folders: Promise.reject('Permission denied') });
+  await assert.rejects(desktopBridge()!.folders(), /Permission denied/);
+});
+
 test('a shell that has the commands works as before', async () => {
   shell({ vault_check: undefined, vault_reveal: undefined, vault_open_privacy: undefined });
   const bridge = desktopBridge()!;
@@ -97,6 +110,18 @@ test('a shell without the base64 commands is sent the raw bytes, and not asked f
   assert.equal(await bridge.write('y.png', file), 7);
   assert.deepEqual(calls.map((c) => c.command), ['vault_read_base64', 'vault_read', 'vault_write', 'vault_write']);
   assert.equal(calls[2].args, file, 'the bytes are the body');
+});
+
+test('files are dated in whole milliseconds, and a shell that cannot date them is not asked again', async () => {
+  const calls = recordingShell({ vault_set_times: () => 1234 });
+  assert.equal(await desktopBridge()!.setTimes('a.md', { created: 1000.4, modified: undefined }), 1234);
+  assert.deepEqual(calls, [{ command: 'vault_set_times', args: { path: 'a.md', createdMs: 1000, modifiedMs: null } }]);
+
+  const old = recordingShell({});
+  const bridge = desktopBridge()!;
+  assert.equal(await bridge.setTimes('a.md', { created: 1 }), null);
+  assert.equal(await bridge.setTimes('b.md', { created: 1 }), null);
+  assert.equal(old.length, 1);
 });
 
 test('a real failure of the base64 commands comes through', async () => {

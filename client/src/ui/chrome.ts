@@ -17,6 +17,7 @@ import {
   type ZoomTarget,
 } from './actions.ts';
 import { CommandRegistry, type Command, type CommandSpec } from './commands.ts';
+import { announce } from './announce.ts';
 import { h, isFormField, modalOpen, segmented } from './dom.ts';
 import { zoomPercent } from '../view/camera.ts';
 import { sameValue } from './sameValue.ts';
@@ -41,6 +42,8 @@ import { inAppMenuOnMac, installFullScreen, isFullScreen, onFullScreenChange, on
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type PaletteControl, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
 import { autoFormatOn, setAutoFormat } from './autoFormat.ts';
+import { SCREEN_READER_SHORTCUT, screenReaderOn, setScreenReader } from './screenReader.ts';
+import { rowControls, type Region } from './focusRegions.ts';
 import { lockGuidesOn, selectAfterPencilOn, setLockGuides, setSelectAfterPencil, setShowGuides, showGuidesOn } from './drawingOptions.ts';
 import { SCHEMES, currentAppearance, currentScheme, isDark, pagesDark, setAppearance, setScheme, toggleDark, toggleDarkPages } from './theme.ts';
 import { showCustomize, type CatalogItem } from './customize.ts';
@@ -204,6 +207,24 @@ export class Chrome {
     this.refresh();
   }
 
+  /** The parts of the chrome F6 stops at (ui/focusRegions.ts): the menu bar, then each toolbar shown. */
+  regions(): Region[] {
+    const bar: Region = { el: this.menuBar.el, focus: () => this.menuBar.focusFromKeyboard() };
+    const rows = this.toolbars
+      .filter((toolbar) => !toolbar.el.hidden)
+      .map(
+        (toolbar): Region => ({
+          el: toolbar.el,
+          focus: () => {
+            const first = rowControls(toolbar.el)[0];
+            first?.focus();
+            return !!first && toolbar.el.contains(document.activeElement);
+          },
+        }),
+      );
+    return [bar, ...rows];
+  }
+
   /** Merges application state; controls are refreshed only when something changed. */
   update(partial: Partial<ChromeState>): void {
     let changed = false;
@@ -364,6 +385,10 @@ export class Chrome {
       dialog('edit.find', t('chrome.edit.find'), 'find', { icon: 'find', shortcut: 'Mod+F' }),
       dialog('edit.replace', t('chrome.edit.replace'), 'replace', { shortcut: { other: 'Mod+H', mac: 'Ctrl+H' } }),
       dialog('edit.goTo', t('chrome.edit.goTo'), 'goTo', { shortcut: 'Mod+G' }),
+      a('edit.nextHeading', t('a11y.nextHeading'), { kind: 'jump', to: 'heading', backward: false }, { shortcut: 'Mod+Alt+PageDown' }),
+      a('edit.previousHeading', t('a11y.previousHeading'), { kind: 'jump', to: 'heading', backward: true }, { shortcut: 'Mod+Alt+PageUp' }),
+      a('edit.nextTable', t('a11y.nextTable'), { kind: 'jump', to: 'table', backward: false }, { shortcut: 'Mod+Alt+Shift+PageDown' }),
+      a('edit.previousTable', t('a11y.previousTable'), { kind: 'jump', to: 'table', backward: true }, { shortcut: 'Mod+Alt+Shift+PageUp' }),
       dialog('edit.searchAll', t('chrome.edit.searchAll'), 'searchAll', { icon: 'find', shortcut: 'Mod+Shift+F' }),
     );
 
@@ -493,6 +518,7 @@ export class Chrome {
       dialog('format.columns', t('chrome.format.columns'), 'columns', { icon: 'columns' }),
       dialog('format.tabs', t('chrome.format.tabs'), 'tabs'),
       dialog('format.styles', t('chrome.format.styles'), 'styles'),
+      a('format.altText', t('a11y.alt.menu'), { kind: 'altText' }, { enabled: (s) => !!s.pictureSelected }),
     );
     for (const lines of [1, 1.15, 1.5, 2, 2.5, 3]) {
       r.add(a(`format.spacing.${lines}`, lines.toFixed(lines % 1 ? 2 : 1).replace(/0$/, ''), { kind: 'setLineSpacing', lines }));
@@ -508,6 +534,7 @@ export class Chrome {
       a('tools.runScript', t('chrome.tools.runScript'), { kind: 'runScript' }, { tooltip: t('chrome.tools.runScript.tip') }),
       a('tools.scripts', t('chrome.tools.scripts'), { kind: 'scripts' }, { tooltip: t('chrome.tools.scripts.tip') }),
       { id: 'tools.autoFormat', label: t('chrome.tools.autoFormat'), tooltip: t('chrome.tools.autoFormat.tip'), run: () => setAutoFormat(!autoFormatOn()), checked: autoFormatOn },
+      { id: 'tools.screenReader', label: t('a11y.mode'), tooltip: t('a11y.mode.tip'), shortcut: SCREEN_READER_SHORTCUT, run: () => setScreenReader(!screenReaderOn()), checked: screenReaderOn },
     );
 
     // Table
@@ -748,6 +775,7 @@ export class Chrome {
       cmd('file.trash'),
       cmd('file.vault'),
       cmd('tools.options'),
+      cmd('tools.screenReader'),
       heading(t('chrome.menu.help')),
       cmd('help.shortcuts'),
       cmd('help.feedback'),
@@ -824,6 +852,10 @@ export class Chrome {
           cmd('edit.find'),
           cmd('edit.replace'),
           cmd('edit.goTo'),
+          cmd('edit.nextHeading'),
+          cmd('edit.previousHeading'),
+          cmd('edit.nextTable'),
+          cmd('edit.previousTable'),
           cmd('edit.searchAll'),
         ],
       },
@@ -941,13 +973,14 @@ export class Chrome {
           sub(t('chrome.format.changeCase'), ['sentence', 'lower', 'upper', 'title', 'toggle'].map((c) => cmd(`format.case.${c}`))),
           sep,
           cmd('format.styles'),
+          cmd('format.altText'),
           cmd('format.painter'),
           cmd('format.clear'),
         ],
       },
       {
         label: t('chrome.menu.tools'),
-        items: [cmd('tools.spelling'), cmd('tools.thesaurus'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), cmd('tools.autoFormat'), sep, cmd('tools.runScript'), cmd('tools.scripts'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
+        items: [cmd('tools.spelling'), cmd('tools.thesaurus'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), cmd('tools.autoFormat'), sep, cmd('tools.runScript'), cmd('tools.scripts'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.screenReader'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
       },
       {
         label: t('chrome.menu.table'),
@@ -2017,6 +2050,8 @@ export class Chrome {
           key.classList.remove('recording');
           key.textContent = command.shortcutText || t('chrome.shortcuts.none');
           key.classList.toggle('none', !command.shortcutText);
+          // Its name says the key it has now, which its label would otherwise hide.
+          key.setAttribute('aria-label', t('a11y.withValue', { label: t('chrome.shortcuts.change', { label: command.plainLabel }), value: key.textContent }));
         };
         show();
         if (command.nativeShortcut) {
@@ -2059,6 +2094,7 @@ export class Chrome {
             key.classList.add('recording');
             key.textContent = t('chrome.shortcuts.press');
             status.textContent = '';
+            announce(t('chrome.shortcuts.press'));
             recording = stop;
             key.addEventListener('keydown', onKey);
             key.addEventListener('blur', stop);

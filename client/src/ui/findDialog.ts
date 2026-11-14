@@ -3,7 +3,7 @@
 // editor does the searching, see @golemdocs/editor); Go To scrolls to a page or selects a comment.
 
 import { t } from '../i18n/index.ts';
-import { h, makeDraggable } from './dom.ts';
+import { h, makeDraggable, tabList as tabKeys } from './dom.ts';
 import { listBox, type ListBox } from './listBox.ts';
 import { dialogTitleBar } from './popup.ts';
 
@@ -176,6 +176,7 @@ export class FindDialog {
       this.tabButtons.set(tab, el);
       tabs.append(el);
     }
+    tabKeys(tabs);
 
     this.el = h(
       'dialog',

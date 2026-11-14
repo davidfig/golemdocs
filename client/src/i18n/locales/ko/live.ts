@@ -2,6 +2,7 @@ import type { Messages } from '../../index.ts';
 
 export const live: Partial<Messages> = {
   'live.copy.nothing': "제목이 있는 표, 책갈피 또는 제목 아래 구역에 커서를 두면 라이브 링크로 복사할 수 있습니다.",
+  'live.insideLive': "이 셀은 이미 라이브 블록의 일부이므로 여기에 라이브 링크를 붙여 넣을 수 없습니다. 블록 밖의 빈 셀에 붙여 넣으세요.",
   'live.readOnly': "이 부분은 {source}을(를) 보여 주며 거기서 최신 상태로 유지됩니다. 원본에서 변경하세요.",
   'live.notUpdated': "{name}의 라이브 블록을 업데이트하지 못했습니다: {problem}",
   'live.resultsOnly': "라이브 블록은 여기서 계속 업데이트됩니다. 다운로드한 {extension} 파일에는 지금 보이는 내용만 들어 있습니다.",
@@ -61,6 +62,10 @@ export const live: Partial<Messages> = {
   'live.error.script': "{source}을(를) 실행할 수 없습니다: {detail}",
   'live.error.notAllowed': "{source}은(는) 요청한 항목을 읽을 권한이 없습니다: {detail}",
   'live.error.blocked': "{source}에 더 많은 공간이 필요합니다. {detail}이(가) 비어 있지 않아 마지막 결과를 유지합니다. 늘어날 셀을 비우세요.",
+  'live.error.foreign': "다른 사람이 만든 것이므로 받은 그대로 표시되며 내 파일에서 {source}을(를) 읽지 않습니다. 내 파일로 최신 상태를 유지하려면 ‘내 것으로 만들기’를 선택하세요.",
+  'live.card.makeMine': "내 것으로 만들기",
+  'live.foreign.title': "다른 사람이 만든 라이브 블록",
+  'live.foreign.body': "{name}에 다른 사람이 만든 라이브 블록이 있으며 {sources}을(를) 표시합니다. 받은 내용을 그대로 유지하고 내 파일에서는 아무것도 읽지 않습니다. 내 것으로 만들면 같은 이름의 내 파일로 최신 상태를 유지합니다.",
   'live.script.wholeVault': "전체 보관 폴더",
   'live.script.daily': "매일 {time}에 실행",
   'live.script.weekly': "매주 {day} {time}에 실행",

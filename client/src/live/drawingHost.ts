@@ -6,6 +6,8 @@
 // change), text keeps its place and style (only its lines change). A new group (a live link pasted into a drawing) takes the
 // result's own size, at the drawing's top left, to be moved where it should go.
 
+import type { LiveOptions } from './owner.ts';
+import { ownership } from './owner.ts';
 import { paragraphText, paragraphsIn } from '@golemdocs/docx';
 import type { GroupNode, ImageNode, Scene, SceneNode, TextNode } from '../vector/model.ts';
 import { isWdoc, readWdoc } from '../formats/wdoc.ts';
@@ -16,6 +18,8 @@ import type { UpdateReport } from './update.ts';
 
 export const LIVE_ATTR = 'data-golem-live';
 export const STAMP_ATTR = 'data-golem-stamp';
+/** Who made the group (owner.ts). */
+export const BY_ATTR = 'data-golem-by';
 
 /** The live groups of a drawing, at any depth. */
 export function drawingLiveGroups(nodes: readonly SceneNode[]): GroupNode[] {
@@ -77,12 +81,18 @@ export function fillGroup(group: GroupNode, result: LiveResult, stamp: string): 
 }
 
 /** Brings a drawing's live groups up to date, in place; what happened to each. */
-export async function updateSceneLive(scene: Scene, lookup: SourceLookup, options: { force?: boolean } = {}): Promise<UpdateReport> {
+export async function updateSceneLive(scene: Scene, lookup: SourceLookup, options: LiveOptions = {}): Promise<UpdateReport> {
   const report: UpdateReport = { updated: 0, problems: [] };
   const files = new Map<string, ReturnType<SourceLookup>>();
   const results = new Map<string, Promise<LiveResult>>();
   for (const group of drawingLiveGroups(scene.children)) {
     const source = group.attrs[LIVE_ATTR];
+    // Someone else's group keeps what it came with (owner.ts).
+    const own = await ownership({ source, stamp: group.attrs[STAMP_ATTR] ?? '', ...(group.attrs[BY_ATTR] && { by: group.attrs[BY_ATTR] }) }, options);
+    if (!own.mine) {
+      report.problems.push({ source, code: 'foreign' });
+      continue;
+    }
     let found = results.get(source);
     if (!found) results.set(source, (found = resultOf(source, lookup, files)));
     const result = await found;
@@ -92,17 +102,20 @@ export async function updateSceneLive(scene: Scene, lookup: SourceLookup, option
     }
     const stamp = stampOf(result);
     if (stamp === group.attrs[STAMP_ATTR] && !options.force) continue;
-    if (fillGroup(group, result, stamp)) report.updated++;
+    if (fillGroup(group, result, stamp)) {
+      if (own.by) group.attrs[BY_ATTR] = own.by;
+      report.updated++;
+    }
     else report.problems.push({ source, code: 'unsupported' });
   }
   return report;
 }
 
 /** A new live group showing `source`, to be filled by the next update. */
-export const liveGroup = (source: string): GroupNode => ({ kind: 'group', tag: 'g', children: [], style: {}, attrs: { [LIVE_ATTR]: source } });
+export const liveGroup = (source: string, by?: string): GroupNode => ({ kind: 'group', tag: 'g', children: [], style: {}, attrs: { [LIVE_ATTR]: source, ...(by && { [BY_ATTR]: by }) } });
 
 /** A stored drawing's bytes with its live groups up to date (null when none changed, or it has none). */
-export async function updateStoredDrawing(bytes: Uint8Array, lookup: SourceLookup, options: { force?: boolean } = {}): Promise<{ bytes: Uint8Array | null; report: UpdateReport }> {
+export async function updateStoredDrawing(bytes: Uint8Array, lookup: SourceLookup, options: LiveOptions = {}): Promise<{ bytes: Uint8Array | null; report: UpdateReport }> {
   const none = { bytes: null, report: { updated: 0, problems: [] } };
   const wdoc = isWdoc(bytes);
   // An SVG file kept as it was uploaded (written by an agent, say) is updated as the file it is.

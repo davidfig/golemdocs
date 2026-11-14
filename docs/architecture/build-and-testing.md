@@ -27,7 +27,7 @@ Dependencies only point down: `docx` (document model, reader/writer) is the base
 | `e2e/`, `playwright.config.ts` | End-to-end tests |
 | `docs/` | Docs; `server/AUTH.md` covers sign-in providers |
 
-Root scripts (`package.json`): `dev`, `dev:client`, `dev:server`, `kill`, `build`, `typecheck` (root `tsc` over `scripts/`, then each package's `tsc`), `build:home`, `fonts`, `test`, `test:coverage`, `e2e`, `record:home`. TypeScript is shared via `tsconfig.base.json`.
+Root scripts (`package.json`): `dev`, `dev:client`, `dev:server`, `kill`, `build`, `typecheck` (root `tsc` over `scripts/`, then each package's `tsc`), `build:home`, `fonts`, `test`, `test:coverage`, `e2e`, `record:home`, `record:workbook`. TypeScript is shared via `tsconfig.base.json`.
 
 ## Client build and lazy chunks
 
@@ -54,7 +54,8 @@ Rules (AGENTS.md "Bundle size and lazy loading"): split into its own chunk only 
 | `scripts/e2e.ts` (`pnpm e2e`) | Runs Playwright in two passes (below) |
 | `scripts/coverage.ts` (`pnpm test:coverage`) | Node built-in line coverage per package; lists files no test loads |
 | `scripts/fonts/` (`pnpm fonts`) | Font atlas generation (below) |
-| `scripts/marketing/record-war-and-peace.ts` (`pnpm record:home`) | Re-records `client/public/home/war-and-peace.webm` from the user's dev server |
+| `scripts/marketing/record-war-and-peace.ts` (`pnpm record:home`) | Re-records `client/public/home/war-and-peace.webm` and its dark-theme twin `war-and-peace-dark.webm` from the user's dev server (`--theme light` or `dark` for one) |
+| `scripts/marketing/record-workbook.ts` (`pnpm record:workbook`) | Re-records `client/public/home/workbook.webm` and `workbook-dark.webm` the same way, opening the million-row workbook `make-workbook.ts` writes to `.cache/marketing/orders.xlsx`; both scripts share `clip.ts` (the browser, the frame-by-frame zoom, the encoding) |
 
 ### Fonts generation
 
@@ -117,6 +118,7 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-09 | `e2e/collab/comments-files.spec.ts` › comments persist › a reply and a resolved state survive a reload | Timed out at 1 min in pass one of the 0.37.0 release run, passed its retry; alone, passed three times |
 | 2026-11-09 | `e2e/collab/folders.spec.ts` › documents made in the app (with a copy in this browser) stay in their folder as the dashboard refreshes | Already `@heavy`: the folder still did not show "2 items" at 23 s in the heavy pass of the 0.37.0 release run, passed its retry; alone, passed three times |
 | 2026-11-14 | `e2e/collab/cloud-room.spec.ts` › a cloud picture in a room › shapes drawn on whichever device holds it appear on the other… | Failed at 34.7 s in pass one of the live-blocks branch's full run, passed its retry; alone, passed five times |
+| 2026-11-15 | `e2e/files/moving.spec.ts` › sidebar: a folder can't be dragged into itself or into a folder inside it | The first drop (Inner onto Outer) never landed in a three-worker side run of the live-blocks fixes (still level 1 at 10 s), passed its retry; alone, passed three times |
 
 ## Performance traces (`golem:*`)
 

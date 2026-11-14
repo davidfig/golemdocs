@@ -5,7 +5,7 @@
 
 import { getLocale, t } from '../i18n/index.ts';
 import type { Alignment, ParagraphChoice } from './actions.ts';
-import { h } from './dom.ts';
+import { h, tabList } from './dom.ts';
 import { choiceButton } from './dropdown.ts';
 import { dialogTitleBar } from './popup.ts';
 
@@ -155,6 +155,7 @@ export function showParagraphDialog(current: ParagraphChoice): Promise<Paragraph
       panes.push([button, pane as HTMLElement]);
     });
     show(0);
+    tabList(tabs, panes.map(([, pane]) => pane));
 
     const message = h('div', { class: 'wm-find-message', attrs: { role: 'alert' } });
     const ok = h('button', { class: 'wm-button', text: t('paragraph.ok'), attrs: { type: 'submit' } });

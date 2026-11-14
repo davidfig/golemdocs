@@ -519,5 +519,7 @@ export function chartScene(book: Workbook, engine: Engine, sheetIndex: number, s
     series: all.map((s) => ({ name: s.nameRef ? `=${s.nameRef}` : s.name, values: s.valRef ? `=${s.valRef}` : '' })),
     categories: first?.catRef ? `=${first.catRef}` : first?.xRef ? `=${first.xRef}` : '',
   };
-  return { id, ...box, ...laid, title: c.chart.title, data };
+  const g0 = c.chart.groups[0];
+  const kind = !g0 ? null : g0.kind === 'bar' ? (g0.direction === 'bar' ? 'bar' : 'column') : g0.kind;
+  return { id, ...box, ...laid, title: c.chart.title, data, kind };
 }

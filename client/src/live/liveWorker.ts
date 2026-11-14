@@ -67,8 +67,8 @@ export function serveLive(post: (message: FromWorker, transfer: Transferable[]) 
       else waiting.resolve(message.value);
       return;
     }
-    const { job, bytes, name, force, has } = message;
-    void updateFromStored(new Uint8Array(bytes), name, lookupFor(job, has), drawing, { force }).then(
+    const { job, bytes, name, force, owner, adopt, has } = message;
+    void updateFromStored(new Uint8Array(bytes), name, lookupFor(job, has), drawing, { force, owner, adopt }).then(
       (outcome) => {
         const out = outcome.bytes && ownBuffer(outcome.bytes);
         post({ type: 'done', job, bytes: out, report: outcome.report }, out ? [out] : []);

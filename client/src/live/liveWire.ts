@@ -1,6 +1,7 @@
 // What crosses between the page and the live worker (liveWorker.ts, liveClient.ts): the messages, and results in a form that
 // can cross. Small, so the page can use it without loading the worker's code.
 
+import type { LiveOwner } from './owner.ts';
 import type { Block } from '@golemdocs/docx';
 import type { LiveResult } from './result.ts';
 import type { UpdateReport } from './update.ts';
@@ -14,7 +15,7 @@ export type WireResult =
 export type LookupOp = 'file' | 'folder' | 'exportPdf' | 'script' | 'button';
 
 export type ToWorker =
-  | { type: 'update'; job: number; bytes: ArrayBuffer; name: string; force: boolean; has: LookupOp[] }
+  | { type: 'update'; job: number; bytes: ArrayBuffer; name: string; force: boolean; owner?: LiveOwner; adopt?: true | string; has: LookupOp[] }
   | { type: 'answer'; ask: number; value?: unknown; error?: string };
 
 export type FromWorker =

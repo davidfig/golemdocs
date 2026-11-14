@@ -3,7 +3,7 @@
 
 import { t } from '../../i18n/index.ts';
 import type { BordersChoice, DocumentInfo, FontChoice, ParagraphChoice, StyleEdit, StyleInfo, TabChoice } from '../actions.ts';
-import { h } from '../dom.ts';
+import { h, uniqueId } from '../dom.ts';
 import { listBox } from '../listBox.ts';
 import { showParagraphDialog } from '../paragraphDialog.ts';
 import { dialogTitleBar, showConfirm } from '../popup.ts';
@@ -129,7 +129,9 @@ export function showStylesDialog(first: DocumentInfo, host: StylesHost): Promise
     });
     const sample = h('span', { text: t('format.font.sample') });
     const preview = h('div', { class: 'wm-fd-sample' }, sample);
-    const description = h('p', { class: 'wm-hint' });
+    // What the picked style looks like, in words: the list's description, so it is read with each style picked.
+    const description = h('p', { class: 'wm-hint', attrs: { id: uniqueId('wm-style-about') } });
+    list.el.setAttribute('aria-describedby', description.id);
     const message = h('div', { class: 'wm-find-message', attrs: { role: 'alert' } });
     const buttonOf = (text: string) => h('button', { class: 'wm-button', text, attrs: { type: 'button' } });
     const apply = h('button', { class: 'wm-button wm-primary', text: t('format.styles.apply'), attrs: { type: 'button' } });

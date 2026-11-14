@@ -47,7 +47,7 @@ import {
 } from '@golemdocs/docx';
 import type { OdtExtension, OdtFragment, OdtImageFrame, OdtObject, OdtProperties } from './extension.ts';
 import { odfStyleName } from './names.ts';
-import { liveTagOf } from './live.ts';
+import { LIVE_META_NS, LIVE_META_PROPERTY, liveSectionName, liveTagOf } from './live.ts';
 import {
   MANIFEST_NS,
   MIME_TEXT,
@@ -185,6 +185,9 @@ class Writer {
   private readonly lastListByCounter = new Map<string, string>();
   /** xml:ids written so far, by part (sink prefix): an id may appear only once in a part. */
   private readonly xmlIds = new Set<string>();
+  /** Names of the live blocks' sections written so far: each must be unique (live.ts). */
+  private readonly liveSections = new Set<string>();
+  private liveValues = 0;
   private listCount = 0;
   private tableCount = 0;
   private imageCount = 0;
@@ -512,7 +515,7 @@ class Writer {
         }
         flush();
         const inner = this.writeBlocks(b.children, sink, layer, false);
-        out.push({ node: el('text:section', { 'text:name': tag }, inner.map((e) => e.node)), ids: inner.flatMap((e) => e.ids) });
+        out.push({ node: el('text:section', { 'text:name': liveSectionName(tag, this.liveSections) }, inner.map((e) => e.node)), ids: inner.flatMap((e) => e.ids) });
       }
       flush();
       return out;
@@ -701,6 +704,11 @@ class Writer {
   }
 
   /** The text style for a run: its character style, or an automatic style over it. */
+  /** A live value's text:meta (live.ts), with a new xml:id. */
+  liveMeta(tag: string): XmlElement {
+    return el('text:meta', { 'xmlns:golem': LIVE_META_NS, 'xml:id': `golem-live-${++this.liveValues}`, 'xhtml:about': 'urn:golemdocs:live', 'xhtml:property': LIVE_META_PROPERTY, 'xhtml:content': tag });
+  }
+
   spanStyle(props: RunProperties, sink: AutoStyles, dropStyle?: string): string | null {
     const style = props.style && props.style !== dropStyle ? this.textNames.get(props.style) : undefined;
     const direct: RunProperties = { ...props };
@@ -1169,7 +1177,9 @@ function guessType(path: string): string {
 
 // --- Paragraph content ---------------------------------------------------------------------
 
-type Piece = { link: Hyperlink | null; style: string | null; node: XmlNode; spaces?: number };
+/** A live value written as a text:meta (live.ts); outer when it is not inside a link, so links inside it nest in it. */
+type LiveMeta = { element: XmlElement; outer: boolean };
+type Piece = { link: Hyperlink | null; style: string | null; node: XmlNode; spaces?: number; live?: LiveMeta | null };
 
 /**
  * Writes one paragraph's inline content, keeping model offsets (see @golemdocs/docx edit/text.ts)
@@ -1185,6 +1195,8 @@ class InlineWriter {
   private replacementIndex = 0;
   private fieldDepth = 0;
   private field: { phase: 'instr' | 'result'; instr: string; capture?: { kind: string; text: string; style: string | null; link: Hyperlink | null } } | null = null;
+  /** The live value being written as a text:meta, if any: every piece inside it says so. */
+  private meta: LiveMeta | null = null;
   breakAfter: 'page' | 'column' | undefined;
   hasContent = false;
 
@@ -1210,8 +1222,16 @@ class InlineWriter {
           break;
         case 'wrapper': {
           const tag = liveTagOf(inline);
-          if (tag !== null && !this.field) {
-            this.live(tag, inline.children, link);
+          if (tag !== null && !this.field && !this.meta) {
+            // Plain text in one format is a field; anything else (bold in part, a picture, a link) keeps its spans in a
+            // text:meta.
+            const style = this.plainStyle(inline.children, linkStyle);
+            if (style !== undefined) this.live(tag, inline.children, link, style);
+            else {
+              this.meta = { element: this.w.liveMeta(tag), outer: link === null };
+              this.walk(inline.children, link, linkStyle);
+              this.meta = null;
+            }
             break;
           }
           this.walk(inline.children, link, linkStyle);
@@ -1222,7 +1242,7 @@ class InlineWriter {
           const commentId = inline.xml.attrs['w:id'];
           if (commentId !== undefined && (inline.xml.name === 'w:commentRangeStart' || inline.xml.name === 'w:commentRangeEnd')) {
             const e = inline.xml.name === 'w:commentRangeStart' ? this.w.commentStartElement(commentId) : this.w.commentEndElement(commentId);
-            if (e) this.pieces.push({ link, style: null, node: e });
+            if (e) this.pieces.push({ link, style: null, node: e, live: this.meta });
           }
           // An equation is its LaTeX, as text.
           if (!skip && isMathInline(inline)) {
@@ -1241,7 +1261,7 @@ class InlineWriter {
   private at(style: string | null = null, link: Hyperlink | null = null): boolean {
     while (this.next < this.insertions.length && this.insertions[this.next].offset <= this.pos) {
       const e = this.insertions[this.next++].make(this.sink);
-      if (e) this.pieces.push({ link, style: null, node: e });
+      if (e) this.pieces.push({ link, style: null, node: e, live: this.meta });
     }
     while (this.replacementIndex < this.replacements.length && this.replacements[this.replacementIndex].offset < this.pos) this.replacementIndex++;
     const r = this.replacements[this.replacementIndex];
@@ -1249,7 +1269,7 @@ class InlineWriter {
       this.replacementIndex++;
       const e = this.w.restore(r.fragment, this.sink);
       if (e) {
-        this.pieces.push({ link, style, node: e });
+        this.pieces.push({ link, style, node: e, live: this.meta });
         this.prevSpace = false;
         this.hasContent = true;
         this.skipUntil = this.pos + r.length;
@@ -1341,8 +1361,21 @@ class InlineWriter {
     }
   }
 
+  /** The span style of a live value that is plain text in one format; undefined when it has more than that. */
+  private plainStyle(children: Inline[], linkStyle?: string): string | null | undefined {
+    let style: string | null | undefined;
+    for (const i of children) {
+      if (i.kind !== 'run' || i.content.some((c) => c.kind !== 'text' && c.kind !== 'tab')) return undefined;
+      if (!i.content.length) continue;
+      const s = this.w.spanStyle(i.properties, this.sink, linkStyle ? 'Hyperlink' : undefined);
+      if (style !== undefined && s !== style) return undefined;
+      style = s;
+    }
+    return style ?? null;
+  }
+
   /** A live value (live.ts): a text-input field described by its tag, holding its text. Each character is a position. */
-  private live(tag: string, children: Inline[], link: Hyperlink | null): void {
+  private live(tag: string, children: Inline[], link: Hyperlink | null, style: string | null): void {
     let text = '';
     const gather = (list: Inline[]) => {
       for (const i of list) {
@@ -1352,12 +1385,12 @@ class InlineWriter {
     };
     gather(children);
     this.at(null, link);
-    this.push(el('text:text-input', { 'text:description': tag }, text ? [text] : []), null, link);
+    this.push(el('text:text-input', { 'text:description': tag }, text ? [text] : []), style, link);
     this.pos += text.length;
   }
 
   private push(node: XmlNode, style: string | null, link: Hyperlink | null): void {
-    this.pieces.push({ link, style, node });
+    this.pieces.push({ link, style, node, live: this.meta });
     this.prevSpace = false;
     this.hasContent = true;
   }
@@ -1373,8 +1406,8 @@ class InlineWriter {
     if (ch === ' ') {
       const last = this.pieces[this.pieces.length - 1];
       if (this.prevSpace) {
-        if (last && last.spaces && last.style === style && last.link === link) last.spaces++;
-        else this.pieces.push({ link, style, node: el('text:s'), spaces: 1 });
+        if (last && last.spaces && last.style === style && last.link === link && last.live === this.meta) last.spaces++;
+        else this.pieces.push({ link, style, node: el('text:s'), spaces: 1, live: this.meta });
       } else this.text(' ', style, link);
       this.prevSpace = true;
       return;
@@ -1389,8 +1422,8 @@ class InlineWriter {
 
   private text(s: string, style: string | null, link: Hyperlink | null): void {
     const last = this.pieces[this.pieces.length - 1];
-    if (last && typeof last.node === 'string' && last.style === style && last.link === link) last.node += s;
-    else this.pieces.push({ link, style, node: s });
+    if (last && typeof last.node === 'string' && last.style === style && last.link === link && last.live === this.meta) last.node += s;
+    else this.pieces.push({ link, style, node: s, live: this.meta });
   }
 
   /** Remaining insertions (at the paragraph's end) and the grouped content. */
@@ -1401,14 +1434,25 @@ class InlineWriter {
       this.field = null;
       for (const ch of c.text) this.char(ch, c.style, c.link);
     }
+    return this.linkGroups(this.pieces);
+  }
+
+  /** Pieces grouped into links, with live values' text:meta around theirs: outside the links a value holds, inside the link that holds a value. */
+  private linkGroups(pieces: Piece[]): XmlNode[] {
     const out: XmlNode[] = [];
     let i = 0;
-    const pieces = this.pieces;
     while (i < pieces.length) {
-      const link = pieces[i].link;
+      const outer = pieces[i].live?.outer ? pieces[i].live! : null;
       let j = i;
-      while (j < pieces.length && pieces[j].link === link) j++;
-      const nodes = spans(pieces.slice(i, j));
+      if (outer) {
+        while (j < pieces.length && pieces[j].live === outer) j++;
+        out.push({ ...outer.element, children: this.linkGroups(pieces.slice(i, j).map((p) => ({ ...p, live: null }))) });
+        i = j;
+        continue;
+      }
+      const link = pieces[i].link;
+      while (j < pieces.length && pieces[j].link === link && !pieces[j].live?.outer) j++;
+      const nodes = metaGroups(pieces.slice(i, j));
       if (link && (link.url || link.anchor)) {
         const href = link.url ?? `#${link.anchor}`;
         out.push(el('text:a', { 'xlink:type': 'simple', 'xlink:href': href, 'text:style-name': this.w.linkStyle(link) }, nodes));
@@ -1417,6 +1461,22 @@ class InlineWriter {
     }
     return out;
   }
+}
+
+/** Pieces with live values' text:meta around theirs (live values inside a link). */
+function metaGroups(pieces: Piece[]): XmlNode[] {
+  const out: XmlNode[] = [];
+  let i = 0;
+  while (i < pieces.length) {
+    const live = pieces[i].live;
+    let j = i;
+    while (j < pieces.length && pieces[j].live === live) j++;
+    const nodes = spans(pieces.slice(i, j));
+    if (live) out.push({ ...live.element, children: nodes });
+    else out.push(...nodes);
+    i = j;
+  }
+  return out;
 }
 
 function spans(pieces: Piece[]): XmlNode[] {

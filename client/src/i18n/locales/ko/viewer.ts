@@ -18,4 +18,7 @@ export const viewer: Partial<Messages> = {
   'viewer.viewOnlyTitle': '{name} (보기 전용)',
   'viewer.download': '다운로드',
   'viewer.linkGone': '이 링크는 더 이상 작동하지 않습니다. 문서가 더 이상 공개 공유되지 않습니다.',
+  'viewer.toolbar': '뷰어',
+  'viewer.zoomButton': '실제 크기 (현재 {zoom})',
+  'viewer.foundOnPage': '{pages}페이지 중 {page}페이지에서 찾음',
 };

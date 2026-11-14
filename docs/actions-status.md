@@ -71,6 +71,15 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
   - Grammar: hand-coded, conservative rules (`client/src/spelling/grammar.ts`): repeated words, a/an, sentence and pronoun "I" capitals, extra spaces, and common mix-ups (should of, your/you're, its/it's, their/there, then/than, subject–verb)
 - Thesaurus (Shift+F7, Tools menu): a dialog like Word 2003's showing the meanings of the selected word (or the word at the caret, which it selects) and the words for each; Replace, Look Up, Previous, and a double click to look up a synonym. A right click on a correctly spelled word offers up to ten synonyms and Thesaurus…. English only: WordNet, from the LibreOffice dictionaries, packed by `scripts/thesaurus.ts` into `client/public/dictionaries/th_en_US.txt` and read by `client/src/spelling/thesaurus.ts` in the layout worker the first time a word is looked up (the right-click menu opens at once and fills its Synonyms submenu in when they arrive). Inflected words are looked up by a guessed base form ("ran" is not, "cats" is)
 
+**Format**
+- Alt Text (`altText`): the selected picture's description for screen readers, in a form over the document (`ui/altTextPopover.ts`); also on the picture's right-click menu
+
+**Edit**
+- Next / Previous Heading and Next / Previous Table (`jump`): the caret goes to the start of the next one, in the layout worker
+
+**Tools**
+- Screen Reader Mode (Mod+Alt+Z): see [Accessibility](architecture/accessibility.md)
+
 ## Still needs work
 
 **Standard toolbar buttons that are disabled today**

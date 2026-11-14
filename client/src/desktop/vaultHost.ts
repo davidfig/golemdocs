@@ -85,6 +85,7 @@ export function accountCloud(keep: KeepCopy = async () => {}): VaultCloud {
     async trash(id) {
       throwIfFailed(await deleteDocuments([id]));
     },
+    makeFolder: async (directory) => void (await folderFor(directory)),
     async removeFolder(id) {
       throwIfFailed(await removeFolders([id]));
       folders = folders.filter((f) => f.id !== id);

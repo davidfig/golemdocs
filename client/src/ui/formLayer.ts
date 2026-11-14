@@ -38,6 +38,8 @@ export interface FormLayerHost {
   setMode(mode: FormMode): void;
   /** A field was made to show a live block (a live link pasted into it): fill it now. */
   liveAdded?(source: string): void;
+  /** A `by` for a live block made now (live/owner.ts): whose it is. */
+  blockBy?(): Promise<string>;
 }
 
 type Box = WireField['box'];
@@ -237,19 +239,28 @@ export class FormLayer {
       const source = e.clipboardData ? clipboardLiveLink(e.clipboardData.getData('text/plain'), e.clipboardData.getData('text/html')) : null;
       if (!f || !source || f.readOnly || !this.fields) return;
       e.preventDefault();
-      this.fields = this.fields.map((o) => (o.id === id ? { ...o, live: liveTagText({ source, stamp: '' }) } : o));
-      this.host.change(this.fields);
-      this.render();
-      this.host.liveAdded?.(source);
+      void (async () => {
+        const by = await this.host.blockBy?.();
+        if (!this.fields) return;
+        this.fields = this.fields.map((o) => (o.id === id ? { ...o, live: liveTagText({ source, stamp: '', ...(by && { by }) }) } : o));
+        this.host.change(this.fields);
+        this.render();
+        this.host.liveAdded?.(source);
+      })();
     });
     return el;
   }
 
   private syncInput(el: HTMLElement, field: WireField): void {
+    // Named by what the field is for, where the PDF says (its TU), rather than by its name in the file ("f1_01[0]").
+    // Each of a group's radio buttons also says its own choice. A live field's tooltip says where it comes from.
+    const label = field.description || field.name;
     const live = parseLiveTag(field.live);
-    el.title = live ? t('live.readOnly', { source: live.source }) : field.name;
+    el.title = live ? t('live.readOnly', { source: live.source }) : label;
     el.classList.toggle('wm-field-live', !!live);
-    el.setAttribute('aria-label', field.name);
+    el.setAttribute('aria-label', field.kind === 'radio' && field.onState ? `${label}, ${field.onState}` : label);
+    if (field.required && field.kind !== 'checkbox' && field.kind !== 'radio') el.setAttribute('aria-required', 'true');
+    else el.removeAttribute('aria-required');
     if (el instanceof HTMLButtonElement) {
       const on = !!field.onState && field.value === field.onState;
       el.setAttribute('aria-checked', String(on));

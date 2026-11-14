@@ -22,6 +22,9 @@ export const EMBED_PREFIX = 'embed:';
  */
 export const LIVE_PREFIX = 'live:';
 
+/** What follows a live tag's source: who made it (`by=`, optional) and its stamp (optional). */
+export const TAG_TAIL = /(?: by=[0-9a-z]+)?(?: stamp=[0-9a-z]*)?$/;
+
 /**
  * The title a live block's source names: what comes before its part (`#Expenses`) and its options (`?where=…`). A built-in
  * block (`@list:Characters?columns=role`) names no document, so the whole address stands for it.
@@ -53,20 +56,31 @@ export function linkTitle(title: string): string {
   return (count && decodeTarget(count[2]).trim()) || title;
 }
 
+/** A built-in block's address up to its options (`@list:Characters`): what it reads is a folder's path (a count's may be a document's title). */
+const BUILTIN = /^(\s*@(list|count|timeline):)([^?]*)/i;
+
+/**
+ * The key under which a rename names a folder's new path, in the same map as documents' new titles: `@folder:<path as written>`.
+ * Only a built-in block's address reads it (no title starts with `@folder:`), so a link to a document of the same name is left alone.
+ */
+export const folderRenameKey = (path: string): string => `@folder:${path}`;
+
 /**
  * A live block's source (`Budget.xlsx#Expenses stamp=…`, stamp optional) or an embed's address before its `|`, with the title it
- * names (as `linkTitle` gives it) renamed by `renames`, the rest kept as it is; null when it names none of them.
+ * names (as `linkTitle` gives it) renamed by `renames`, the rest kept as it is; null when it names none of them. A built-in
+ * block's folder (`@list:Characters?…`) is renamed by its `folderRenameKey`; a count's target by its title first.
  */
 export function renamedSource(source: string, renames: ReadonlyMap<string, string>): string | null {
-  const stamp = / stamp=[0-9a-z]*$/.exec(source);
+  const stamp = TAG_TAIL.exec(source);
   const body = stamp ? source.slice(0, stamp.index) : source;
   const tail = stamp ? stamp[0] : '';
-  const count = COUNT.exec(body);
-  if (count) {
-    const next = renames.get(decodeTarget(count[2]).trim());
+  const builtin = BUILTIN.exec(body);
+  if (builtin) {
+    const target = decodeTarget(builtin[3]).trim();
+    const next = (builtin[2].toLowerCase() === 'count' ? renames.get(target) : undefined) ?? renames.get(folderRenameKey(target));
     // Written as builtinAddress.ts writes a target: what would end it escaped.
     const escaped = next?.replace(/[%&?=#|\]\[]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`);
-    return escaped ? `${count[1]}${escaped}${body.slice(count[0].length)}${tail}` : null;
+    return escaped ? `${builtin[1]}${escaped}${body.slice(builtin[0].length)}${tail}` : null;
   }
   if (/^\s*@/.test(body)) return null;
   const title = sourceTitle(body);
@@ -79,7 +93,7 @@ export function renamedSource(source: string, renames: ReadonlyMap<string, strin
 /** The title a live block's tag names, or null when the text is no live block's tag. */
 export function liveTitle(tag: string | undefined): string | null {
   if (!tag?.startsWith(LIVE_PREFIX)) return null;
-  return sourceTitle(tag.slice(LIVE_PREFIX.length).replace(/ stamp=[0-9a-z]*$/, '')) || null;
+  return sourceTitle(tag.slice(LIVE_PREFIX.length).replace(TAG_TAIL, '')) || null;
 }
 
 /** The tag of a content control (a Word sdt), or undefined. */

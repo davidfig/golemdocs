@@ -3,6 +3,8 @@
 // names and punctuation; it does not check that what it reads is valid. `<` and `>` are always single tokens (so `>>` is
 // two), which is what reading types needs; the text between tokens is never changed by the stripper anyway.
 
+import { say } from './messages.ts';
+
 export type TokenKind = 'name' | 'number' | 'string' | 'template' | 'regex' | 'punct' | 'private';
 
 export interface Token {
@@ -24,7 +26,7 @@ export class ScriptSyntaxError extends Error {
     message: string,
     readonly line: number,
   ) {
-    super(`${message} (line ${line})`);
+    super(say('syntaxLine', { message, line }));
   }
 }
 
@@ -76,7 +78,7 @@ export function tokenize(src: string): Token[] {
       else if (c === '$' && src[j + 1] === '{') return { end: j + 2, opens: true };
       else j++;
     }
-    return fail('A template literal is not closed', from);
+    return fail(say('templateOpen'), from);
   };
   while (i < src.length) {
     const c = src[i];
@@ -95,7 +97,7 @@ export function tokenize(src: string): Token[] {
     }
     if (c === '/' && src[i + 1] === '*') {
       const close = src.indexOf('*/', i + 2);
-      if (close < 0) fail('A comment is not closed', i);
+      if (close < 0) fail(say('commentOpen'), i);
       if (/[\n\r\u2028\u2029]/.test(src.slice(i, close))) newline = true;
       i = close + 2;
       continue;
@@ -110,10 +112,10 @@ export function tokenize(src: string): Token[] {
       i++;
       while (i < src.length && src[i] !== c) {
         if (src[i] === '\\') i++;
-        else if (src[i] === '\n') fail('A string is not closed', start);
+        else if (src[i] === '\n') fail(say('stringOpen'), start);
         i++;
       }
-      if (i >= src.length) fail('A string is not closed', start);
+      if (i >= src.length) fail(say('stringOpen'), start);
       push('string', start, ++i);
       continue;
     }
@@ -164,7 +166,7 @@ export function tokenize(src: string): Token[] {
         else if (r === '[') inClass = true;
         else if (r === ']') inClass = false;
         else if (r === '/' && !inClass) break;
-        else if (r === '\n') fail('A regular expression is not closed', start);
+        else if (r === '\n') fail(say('regexOpen'), start);
         i++;
       }
       i++;
@@ -181,14 +183,14 @@ export function tokenize(src: string): Token[] {
     else if (text === ')' || text === ']' || text === '}') {
       const opener = open.pop();
       const want = text === ')' ? '(' : text === ']' ? '[' : '{';
-      if (opener === undefined || tokens[opener].text !== want) fail(`An unexpected '${text}'`, start);
+      if (opener === undefined || tokens[opener].text !== want) fail(say('unexpected', { text }), start);
       tokens[opener!].match = tokens.length - 1;
       tokens[tokens.length - 1].match = opener;
     }
   }
   if (open.length) {
     const opener = tokens[open[open.length - 1]];
-    fail(opener.kind === 'template' ? 'A template literal is not closed' : `A '${opener.text}' is not closed`, opener.start);
+    fail(opener.kind === 'template' ? say('templateOpen') : say('bracketOpen', { text: opener.text }), opener.start);
   }
   return tokens;
 }

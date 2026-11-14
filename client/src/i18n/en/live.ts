@@ -1,6 +1,7 @@
 // Live blocks (docs/live-blocks.md): parts of a document kept up to date from another file.
 export const live = {
   'live.copy.nothing': "Put the caret in a table with a title, a bookmark, or a section under a heading to copy it as a live link.",
+  'live.insideLive': "This cell is already part of a live block, so a live link can’t be pasted here. Paste it into an empty cell outside the block.",
   'live.readOnly': "This part shows {source} and is kept up to date from it. Change it there.",
   'live.notUpdated': "A live block in {name} was not updated: {problem}",
   'live.resultsOnly': "Its live blocks stay live here; a downloaded {extension} file has only what they show now.",
@@ -60,6 +61,10 @@ export const live = {
   'live.error.script': "{source} could not run: {detail}",
   'live.error.notAllowed': "{source} is not allowed to read what it asked for: {detail}",
   'live.error.blocked': "{source} needs more room: {detail} isn’t empty, so it keeps its last result. Clear the cells it would grow into.",
+  'live.error.foreign': "Made by someone else, so it shows what it came with and doesn’t read {source} from your files. Choose Make It Mine to keep it up to date from them.",
+  'live.card.makeMine': "Make It Mine",
+  'live.foreign.title': "Live Blocks Made by Someone Else",
+  'live.foreign.body': "{name} has live blocks someone else made, showing {sources}. They keep what they came with and read nothing from your files. Make them yours to keep them up to date from your files with those names.",
   'live.script.wholeVault': "the whole vault",
   'live.script.daily': "Runs every day at {time}",
   'live.script.weekly': "Runs every {day} at {time}",

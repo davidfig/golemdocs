@@ -7,6 +7,7 @@
 
 import { ACTION_TOOLS, BOX_TOOLS, EFFECT_TOOLS, brushRadius, isStrokeTool, DRAW_TOOLS, MARKER_WIDTH, bubbleGeometry, constrainEnd, fillShape, fontSize, lineWidth, nextStepNumber, shiftShape, styleFields } from '../formats/imageDraw.ts';
 import type { BasePixels, DrawStyle, DrawTool, Point, Shape } from '../formats/imageDraw.ts';
+import { announceBox, arrowEdit, resizedBox } from './shapeKeys.ts';
 import {
   RESIZE_HANDLES,
   activeParent,
@@ -125,9 +126,11 @@ export class DrawLayer {
     } else if (key === 'Enter') this.finish(true);
     else if (key.toLowerCase() === 'z' && mod && !e.shiftKey) this.undo();
     else if ((key === 'Delete' || key === 'Backspace') && !mod && this.selected.length) this.deleteSelection();
-    else if (key.startsWith('Arrow') && !mod && !e.altKey && this.selected.length) {
-      const step = e.shiftKey ? 10 : 1;
-      this.nudge(key === 'ArrowLeft' ? -step : key === 'ArrowRight' ? step : 0, key === 'ArrowUp' ? -step : key === 'ArrowDown' ? step : 0);
+    else if (arrowEdit(e) && this.selected.length) {
+      const arrow = arrowEdit(e)!;
+      if (arrow.kind === 'move') this.nudge(arrow.dx, arrow.dy);
+      else this.resizeBy(arrow.dx, arrow.dy);
+      announceBox(this.selectionBox());
     } else return;
     e.preventDefault();
     e.stopPropagation();
@@ -518,6 +521,16 @@ export class DrawLayer {
     const targets = this.targets();
     if (!this.session || !targets.length) return;
     this.change(this.shapes.map((s) => (targets.includes(s) ? shiftShape(s, dx, dy) : s)));
+    this.refresh();
+  }
+
+  /** Makes the picked shapes (dx, dy) pixels wider and taller, their top-left corner staying where it is. */
+  resizeBy(dx: number, dy: number): void {
+    const targets = this.targets();
+    const box = this.selectionBox();
+    if (!this.session || !targets.length || !box) return;
+    const to = resizedBox(box, dx, dy);
+    this.change(this.shapes.map((s) => (targets.includes(s) ? scaleShape(s, box, to) : s)));
     this.refresh();
   }
 

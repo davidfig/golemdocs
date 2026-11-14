@@ -59,6 +59,7 @@ export function guestCloud(): VaultCloud {
     },
     keepVersion: async (id) => void (await keepVersion(id)),
     trash: trashSaved,
+    makeFolder: async (directory) => void (await folderFor(directory)),
     async removeFolder(id) {
       await deleteLocalFolder(id, folders.find((f) => f.id === id)?.parentId ?? null);
       folders = folders.filter((f) => f.id !== id);

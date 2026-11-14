@@ -81,7 +81,9 @@ export interface LayerAdapter {
 
 export class LayerTree {
   readonly el = h('aside', { class: 'wm-layers', attrs: { 'aria-label': t('vector.layers') } });
-  private readonly list = h('ul', { class: 'wm-layers-list', attrs: { role: 'tree', 'aria-label': t('vector.layers') } });
+  private readonly list = h('ul', { class: 'wm-layers-list', attrs: { role: 'tree', 'aria-label': t('vector.layers'), 'aria-multiselectable': 'true' } });
+  /** The row the keyboard is on (the tree's one Tab stop). */
+  private focusId: string | null = null;
   /** Groups shown closed, by id. */
   private readonly closed = new Set<string>();
   private shown = '';
@@ -113,6 +115,7 @@ export class LayerTree {
     }
     this.el.append(h('header', { class: 'wm-pages-bar' }, h('h2', { text: t('vector.layers') }), close), this.list, ...(adapter.extra ? [adapter.extra] : []), bar);
     this.el.addEventListener('keydown', (e) => e.stopPropagation());
+    this.list.addEventListener('keydown', (e) => this.keydown(e));
     parent.append(this.el);
   }
 
@@ -146,6 +149,8 @@ export class LayerTree {
   }
 
   private draw(): void {
+    // Drawing again replaces the rows: the one with the keyboard gets it back.
+    const hadFocus = this.list.contains(document.activeElement) && document.activeElement !== this.list;
     this.list.replaceChildren();
     const top = this.adapter.top?.();
     if (top) this.list.append(top);
@@ -162,15 +167,94 @@ export class LayerTree {
       return false;
     };
     this.visible = rows.filter((r) => !hiddenInside(r));
+    if (!this.visible.some((r) => r.id === this.focusId)) this.focusId = (this.visible.find((r) => r.selected) ?? this.visible[0])?.id ?? null;
     for (const row of this.visible) this.list.append(this.row(row));
     const bottom = this.adapter.bottom?.();
     if (bottom) this.list.append(bottom);
     this.adapter.updated?.();
+    if (hadFocus) this.rowElement(this.focusId)?.focus({ preventScroll: true });
+  }
+
+  private rowElement(id: string | null): HTMLElement | undefined {
+    return id === null ? undefined : [...this.list.children].find((r): r is HTMLElement => r instanceof HTMLElement && r.dataset.id === id);
+  }
+
+  /**
+   * The tree from the keyboard (the ARIA tree pattern): Up and Down, Home and End move between rows; Right opens a group or
+   * goes into it, Left closes it or goes to its group; Enter or Space picks the row (with Ctrl or Cmd added, with Shift the
+   * rows from the last picked); F2 renames it; the context menu key or Shift+F10 opens its menu.
+   */
+  private keydown(e: KeyboardEvent): void {
+    const target = e.target;
+    if (this.renaming || !(target instanceof HTMLElement) || target.getAttribute('role') !== 'treeitem') return;
+    const at = this.visible.findIndex((r) => r.id === target.dataset.id);
+    const row = this.visible[at];
+    if (!row) return;
+    const go = (i: number) => {
+      const next = this.visible[Math.max(0, Math.min(this.visible.length - 1, i))];
+      if (!next) return;
+      this.focusId = next.id;
+      for (const el of this.list.querySelectorAll<HTMLElement>('[role="treeitem"]')) el.tabIndex = el.dataset.id === next.id ? 0 : -1;
+      this.rowElement(next.id)?.focus();
+    };
+    const open = row.group && !this.closed.has(row.id);
+    const toggle = (closed: boolean) => {
+      if (closed) this.closed.add(row.id);
+      else this.closed.delete(row.id);
+      this.shown = '';
+      this.update();
+    };
+    switch (e.key) {
+      case 'ArrowDown':
+        go(at + 1);
+        break;
+      case 'ArrowUp':
+        go(at - 1);
+        break;
+      case 'Home':
+        go(0);
+        break;
+      case 'End':
+        go(this.visible.length - 1);
+        break;
+      case 'ArrowRight':
+        if (row.group && !open) toggle(false);
+        else if (open) go(at + 1);
+        break;
+      case 'ArrowLeft':
+        if (open) toggle(true);
+        else if (row.parent !== undefined) go(this.visible.findIndex((r) => r.id === row.parent));
+        break;
+      case 'Enter':
+      case ' ':
+        if (!this.adapter.pickable || this.adapter.pickable(row)) this.click(row, e);
+        break;
+      case 'F2':
+        this.startRename(row.id);
+        break;
+      case 'ContextMenu':
+      case 'F10':
+        if (e.key === 'F10' && !e.shiftKey) return;
+        {
+          if (!row.selected) this.adapter.select([row.id], row);
+          const box = target.getBoundingClientRect();
+          showPopupMenu(this.adapter.menu(row, () => this.startRename(row.id)), box.left + 16, box.bottom, t('vector.layers'), () => this.rowElement(row.id)?.focus());
+        }
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
   }
 
   private row(row: LayerRow): HTMLLIElement {
     const { adapter } = this;
-    const el = h('li', { class: 'wm-layers-row', attrs: { role: 'treeitem', 'aria-selected': String(row.selected), draggable: 'true' } });
+    const states = [row.name, ...(row.hidden ? [t('a11y.layer.hidden')] : []), ...(row.locked ? [t('a11y.layer.locked')] : [])];
+    const el = h('li', {
+      class: 'wm-layers-row',
+      attrs: { role: 'treeitem', 'aria-selected': String(row.selected), 'aria-level': String(row.depth + 1), 'aria-label': states.join(', '), tabindex: row.id === this.focusId ? '0' : '-1', draggable: 'true' },
+    });
+    if (row.group) el.setAttribute('aria-expanded', String(!this.closed.has(row.id)));
     el.classList.toggle('selected', row.selected);
     el.classList.toggle('hidden-node', row.hidden);
     el.classList.toggle('locked-node', row.locked);
@@ -205,8 +289,11 @@ export class LayerTree {
       e.stopPropagation();
       adapter.setLocked(row.id, !row.locked);
     });
+    // The row's buttons are for the pointer; the keyboard stays on the rows (their menu has the same commands).
+    for (const button of [eye, lock, ...expand.children]) (button as HTMLElement).tabIndex = -1;
     el.append(expand, name, eye, lock);
 
+    el.addEventListener('focus', () => (this.focusId = row.id));
     el.addEventListener('click', (e) => {
       if (adapter.pickable && !adapter.pickable(row)) return;
       this.click(row, e);
@@ -253,7 +340,7 @@ export class LayerTree {
   }
 
   /** A click on a row: it alone is picked; with Ctrl or Cmd it is added (or taken away again); with Shift every row from the last one clicked to it is picked. */
-  private click(row: LayerRow, e: MouseEvent): void {
+  private click(row: LayerRow, e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }): void {
     const { adapter } = this;
     const picked = this.visible.filter((r) => r.selected).map((r) => r.id);
     const add = e.ctrlKey || e.metaKey;

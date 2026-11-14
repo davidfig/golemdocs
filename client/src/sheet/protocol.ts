@@ -118,7 +118,12 @@ export interface ChartScene {
   title: string | null;
   /** Its series and categories as Select Data shows them. */
   data: ChartData;
+  /** What kind of chart it is (its first group's), to name it to a screen reader. */
+  kind?: ChartKindName | null;
 }
+
+/** A chart's kind as the Insert › Chart menu names it (a bar chart's columns stand up, its bars lie down). */
+export type ChartKindName = 'column' | 'bar' | 'line' | 'area' | 'pie' | 'doughnut' | 'scatter';
 
 export interface CellTile {
   sheet: number;
@@ -276,7 +281,7 @@ export type EditOp =
   /** What-If › Solver: the sheet's model kept (in its hidden names), or taken away. */
   | { kind: 'solverModel'; model: SolverModel | null }
   /** A live link pasted at a cell (docs/live-blocks.md §3): a live range there, filled when the workbook is next updated. */
-  | { kind: 'addLive'; row: number; col: number; source: string }
+  | { kind: 'addLive'; row: number; col: number; source: string; /** Who made it (live/owner.ts). */ by?: string }
   /** Stop Updating (docs/live-blocks.md §9): the live range at a cell keeps what it shows, as ordinary cells. */
   | { kind: 'stopLive'; row: number; col: number }
   /** Values put in cells, as typed (Solver's solution kept). */

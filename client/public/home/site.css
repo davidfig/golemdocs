@@ -212,6 +212,9 @@ ins.tc { text-decoration: underline; text-decoration-color: var(--agent); color:
 .ed-sheet .head td { font-weight: 700; }
 .ed-sheet td.n { text-align: right; font-variant-numeric: tabular-nums; }
 .ed-sheet td.picked { position: relative; outline: 2px solid var(--brand); outline-offset: -1px; }
+/* The big workbook: a recording of the app, as wide as the column, shown whole. */
+.sheet-shot { margin-top: 18px; }
+.sheet-plate { height: auto; aspect-ratio: 16 / 9; }
 
 /* The editor, drawn small. */
 .editor { display: grid; grid-template-rows: auto 1fr; height: 100%; min-width: 0; }
@@ -479,6 +482,7 @@ pre.code { margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--ch
   /* Pictures grow to fit their content, and their labels sit under them rather than over it. */
   .plate:not(.flush) { height: auto; min-height: 200px; }
   .point.lead .plate { height: 270px; }
+  .sheet-plate > .callout { display: none; }
   .ed-body { grid-template-columns: minmax(0, 1fr); }
   .ed-files { display: none; }
   .demo-tabs.phone-only { display: inline-flex; }

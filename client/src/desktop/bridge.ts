@@ -37,6 +37,17 @@ export interface DesktopBridge {
   /** Writes through a temporary file and a rename. Returns the new modification time in milliseconds. */
   write(path: string, bytes: Uint8Array): Promise<number>;
   remove(path: string): Promise<void>;
+  /** Every folder in the vault, empty ones included; null in a shell too old to list them. */
+  folders(): Promise<string[] | null>;
+  /** Makes a folder (and the ones it is in); one already there is fine. */
+  makeFolder(path: string): Promise<void>;
+  /** Removes a folder if nothing is in it: true when it is gone, false when it holds something and was left. */
+  removeFolder(path: string): Promise<boolean>;
+  /**
+   * Gives a file dates (milliseconds since 1970; either may be left out). A creation date only moves earlier, and is ignored
+   * where the system can't set one (Linux). Returns the file's modification time after, or null when the shell is too old to date files.
+   */
+  setTimes(path: string, times: { created?: number; modified?: number }): Promise<number | null>;
 }
 
 /**
@@ -116,6 +127,8 @@ export function desktopBridge(): DesktopBridge | null {
   // Files go as base64 text, which crosses as one string however the web view carries it (raw bytes become a JSON array of
   // numbers when it falls back to postMessage: far too slow for a large file). A shell without those commands takes the raw form.
   let base64 = true;
+  let dating = true;
+  const ms = (time: number | undefined) => (time === undefined || !Number.isFinite(time) ? null : Math.max(0, Math.round(time)));
   return {
     fixed: isIosApp(),
     root: () => core.invoke<string | null>('vault_root'),
@@ -156,6 +169,24 @@ export function desktopBridge(): DesktopBridge | null {
       return core.invoke<number>('vault_write', data as unknown as Record<string, unknown>, { headers: { path: encodeURIComponent(path).replace(/%2F/gi, '/') } });
     },
     remove: (path) => core.invoke<void>('vault_remove', { path }),
+    // An older shell lists files only: the sync then keeps the folders it can see through them, as it did before.
+    folders: () => core.invoke<string[]>('vault_folders').catch((error: unknown) => {
+      if (isMissingCommand(error)) return null;
+      throw error;
+    }),
+    makeFolder: (path) => needsNewerShell(() => core.invoke<void>('vault_make_folder', { path })),
+    removeFolder: (path) => needsNewerShell(() => core.invoke<boolean>('vault_remove_folder', { path })),
+    // Dates are a nicety: an older shell has no such command, and its files keep the dates the disk gave them.
+    async setTimes(path, { created, modified }) {
+      if (!dating) return null;
+      try {
+        return await core.invoke<number>('vault_set_times', { path, createdMs: ms(created), modifiedMs: ms(modified) });
+      } catch (error) {
+        if (!isMissingCommand(error)) throw error;
+        dating = false;
+        return null;
+      }
+    },
   };
 }
 

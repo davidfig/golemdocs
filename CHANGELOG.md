@@ -44,6 +44,9 @@
 - A Word document with a live table, saved in LibreOffice, keeps the table live. The next update used to put the whole table in its first cell.
 - An SVG file imported from a ZIP or a dropped folder now opens as a drawing. It used to be renamed to a PNG.
 - The Down arrow on the line above a table goes into the table's first row, and Up from below it into the last row. It used to jump over the whole table.
+- A folder deleted in your vault folder no longer stays behind, empty, in Golem Docs. Folders now match on both sides, empty ones too: an empty folder made in the app appears in the vault folder, and one made in the vault folder appears in the app. Empty folders the vault had already lost are removed on the next sync. The desktop app needs its latest update for this.
+- Files in your vault folder show when the document was made, the same on every computer, instead of the moment that computer last copied them. Renaming or moving a document on another computer no longer changes its modified date here; only a change to its content does. Creation dates need the latest app on a Mac or Windows; Linux can't set them.
+- Linking a vault folder that already holds your documents (signing in after using it signed out, or pointing another computer at it) no longer uploads every file again and adds a copy of each to its version history. Files that already match their document are just linked; only ones that differ are uploaded.
 
 ## 0.37.2 - 2026-11-11
 

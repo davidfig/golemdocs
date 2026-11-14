@@ -77,6 +77,10 @@ function fakeCloud() {
       calls.push(`rmdir ${id}`);
       folders.delete(id);
     },
+    async makeFolder(dir) {
+      calls.push(`mkdir ${dir.join('/')}`);
+      folderFor(dir);
+    },
   };
   const add = (path: string, content: string, id = `a${++ids}`) => {
     const parts = path.split('/');
@@ -91,10 +95,36 @@ function fakeCloud() {
   return { cloud, docs, folders, calls, add, edit, folderFor };
 }
 
-/** A folder in memory that behaves like the native side: hidden names are not listed, and every write has a new time. */
-function fakeDisk() {
+/**
+ * A folder in memory that behaves like the native side: hidden names are not listed, every write has a new time, a file
+ * rewritten keeps its creation date, and a creation date set later only moves earlier. With
+ * `folders` it is today's shell, which lists folders, empty ones too (those that hold a file, and those made in `dirs`), and
+ * removes the folders a deleted file leaves empty; without, a shell too old to list folders.
+ */
+function fakeDisk(options: { folders?: boolean } = {}) {
   let clock = 5000;
-  const files = new Map<string, { bytes: Uint8Array; mtimeMs: number }>();
+  const files = new Map<string, { bytes: Uint8Array; mtimeMs: number; created?: number }>();
+  const dated: string[] = [];
+  const dirs = new Set<string>();
+  const hidden = (p: string) => p.split('/').some((s) => s.startsWith('.'));
+  const under = (dir: string) => [...files.keys(), ...dirs].some((p) => p.startsWith(`${dir}/`));
+  const allDirs = () => {
+    const out = new Set(dirs);
+    for (const path of files.keys()) for (let at = path.lastIndexOf('/'); at > 0; at = path.lastIndexOf('/', at - 1)) out.add(path.slice(0, at));
+    return [...out].filter((p) => !hidden(p)).sort();
+  };
+  const folderOps: Pick<VaultDisk, 'folders' | 'makeFolder' | 'removeFolder'> = {
+    folders: async () => allDirs(),
+    async makeFolder(path) {
+      const parts = path.split('/');
+      for (let i = 1; i <= parts.length; i++) dirs.add(parts.slice(0, i).join('/'));
+    },
+    async removeFolder(path) {
+      if (under(path)) return false;
+      dirs.delete(path);
+      return true;
+    },
+  };
   const disk: VaultDisk = {
     async scan() {
       return [...files].filter(([p]) => !p.split('/').some((s) => s.startsWith('.'))).map(([path, f]) => ({ path, size: f.bytes.byteLength, mtimeMs: f.mtimeMs }));
@@ -105,17 +135,35 @@ function fakeDisk() {
       return f.bytes;
     },
     async write(path, bytes) {
-      files.set(path, { bytes, mtimeMs: ++clock });
+      files.set(path, { bytes, mtimeMs: ++clock, created: files.get(path)?.created ?? clock });
       return clock;
     },
     async remove(path) {
       files.delete(path);
+      if (!options.folders) return;
+      // Like the shell: the folders the file leaves empty go with it.
+      const parts = path.split('/').slice(0, -1);
+      for (; parts.length && !under(parts.join('/')); parts.pop()) dirs.delete(parts.join('/'));
     },
+    async setTimes(path, { created, modified }) {
+      const f = files.get(path);
+      if (!f) throw new Error(`no ${path}`);
+      dated.push(path);
+      if (modified !== undefined) f.mtimeMs = modified;
+      if (created !== undefined && created < (f.created ?? Infinity)) f.created = created;
+      return f.mtimeMs;
+    },
+    ...(options.folders && folderOps),
   };
-  const put = (path: string, content: string) => void files.set(path, { bytes: text(content), mtimeMs: ++clock });
+  const put = (path: string, content: string) => void files.set(path, { bytes: text(content), mtimeMs: ++clock, created: files.get(path)?.created ?? clock });
   const get = (path: string) => (files.has(path) ? read(files.get(path)!.bytes) : undefined);
   const paths = () => [...files.keys()].filter((p) => !p.startsWith('.')).sort();
-  return { disk, files, put, get, paths };
+  /** Deletes a folder with all that is in it, as Finder does. */
+  const rmrf = (dir: string) => {
+    for (const p of [...files.keys()]) if (p.startsWith(`${dir}/`)) files.delete(p);
+    for (const p of [...dirs]) if (p === dir || p.startsWith(`${dir}/`)) dirs.delete(p);
+  };
+  return { disk, files, dirs, put, get, paths, rmrf, folders: allDirs, dated };
 }
 
 const codec: VaultCodec = {
@@ -138,9 +186,9 @@ function fakeMemory() {
   return memory;
 }
 
-function setup(account = 'u1') {
+function setup(account = 'u1', options: { folders?: boolean } = {}) {
   const account_ = fakeCloud();
-  const folder = fakeDisk();
+  const folder = fakeDisk(options);
   const host: VaultHost = { disk: folder.disk, memory: fakeMemory(), cloud: account_.cloud, codec, hash: async (b) => createHash('sha256').update(b).digest('hex'), account };
   const sync = (options?: { allowMassDelete?: boolean }) => syncVault(host, options);
   return { ...account_, folder, host, sync };
@@ -368,7 +416,7 @@ test('a folder gone from the vault stays while it holds a document the vault doe
   assert.equal(s.folders.has('Box'), false);
 });
 
-test('a vault synced before folders were remembered removes none on its first sync', async () => {
+test('a vault synced before folders were remembered removes none on its first sync, with a shell too old to list folders', async () => {
   const s = setup();
   s.add('Notes/one.md', 'x');
   await s.sync();
@@ -451,6 +499,26 @@ test('a vault kept while signed out joins the account that signs in, matching fi
   assert.equal(s.calls.filter((c) => c.startsWith('trash')).length, 0);
 });
 
+test('a file found by path that is already its document is linked, with no upload and no version', async () => {
+  const s = setup(GUEST_ACCOUNT);
+  s.add('same.md', 'unchanged');
+  s.add('changed.md', 'before');
+  await s.sync();
+  s.folder.put('changed.md', 'edited while signed out');
+  s.calls.length = 0;
+  s.docs.clear();
+  s.add('same.md', 'unchanged', 'acct1');
+  s.add('changed.md', 'before', 'acct2');
+  const report = await syncVault({ ...s.host, account: 'u1' });
+  assert.deepEqual(report.errors, []);
+  assert.equal(report.linked, 1);
+  assert.equal(counts(report), '0,1,0,0,0,0,0', 'only the edited file is uploaded');
+  assert.deepEqual(s.calls.filter((c) => !c.startsWith('download')), ['keep acct2', 'replace acct2']);
+  s.calls.length = 0;
+  assert.equal(counts(await syncVault({ ...s.host, account: 'u1' })), quiet, 'and both stay linked');
+  assert.deepEqual(s.calls, []);
+});
+
 test('a vault linked to an account is not used while signed out', async () => {
   const s = setup('u1');
   s.add('one.md', 'x');
@@ -471,6 +539,113 @@ test('an emptied vault is not copied to the account until confirmed', async () =
   const confirmed = await s.sync({ allowMassDelete: true });
   assert.equal(confirmed.trashed, 12);
   assert.equal(s.docs.size, 0);
+});
+
+const accountFolders = (s: ReturnType<typeof setup>) => [...s.folders.keys()].sort();
+
+test('an empty folder in the account is made in the vault, and goes from the account once deleted there', async () => {
+  const s = setup('u1', { folders: true });
+  s.add('Notes/one.md', 'x');
+  s.folderFor(['Notes', 'Empty']);
+  s.folderFor(['Later']);
+  const first = await s.sync();
+  assert.deepEqual(first.errors, []);
+  assert.deepEqual(s.folder.folders(), ['Later', 'Notes', 'Notes/Empty']);
+  assert.equal(counts(await s.sync()), quiet);
+  s.folder.rmrf('Notes/Empty');
+  const report = await s.sync();
+  assert.equal(report.foldersRemoved, 1);
+  assert.deepEqual(accountFolders(s), ['Later', 'Notes']);
+  assert.deepEqual(s.folder.folders(), ['Later', 'Notes'], 'not made again');
+});
+
+test('an empty folder made in the vault is made in the account, and goes from the vault once removed there', async () => {
+  const s = setup('u1', { folders: true });
+  s.add('one.md', 'x');
+  await s.sync();
+  await s.folder.disk.makeFolder!('Projects/Ideas');
+  const report = await s.sync();
+  assert.equal(report.foldersMade, 2);
+  assert.deepEqual(accountFolders(s), ['Projects', 'Projects/Ideas']);
+  assert.equal((await s.sync()).foldersMade, 0);
+  s.folders.delete('Projects/Ideas'); // deleted in the app
+  await s.sync();
+  assert.deepEqual(s.folder.folders(), ['Projects']);
+  assert.deepEqual(accountFolders(s), ['Projects'], 'not made again');
+});
+
+test('a document moved out of its folder in the app leaves the folder on both sides', async () => {
+  const s = setup('u1', { folders: true });
+  const id = s.add('Shelf/one.md', 'x');
+  await s.sync();
+  Object.assign(s.docs.get(id)!, { dir: [], updatedAt: 9999 });
+  const report = await s.sync();
+  assert.equal(report.movedHere, 1);
+  assert.deepEqual(s.folder.paths(), ['one.md']);
+  assert.deepEqual(s.folder.folders(), ['Shelf'], 'made again after the move emptied it');
+  assert.equal((await s.sync()).foldersRemoved, 0);
+  assert.deepEqual(accountFolders(s), ['Shelf']);
+});
+
+test('a folder removed in the app that still holds a file the vault does not keep stays in the vault, and is not made again in the account', async () => {
+  const s = setup('u1', { folders: true });
+  s.add('Box/one.md', 'x');
+  await s.sync();
+  s.folder.put('Box/photos.zip', 'zip');
+  await s.sync();
+  const id = [...s.docs.values()].find((d) => d.name === 'one.md')!.id;
+  Object.assign(s.docs.get(id)!, { dir: [], updatedAt: 9999 }); // the folder is removed in the app: what was in it moves up
+  s.folders.delete('Box');
+  await s.sync();
+  assert.deepEqual(s.folder.paths(), ['Box/photos.zip', 'one.md']);
+  assert.deepEqual(accountFolders(s), []);
+  await s.sync();
+  assert.deepEqual(accountFolders(s), [], 'not made again while it is left here');
+  assert.deepEqual(s.folder.folders(), ['Box']);
+  s.folder.files.delete('Box/photos.zip');
+  await s.folder.disk.makeFolder!('Box');
+  await s.sync();
+  assert.deepEqual(s.folder.folders(), [], 'once empty it goes');
+  assert.deepEqual(accountFolders(s), []);
+});
+
+test('the first sync that lists folders removes the empty folders a vault synced before had lost, and brings the rest here', async () => {
+  const s = setup('u1', { folders: true });
+  s.add('Posts/Essay/Paper (2013)/Paper.md', 'notes');
+  s.add('Posts/Essay/Essay.md', 'essay');
+  s.add('Archive/old.zip', 'zip');
+  await s.sync();
+  // As a shell too old to list folders left it: the folders that held files, and a folder whose files were moved up since.
+  const memory = JSON.parse((await s.host.memory.load())!);
+  delete memory.mirrored;
+  memory.folders = ['Posts', 'Posts/Essay'];
+  await s.host.memory.save(JSON.stringify(memory));
+  s.folderFor(['Posts', 'Essay', 'Paper (2013)', 'Figures']);
+  s.folder.files.set('Posts/Essay/Paper.md', s.folder.files.get('Posts/Essay/Paper (2013)/Paper.md')!);
+  s.folder.rmrf('Posts/Essay/Paper (2013)');
+  s.folder.rmrf('Archive');
+  s.folder.dirs.clear();
+  const report = await s.sync();
+  assert.deepEqual(report.errors, []);
+  assert.equal(report.foldersRemoved, 2);
+  assert.deepEqual(accountFolders(s), ['Archive', 'Posts', 'Posts/Essay'], 'a folder holding a document the vault does not keep stays');
+  assert.deepEqual(s.folder.folders(), ['Archive', 'Posts', 'Posts/Essay'], 'and is brought here');
+});
+
+test('a vault linked for the first time gets the account\'s empty folders and removes none', async () => {
+  const s = setup('u1', { folders: true });
+  s.folderFor(['Empty']);
+  const report = await s.sync();
+  assert.equal(report.foldersRemoved, 0);
+  assert.deepEqual(s.folder.folders(), ['Empty']);
+});
+
+test('a folder whose name the account spells differently is not made there', async () => {
+  const s = setup('u1', { folders: true });
+  await s.folder.disk.makeFolder!('a:b');
+  const report = await s.sync();
+  assert.equal(report.foldersMade, 0);
+  assert.deepEqual(accountFolders(s), []);
 });
 
 test('the sync state is kept in this computer\'s memory, and the folder only says whose it is', async () => {
@@ -592,4 +767,66 @@ test('with the real converters, PDFs and pictures go out as the files they are a
   } finally {
     canvas.restore();
   }
+});
+
+test('a file that comes down has its document\'s dates, and a move in the account keeps them', async () => {
+  const s = setup();
+  const id = s.add('one.md', 'x');
+  const made = s.docs.get(id)!.createdAt;
+  await s.sync();
+  assert.deepEqual([s.folder.files.get('one.md')!.created, s.folder.files.get('one.md')!.mtimeMs], [made, s.docs.get(id)!.updatedAt]);
+  assert.equal(counts(await s.sync()), quiet, 'the dates the sync gave are not mistaken for an edit');
+
+  const before = s.folder.files.get('one.md')!.mtimeMs;
+  await s.cloud.place(id, ['Moved'], 'two.md'); // the account's time moves with a rename
+  await s.sync();
+  const moved = s.folder.files.get('Moved/two.md')!;
+  assert.deepEqual([moved.created, moved.mtimeMs], [made, before], 'neither date changes with the move');
+  assert.equal(counts(await s.sync()), quiet);
+
+  s.edit(id, 'new words');
+  await s.sync();
+  assert.deepEqual([s.folder.files.get('Moved/two.md')!.created, s.folder.files.get('Moved/two.md')!.mtimeMs], [made, s.docs.get(id)!.updatedAt]);
+  assert.equal(counts(await s.sync()), quiet);
+});
+
+test('a file made in the vault keeps its own creation date', async () => {
+  const s = setup();
+  s.folder.put('mine.md', 'mine');
+  s.folder.files.get('mine.md')!.created = 7; // earlier than the account's
+  await s.sync();
+  assert.equal(s.folder.files.get('mine.md')!.created, 7);
+});
+
+test('files a shell could not date get their creation date once it can', async () => {
+  const s = setup();
+  const id = s.add('one.md', 'x');
+  const setTimes = s.folder.disk.setTimes!;
+  s.folder.disk.setTimes = async () => null; // an older shell
+  await s.sync();
+  const file = s.folder.files.get('one.md')!;
+  assert.notEqual(file.created, s.docs.get(id)!.createdAt);
+  const mtime = file.mtimeMs;
+
+  s.folder.disk.setTimes = setTimes;
+  assert.equal(counts(await s.sync()), quiet);
+  assert.equal(file.created, s.docs.get(id)!.createdAt);
+  assert.equal(file.mtimeMs, mtime, 'only the creation date: the modification time is the file\'s own');
+  s.folder.dated.length = 0;
+  await s.sync();
+  assert.deepEqual(s.folder.dated, [], 'once');
+});
+
+test('a document with no creation time (saved in this browser) leaves the file\'s creation date alone', async () => {
+  const s = setup();
+  s.folder.put('mine.md', 'mine');
+  s.folder.files.get('mine.md')!.created = 7;
+  const list = s.cloud.list;
+  s.cloud.list = async () => {
+    const listed = await list();
+    return { ...listed, docs: listed.docs.map((d) => ({ ...d, createdAt: 0 })) };
+  };
+  await s.sync();
+  await s.sync();
+  assert.equal(s.folder.files.get('mine.md')!.created, 7);
 });

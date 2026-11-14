@@ -59,6 +59,7 @@ fn builder() -> tauri::Builder<tauri::Wry> {
         .invoke_handler(tauri::generate_handler![
             vault::vault_root,
             vault::vault_choose,
+            vault::vault_use_default,
             vault::vault_forget,
             vault::vault_reveal,
             vault::vault_check,

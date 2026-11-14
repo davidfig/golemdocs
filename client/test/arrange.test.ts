@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { arrangePages, columnsToFill, nearestPage, type Page } from '../src/document/arrange.ts';
+import { arrangePages, columnsToFill, nearestPage, onSeam, type Page } from '../src/document/arrange.ts';
 
 class TestPage implements Page {
   x = -1;
@@ -58,4 +58,21 @@ test('the nearest page is the one under the point, else the closest', () => {
   assert.equal(nearestPage([a, b], 50, 180), b, 'in the gap, closer to b');
   assert.equal(nearestPage([a, b], 500, 500), b, 'far outside');
   assert.equal(nearestPage([], 0, 0), null);
+});
+
+test('onSeam finds the gap between pages, or the line where touching pages meet', () => {
+  const apart = pages([100, 200], [100, 200]);
+  arrangePages(apart, 1, 10); // gap from 200 to 210
+  assert.equal(onSeam(apart, 50, 205, 1), true, 'in the gap');
+  assert.equal(onSeam(apart, 50, 100, 1), false, 'inside a page');
+  assert.equal(onSeam(apart, 150, 205, 1), false, 'beside the pages');
+  assert.equal(onSeam(apart, 50, 420, 1), false, 'below the last page');
+  const joined = pages([100, 200], [100, 200]);
+  arrangePages(joined, 1, 0);
+  assert.equal(onSeam(joined, 50, 200, 2), true, 'on the line');
+  assert.equal(onSeam(joined, 50, 198.5, 2), true, 'just above it');
+  assert.equal(onSeam(joined, 50, 190, 2), false, 'well inside the page');
+  const columns = pages([100, 100], [100, 100]);
+  arrangePages(columns, 2, 10);
+  assert.equal(onSeam(columns, 105, 50, 1), false, 'between side-by-side pages is not a seam');
 });

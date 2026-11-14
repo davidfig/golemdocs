@@ -46,6 +46,8 @@ export class PageRenderer {
 
   /** Draw pages edge to edge with no shadow or border (Flow view). */
   flat = false;
+  /** Pages touch (the space between them is hidden): a thin line marks each edge, with no shadow. */
+  joined = false;
 
   /** `darkPages`: dark sheets with light letters (View › Color Scheme › Dark Pages); pictures of pages leave it off. */
   render(camera: Camera, pages: readonly GpuPage[], selection?: SelectionLayer, caretVisible = true, darkPages = false): FrameStats {
@@ -85,7 +87,7 @@ export class PageRenderer {
       const x1 = this.flat ? Math.max(Math.round((page.x + page.width - left) * scale), camera.width) : Math.round((page.x + page.width - left) * scale);
       const y1 = Math.round((page.y + page.height - top) * scale);
       // A soft drop shadow: a few faint layers, each larger than the last, sinking below the sheet.
-      for (let i = 0; !this.flat && i < SHADOW_LAYERS; i++) {
+      for (let i = 0; !this.flat && i < SHADOW_LAYERS && !this.joined; i++) {
         const grow = (i + 1) * scale;
         this.sheets.add(x0 - grow, y0 - grow + 2 * scale, x1 - x0 + 2 * grow, y1 - y0 + 2 * grow, PAGE_SHADOW);
       }

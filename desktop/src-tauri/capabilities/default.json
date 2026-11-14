@@ -9,6 +9,7 @@
   "permissions": [
     "allow-vault-root",
     "allow-vault-choose",
+    "allow-vault-use-default",
     "allow-vault-forget",
     "allow-vault-reveal",
     "allow-vault-check",

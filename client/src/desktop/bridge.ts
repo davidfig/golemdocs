@@ -19,6 +19,11 @@ export interface DesktopBridge {
   root(): Promise<string | null>;
   /** Asks the person for a folder (a native dialog). Null if they cancel. */
   choose(): Promise<string | null>;
+  /**
+   * Starts keeping the folder a new desktop install uses (`GolemDocs` in the home folder), unless one is in use already,
+   * and returns the folder. Null where there is no such folder, or in a shell too old to have one.
+   */
+  useDefault(): Promise<string | null>;
   /** Stops using the folder; its files stay. */
   forget(): Promise<void>;
   /** Shows the vault folder in Finder (Explorer, the file manager). */
@@ -122,6 +127,10 @@ export function desktopBridge(): DesktopBridge | null {
     fixed: isIosApp(),
     root: () => core.invoke<string | null>('vault_root'),
     choose: () => core.invoke<string | null>('vault_choose'),
+    useDefault: () => core.invoke<string | null>('vault_use_default').catch((error: unknown) => {
+      if (isMissingCommand(error)) return null;
+      throw error;
+    }),
     forget: () => core.invoke<void>('vault_forget'),
     reveal: () => needsNewerShell(() => core.invoke<void>('vault_reveal')),
     // Only there to make macOS ask for access: an older shell has no such step, and its sync fails with its own error if it can't read the folder.

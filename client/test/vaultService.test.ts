@@ -16,6 +16,7 @@ function bridge(scan: () => Promise<{ path: string; size: number; mtimeMs: numbe
     fixed: true,
     root: async () => '/icloud/Documents',
     choose: async () => '/icloud/Documents',
+    useDefault: async () => null,
     forget: async () => {},
     reveal: async () => {},
     check: async () => {},

@@ -1,6 +1,14 @@
 # What’s New in Golem Docs
 
-## 0.37.3 - Unreleased
+## 0.38.0 - Unreleased
+
+### Added
+
+- Double-click between two pages to hide the space between them, like Word; double-click again to bring it back. View › Hide Space Between Pages does the same, and the choice follows you to your other computers.
+
+### Changed
+
+- A new install of the desktop app keeps your documents in a GolemDocs folder in your home folder from the start, on Mac, Windows and Linux. File › Vault Folder can change it.
 
 ### Fixed
 

@@ -29,6 +29,7 @@ const KEYS = [
   'word.viewMode',
   'word.formattingMarks',
   'word.ruler',
+  'word.collapsePages', // View › Hide Space Between Pages
   'word.footer', // status bar
   'word.fullScreenMenus', // Tools › Options: keep the menu bar in full screen
   'word.scrollPastEnd', // Tools › Options: scroll half a screen past the end of the document

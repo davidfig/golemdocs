@@ -29,7 +29,7 @@ const PAGES = [
   { path: '/home/ai', menu: 'Your ai', heading: 'Ask your ai to help with your documents.' },
   { path: '/home/formats', menu: 'Formats', heading: 'If you can name it, you can probably open it.' },
   { path: '/home/pricing', menu: 'Pricing', heading: 'Free to use. Paying covers my server bills.' },
-  { path: '/home/journal', menu: 'Journal', heading: 'What changed lately.' },
+  { path: '/home/journal', menu: 'Changelog', heading: 'What changed lately.' },
   { path: '/home/about', menu: 'About', heading: 'Why I built this.' },
   { path: '/home/open-source', menu: 'Open source', heading: 'All of Golem Docs is open source.' },
   { path: '/home/developers', menu: 'Developers', heading: 'Plain files, and a sync you can reason about.' },
@@ -44,18 +44,48 @@ test('every page has its heading, marks itself in the menu, and loads without er
   for (const { path, menu, heading } of PAGES) {
     await page.goto(path);
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading);
-    await expect(nav(page).locator('[aria-current="page"]')).toHaveText(menu);
+    if (path === '/home') await expect(page.locator('.chrome .logo')).toHaveAttribute('aria-current', 'page');
+    else await expect(page.locator('.chrome [aria-current="page"]')).toHaveText(menu);
   }
   expect(errors).toEqual([]);
 });
 
-test('the menu bar goes from page to page', async ({ page }) => {
-  await page.goto('/home');
-  await nav(page).getByRole('link', { name: 'Journal' }).click();
+test('the menu bar drops down menus that go from page to page', async ({ page }) => {
+  await page.goto('/home/ai');
+  await expect(nav(page).getByRole('button', { name: 'Features' })).toHaveClass(/marked/);
+  await nav(page).getByRole('button', { name: 'About' }).click();
+  await nav(page).getByRole('menuitem', { name: 'Changelog' }).click();
   await expect(page).toHaveURL(/\/home\/journal$/);
   await expect(page.locator('.entry').first()).toBeVisible();
-  await nav(page).getByRole('link', { name: 'Home' }).click();
+  // Sliding to another title while a menu is open switches menus; a click elsewhere closes it.
+  await nav(page).getByRole('button', { name: 'About' }).click();
+  await nav(page).getByRole('button', { name: 'Features' }).hover();
+  await expect(nav(page).getByRole('menuitem', { name: 'Live blocks' })).toBeVisible();
+  await expect(nav(page).getByRole('menuitem', { name: 'Changelog' })).toBeHidden();
+  await page.mouse.click(400, 400);
+  await expect(nav(page).getByRole('menu')).toBeHidden();
+  await page.locator('.chrome').getByRole('link', { name: 'Download' }).click();
+  await expect(page).toHaveURL(/\/home\/download$/);
+  // The app's icon is the way home.
+  await page.locator('.chrome .logo').click();
   await expect(page).toHaveURL(/\/home$/);
+});
+
+test('the menus work from the keyboard, as the app\'s do', async ({ page }) => {
+  await page.goto('/home');
+  await page.keyboard.press('Alt+KeyO');
+  const openSource = nav(page).getByRole('menu', { name: 'Open source' });
+  await expect(openSource).toBeVisible();
+  await expect(openSource.getByRole('menuitem', { name: 'Open source' })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(openSource.getByRole('menuitem', { name: 'Developers' })).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(nav(page).getByRole('menu', { name: 'Pricing' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(nav(page).getByRole('menu')).toBeHidden();
+  await page.keyboard.press('Alt+KeyF');
+  await page.keyboard.press('l');
+  await expect(page).toHaveURL(/\/home\/live-blocks$/);
 });
 
 test('the demo shows the chat app, and the pane\'s Terminal tab shows it in a terminal', async ({ page }) => {
@@ -278,7 +308,7 @@ test.describe('feature pages', () => {
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(heading);
       await expect(page.locator('link[rel=canonical]')).toHaveAttribute('href', `https://golemdocs.com/home/${name}`);
       await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', `${heading} | Golem Docs`);
-      await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/home');
+      await expect(page.locator('.chrome .logo')).toHaveAttribute('href', '/home');
       await expect(page.locator('main .try').getByRole('link', { name: 'Open Golem Docs' })).toHaveAttribute('href', '/');
       await expect(page.locator('#canvas')).toHaveCount(0);
     });
@@ -296,7 +326,8 @@ test.describe('feature pages', () => {
 
   test('the menu bar leads to the site\'s pages', async ({ page }) => {
     await page.goto('/home/pdf');
-    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Pricing' }).click();
+    await nav(page).getByRole('button', { name: 'Pricing' }).click();
+    await nav(page).getByRole('menuitem', { name: 'Pricing' }).click();
     await expect(page).toHaveURL(/\/home\/pricing$/);
   });
 

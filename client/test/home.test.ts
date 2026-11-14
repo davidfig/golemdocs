@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
-  LANGS, MENU_PAGES, PAGES, SOURCE, allPaths, journalHtml, latestHtml, pageFile, pagePath, parseChangelog, parseJournalNotes, readLayout, readPage,
+  LANGS, MENUS, PAGES, SOURCE, allPaths, journalHtml, latestHtml, pageFile, pagePath, parseChangelog, parseJournalNotes, readLayout, readPage,
   readSources, readStrings, renderAll, renderPage, route,
 } from '../home/build.ts';
 
@@ -20,13 +20,15 @@ test('the site has a translation of every string for every app language', () => 
       assert.equal(tags(value), tags(english[key]), `${lang} ${key} markup differs from English`);
       assert.equal(slots(value), slots(english[key]), `${lang} ${key} placeholders differ from English`);
     }
-    // Each menu name has one access key, and no two share one.
-    const keys = MENU_PAGES.map((page) => {
-      const marks = strings[`nav.${page}`].match(/&(.)/g) ?? [];
-      assert.equal(marks.length, 1, `${lang} nav.${page} has one access key`);
+    // Each menu title and item has one access key, and no two in the bar, or in one menu, share one.
+    const key = (name: string) => {
+      const marks = strings[name].match(/&(.)/g) ?? [];
+      assert.equal(marks.length, 1, `${lang} ${name} has one access key`);
       return marks[0].slice(1).toLowerCase();
-    });
-    assert.equal(new Set(keys).size, keys.length, `${lang} access keys are unique: ${keys.join(' ')}`);
+    };
+    const unique = (keys: string[], where: string) => assert.equal(new Set(keys).size, keys.length, `${lang} ${where} access keys are unique: ${keys.join(' ')}`);
+    unique(MENUS.map((menu) => key(menu.title)), 'menu bar');
+    for (const menu of MENUS) unique(menu.pages.map((page) => key(`nav.${page}`)), `${menu.id} menu`);
   }
 });
 
@@ -34,7 +36,7 @@ test('every slot is filled by the English strings, and every string is used', ()
   const english = readStrings(SOURCE);
   const sources = readLayout() + PAGES.map(readPage).join('') + Object.values(english).join('');
   const used = new Set([...sources.matchAll(/\{\{([\w.-]+)\}\}/g)].map((m) => m[1]));
-  const derived = new Set(PAGES.flatMap((p) => [`${p}.title`, `${p}.description`, `nav.${p}`]).concat(['journal.now', 'journal.added', 'journal.changed', 'journal.fixed', 'journal.inEnglish']));
+  const derived = new Set(PAGES.flatMap((p) => [`${p}.title`, `${p}.description`, `nav.${p}`]).concat(MENUS.map((m) => m.title), ['journal.now', 'journal.added', 'journal.changed', 'journal.fixed', 'journal.inEnglish']));
   for (const key of Object.keys(english)) assert.ok(used.has(key) || derived.has(key), `${key} is unused`);
 });
 
@@ -52,6 +54,7 @@ test('every page in every language declares its language, links its alternates, 
       assert.ok(sitemap.includes(`<loc>https://golemdocs.com${path}</loc>`), `${path} in sitemap`);
       assert.ok(!html.includes('{{'), `${path} has an unfilled slot`);
       assert.match(html, /aria-current="page"/, `${path} marks its menu item`);
+      if (page !== 'home' && page !== 'download') assert.match(html, /class="menu-title marked"/, `${path} marks its menu`);
       assert.ok(!/noindex/.test(html), `${path} is indexed`);
     }
   }

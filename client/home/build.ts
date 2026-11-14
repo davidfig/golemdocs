@@ -19,14 +19,22 @@ export const SOURCE = 'en';
 /** Where the stylesheet, script and clip are served, whatever the language. */
 export const ASSET_BASE = '/home';
 
-/** The pages, in menu order (those in MENU_PARENT come last and are not in the menu). */
+/** The pages. */
 export const PAGES = ['home', 'ai', 'live-blocks', 'formats', 'pricing', 'journal', 'about', 'open-source', 'developers', 'download', 'self-host'] as const;
 export type PageName = (typeof PAGES)[number];
 
-/** Pages reached from another page rather than from the menu bar, which marks that page while they are open. */
-export const MENU_PARENT: Partial<Record<PageName, PageName>> = { 'self-host': 'pricing' };
-/** The menu bar's pages. */
-export const MENU_PAGES = PAGES.filter((page) => !MENU_PARENT[page]);
+/**
+ * The menu bar's menus, as the app's are: a title (`title`, a key in the locales) that drops down a list of pages. Each
+ * page is in one menu, which the bar marks while it is open. Two pages are not in a menu: Home is the app's icon at the start of the bar, and Download the button beside Open Golem Docs.
+ */
+export const MENUS: readonly { id: string; title: string; pages: readonly PageName[] }[] = [
+  { id: 'features', title: 'nav.menu.features', pages: ['ai', 'live-blocks', 'formats'] },
+  { id: 'pricing', title: 'nav.pricing', pages: ['pricing', 'self-host'] },
+  { id: 'open-source', title: 'nav.open-source', pages: ['open-source', 'developers'] },
+  { id: 'about', title: 'nav.about', pages: ['about', 'journal'] },
+];
+/** The menu a page belongs to, marked in the bar while the page is open. */
+export const menuOf = (page: PageName): string | undefined => MENUS.find((m) => m.pages.includes(page))?.id;
 
 export const LANGS = Object.keys(LOCALES);
 
@@ -161,13 +169,23 @@ export function latestHtml(releases: Release[], notes: Map<string, JournalNote>,
     .join('\n');
 }
 
-/** The menu bar: `&` in a name marks its access key, drawn underlined as Word does. */
+/** A name with its access key (`&`) underlined, as Word draws it, or dropped. */
+const keyed = (name: string): string => name.replace(/&(.)/, '<u>$1</u>');
+const unkeyed = (name: string): string => name.replace(/\(&.\)|&/, '');
+
+/** The menu bar: a title per menu, each dropping down its pages (site.js opens them). The page's own menu and item are marked. */
 function menuHtml(lang: string, current: PageName | null, strings: Strings): string {
-  const marked = current && (MENU_PARENT[current] ?? current);
-  return MENU_PAGES.map((page) => {
-    const name = strings[`nav.${page}`].replace(/&(.)/, '<u>$1</u>');
-    const here = page === marked ? ' aria-current="page"' : '';
-    return `<a href="${pagePath(lang, page)}"${here}>${name}</a>`;
+  const marked = current && menuOf(current);
+  return MENUS.map((menu) => {
+    const items = menu.pages
+      .map((page) => `<a role="menuitem" href="${pagePath(lang, page)}"${page === current ? ' aria-current="page"' : ''}>${keyed(strings[`nav.${page}`])}</a>`)
+      .join('\n              ');
+    return `<div class="menu">
+            <button type="button" class="menu-title${menu.id === marked ? ' marked' : ''}" id="mt-${menu.id}" aria-haspopup="menu" aria-expanded="false" aria-controls="m-${menu.id}">${keyed(strings[menu.title])}</button>
+            <div class="menu-pop" role="menu" id="m-${menu.id}" aria-labelledby="mt-${menu.id}" hidden>
+              ${items}
+            </div>
+          </div>`;
   }).join('\n          ');
 }
 
@@ -295,6 +313,8 @@ function frame(f: Frame): string {
     languageName: escapeHtml(LOCALES[lang].name),
     redirect: lang === SOURCE && f.alternates ? redirectScript() : '',
     menu: menuHtml(lang, f.current, { ...english, ...strings }),
+    logoCurrent: f.current === 'home' ? ' aria-current="page"' : '',
+    download: `<a class="btn download" href="${pagePath(lang, 'download')}"${f.current === 'download' ? ' aria-current="page"' : ''}>${unkeyed(strings['nav.download'] ?? english['nav.download'])}</a>`,
     content: f.content,
     title: attr(f.title),
     description: attr(f.description),
@@ -329,7 +349,7 @@ export function renderPage(lang: string, page: PageName, strings = readStrings(l
     url: ORIGIN + pagePath(lang, page),
     title: text(`${page}.title`),
     description: text(`${page}.description`),
-    docTitle: `Golem Docs · ${text(`nav.${page}`).replace(/\(&.\)|&/, '')}`,
+    docTitle: `Golem Docs · ${unkeyed(text(`nav.${page}`))}`,
     current: page,
     alternates: (other) => pagePath(other, page),
     content: readPage(page),

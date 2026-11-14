@@ -32,12 +32,15 @@
   <body data-page="{{page}}">
     <header class="chrome">
       <div class="chrome-in">
-        <a class="logo" href="{{base}}" title="Golem Docs"><img src="/favicon.svg" alt="Golem Docs" width="16" height="16" /></a>
+        <a class="logo" href="{{base}}" title="Golem Docs"{{logoCurrent}}><img src="/favicon.svg" alt="Golem Docs" width="16" height="16" /></a>
         <nav class="menus" aria-label="{{nav.label}}">
           {{menu}}
         </nav>
         <span class="doc-title" aria-hidden="true">{{docTitle}}</span>
-        <a class="btn open-app" href="/">{{nav.open}}</a>
+        <div class="chrome-actions">
+          {{download}}
+          <a class="btn open-app" href="/">{{nav.open}}</a>
+        </div>
       </div>
     </header>
 

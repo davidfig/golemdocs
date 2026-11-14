@@ -7,7 +7,7 @@
   (function () {
     var title = document.querySelector('.doc-title');
     var menus = document.querySelector('.menus');
-    var open = document.querySelector('.open-app');
+    var open = document.querySelector('.chrome-actions');
     if (!title || !menus) return;
     function fit() {
       title.classList.remove('crowded');
@@ -20,24 +20,81 @@
     if (document.fonts) document.fonts.ready.then(fit);
   })();
 
-  // The menu bar's access keys, as in the app: holding Alt underlines them, and Alt with the letter opens that page.
+  // The menu bar works as the app's does: a click (or Alt with a title's letter) drops a menu down, sliding across the
+  // titles while one is open switches menus, the arrow keys move through the items and across the menus, an item's letter
+  // follows it, and Escape or a click elsewhere closes it. Holding Alt underlines the letters.
   (function () {
     var chrome = document.querySelector('.chrome');
     if (!chrome) return;
-    var keys = {};
-    chrome.querySelectorAll('.menus a').forEach(function (a) {
-      var u = a.querySelector('u');
-      if (u) keys['Key' + u.textContent.toUpperCase()] = a;
-    });
+    var titles = [].slice.call(chrome.querySelectorAll('.menu-title'));
+    var current = null;
+    function key(el) {
+      var u = el.querySelector('u');
+      return u ? u.textContent.toLowerCase() : '';
+    }
+    function items(title) { return [].slice.call(document.getElementById(title.getAttribute('aria-controls')).querySelectorAll('a')); }
     function cues(on) { chrome.classList.toggle('cues', on); }
+    function close(refocus) {
+      if (!current) return;
+      var title = current;
+      current = null;
+      title.setAttribute('aria-expanded', 'false');
+      document.getElementById(title.getAttribute('aria-controls')).hidden = true;
+      cues(false);
+      if (refocus) title.focus();
+    }
+    function open(title, focusItem, keyboard) {
+      if (current && current !== title) close(false);
+      current = title;
+      title.setAttribute('aria-expanded', 'true');
+      var pop = document.getElementById(title.getAttribute('aria-controls'));
+      pop.hidden = false;
+      // A menu near the right edge (a long translation, a narrow phone) opens leftward so it stays on screen.
+      pop.style.left = '';
+      var over = pop.getBoundingClientRect().right - (document.documentElement.clientWidth - 4);
+      if (over > 0) pop.style.left = -over + 'px';
+      cues(!!keyboard);
+      if (focusItem) items(title)[0].focus();
+      else title.focus();
+    }
+    function step(list, el, by) { return list[(list.indexOf(el) + by + list.length) % list.length]; }
+    titles.forEach(function (title) {
+      title.addEventListener('click', function (e) {
+        if (current === title) close(false);
+        else open(title, e.detail === 0, e.detail === 0);
+      });
+      title.addEventListener('pointerenter', function () { if (current && current !== title) open(title, false, false); });
+      title.addEventListener('keydown', function (e) {
+        if (current) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); open(title, true, true); }
+        else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); step(titles, title, e.key === 'ArrowRight' ? 1 : -1).focus(); }
+      });
+    });
+    chrome.addEventListener('keydown', function (e) {
+      if (!current || e.altKey || e.ctrlKey || e.metaKey) return;
+      var list = items(current);
+      var at = document.activeElement;
+      if (e.key === 'Escape') { e.preventDefault(); close(true); }
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); step(list, list.indexOf(at) < 0 ? list[e.key === 'ArrowDown' ? list.length - 1 : 0] : at, e.key === 'ArrowDown' ? 1 : -1).focus(); }
+      else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); open(step(titles, current, e.key === 'ArrowRight' ? 1 : -1), true, true); }
+      else if (e.key === 'Tab') close(false);
+      else if (e.key.length === 1) {
+        var hit = list.filter(function (a) { return key(a) === e.key.toLowerCase(); })[0];
+        if (hit) { e.preventDefault(); location.href = hit.href; }
+      }
+    });
+    document.addEventListener('pointerdown', function (e) { if (current && !e.target.closest('.menu')) close(false); });
     addEventListener('keydown', function (e) {
       if (e.key === 'Alt') return cues(true);
-      if (!e.altKey || e.ctrlKey || e.metaKey || !keys[e.code]) return;
+      if (!e.altKey || e.ctrlKey || e.metaKey || !/^Key[A-Z]$/.test(e.code)) return;
+      var letter = e.code.slice(3).toLowerCase();
+      var title = titles.filter(function (t) { return key(t) === letter || key(t) === e.key.toLowerCase(); })[0];
+      if (!title) return;
       e.preventDefault();
-      location.href = keys[e.code].href;
+      open(title, true, true);
     });
-    addEventListener('keyup', function (e) { if (e.key === 'Alt') cues(false); });
-    addEventListener('blur', function () { cues(false); });
+    addEventListener('keyup', function (e) { if (e.key === 'Alt' && !current) cues(false); });
+    addEventListener('blur', function () { if (!current) cues(false); });
   })();
 
   // The editor picture: choosing a file in its sidebar (or, on a phone, a tab) shows how the editor looks for that kind of

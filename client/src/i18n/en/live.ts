@@ -59,6 +59,7 @@ export const live = {
   'live.error.unsupported': "{source} can’t be shown in a live block.",
   'live.error.script': "{source} could not run: {detail}",
   'live.error.notAllowed': "{source} is not allowed to read what it asked for: {detail}",
+  'live.error.blocked': "{source} needs more room: {detail} isn’t empty, so it keeps its last result. Clear the cells it would grow into.",
   'live.script.wholeVault': "the whole vault",
   'live.script.daily': "Runs every day at {time}",
   'live.script.weekly': "Runs every {day} at {time}",

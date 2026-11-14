@@ -2842,7 +2842,7 @@ async function updateLinks(before: ReturnType<typeof placedDocs>, after: ReturnT
   let skipped = 0;
   for (const [key, renames] of plan) {
     const entry = library.entries.find((e) => e.key === key);
-    const result = entry && entry.state !== 'conflict' ? await updateLinksIn(entry, renames) : 'skipped';
+    const result = entry && entry.state !== 'conflict' ? await updateLinksIn(entry, renames).catch(() => 'skipped' as const) : 'skipped'; // one that can't be read leaves the others to do
     if (result === 'updated') updated++;
     else if (result === 'skipped') skipped++;
   }
@@ -2942,6 +2942,9 @@ function retryRoomUpdate(key: string): void {
 /** The documents live blocks are kept in: this device's copies, and the account's (downloaded when one is updated). */
 const liveDocuments = (): LibraryEntry[] => library.entries.filter((e) => e.local || e.cloud);
 
+/** The `updatedAt` of the copy each live update read, by document key (-1 for none). */
+const liveReadFrom = new Map<string, number>();
+
 const liveKeeper: LiveKeeper<LibraryEntry> = new LiveKeeper<LibraryEntry>({
   entries: liveDocuments,
   async links() {
@@ -2961,7 +2964,15 @@ const liveKeeper: LiveKeeper<LibraryEntry> = new LiveKeeper<LibraryEntry>({
   // The open document while it is edited together: as it is in the room now, not as last saved, with how many changes it had
   // had then (an update made from it goes in only if nothing changed since).
   async read(entry) {
-    if (!(isOpenEntry(entry) && current.room?.mode === 'shared')) return storedBytes(entry);
+    if (!(isOpenEntry(entry) && current.room?.mode === 'shared')) {
+      // Which save of this device's copy the update is made from: it is written only over that same save (see `write`).
+      if (entry.local && !opensFromCloud(entry)) {
+        const saved = await getSaved(entry.local.id).catch(() => null);
+        liveReadFrom.set(entry.key, saved?.info.updatedAt ?? -1);
+        if (saved) return saved.bytes;
+      }
+      return storedBytes(entry);
+    }
     const doc = current;
     const snapshot = await worker.snapshot().catch(() => null);
     if (!snapshot || current !== doc) return null;
@@ -3007,6 +3018,11 @@ const liveKeeper: LiveKeeper<LibraryEntry> = new LiveKeeper<LibraryEntry>({
     }
     // Edited here meanwhile, or edited with others: left for the next check (on open, or the next save of its source).
     if (!entry.local || entry.state === 'conflict' || (isOpen && (current.unsavedSince > 0 || current.shared || (current.room && current.room.mode !== 'solo')))) return false;
+    // Saved since the update read it (typing in the open document, autosaved; a sync): its blocks are updated from that next time,
+    // rather than this copy, made from the one before, replacing it.
+    const readFrom = liveReadFrom.get(entry.key);
+    liveReadFrom.delete(entry.key);
+    if (readFrom === undefined || (await getSaved(entry.local.id).catch(() => null))?.info.updatedAt !== readFrom) return false;
     const info = await saveSaved({ id: entry.local.id, name: entry.name, bytes, owner: account?.id });
     library.putLocal(info);
     if (account) scheduleUpload(info.id);
@@ -3061,10 +3077,11 @@ const backgroundLive = new BackgroundLive<LibraryEntry>({
   },
   // The open document is left alone: it is updated as it always was, when opened and when its sources are saved here.
   entries: () => liveDocuments().filter((e) => e.cloud),
-  // Unless it is edited together and this session updates it for the owner: no one else would.
-  dependents: async (keys) => (await liveKeeper.dependentsOfKeys(keys)).filter((e) => !isOpenEntry(e) || (current.room?.mode === 'shared' && current.room.liveUpdater)),
+  // Unless it is edited together and this session updates it for the owner: no one else would. Otherwise it is left deferred,
+  // so it is updated once it is closed, here or on another device.
+  dependents: (keys) => liveKeeper.dependentsOfKeys(keys),
   sources: (entry) => liveKeeper.sourcesOf(entry),
-  update: (entry) => liveKeeper.outcome(entry.key),
+  update: async (entry) => (isOpenEntry(entry) && !(current.room?.mode === 'shared' && current.room.liveUpdater) ? 'notNow' : liveKeeper.outcome(entry.key)),
   limit: liveLimitBytes,
   idle: () =>
     new Promise<void>((resolve) => {
@@ -3258,7 +3275,8 @@ const scriptsApp: ScriptsApp = new ScriptsApp({
     // With no account the vault is on this computer only: nothing to share the run with.
     if (!account) return true;
     const response = await fetch('/api/script-claims', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ run, device: scriptState.device(), ...(done && { done }) }) });
-    if (!response.ok) return false;
+    // No answer (offline, a server error): thrown, so the run is asked about again on the next tick.
+    if (!response.ok) throw new Error(`claim: ${response.status}`);
     return done || ((await response.json()) as { claimed?: boolean }).claimed === true;
   },
   ask: (path, meta) => askToRun(path, meta),

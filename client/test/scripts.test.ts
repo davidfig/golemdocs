@@ -276,3 +276,64 @@ test('an action fails, writing nothing, when its note changes again during the s
   assert.match(log.errors.join(), /Inbox\/a\.md changed while Stamp ran/);
   assert.doesNotMatch(new TextDecoder().decode(stored.get('Inbox/a.md')!), /stamped/);
 });
+
+test('an action’s own save is known as its own, even when the store reports it before it returns', async () => {
+  // The app's store reports the save (sourceSaved → saved) before it returns the key: the action must not start itself again.
+  const { host } = memoryHost({ 'Scripts/stamp.ts': APPEND, 'Inbox/a.md': 'first\n' });
+  const store = host.store;
+  host.store = async (path, bytes, key) => {
+    const k = await store(path, bytes, key);
+    app.saved(k);
+    return k;
+  };
+  const app = new ScriptsApp(host, nodeChannel);
+  const run = await app.act('Scripts/stamp.ts', 'hand');
+  assert.equal(run?.ok, true);
+  const inside = app as unknown as { changedKeys: Map<string, number>; writtenBy: Map<string, unknown>; changedTimer: ReturnType<typeof setTimeout> | null };
+  clearTimeout(inside.changedTimer!);
+  assert.equal(inside.changedKeys.get('Inbox/a.md'), 1);
+  assert.equal(inside.changedKeys.get('Inbox/a.md\u0000Scripts/stamp.ts'), -1);
+  assert.equal(inside.writtenBy.size, 0);
+});
+
+test('Undo This Run keeps what would put back a file that changed since, and counts the run undone only when all went back', async () => {
+  const { host, stored } = memoryHost({ 'Scripts/stamp.ts': APPEND, 'Inbox/a.md': 'first\n' });
+  const app = new ScriptsApp(host, nodeChannel);
+  const run = (await app.act('Scripts/stamp.ts', 'hand'))!;
+  const after = stored.get('Inbox/a.md')!;
+  stored.set('Inbox/a.md', new TextEncoder().encode('changed by hand\n'));
+  await assert.rejects(app.undo(run));
+  assert.ok(app.canUndo(run));
+  stored.set('Inbox/a.md', after);
+  await app.undo(run);
+  assert.equal(new TextDecoder().decode(stored.get('Inbox/a.md')!), 'first\n');
+  assert.ok(!app.canUndo(run));
+});
+
+import { scriptState } from '../src/scripts/state.ts';
+import { grantOf } from '../src/scripts/runner.ts';
+
+test('a scheduled run whose claim got no answer is asked about again on the next tick', async () => {
+  // Script state is kept in browser storage: one in memory, for this test.
+  const g = globalThis as { localStorage?: Storage };
+  if (!g.localStorage?.setItem) {
+    const items = new Map<string, string>();
+    g.localStorage = { getItem: (k: string) => items.get(k) ?? null, setItem: (k: string, v: string) => void items.set(k, v), removeItem: (k: string) => void items.delete(k), clear: () => items.clear(), key: () => null, length: 0 } as Storage;
+  }
+  const DAILY = "export const meta = { name: 'Daily', writes: ['Inbox/'], trigger: { daily: '06:00' } };\nexport default async ({ open }) => { (await open('Inbox/a.md')).append('ran'); };";
+  const { host, stored } = memoryHost({ 'Scripts/daily.ts': DAILY, 'Inbox/a.md': 'first\n' });
+  const answers: (boolean | 'offline')[] = ['offline', true, true];
+  host.claim = async () => {
+    const next = answers.shift();
+    if (next === 'offline') throw new Error('offline');
+    return next ?? true;
+  };
+  const app = new ScriptsApp(host, nodeChannel);
+  const meta = readMeta({ name: 'Daily', writes: ['Inbox/'], trigger: { daily: '06:00' } }, 'Scripts/daily.ts');
+  scriptState.grants.set('Scripts/daily.ts', grantOf(meta));
+  await app.tick(new Date(2026, 10, 13, 7, 0)); // first look: from the next one on
+  await app.tick(new Date(2026, 10, 14, 7, 0)); // due, claim gets no answer
+  assert.doesNotMatch(new TextDecoder().decode(stored.get('Inbox/a.md')!), /ran/);
+  await app.tick(new Date(2026, 10, 14, 7, 1)); // asked again: runs
+  assert.match((await markdownOf(stored.get('Inbox/a.md')!, 'a.md')).text, /ran/);
+});

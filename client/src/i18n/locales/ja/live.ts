@@ -60,6 +60,7 @@ export const live: Partial<Messages> = {
   'live.error.unsupported': "{source} はライブブロックに表示できません。",
   'live.error.script': "{source} を実行できませんでした: {detail}",
   'live.error.notAllowed': "{source} は要求したものを読み取る許可がありません: {detail}",
+  'live.error.blocked': "{source} にはもっと場所が必要です。{detail} が空でないため、前回の結果のままです。広がる先のセルを空にしてください。",
   'live.script.wholeVault': "保管庫全体",
   'live.script.daily': "毎日 {time} に実行",
   'live.script.weekly': "毎週{day}の {time} に実行",

@@ -335,7 +335,7 @@ test.describe('a cloud PDF in a room', () => {
 });
 
 test.describe('a cloud picture in a room', () => {
-  test('shapes drawn on whichever device holds it appear on the other, and the account’s copy keeps the picture with the shapes as its layers', async ({ browser }) => {
+  test('shapes drawn on whichever device holds it appear on the other, and the account’s copy keeps the picture with the shapes as its layers', { tag: '@heavy' }, async ({ browser }) => {
     const a = await newPerson(browser, 'picture');
     await a.page.goto('/?doc=welcome');
     await openPicture(a.app, makePng(400, 300, () => [255, 255, 255, 255]));

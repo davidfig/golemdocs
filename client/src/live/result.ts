@@ -25,7 +25,7 @@ export type LiveResult =
   | { kind: 'error'; code: LiveError; detail?: string };
 
 /** Why a block could not be updated. */
-export type LiveError = 'unreadable' | 'empty' | 'noTable' | 'notRange' | 'notFound' | 'notSheet' | 'missing' | 'cycle' | 'unsupported' | 'script' | 'notAllowed';
+export type LiveError = 'unreadable' | 'empty' | 'noTable' | 'notRange' | 'notFound' | 'notSheet' | 'missing' | 'cycle' | 'unsupported' | 'script' | 'notAllowed' | 'blocked';
 
 const HAIRLINE: Border = { val: 'single', sz: 4, space: 0, color: 'BFBFBF' };
 const EMU_PER_PIXEL = 9525;

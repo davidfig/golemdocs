@@ -219,3 +219,52 @@ test('a script’s meta is read as folders and a trigger', () => {
   assert.ok(!within('Bookshelf/x.md', ['Books']));
   assert.ok(within('anything.md', ['']));
 });
+
+test('a script is answered and its result taken only once it is allowed, and it cannot ask for more while it runs', async () => {
+  // Its own code runs in the runtime's worker, so it can post messages itself: before the person says yes, or a second meta.
+  const post = "const post = async (m: any) => { if (typeof postMessage === 'function') postMessage(m); else (await import('node:' + 'worker_threads')).parentPort!.postMessage(m); };";
+  const early = `export const meta = { writes: ['/'] };\n${post}\nsetTimeout(() => post({ type: 'request', id: 999, op: 'read', args: ['Secret/x.md'] }), 0);\nexport default () => 1;`;
+  let served = 0;
+  await assert.rejects(
+    run({ 'Scripts/early.ts': early }, 'Scripts/early.ts', { mode: 'act', approve: () => new Promise((r) => setTimeout(() => r('no'), 300)), request: async () => void served++ }),
+    (e: unknown) => e instanceof ScriptRunError && e.code === 'invalid',
+  );
+  assert.equal(served, 0);
+  const done = `export const meta = { writes: ['/'] };\n${post}\nsetTimeout(() => post({ type: 'done', result: null, edits: [{ path: 'Diary/x.md', create: true, ops: [] }] }), 0);\nexport default () => 1;`;
+  await assert.rejects(run({ 'Scripts/done.ts': done }, 'Scripts/done.ts', { mode: 'act', approve: () => new Promise((r) => setTimeout(() => r(true), 300)) }), (e: unknown) => e instanceof ScriptRunError && e.code === 'invalid');
+  const widen = `export const meta = { writes: ['Inbox/'] };\n${post}\nexport default async () => { await post({ type: 'meta', meta: { writes: ['/'] } }); await new Promise(() => {}); };`;
+  await assert.rejects(run({ 'Scripts/widen.ts': widen }, 'Scripts/widen.ts', { mode: 'act' }), (e: unknown) => e instanceof ScriptRunError && e.code === 'invalid' && /asked for more/.test(e.message));
+});
+
+test('the time limit does not count the time spent deciding, and many requests at once wait their turn', async () => {
+  const outcome = await run({ 'Scripts/a.ts': "export default async ({ read }: any) => (await Promise.all(Array.from({ length: 50 }, (_, i) => read(`n${i}.md`)))).length;" }, 'Scripts/a.ts', {
+    timeoutMs: 1_000,
+    approve: () => new Promise((r) => setTimeout(() => r(true), 1_200)),
+    request: async () => ({ path: 'x', title: 'x', text: '', fields: {} }),
+  });
+  assert.deepEqual(outcome.result, { kind: 'value', text: '50' });
+});
+
+test('a path with . or .. parts is inside no folder', () => {
+  assert.ok(!within('Books/../Private/Budget.xlsx', ['Books']));
+  assert.ok(!within('Books/./x.md', ['Books']));
+  assert.ok(!within('Books//x.md', ['Books']));
+  assert.ok(!within('../x.md', ['']));
+  assert.ok(within('Books/x..y.md', ['Books']));
+});
+
+test('a producer cannot keep the clock from its top-level code, reach the real Date, or read the time and randomness another way', async () => {
+  const tries = {
+    'Scripts/top.ts': 'const now = Date.now;\nexport default () => now();',
+    'Scripts/proto.ts': 'export default () => new (Object.getPrototypeOf(Date))().getTime();',
+    'Scripts/ctor.ts': 'export default () => new (new Date(0).constructor as any)().getTime();',
+    'Scripts/intl.ts': 'export default () => new Intl.DateTimeFormat().format();',
+    'Scripts/origin.ts': 'export default () => performance.timeOrigin;',
+    'Scripts/uuid.ts': 'export default () => crypto.randomUUID();',
+  };
+  for (const name of Object.keys(tries)) await assert.rejects(run(tries, name), (e: unknown) => e instanceof ScriptRunError && e.code === 'failed', name);
+  const ok = { 'Scripts/ok.ts': "export default ({ value }: any) => value([new Date(0).toISOString(), Date.UTC(2026, 0, 1), crypto.getRandomValues(new Uint8Array(2)).join(',')].join('|'));" };
+  const [a, b] = [await run(ok, 'Scripts/ok.ts'), await run(ok, 'Scripts/ok.ts')];
+  assert.match((a.result as { text: string }).text, /^1970-01-01T00:00:00\.000Z\|1767225600000\|\d+,\d+$/);
+  assert.deepEqual(a.result, b.result);
+});

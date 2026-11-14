@@ -5,7 +5,7 @@
 import type { WordDocument } from '../docx/document.ts';
 import { StyleResolver } from '../model/resolve.ts';
 import type { Block, Paragraph } from '../model/types.ts';
-import { docLinkTitles, liveInlineTitles, liveTitle, sdtTag, textLinkTitles, textLiveTitles } from '../search/links.ts';
+import { docLinkTitles, liveInlineTitles, linkTitle, liveTitle, sdtTag, textLinkTitles, textLiveTitles } from '../search/links.ts';
 import { OBJECT_CHAR, paragraphText, paragraphsIn } from './text.ts';
 
 /** One paragraph of a document, as plain text. */
@@ -44,7 +44,7 @@ export function paragraphSegments(doc: WordDocument): Segment[] {
     const block = liveLinks.get(p);
     const inline = liveInlineTitles(p);
     const live = block ? [...new Set([block, ...inline])] : inline;
-    const links = block ? [...new Set([block, ...docLinkTitles(p)])] : docLinkTitles(p);
+    const links = block ? [...new Set([linkTitle(block), ...docLinkTitles(p)])] : docLinkTitles(p);
     return {
       ...(named && !/^normal$/i.test(named) && { style: named }),
       text: paragraphText(p).replaceAll(OBJECT_CHAR, '[object]'),

@@ -36,7 +36,7 @@ export interface ScriptsHost {
   fetch(url: string, init: ScriptFetch): Promise<ScriptResponse>;
   /** Removes a document an undone run made. */
   remove(key: string): Promise<void>;
-  /** Claims a scheduled run for this device (true: run it), or marks it done. */
+  /** Claims a scheduled run for this device (true: run it; false: another has it), or marks it done. Throws when it got no answer. */
   claim(run: string, done: boolean): Promise<boolean>;
   /** Asks whether a script may run as it asks to; null when the person says no. */
   ask(path: string, meta: ScriptMeta): Promise<'once' | 'always' | null>;
@@ -103,6 +103,8 @@ export class ScriptsApp {
   private readonly metas = new Map<string, { hash: number; meta: ScriptMeta | null; error?: string }>();
   /** Documents an action just wrote, and how far down a chain it was: their saves don't start it again. */
   private readonly writtenBy = new Map<string, { script: string; depth: number }>();
+  /** While an action's file is being stored: the saves reported meanwhile (see `storeFor`). */
+  private storing: string[] | null = null;
   private changedKeys = new Map<string, number>();
   private changedTimer: ReturnType<typeof setTimeout> | null = null;
   private ticking: ReturnType<typeof setInterval> | null = null;
@@ -256,10 +258,7 @@ export class ScriptsApp {
         if (changed) throw new Error(`${changed} changed while ${outcome.meta.name} ran`);
       }
       files = outcome.files;
-      for (const file of files) {
-        const key = await this.host.store(file.path, file.after, this.find(file.path)?.key ?? null);
-        this.writtenBy.set(key, { script: p, depth });
-      }
+      for (const file of files) await this.storeFor(p, depth, file.path, file.after);
       const { run } = scriptState.ran({ path: p, name: outcome.meta.name, by, ok: true, ...(outcome.message && { message: outcome.message }), changed: files.map((f) => ({ path: f.path, made: f.before === null })) }, files);
       if (interactive || files.length) this.host.status(this.host.say.ran(outcome.meta.name, files.length, outcome.message));
       return run;
@@ -274,6 +273,27 @@ export class ScriptsApp {
       const { run, paused } = scriptState.ran({ path: p, name, by, ok: false, message });
       this.host.error(paused ? this.host.say.paused(name) : this.host.say.failed(name, message));
       return run;
+    }
+  }
+
+  /**
+   * Stores a file an action wrote, marked as that action's. The store reports the save (`saved`) before it returns the
+   * document's key, so saves reported meanwhile wait until the key is known: otherwise the action's own save would look like
+   * anyone's, start it again and never count toward `MAX_CHAIN`.
+   */
+  private async storeFor(script: string, depth: number, path: string, bytes: Uint8Array): Promise<string> {
+    this.storing = [];
+    let key: string | null = null;
+    try {
+      key = await this.host.store(path, bytes, this.find(path)?.key ?? null);
+      this.writtenBy.set(key, { script, depth });
+      return key;
+    } finally {
+      const waiting = this.storing;
+      this.storing = null;
+      for (const k of waiting) this.saved(k);
+      // Not reported by the store (a host that doesn't): no mark left behind for another save to use up.
+      if (key !== null && !waiting.includes(key)) this.writtenBy.delete(key);
     }
   }
 
@@ -301,8 +321,10 @@ export class ScriptsApp {
       }
       if (before) await this.host.store(path, before, doc.key);
       else await this.host.remove(doc.key);
+      kept.delete(path);
     }
-    scriptState.undone(run.id);
+    // Only a run whose every file went back counts as undone; the files changed since keep what would put them back.
+    if (!kept.size) scriptState.undone(run.id);
     if (skipped.length) throw new Error(skipped.map((p) => this.host.say.undoChanged(p)).join(' '));
     this.host.status(this.host.say.undone(run.name));
   }
@@ -315,6 +337,10 @@ export class ScriptsApp {
 
   /** A document was saved (here, or synced from elsewhere): actions watching its folder run once things settle. */
   saved(key: string): void {
+    if (this.storing) {
+      this.storing.push(key);
+      return;
+    }
     const by = this.writtenBy.get(key);
     this.writtenBy.delete(key);
     this.changedKeys.set(key, Math.max(this.changedKeys.get(key) ?? 0, by ? by.depth + 1 : 0));
@@ -369,8 +395,11 @@ export class ScriptsApp {
         continue;
       }
       if (last === id) continue;
+      // Claimed by a device, this one or another: settled. With no answer it stays due, for the next tick.
+      const claimed = await this.host.claim(id, false).catch(() => null);
+      if (claimed === null) continue;
       scriptState.setScheduled(path, id);
-      if (!(await this.host.claim(id, false).catch(() => false))) continue;
+      if (!claimed) continue;
       await this.act(path, 'schedule');
       await this.host.claim(id, true).catch(() => undefined);
     }

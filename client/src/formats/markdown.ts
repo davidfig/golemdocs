@@ -55,6 +55,7 @@ import type {
   Table,
   TableCell,
   TableRow,
+  Wrapper,
 } from '@golemdocs/docx';
 
 import { commentMarker, commentThreads, RangeTracker } from './commentRanges.ts';
@@ -62,7 +63,8 @@ import { MONO_FONTS, styleFor, TASK_GLYPHS } from './markdownStyles.ts';
 import { EMBED_PREFIX, EMBED_STYLE, embedPlaceholder, embedTag, placeholderBody } from './embedMarks.ts';
 import { readWikiLink, wikiLinkText } from './wikiLinks.ts';
 import { isLiveSourceName, liveTag, liveWrapper } from '../live/liveMarks.ts';
-import { LIVE_CLOSE, liveClose, liveOpen, liveOpenTag, splitLiveInline } from '../live/markdownMarks.ts';
+import { LIVE_CLOSE, liveClose, liveOpen, liveOpenAt, liveOpenTag } from '../live/markdownMarks.ts';
+import type { LiveTag } from '../live/liveMarks.ts';
 import { normalizeTag, parseTagAddress, readTag, tagAddress } from '@golemdocs/docx';
 
 const MAX_DEPTH = 24;
@@ -99,7 +101,9 @@ function appendText(content: RunContent[], text: string): void {
 // --- Inline parsing ------------------------------------------------------------------------------
 
 interface INode {
-  t: 'text' | 'code' | 'delim' | 'br' | 'image' | 'math' | 'cstart' | 'cend';
+  t: 'text' | 'code' | 'delim' | 'br' | 'image' | 'math' | 'cstart' | 'cend' | 'lopen' | 'lclose';
+  /** A live value's tag, for its opening marker (`s` is the marker as written, its text if it turns out unpaired). */
+  live?: LiveTag;
   /** Comment ids, for a comment range's start or end. */
   c?: string[];
   s: string;
@@ -776,6 +780,19 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>,
         break;
       }
       case '<': {
+        // A live value's markers (docs/live-blocks.md §4). Only here, so not in a code span and not escaped.
+        if (text.startsWith('<!-- ', p)) {
+          const open = liveOpenAt(text, p);
+          if (open || text.startsWith(LIVE_CLOSE, p)) {
+            flush();
+            const end = open ? open.end : p + LIVE_CLOSE.length;
+            const node = mk(open ? 'lopen' : 'lclose', text.slice(p, end));
+            if (open) node.live = open.tag;
+            nodes.push(node);
+            p = end;
+            break;
+          }
+        }
         BR_TAG.lastIndex = p;
         if (BR_TAG.exec(text)) {
           flush();
@@ -825,7 +842,33 @@ function parseInline(text: string, refs: Map<string, string>, used: Set<string>,
   processEmphasis(null);
   // Delimiters that matched (fully or partly) keep only their unused characters as literal text.
   for (const d of allDelims) d.ref.s = d.ch.repeat(d.n);
+  pairLiveMarkers(nodes);
   return nodesToInlines(nodes, used);
+}
+
+/**
+ * Pairs each live value's opening marker with the next closing one. A pair must nest with links: both outside any link (a
+ * link may sit between them), or both in the same link's text with only that link's text between. Any other marker is text.
+ */
+function pairLiveMarkers(nodes: INode[]): void {
+  let open = -1;
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (node.t === 'lopen') {
+      if (open >= 0) nodes[open].t = 'text';
+      open = i;
+    } else if (node.t === 'lclose') {
+      const link = open >= 0 ? nodes[open].link : undefined;
+      let ok = open >= 0 && node.link === link;
+      for (let k = open + 1; ok && link !== undefined && k < i; k++) ok = nodes[k].link === link && !nodes[k].embed;
+      if (!ok) {
+        if (open >= 0) nodes[open].t = 'text';
+        node.t = 'text';
+      }
+      open = -1;
+    }
+  }
+  if (open >= 0) nodes[open].t = 'text';
 }
 
 function nodesToInlines(nodes: INode[], used: Set<string>): Inline[] {
@@ -833,14 +876,29 @@ function nodesToInlines(nodes: INode[], used: Set<string>): Inline[] {
   let bold = 0;
   let italic = 0;
   let strike = 0;
-  const st: { link: Hyperlink | null; url: string | undefined; title: string | undefined; dest: string | undefined; run: Run | null; key: string } = {
+  const st: {
+    link: Hyperlink | null;
+    url: string | undefined;
+    title: string | undefined;
+    dest: string | undefined;
+    run: Run | null;
+    key: string;
+    // The live value being read, and the link it is in (null: it is outside links, and may hold some).
+    live: Wrapper<Inline> | null;
+    liveLink: Hyperlink | null;
+  } = {
     link: null,
     url: undefined,
     title: undefined,
     dest: undefined,
     run: null,
     key: '',
+    live: null,
+    liveLink: null,
   };
+  // Where a new link goes, and where new inlines go.
+  const outer = (): Inline[] => (st.live && !st.liveLink ? st.live.children : out);
+  const holder = (): Inline[] => (st.live && st.liveLink === st.link ? st.live.children : st.link ? st.link.children : out);
 
   // A link's title is kept as the hyperlink's tooltip (what Word shows over it, too), and its destination
   // as written, so saving the file doesn't rewrite it.
@@ -854,7 +912,7 @@ function nodesToInlines(nodes: INode[], used: Set<string>): Inline[] {
     else {
       st.link = { kind: 'hyperlink', url, children: [], attrs: title === undefined ? {} : { 'w:tooltip': title } };
       if (dest !== undefined && dest !== formatDest(url)) st.link.markdownDest = dest;
-      out.push(st.link);
+      outer().push(st.link);
     }
   };
 
@@ -876,7 +934,7 @@ function nodesToInlines(nodes: INode[], used: Set<string>): Inline[] {
     const run = newRun(props, []);
     st.run = run;
     st.key = key;
-    (st.link ? st.link.children : out).push(run);
+    holder().push(run);
     return run;
   };
 
@@ -891,17 +949,28 @@ function nodesToInlines(nodes: INode[], used: Set<string>): Inline[] {
     if (node.t === 'cstart' || node.t === 'cend') {
       setLink(node.link, node.linkTitle, node.linkDest);
       st.run = null;
-      const target = st.link ? st.link.children : out;
+      const target = holder();
       for (const id of node.c!) {
         if (node.t === 'cstart') target.push(commentStart(id));
         else target.push(commentEnd(id), commentReference(id));
       }
       continue;
     }
+    if (node.t === 'lopen' || node.t === 'lclose') {
+      setLink(node.link, node.linkTitle, node.linkDest);
+      st.run = null;
+      if (node.t === 'lopen') {
+        const live = liveWrapper<Inline>(node.live!, []);
+        holder().push(live);
+        st.live = live;
+        st.liveLink = st.link;
+      } else st.live = null;
+      continue;
+    }
     if (node.t === 'math') {
       setLink(node.link, node.linkTitle, node.linkDest);
       st.run = null;
-      (st.link ? st.link.children : out).push(mathInline(parseLatex(node.s, node.url === 'display').equation));
+      holder().push(mathInline(parseLatex(node.s, node.url === 'display').equation));
       continue;
     }
     if (node.t === 'image' && node.link === undefined) {
@@ -1284,11 +1353,7 @@ class Builder {
   /** Runs the deferred inline parsing (it needs every link definition, so it waits for the block pass). */
   finish(): void {
     const add = (blocks: CriticBlock[]): string[] => this.addComments(blocks);
-    // A live value inside a sentence (`<!-- golem:live Budget.xlsx#Total stamp=… -->$4,210<!-- /golem:live -->`) is read apart
-    // from the text around it and kept as an inline content control.
-    for (const { p, text } of this.pending) {
-      p.children = splitLiveInline(text).flatMap((part) => (typeof part === 'string' ? parseInline(part, this.refs, this.used, add) : [liveWrapper(part.tag, parseInline(part.text, this.refs, this.used, add))]));
-    }
+    for (const { p, text } of this.pending) p.children = parseInline(text, this.refs, this.used, add);
   }
 
   /** Adds the styles the document ended up using. */
@@ -1329,8 +1394,18 @@ function parseBlocks(b: Builder, lines: string[], ctx: Ctx, out: Block[]): void 
     // A live block (docs/live-blocks.md §4): its result between comment markers, kept as a content control.
     const live = liveOpenTag(line);
     if (live) {
+      // Its close is the first closing marker line outside fenced code (a marker shown in a code block is text).
       let j = i + 1;
-      while (j < n && !liveClose(lines[j]) && !liveOpenTag(lines[j])) j++;
+      let fence: Fence | null = null;
+      for (; j < n; j++) {
+        if (fence) {
+          if (fenceEnds(lines[j], fence)) fence = null;
+          continue;
+        }
+        if (liveClose(lines[j]) || liveOpenTag(lines[j])) break;
+        const at = leading(lines[j]);
+        fence = fenceStart(lines[j], at.cols, at.idx);
+      }
       if (j < n && liveClose(lines[j])) {
         const inner: Block[] = [];
         parseBlocks(b, lines.slice(i + 1, j), ctx, inner);
@@ -2223,9 +2298,10 @@ class Exporter {
           }
           case 'wrapper': {
             const live = liveTag(inline);
-            if (live) segs.push({ text: liveOpen(live), ...plainFmt, raw: true });
+            // Inside a link's text the markers are part of the link, so it is written (and read back) as one link.
+            if (live) segs.push({ text: liveOpen(live), ...plainFmt, raw: true, link, title, dest });
             walk(inline.children, link, title, dest);
-            if (live) segs.push({ text: LIVE_CLOSE, ...plainFmt, raw: true });
+            if (live) segs.push({ text: LIVE_CLOSE, ...plainFmt, raw: true, link, title, dest });
             break;
           }
           case 'raw':

@@ -60,6 +60,7 @@ export const live: Partial<Messages> = {
   'live.error.unsupported': "{source} нельзя показать в динамическом блоке.",
   'live.error.script': "Не удалось выполнить {source}: {detail}",
   'live.error.notAllowed': "{source} не может читать то, что запросил: {detail}",
+  'live.error.blocked': "{source} нужно больше места: ячейка {detail} не пуста, поэтому остаётся прежний результат. Очистите ячейки, куда он должен расшириться.",
   'live.script.wholeVault': "всё хранилище",
   'live.script.daily': "Запускается каждый день в {time}",
   'live.script.weekly': "Запускается каждый {day} в {time}",

@@ -10,7 +10,7 @@ import { documentToMarkdown, markdownToDocument } from '../formats/markdown.ts';
 import type { LiveResult } from '../live/result.ts';
 import { frontMatterField, readStoredText } from '../live/textSource.ts';
 import type { StoredText } from '../live/textSource.ts';
-import { normalizeFolder, within } from '@golemdocs/script/host';
+import { normalizeFolder, plainPath, within } from '@golemdocs/script/host';
 import type { ScriptMeta } from '@golemdocs/script/host';
 import { isScriptPath } from '@golemdocs/script/link';
 import type { RunMode, ScriptEdit, ScriptEditOp } from '@golemdocs/script/runtime';
@@ -128,7 +128,7 @@ export class ScriptRequests {
       }
       case 'result': {
         const path = normalizeFolder(arg);
-        if (!isScriptPath(path)) throw new Error(`${path} is not a script`);
+        if (!isScriptPath(path) || !plainPath(path)) throw new Error(`${path} is not a script`);
         this.read.add(path);
         return plainResult(await this.vault.produce(path));
       }

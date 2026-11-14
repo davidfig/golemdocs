@@ -60,6 +60,7 @@ export const live: Partial<Messages> = {
   'live.error.unsupported': "{source} 无法显示在实时块中。",
   'live.error.script': "{source} 无法运行：{detail}",
   'live.error.notAllowed': "{source} 无权读取它请求的内容：{detail}",
+  'live.error.blocked': "{source} 需要更多空间：{detail} 不为空，因此保留上次的结果。请清空它要扩展到的单元格。",
   'live.script.wholeVault': "整个保管库",
   'live.script.daily': "每天 {time} 运行",
   'live.script.weekly': "每{day} {time} 运行",

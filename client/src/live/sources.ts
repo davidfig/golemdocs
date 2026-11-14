@@ -132,7 +132,10 @@ function fnv(bytes: Uint8Array, hash = 0x811c9dc5): number {
 export function stampOf(result: LiveResult): string {
   const encode = (s: string) => new TextEncoder().encode(s);
   let hash: number;
-  if (result.kind === 'picture') hash = fnv(encode(result.svg ?? ''), fnv(result.bytes));
+  // A drawing, chart or PDF page is stamped by its SVG and size: its picture is drawn on this device's canvas, which differs
+  // from one browser to the next, and stamping it would have each device rewrite the document. A picture file's bytes are
+  // the same everywhere.
+  if (result.kind === 'picture') hash = result.svg ? fnv(encode(`${result.width}x${result.height}\n${result.svg}`)) : fnv(result.bytes);
   else if (result.kind === 'blocks') {
     hash = fnv(encode(JSON.stringify(result.blocks)));
     for (const part of Object.keys(result.pictures).sort()) hash = fnv(result.pictures[part], fnv(encode(part), hash));

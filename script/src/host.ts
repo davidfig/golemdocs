@@ -53,9 +53,16 @@ const folderList = (value: unknown): string[] => {
 /** A folder as scripts write it (`Books/`, `/Books`, `Books`), as a vault path with no slashes at the ends; '' for the whole vault. */
 export const normalizeFolder = (folder: string): string => folder.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
 
-/** Whether a vault path is inside one of the folders (or is one). */
+/** Whether a vault path names a place plainly: no `.`, `..` or empty parts, which other code would resolve to somewhere else. */
+export const plainPath = (path: string): boolean => {
+  const p = normalizeFolder(path);
+  return p === '' || p.split('/').every((part) => part !== '' && part !== '.' && part !== '..');
+};
+
+/** Whether a vault path is inside one of the folders (or is one). A path with `.`, `..` or empty parts is in none. */
 export const within = (path: string, folders: readonly string[]): boolean => {
   const p = normalizeFolder(path);
+  if (!plainPath(p)) return false;
   return folders.some((f) => f === '' || p === f || p.startsWith(`${f}/`));
 };
 
@@ -116,12 +123,43 @@ export function errorPlace(stack: string | undefined): { path: string; line: num
   return m ? { path: m[1], line: Number(m[2]) } : null;
 }
 
+/** The most requests of a run answered at once; the others wait. */
+export const MAX_REQUESTS_IN_FLIGHT = 8;
+/** The most requests a run may have waiting: past it, the run fails. */
+export const MAX_REQUESTS_WAITING = 10_000;
+
 /** Runs a linked program on a channel; `path` names the script. */
 export function runOnChannel(channel: RuntimeChannel, path: string, options: RunOptions): Promise<RunOutcome> {
   return new Promise<RunOutcome>((resolve, reject) => {
     let meta: ScriptMeta | null = null;
+    // Set once the person (or the grant) has said yes. Nothing the script asks for is answered, and nothing it sends back is
+    // taken, before then: its own top-level code runs in the same worker as the runtime and can post messages itself.
+    let approved = false;
+    let inFlight = 0;
+    const waiting: { id: number; op: string; args: unknown[]; meta: ScriptMeta }[] = [];
+    const answerNext = (): void => {
+      while (!finished && inFlight < MAX_REQUESTS_IN_FLIGHT && waiting.length) {
+        const next = waiting.shift()!;
+        inFlight++;
+        void options
+          .request(next.op, next.args, next.meta)
+          .then(
+            (value) => {
+              if (!finished) channel.send({ type: 'reply', id: next.id, ok: true, value });
+            },
+            (e: unknown) => {
+              if (!finished) channel.send({ type: 'reply', id: next.id, ok: false, error: e instanceof Error ? e.message : String(e) });
+            },
+          )
+          .finally(() => {
+            inFlight--;
+            answerNext();
+          });
+      }
+    };
     let usesDate = false;
     let finished = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const finish = (error: ScriptRunError | null, outcome?: RunOutcome): void => {
       if (finished) return;
       finished = true;
@@ -130,44 +168,51 @@ export function runOnChannel(channel: RuntimeChannel, path: string, options: Run
       if (error) reject(error);
       else resolve(outcome!);
     };
-    const timer = setTimeout(() => finish(new ScriptRunError(`${path} took longer than ${Math.round(options.timeoutMs / 1000)} seconds`, 'timeout')), options.timeoutMs);
+    // The time limit covers loading and running, not the time the person takes to answer the prompt.
+    const startTimer = (): void => {
+      clearTimeout(timer);
+      timer = setTimeout(() => finish(new ScriptRunError(`${path} took longer than ${Math.round(options.timeoutMs / 1000)} seconds`, 'timeout')), options.timeoutMs);
+    };
+    startTimer();
     channel.listen(
       (message) => {
         if (finished) return;
         switch (message.type) {
           case 'meta': {
+            // One meta per run: a second could widen what the script asks for after it was allowed.
+            if (meta) return finish(new ScriptRunError(`${path} asked for more while it ran`, 'invalid'));
             try {
               meta = readMeta(message.meta, path);
             } catch (e) {
               return finish(new ScriptRunError((e as Error).message, 'invalid'));
             }
             if (options.mode === 'describe') return finish(null, { meta, result: null, edits: [], usesDate: false });
+            clearTimeout(timer);
             void options.approve(meta).then(
-              (ok) => (ok === true ? channel.send({ type: 'go' }) : finish(new ScriptRunError(ok, 'denied'))),
+              (ok) => {
+                if (finished) return;
+                if (ok !== true) return finish(new ScriptRunError(ok, 'denied'));
+                approved = true;
+                startTimer();
+                channel.send({ type: 'go' });
+              },
               (e: unknown) => finish(new ScriptRunError((e as Error).message, 'denied')),
             );
             return;
           }
           case 'request': {
-            if (!meta) return finish(new ScriptRunError('asked before it started', 'invalid'));
-            const current = meta;
-            void options
-              .request(message.op, message.args, current)
-              .then(
-                (value) => {
-                  if (!finished) channel.send({ type: 'reply', id: message.id, ok: true, value });
-                },
-                (e: unknown) => {
-                  if (!finished) channel.send({ type: 'reply', id: message.id, ok: false, error: e instanceof Error ? e.message : String(e) });
-                },
-              );
+            if (!meta || !approved) return finish(new ScriptRunError('asked before it started', 'invalid'));
+            // Each request reads documents on the page, so only a few are answered at a time; the rest wait their turn.
+            if (waiting.length >= MAX_REQUESTS_WAITING) return finish(new ScriptRunError(`${path} asked for more than ${MAX_REQUESTS_WAITING} things at once`, 'tooLarge'));
+            waiting.push({ id: message.id, op: message.op, args: message.args, meta });
+            answerNext();
             return;
           }
           case 'usesDate':
             usesDate = true;
             return;
           case 'done': {
-            if (!meta) return finish(new ScriptRunError('finished before it started', 'invalid'));
+            if (!meta || !approved) return finish(new ScriptRunError('finished before it started', 'invalid'));
             const size = JSON.stringify(message.result ?? null).length + JSON.stringify(message.edits ?? []).length;
             if (size > options.maxResultChars) return finish(new ScriptRunError(`${path} sent back more than the ${Math.round(options.maxResultChars / 1_000_000)} MB a run may`, 'tooLarge'));
             return finish(null, { meta, result: message.result, edits: Array.isArray(message.edits) ? message.edits : [], usesDate });

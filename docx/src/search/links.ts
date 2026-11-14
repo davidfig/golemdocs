@@ -32,6 +32,50 @@ export function sourceTitle(source: string): string {
   return (end < 0 ? source : source.slice(0, end)).trim();
 }
 
+/** A built-in count's address (`@count:Novel.docx?of=words`): what it counts is a document's title (or a folder's path). */
+const COUNT = /^(\s*@count:)([^?]*)/i;
+
+const decodeTarget = (s: string): string => {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+};
+
+/**
+ * The title a link (or a live block's source) names, as a rename sees it: the title `sourceTitle` gives, except that a built-in
+ * count names the document it counts (`@count:Novel.docx?of=words` → `Novel.docx`), so renaming the document rewrites the block.
+ * Other built-in blocks name a folder, not a document, so their whole address stands for them, as in `sourceTitle`.
+ */
+export function linkTitle(title: string): string {
+  const count = COUNT.exec(title);
+  return (count && decodeTarget(count[2]).trim()) || title;
+}
+
+/**
+ * A live block's source (`Budget.xlsx#Expenses stamp=…`, stamp optional) or an embed's address before its `|`, with the title it
+ * names (as `linkTitle` gives it) renamed by `renames`, the rest kept as it is; null when it names none of them.
+ */
+export function renamedSource(source: string, renames: ReadonlyMap<string, string>): string | null {
+  const stamp = / stamp=[0-9a-z]*$/.exec(source);
+  const body = stamp ? source.slice(0, stamp.index) : source;
+  const tail = stamp ? stamp[0] : '';
+  const count = COUNT.exec(body);
+  if (count) {
+    const next = renames.get(decodeTarget(count[2]).trim());
+    // Written as builtinAddress.ts writes a target: what would end it escaped.
+    const escaped = next?.replace(/[%&?=#|\]\[]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`);
+    return escaped ? `${count[1]}${escaped}${body.slice(count[0].length)}${tail}` : null;
+  }
+  if (/^\s*@/.test(body)) return null;
+  const title = sourceTitle(body);
+  const next = title && renames.get(title);
+  if (!next) return null;
+  const at = body.indexOf(title);
+  return `${body.slice(0, at)}${next}${body.slice(at + title.length)}${tail}`;
+}
+
 /** The title a live block's tag names, or null when the text is no live block's tag. */
 export function liveTitle(tag: string | undefined): string | null {
   if (!tag?.startsWith(LIVE_PREFIX)) return null;
@@ -101,14 +145,14 @@ export function docLinkTitles(paragraph: Paragraph): string[] {
         walk(inline.children);
       } else if (inline.kind === 'wrapper') {
         const live = liveTitle(sdtTag(inline.shell));
-        if (live) found.add(live);
+        if (live) found.add(linkTitle(live));
         walk(inline.children);
       }
       else if (inline.kind === 'run') {
         for (const item of inline.content) {
           if (item.kind !== 'drawing' || !item.name?.startsWith(EMBED_PREFIX)) continue;
           const title = embedTitle(item.name.slice(EMBED_PREFIX.length));
-          if (title) found.add(title);
+          if (title) found.add(linkTitle(title));
         }
       }
     }
@@ -136,14 +180,18 @@ export function textLiveTitles(line: string): string[] {
   return /golem|!\[\[/.test(line) ? textTitles(line, true) : [];
 }
 
+/** A Markdown marker's source as written: `%25` and `%2D` stand for `%` and `-` (client/src/live/markdownMarks.ts). */
+const decodeMarkerSource = (text: string): string => text.replace(/%(25|2D)/gi, (_m, hex: string) => (hex === '25' ? '%' : '-'));
+
 function textTitles(line: string, liveOnly: boolean): string[] {
   if (!line.includes('[[') && !line.includes('doc:') && !line.includes('golem')) return [];
   const found = new Set<string>();
   for (const m of line.matchAll(TEXT_LINK)) {
     // A plain embed is a live block's source only when only a live block can show it (Markdown reads it as one).
     if (liveOnly && m[3] === undefined && m[4] === undefined && !(m[1] !== undefined && m[0].startsWith('!') && LIVE_ONLY.test(m[1].split('|')[0]))) continue;
-    const title = m[1] !== undefined ? embedTitle(m[1]) : m[2] !== undefined ? parseDocAddress(m[2])?.title : liveTitle(LIVE_PREFIX + (m[3] ?? m[4]).replace(/&amp;/g, '&').replace(/&quot;/g, '"'));
-    if (title) found.add(title);
+    const title = m[1] !== undefined ? embedTitle(m[1]) : m[2] !== undefined ? parseDocAddress(m[2])?.title : liveTitle(LIVE_PREFIX + (m[3] !== undefined ? decodeMarkerSource(m[3]) : m[4].replace(/&amp;/g, '&').replace(/&quot;/g, '"')));
+    // A live block's source as written (a built-in block's whole address: the graph reads it); a link's, as a rename sees it.
+    if (title) found.add(liveOnly ? title : linkTitle(title));
   }
   return [...found];
 }

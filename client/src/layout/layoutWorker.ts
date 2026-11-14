@@ -426,7 +426,7 @@ class OpenDocument {
   /** The last edit told to the page (see storage/editJournal.ts). */
   journalSeq = 0;
   /** The undo history's `version` as last sent with a save (see `undoForSave`), -1 for none sent. */
-  private undoVersion = -1;
+  undoVersion = -1;
   /** Opened from a room's copy rather than the page's: undo steps kept with the page's copy don't fit it. */
   fromRoom = false;
   session: LayoutSession | null = null;
@@ -1661,7 +1661,8 @@ class OpenDocument {
    */
   undoForSave(): string | null | undefined {
     const history = this.replica?.history;
-    if (!history || this.shared || this.fromRoom || (!history.canUndo && !history.canRedo)) {
+    // A copy opened from a room keeps the steps made since: they fit it. Only steps kept from before can't go back on it (restoreUndo).
+    if (!history || this.shared || (!history.canUndo && !history.canRedo)) {
       this.undoVersion = -1;
       return null;
     }
@@ -2927,8 +2928,8 @@ const now = (): string => new Date().toISOString().replace(/\.\d+Z$/, 'Z');
 
 /** The whole open document as a .wdoc, to be edited as `lens` (default: as now) when next opened. */
 async function save(doc: number, request: number, lens?: Format): Promise<void> {
+  const open = current;
   try {
-    const open = current;
     // Asked for while the document was loading, or with commands still to run: once they have.
     const turn = open?.doc === doc ? open.turn() : null;
     if (turn) await turn;
@@ -2960,6 +2961,8 @@ async function save(doc: number, request: number, lens?: Format): Promise<void> 
     const buffer = bytes.slice().buffer;
     post({ type: 'saved', request, bytes: buffer, seq, changes, ...(undo !== undefined && { undo, doc }) }, [buffer]);
   } catch (e) {
+    // The steps read for this save never reached the page: the next save sends them again rather than "unchanged".
+    if (open?.doc === doc) open.undoVersion = -1;
     post({ type: 'saved', request, bytes: null, error: (e as Error).message });
   }
 }

@@ -211,6 +211,10 @@ Every Golem Docs app is a device: the web app runs the same code in a browser ta
 change to a document comes through one of them, including an ai agent's edit to a vault file, which the desktop app syncs.
 So:
 
+An update is written only over the copy it was made from: if the document was saved meanwhile (typing in it, autosaved;
+a sync), the update is dropped and made again from that next time, so it never takes back what someone just typed. A
+background update leaves the open document deferred, unless this session updates it for a shared room.
+
 1. **The app that saves a source updates its dependents.** It already has the source loaded. To spare autosave (every
    second or two), it waits until editing pauses (about 30 seconds, to be tuned), or until the sheet is closed or the app is
    hidden.
@@ -417,11 +421,16 @@ every platform, with no dependencies:
    `fetch`, no WebSocket, no images or fonts loaded from anywhere.
 3. **The script runs in a worker inside that iframe,** so a loop cannot freeze the page. Its only way out is `postMessage`
    to the app: requests ("read `Books/`"), then a result or a list of operations.
-4. **Every request is checked by the app** against the grant. A read outside it fails in the script as an error.
-5. **Limits.** A time limit (a few seconds for a producer, longer for an action, then the worker is ended); a size limit
-   on what comes back; a limit on how much it can read in one run.
-6. **Determinism for producers.** The sandbox removes `Date.now`, `new Date()` without arguments, `Math.random` (or seeds
-   it from the stamp) and timers that measure time. A producer that needs the date gets `today` from the app; its block is
+4. **Every request is checked by the app** against the grant. A read outside it fails in the script as an error. The
+   script's own code runs in the same worker as the runtime and can post messages itself, so the host (`host.ts`) answers
+   nothing and takes no result until the run has been allowed, and takes one `meta` per run (a second could widen it). A
+   path with `.`, `..` or empty parts is inside no folder.
+5. **Limits.** A time limit (a few seconds for a producer, longer for an action, then the worker is ended; the time a
+   person takes to answer the prompt does not count); a size limit on what comes back; requests answered a few at a time
+   (`MAX_REQUESTS_IN_FLIGHT`), the rest waiting, and a run that asks for too many at once ended.
+6. **Determinism for producers.** Before its module loads, the sandbox removes `Date.now`, `new Date()` without arguments
+   (the real `Date` cannot be reached through the prototype chain), formatting a date without one, `performance.now` and
+   `timeOrigin`, `crypto.randomUUID`, seeds `Math.random` and `crypto.getRandomValues`, and takes away timers that measure time. A producer that needs the date gets `today` from the app; its block is
    then marked as depending on the date and updated on the first open of each day. Actions get `now` and may use the clock.
 
 **Already proven by the viewer.** The embeddable viewer runs in exactly this kind of frame

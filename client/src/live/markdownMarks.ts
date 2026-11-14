@@ -12,33 +12,37 @@ import { parseLiveTag } from './liveMarks.ts';
 import type { LiveTag } from './liveMarks.ts';
 
 export const LIVE_CLOSE = '<!-- /golem:live -->';
-const OPEN = /^ {0,3}<!-- golem:live (.+?) -->\s*$/;
-const INLINE = /<!-- golem:live (.+?) -->([\s\S]*?)<!-- \/golem:live -->/g;
+// The tag is the marker's text up to the first " -->" (a source is written with no "--", but one typed by hand may have it).
+const OPEN = /^ {0,3}<!-- golem:live ((?:(?!-->)[^\n])+?) -->\s*$/;
+const INLINE_OPEN = /<!-- golem:live ((?:(?!-->)[^\n])+?) -->/y;
+
+/**
+ * A source as written in a marker: "%" and the second "-" of each "--" percent-encoded, as "--" can't stand in an HTML comment.
+ * Decoding only "%25" and "%2D" keeps a marker written before this encoding (no "%25" or "%2D" in it) reading the same.
+ */
+const encodeSource = (source: string): string => source.replace(/%/g, '%25').replace(/--/g, '-%2D');
+const decodeSource = (text: string): string => text.replace(/%(25|2D)/gi, (_m, hex: string) => (hex === '25' ? '%' : '-'));
+const tagOf = (text: string): LiveTag | null => {
+  const tag = parseLiveTag(`live:${text}`);
+  return tag && { ...tag, source: decodeSource(tag.source) };
+};
 
 /** The opening marker for a block's tag. */
-export const liveOpen = ({ source, stamp }: LiveTag): string => `<!-- golem:live ${source.replace(/--/g, '- -')}${stamp ? ` stamp=${stamp}` : ''} -->`;
+export const liveOpen = ({ source, stamp }: LiveTag): string => `<!-- golem:live ${encodeSource(source)}${stamp ? ` stamp=${stamp}` : ''} -->`;
 
 /** The tag a line that is an opening marker on its own carries, or null. */
 export function liveOpenTag(line: string): LiveTag | null {
   const m = OPEN.exec(line);
-  return m ? parseLiveTag(`live:${m[1]}`) : null;
+  return m ? tagOf(m[1]) : null;
+}
+
+/** The opening marker at `at` in a paragraph's text: its tag and where it ends, or null. */
+export function liveOpenAt(text: string, at: number): { tag: LiveTag; end: number } | null {
+  INLINE_OPEN.lastIndex = at;
+  const m = INLINE_OPEN.exec(text);
+  const tag = m && tagOf(m[1]);
+  return tag ? { tag, end: at + m[0].length } : null;
 }
 
 /** Whether a line is a closing marker on its own. */
 export const liveClose = (line: string): boolean => line.trim() === LIVE_CLOSE;
-
-/** A paragraph's text split at its inline live values: plain text, and each value's tag and the text between its markers. */
-export function splitLiveInline(text: string): (string | { tag: LiveTag; text: string })[] {
-  if (!text.includes('<!-- golem:live ')) return [text];
-  const out: (string | { tag: LiveTag; text: string })[] = [];
-  let last = 0;
-  for (const m of text.matchAll(INLINE)) {
-    const tag = parseLiveTag(`live:${m[1]}`);
-    if (!tag) continue;
-    if (m.index > last) out.push(text.slice(last, m.index));
-    out.push({ tag, text: m[2] });
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) out.push(text.slice(last));
-  return out;
-}

@@ -56,14 +56,24 @@ export async function handleLiveMarker(request: Request, db: UserDb | null): Pro
     const defer = ids(body.defer);
     const done = new Set(ids(body.done));
     const old = await read(db);
-    const deferred = [...new Set([...old.deferred, ...defer])].filter((id) => !done.has(id)).slice(-MAX_DEFERRED);
     // The marker only moves on: two devices working at once can't take it back. Never past now (a device's mistake).
     const next = Math.min(now, Math.max(old.workedTo ?? 0, typeof workedTo === 'number' ? workedTo : (old.workedTo ?? now)));
-    // `all`, not `run`: this changes no documents.
+    // The list is merged in the one statement, from what is stored then, so two devices posting at once keep each other's
+    // changes: in order, each once, the done ones taken off, the newest MAX_DEFERRED kept. `all`, not `run`: this changes no documents.
+    const fresh = [...new Set(defer)].filter((id) => !done.has(id)).slice(-MAX_DEFERRED);
     await db.all(
       `INSERT INTO live_marker (id, worked_to, deferred) VALUES (1, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET worked_to = MAX(live_marker.worked_to, excluded.worked_to), deferred = excluded.deferred`,
-      [next, JSON.stringify(deferred)],
+       ON CONFLICT(id) DO UPDATE SET worked_to = MAX(live_marker.worked_to, excluded.worked_to), deferred = (
+         SELECT json_group_array(value) FROM (
+           SELECT value, k FROM (
+             SELECT value, MIN(k) AS k FROM (
+               SELECT key AS k, value FROM json_each(live_marker.deferred)
+               UNION ALL SELECT 1000000 + key AS k, value FROM json_each(?)
+             ) WHERE value NOT IN (SELECT value FROM json_each(?)) GROUP BY value ORDER BY k DESC LIMIT ${MAX_DEFERRED}
+           ) ORDER BY k
+         )
+       )`,
+      [next, JSON.stringify(fresh), JSON.stringify(defer), JSON.stringify([...done])],
     );
   }
   const marker = await read(db);

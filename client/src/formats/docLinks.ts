@@ -1,16 +1,19 @@
 // Writing different link titles into a stored document's bytes, for when the documents they name are
 // renamed or moved (see ../linkRename.ts). Works on the model, so it is the same for a document of any
 // format: a link is a hyperlink to `doc:Title`, and an embed is an unresolved link or a drawing or content
-// control named `embed:Title...` (see embedMarks.ts). Free of the browser.
+// control named `embed:Title...` (see embedMarks.ts). A file kept as plain text (Markdown as uploaded, an SVG drawing)
+// has its links rewritten in its text instead. Free of the browser.
 
-import { EMBED_PREFIX, LIVE_PREFIX, WordDocument, docAddress, embedTitle, liveTitle, paragraphsIn, parseDocAddress } from '@golemdocs/docx';
+import { EMBED_PREFIX, LIVE_PREFIX, WordDocument, docAddress, isPlainText, paragraphsIn, parseDocAddress, renamedSource } from '@golemdocs/docx';
 import type { Block, Hyperlink, Inline, XmlElement } from '@golemdocs/docx';
+import { liveOpen, liveOpenTag } from '../live/markdownMarks.ts';
 import { isWdoc, readWdoc, writeWdoc } from './wdoc.ts';
 
-/** An embed's body with its title (the part before `#` and `|`) replaced. */
-function embedBodyWith(body: string, title: string): string {
-  const end = body.search(/[#|]/);
-  return `${title}${end < 0 ? '' : body.slice(end)}`;
+/** An embed's body (`Plan#Heading|300`) with the title it names renamed, the rest kept; null when it names none of `renames`. */
+function renamedEmbed(body: string, renames: ReadonlyMap<string, string>): string | null {
+  const bar = body.indexOf('|');
+  const next = renamedSource(bar < 0 ? body : body.slice(0, bar), renames);
+  return next === null ? null : `${next}${bar < 0 ? '' : body.slice(bar)}`;
 }
 
 /** The `w:tag` of a content control's shell, or undefined. */
@@ -20,13 +23,12 @@ function tagElement(shell: XmlElement): XmlElement | undefined {
   return properties?.children.find((c): c is XmlElement => typeof c !== 'string' && c.name === 'w:tag');
 }
 
-/** Points a live block's tag (`live:Budget.xlsx#Expenses stamp=…`) at its source's new title; whether it changed. */
+/** Points a live block's tag (`live:Budget.xlsx#Expenses stamp=…`, `live:@count:Novel.docx stamp=…`) at its source's new title; whether it changed. */
 function rewriteLive(tag: XmlElement | undefined, renames: ReadonlyMap<string, string>): boolean {
   const value = tag?.attrs['w:val'];
-  const title = liveTitle(value);
-  const next = title && renames.get(title);
-  if (!tag || !value || !title || !next) return false;
-  tag.attrs['w:val'] = `${LIVE_PREFIX}${next}${value.slice(LIVE_PREFIX.length + value.slice(LIVE_PREFIX.length).indexOf(title) + title.length)}`;
+  const next = value?.startsWith(LIVE_PREFIX) ? renamedSource(value.slice(LIVE_PREFIX.length), renames) : null;
+  if (!tag || next === null) return false;
+  tag.attrs['w:val'] = `${LIVE_PREFIX}${next}`;
   return true;
 }
 
@@ -76,10 +78,9 @@ function rewriteInlines(inlines: readonly Inline[], renames: ReadonlyMap<string,
     } else if (inline.kind === 'run') {
       for (const item of inline.content) {
         if (item.kind !== 'drawing' || !item.name?.startsWith(EMBED_PREFIX)) continue;
-        const body = item.name.slice(EMBED_PREFIX.length);
-        const next = renames.get(embedTitle(body));
-        if (next) {
-          item.name = `${EMBED_PREFIX}${embedBodyWith(body, next)}`;
+        const next = renamedEmbed(item.name.slice(EMBED_PREFIX.length), renames);
+        if (next !== null) {
+          item.name = `${EMBED_PREFIX}${next}`;
           changed++;
         }
       }
@@ -98,10 +99,9 @@ function rewriteEmbeds(blocks: readonly Block[], renames: ReadonlyMap<string, st
         const tag = typeof properties === 'object' ? properties.children.find((c) => typeof c !== 'string' && c.name === 'w:tag') : undefined;
         const value = typeof tag === 'object' ? tag.attrs['w:val'] : undefined;
         if (typeof tag === 'object' && value?.startsWith(EMBED_PREFIX)) {
-          const body = value.slice(EMBED_PREFIX.length);
-          const next = renames.get(embedTitle(body));
-          if (next) {
-            tag.attrs['w:val'] = `${EMBED_PREFIX}${embedBodyWith(body, next)}`;
+          const next = renamedEmbed(value.slice(EMBED_PREFIX.length), renames);
+          if (next !== null) {
+            tag.attrs['w:val'] = `${EMBED_PREFIX}${next}`;
             changed++;
           }
         } else if (rewriteLive(tagElement(block.shell), renames)) changed++;
@@ -117,18 +117,80 @@ function rewriteEmbeds(blocks: readonly Block[], renames: ReadonlyMap<string, st
   return changed;
 }
 
+const unescapeAttribute = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+const escapeAttribute = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** What textLinkTitles (docx search/links.ts) reads in a plain text file: wiki links and embeds, `[words](doc:…)`, live markers. */
+const TEXT_LINK = /(!?)\[\[([^\]\n]+)\]\]|\[([^\]\n]*)\]\((doc:[^)\n]+)\)|<!-- golem:live .+? -->|data-golem-live="([^"]+)"/gi;
+
+/** A plain text file's text with its links to the titles in `renames` pointing at the new ones, and how many changed. */
+export function rewriteTextLinks(text: string, renames: ReadonlyMap<string, string>): { text: string; changed: number } {
+  let changed = 0;
+  const out = text.replace(TEXT_LINK, (whole, bang: string | undefined, body: string | undefined, words: string | undefined, address: string | undefined, drawn: string | undefined) => {
+    let next: string | null = null;
+    if (body !== undefined) {
+      // `[[Plan#Budget|the plan]]`, `![[Plan.png|300]]`, `![[Budget.xlsx#Expenses]]`
+      const renamed = renamedEmbed(body, renames);
+      if (renamed !== null) next = `${bang}[[${renamed}]]`;
+    } else if (address !== undefined) {
+      // `[words](doc:Plan#Budget)`: the words too, when they are the old title (as a document's links show it).
+      const doc = parseDocAddress(address);
+      const title = doc && renames.get(doc.title);
+      if (doc && title) {
+        const shown = words === doc.title ? title : words === `${doc.title}#${doc.section}` ? `${title}#${doc.section}` : words;
+        const written = docAddress(title, doc.section || undefined);
+        // Escaped as the old one was (Markdown's %20), so the link still ends where it should.
+        next = `[${shown}](${/%[0-9a-f]{2}/i.test(address) ? `${written.slice(0, 4)}${encodeURI(written.slice(4))}` : written})`;
+      }
+    } else if (drawn !== undefined) {
+      // An SVG drawing's live group (live/drawingHost.ts).
+      const renamed = renamedSource(unescapeAttribute(drawn), renames);
+      if (renamed !== null) next = `data-golem-live="${escapeAttribute(renamed)}"`;
+    } else {
+      // A Markdown live marker (live/markdownMarks.ts), read and written as Markdown writes it.
+      const tag = liveOpenTag(whole);
+      const renamed = tag && renamedSource(tag.source, renames);
+      if (tag && renamed !== null) next = liveOpen({ source: renamed, stamp: tag.stamp });
+    }
+    if (next === null || next === whole) return whole;
+    changed++;
+    return next;
+  });
+  return { text: out, changed };
+}
+
+/** A plain text file's bytes with its links rewritten; null bytes when none changed, or it is not UTF-8 (written back as it was read). */
+function rewritePlainText(bytes: Uint8Array, renames: ReadonlyMap<string, string>): { bytes: Uint8Array | null; changed: number } {
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    return { bytes: null, changed: 0 };
+  }
+  const { text: next, changed } = rewriteTextLinks(text, renames);
+  return changed ? { bytes: new TextEncoder().encode(next), changed } : { bytes: null, changed: 0 };
+}
+
 /**
  * The stored document's bytes with its links to the titles in `renames` pointing at the new ones, and how many links changed. Null
- * bytes when none did (or there is no text to change: a PDF not turned into text yet), so the document is left as it is.
+ * bytes when none did, or when there is nothing here it can change (a PDF not turned into text yet, a workbook, bytes it cannot
+ * read), so the document is left as it is. Never throws: one document it cannot read must not keep the others from being updated.
  */
 export async function rewriteDocumentLinks(bytes: ArrayBuffer, renames: ReadonlyMap<string, string>): Promise<{ bytes: Uint8Array | null; changed: number }> {
-  const wdoc = isWdoc(bytes) ? await readWdoc(new Uint8Array(bytes)) : null;
-  const docx = wdoc ? wdoc.document : new Uint8Array(bytes);
-  if (!docx) return { bytes: null, changed: 0 };
-  const doc = await WordDocument.read(docx);
-  let changed = rewriteEmbeds(doc.body, renames);
-  for (const paragraph of paragraphsIn(doc.body)) changed += rewriteInlines(paragraph.children, renames);
-  if (!changed) return { bytes: null, changed: 0 };
-  const written = await doc.write();
-  return { bytes: wdoc ? await writeWdoc({ ...wdoc, document: written }) : written, changed };
+  try {
+    const plain = new Uint8Array(bytes);
+    if (isPlainText(plain)) return rewritePlainText(plain, renames);
+    const wdoc = isWdoc(bytes) ? await readWdoc(new Uint8Array(bytes)) : null;
+    const docx = wdoc ? wdoc.document : new Uint8Array(bytes);
+    if (!docx) return { bytes: null, changed: 0 };
+    const doc = await WordDocument.read(docx);
+    let changed = rewriteEmbeds(doc.body, renames);
+    for (const paragraph of paragraphsIn(doc.body)) changed += rewriteInlines(paragraph.children, renames);
+    if (!changed) return { bytes: null, changed: 0 };
+    const written = await doc.write();
+    return { bytes: wdoc ? await writeWdoc({ ...wdoc, document: written }) : written, changed };
+  } catch {
+    // A workbook (no main document part), a PDF, damaged bytes: its links stay as they are.
+    return { bytes: null, changed: 0 };
+  }
 }

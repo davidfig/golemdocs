@@ -54,7 +54,13 @@ export class LayoutClient {
   /** What a `saved` answer said of its `seq`, for `saveMarked`. */
   private readonly savedSeqs = new Map<number, number>();
   /** The undo steps as of the last save, and of which document: the worker sends them only when they change. */
-  private lastUndo: { doc: number; undo: string | null } = { doc: -1, undo: null };
+  /**
+   * The last undo steps the worker sent for each recent document (it sends them only when they changed). By document, not
+   * just the open one: a save asked for just before switching documents is answered after the switch.
+   */
+  private readonly lastUndo = new Map<number, string | null>();
+  /** The undo steps sent with each save's answer, by request. */
+  private readonly savedUndo = new Map<number, string | null>();
   private readonly savedChanges = new Map<number, number>();
   private readonly thesaurusRequests = new Map<number, (answer: { result: LookUp | null; failed?: boolean }) => void>();
   private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
@@ -248,7 +254,16 @@ export class LayoutClient {
 
   /** The whole open document as a .wdoc; `lens` records a different format to edit it as when next opened. */
   save(lens?: Format): Promise<Uint8Array> {
-    return this.request((request) => ({ type: 'save', doc: this.doc, request, lens })).then((bytes) => new Uint8Array(bytes));
+    let request = 0;
+    return this.request((r) => {
+      request = r;
+      return { type: 'save', doc: this.doc, request: r, lens };
+    }).then((bytes) => {
+      this.savedSeqs.delete(request);
+      this.savedChanges.delete(request);
+      this.savedUndo.delete(request);
+      return new Uint8Array(bytes);
+    });
   }
 
   /** `save`, and how far through the edit journal the bytes reach. */
@@ -261,15 +276,25 @@ export class LayoutClient {
     }).then((bytes) => {
       const seq = this.savedSeqs.get(request) ?? 0;
       this.savedSeqs.delete(request);
-      const undo = this.lastUndo.doc === doc ? (this.lastUndo.undo ?? undefined) : undefined;
+      this.savedChanges.delete(request);
+      const sent = this.savedUndo.has(request) ? this.savedUndo.get(request) : this.lastUndo.get(doc);
+      this.savedUndo.delete(request);
+      const undo = sent ?? undefined;
       return { bytes: new Uint8Array(bytes), seq, undo };
     });
   }
 
   /** Puts back undo steps kept with the copy just opened (see docs/undo-history.md). Send before `replayJournal`. */
   restoreUndo(undo: string): void {
-    this.lastUndo = { doc: this.doc, undo };
+    this.keepUndo(this.doc, undo);
     this.send({ type: 'restoreUndo', doc: this.doc, undo });
+  }
+
+  private keepUndo(doc: number, undo: string | null): void {
+    this.lastUndo.delete(doc);
+    this.lastUndo.set(doc, undo);
+    // Only the open document and the ones just left can still be saved.
+    for (const key of this.lastUndo.keys()) if (this.lastUndo.size > 3 && key !== this.doc) this.lastUndo.delete(key);
   }
 
   /** `save`, and how many changes the open document had had then (for a live block update made from it, `refresh`). */
@@ -282,6 +307,7 @@ export class LayoutClient {
       const changes = this.savedChanges.get(request) ?? -1;
       this.savedChanges.delete(request);
       this.savedSeqs.delete(request);
+      this.savedUndo.delete(request);
       return { bytes: new Uint8Array(bytes), changes };
     });
   }
@@ -384,7 +410,10 @@ export class LayoutClient {
     if (message.type === 'media' || message.type === 'saved') {
       if (message.type === 'saved' && message.seq !== undefined) this.savedSeqs.set(message.request, message.seq);
       // The worker sends the undo steps only when they have changed: the last ones are kept here for every save.
-      if (message.type === 'saved' && message.undo !== undefined && message.doc === this.doc) this.lastUndo = { doc: message.doc, undo: message.undo };
+      if (message.type === 'saved' && message.undo !== undefined) {
+        this.savedUndo.set(message.request, message.undo);
+        if (message.doc !== undefined) this.keepUndo(message.doc, message.undo);
+      }
       if (message.type === 'saved' && message.changes !== undefined) this.savedChanges.set(message.request, message.changes);
       this.requests.get(message.request)?.(message.bytes, message.type === 'saved' ? message.error : undefined);
       this.requests.delete(message.request);

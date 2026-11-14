@@ -599,7 +599,7 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
       return { ranges: [] };
     }
     case 'addLive':
-      addSheetLive(book, index, op.row, op.col, op.source);
+      if (!addSheetLive(book, index, op.row, op.col, op.source)) return { ranges: [] };
       return { ranges: [{ r0: op.row, c0: op.col, r1: op.row, c1: op.col }] };
     case 'stopLive':
       removeSheetLive(book, index, op.row, op.col);

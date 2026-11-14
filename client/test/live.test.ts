@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { WordDocument, paragraphText } from '@golemdocs/docx';
-import type { Block, Paragraph, Table } from '@golemdocs/docx';
+import type { Block, Inline, Paragraph, Table } from '@golemdocs/docx';
 import { findLive, liveTag, liveWrapper, parseLiveTag, liveTagText } from '../src/live/liveMarks.ts';
 import { sheetResult } from '../src/live/sheetSource.ts';
 import { produce, splitAddress, stampOf } from '../src/live/sources.ts';
@@ -161,6 +161,81 @@ test('a marker with no end is left as text', async () => {
   assert.equal(findLive(document).length, 0);
 });
 
+/** Markdown read, written and read again: what the second read finds, and that the second write is the first. */
+async function markdownTwice(markdown: string): Promise<{ first: string; document: WordDocument }> {
+  const first = documentToMarkdown(await markdownToDocument(markdown));
+  const document = await markdownToDocument(first);
+  assert.equal(documentToMarkdown(document), first);
+  return { first, document };
+}
+
+test('a live marker in a code span stays code, and is written back as code', async () => {
+  const text = 'Write `<!-- golem:live Budget.xlsx#Total -->5<!-- /golem:live -->` for a value.';
+  const { first, document } = await markdownTwice(`${text}\n`);
+  assert.equal(findLive(document).length, 0);
+  assert.equal(first.trim(), text);
+});
+
+test('a backslash-escaped live marker is text', async () => {
+  const text = 'Not live: \\<!-- golem:live Budget.xlsx#Total -->5\\<!-- /golem:live -->.';
+  const { first, document } = await markdownTwice(`${text}\n`);
+  assert.equal(findLive(document).length, 0);
+  assert.equal(first.trim(), text);
+  assert.equal(paragraphText(document.body[0] as Paragraph), 'Not live: <!-- golem:live Budget.xlsx#Total -->5<!-- /golem:live -->.');
+});
+
+test('a live value in a link\'s text keeps the link around it', async () => {
+  const text = 'See [total <!-- golem:live Budget.xlsx#Total stamp=1 -->5<!-- /golem:live --> so far](http://a.example) now.';
+  const { first, document } = await markdownTwice(`${text}\n`);
+  assert.equal(first.trim(), text);
+  const p = document.body[0] as Paragraph;
+  assert.deepEqual(p.children.map((c) => c.kind), ['run', 'hyperlink', 'run']);
+  const [at] = findLive(document);
+  assert.equal(at.tag.source, 'Budget.xlsx#Total');
+  assert.equal(paragraphText(p), 'See total 5 so far now.');
+});
+
+test('a live marker that would cross a link\'s edge is text, and the link is kept', async () => {
+  const { document } = await markdownTwice('[a <!-- golem:live Budget.xlsx#Total -->5](http://a.example) b<!-- /golem:live -->\n');
+  assert.equal(findLive(document).length, 0);
+  assert.equal((document.body[0] as Paragraph).children[0].kind, 'hyperlink');
+});
+
+test('a live value holding a closing marker as text reads back whole', async () => {
+  const document = await markdownToDocument('Total <!-- golem:live Budget.xlsx#Total stamp=1 -->x<!-- /golem:live -->.\n');
+  const [at] = findLive(document);
+  const run = at.wrapper.children[0] as unknown as { content: { kind: 'text'; text: string }[] };
+  run.content[0].text = 'a <!-- /golem:live --> b';
+  const back = await markdownToDocument(documentToMarkdown(document));
+  const [again] = findLive(back);
+  assert.equal(again.wrapper.children.map((c) => paragraphText({ kind: 'paragraph', properties: {}, children: [c], attrs: {} } as unknown as Paragraph)).join(''), 'a <!-- /golem:live --> b');
+  assert.equal(paragraphText(back.body[0] as Paragraph), 'Total a <!-- /golem:live --> b.');
+});
+
+test('a closing marker inside fenced code in a live block does not end the block', async () => {
+  const note = '<!-- golem:live Notes.md#table:Steps -->\n\n```\n<!-- /golem:live -->\n```\n\nAfter\n\n<!-- /golem:live -->\n\nOutside\n';
+  const { document } = await markdownTwice(note);
+  const live = findLive(document);
+  assert.equal(live.length, 1);
+  assert.equal(live[0].wrapper.children.length, 2);
+  assert.equal(paragraphText(live[0].wrapper.children[0] as Paragraph), '<!-- /golem:live -->');
+  assert.equal(paragraphText(document.body[1] as Paragraph), 'Outside');
+});
+
+test('a source holding "--" or "%" comes back as it was, and an old marker reads the same', async () => {
+  for (const source of ['Q1--Budget.xlsx#Total', 'Growth 100%.csv', 'a---b%2D%25.xlsx']) {
+    const document = await markdownToDocument('x\n');
+    (document.body[0] as Paragraph).children.push(liveWrapper({ source, stamp: '1' }, []));
+    const markdown = documentToMarkdown(document);
+    assert.ok(!/<!-- golem:live (.*?) -->/.exec(markdown)![1].includes('--'), markdown);
+    assert.equal(findLive(await markdownToDocument(markdown))[0].tag.source, source);
+  }
+  const old = await markdownToDocument('Total <!-- golem:live Q1- -Budget.xlsx#Total stamp=1 -->5<!-- /golem:live -->, <!-- golem:live Up 5%.csv -->6<!-- /golem:live -->\n');
+  assert.deepEqual(findLive(old).map((at) => at.tag.source), ['Q1- -Budget.xlsx#Total', 'Up 5%.csv']);
+  const block = await markdownToDocument('<!-- golem:live Q1--Budget.xlsx#Expenses -->\n\nText\n\n<!-- /golem:live -->\n');
+  assert.equal(findLive(block)[0].tag.source, 'Q1--Budget.xlsx#Expenses');
+});
+
 // --- Word --------------------------------------------------------------------------------------
 
 test('a Word document keeps its live blocks through a save, tag, lock and result', async () => {
@@ -216,6 +291,36 @@ test('HTML keeps live blocks as elements carrying their source and stamp', async
   assert.deepEqual(await updateLive(back, async () => ({ name: 'Budget.xlsx', bytes })), { updated: 0, problems: [] });
 });
 
+test('HTML keeps a live value inside a link, as read and as written', async () => {
+  const { document } = await htmlToDocument('<p>See <a href="http://a.example">x <span data-golem-live="Q1--Budget.xlsx#Total" data-golem-stamp="1">5</span> y</a> z</p>');
+  const check = (d: WordDocument): void => {
+    const [at] = findLive(d);
+    assert.deepEqual(at.tag, { source: 'Q1--Budget.xlsx#Total', stamp: '1' });
+    assert.equal(paragraphText(d.body[0] as Paragraph), 'See x 5 y z');
+    // Every word of the link's text is still in a link to it.
+    let linked = '';
+    const walk = (list: readonly Inline[], url?: string): void => {
+      for (const c of list) {
+        if (c.kind === 'hyperlink') walk(c.children, c.url);
+        else if (c.kind === 'wrapper') walk(c.children, url);
+        else if (c.kind === 'run' && url === 'http://a.example') for (const item of c.content) if (item.kind === 'text') linked += item.text;
+      }
+    };
+    walk((d.body[0] as Paragraph).children);
+    assert.equal(linked.replace(/\s+/g, ' ').trim(), 'x 5 y');
+  };
+  check(document);
+  const html = documentToHtml(document);
+  const { document: back } = await htmlToDocument(html);
+  check(back);
+  assert.equal(documentToHtml(back), html);
+  // The value written inside a link in Markdown, then as HTML, keeps both.
+  const md = await markdownToDocument('See [x <!-- golem:live A.xlsx#T stamp=1 -->5<!-- /golem:live --> y](http://a.example) z\n');
+  const { document: fromMd } = await htmlToDocument(documentToHtml(md));
+  assert.equal(findLive(fromMd)[0].tag.source, 'A.xlsx#T');
+  assert.equal(paragraphText(fromMd.body[0] as Paragraph), 'See x 5 y z');
+});
+
 // --- OpenDocument ------------------------------------------------------------------------------
 
 import { readOdt, writeOdt } from '@golemdocs/odt';
@@ -254,6 +359,68 @@ test('renaming a source rewrites the live blocks that name it, stamp and part ke
     { source: 'Home budget.xlsx#Expenses', stamp: stamps[0] },
     { source: 'Home budget.xlsx#Total', stamp: stamps[1] },
   ]);
+});
+
+const arrayBuffer = (b: Uint8Array): ArrayBuffer => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+
+test('a rename leaves bytes it cannot rewrite as they are instead of throwing (a workbook, a PDF, damaged bytes)', async () => {
+  const renames = new Map([['Budget.xlsx', 'Home budget.xlsx']]);
+  for (const bytes of [await budget(), new TextEncoder().encode('%PDF-1.4\n\0\0\0'), new Uint8Array([0x50, 0x4b, 3, 4, 0, 0, 9, 9])]) {
+    assert.deepEqual(await rewriteDocumentLinks(arrayBuffer(bytes), renames), { bytes: null, changed: 0 });
+  }
+});
+
+test('a rename rewrites the links of a Markdown file kept as plain text: wiki links, embeds, doc: links and live markers', async () => {
+  const md = [
+    'See [[Plan]], [[Plan#Budget|the plan]] and [Plan](doc:Plan#Budget), not [[Planner]].',
+    '![[Budget.xlsx#Expenses]]',
+    '<!-- golem:live Budget.xlsx#Expenses stamp=3f9a2c1e -->',
+    '| Item | Amount |',
+    '<!-- /golem:live -->',
+    'So far <!-- golem:live Budget.xlsx#Total stamp=ab12 -->$4,210<!-- /golem:live -->, of <!-- golem:live @count:Novel.docx?of=words stamp=9 -->41,200<!-- /golem:live -->.',
+    '<!-- golem:live @list:Plan -->',
+    '',
+  ].join('\n');
+  const renames = new Map([['Plan', 'Roadmap'], ['Budget.xlsx', 'Home budget.xlsx'], ['Novel.docx', 'My Book.docx']]);
+  const { bytes, changed } = await rewriteDocumentLinks(arrayBuffer(new TextEncoder().encode(md)), renames);
+  assert.equal(changed, 7);
+  assert.equal(
+    new TextDecoder().decode(bytes!),
+    [
+      'See [[Roadmap]], [[Roadmap#Budget|the plan]] and [Roadmap](doc:Roadmap#Budget), not [[Planner]].',
+      '![[Home budget.xlsx#Expenses]]',
+      '<!-- golem:live Home budget.xlsx#Expenses stamp=3f9a2c1e -->',
+      '| Item | Amount |',
+      '<!-- /golem:live -->',
+      'So far <!-- golem:live Home budget.xlsx#Total stamp=ab12 -->$4,210<!-- /golem:live -->, of <!-- golem:live @count:My Book.docx?of=words stamp=9 -->41,200<!-- /golem:live -->.',
+      '<!-- golem:live @list:Plan -->',
+      '',
+    ].join('\n'),
+  );
+  // What the index lists for the file is what the rename plan asks to rewrite.
+  assert.deepEqual(Object.keys(buildIndex(textSegments(new TextEncoder().encode(md))).l), ['Plan', 'Planner', 'Budget.xlsx', 'Novel.docx', '@list:Plan']);
+  // None of the links: left as it is.
+  assert.deepEqual(await rewriteDocumentLinks(arrayBuffer(new TextEncoder().encode(md)), new Map([['Other', 'Else']])), { bytes: null, changed: 0 });
+});
+
+test('a rename keeps a doc: link escaped as it was, and rewrites an SVG drawing kept as text', async () => {
+  const { bytes } = await rewriteDocumentLinks(arrayBuffer(new TextEncoder().encode('[x](doc:Old%20plan)\n')), new Map([['Old plan', 'New plan']]));
+  assert.equal(new TextDecoder().decode(bytes!), '[x](doc:New%20plan)\n');
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg"><g data-golem-live="R&amp;D.xlsx#Chart stamp=1"><rect/></g></svg>';
+  const out = await rewriteDocumentLinks(arrayBuffer(new TextEncoder().encode(svg)), new Map([['R&D.xlsx', 'R&D 2027.xlsx']]));
+  assert.equal(out.changed, 1);
+  assert.equal(new TextDecoder().decode(out.bytes!), '<svg xmlns="http://www.w3.org/2000/svg"><g data-golem-live="R&amp;D 2027.xlsx#Chart stamp=1"><rect/></g></svg>');
+});
+
+test('a built-in count links to the document it counts, so renaming it rewrites the block; the graph still sees its address', async () => {
+  const doc = await markdownToDocument('Words: <!-- golem:live @count:Novel.docx?of=words&goal=50000 stamp=1 -->41,200<!-- /golem:live -->.\n');
+  const index = buildIndex(paragraphSegments(doc));
+  assert.deepEqual(Object.keys(index.l), ['Novel.docx']);
+  assert.deepEqual(Object.keys(index.s), ['@count:Novel.docx?of=words&goal=50000']);
+  const bytes = await doc.write();
+  const { bytes: out, changed } = await rewriteDocumentLinks(arrayBuffer(bytes), new Map([['Novel.docx', 'Book #2.docx']]));
+  assert.equal(changed, 1);
+  assert.deepEqual(findLive(await WordDocument.read(out!)).map((at) => at.tag), [{ source: '@count:Book %232.docx?of=words&goal=50000', stamp: '1' }]);
 });
 
 // --- Keeping the vault up to date --------------------------------------------------------------
@@ -632,6 +799,99 @@ test('a workbook’s live range that is given a picture says it can’t show one
   assert.deepEqual(report.problems.map((p) => p.code), ['unsupported']);
 });
 
+// A live range only grows into empty cells: what the person typed, a formula, or another live range keeps it at its last result.
+
+import { numberOf, updateSheetLive } from '../src/live/sheetHost.ts';
+import { contentsWritten } from '../src/sheet/edit.ts';
+
+const csvLookup = (text: string) => (async () => ({ name: 'Meals.csv', bytes: new TextEncoder().encode(text) })) as SourceLookup;
+const MEALS3 = 'Day,Calories\nMon,2100\nTue,1900\n';
+const MEALS5 = 'Day,Calories\nMon,2100\nTue,1900\nWed,2000\nThu,1800\n';
+const normalFormula = (text: string, row: number, col: number) => ({ text, originRow: row, originCol: col, kind: 'normal' as const, shared: -1 });
+
+function liveBook(): { book: Workbook; sheet: Worksheet } {
+  const book = new Workbook();
+  const sheet = new Worksheet('Plan', 1);
+  book.sheets.push(sheet);
+  return { book, sheet };
+}
+
+test('a workbook’s live range does not grow over the person’s cells or formulas, and takes formulas out of its own', async () => {
+  const { book, sheet } = liveBook();
+  addSheetLive(book, 0, 0, 0, 'Meals.csv');
+  assert.equal((await updateSheetLive(book, csvLookup(MEALS3))).updated, 1);
+  assert.equal(sheetLiveRanges(book)[0].name.formula, 'Plan!$A$1:$B$3');
+  const stamp = sheetLiveRanges(book)[0].tag.stamp;
+  // Text under it in A4, a sum in B5.
+  sheet.grid.set(3, 0, Kind.String, book.strings.add('Notes'), 0);
+  sheet.grid.column(1).setFormula(4, normalFormula('SUM(B2:B3)', 4, 1));
+  sheet.grid.set(4, 1, Kind.Number, 4000, 0);
+  let report = await updateSheetLive(book, csvLookup(MEALS5));
+  assert.equal(report.updated, 0);
+  assert.deepEqual(report.problems, [{ source: 'Meals.csv', code: 'blocked', detail: 'A4' }]);
+  assert.equal(book.strings.get(sheet.grid.columns[0]!.value(3)), 'Notes');
+  assert.equal(sheetLiveRanges(book)[0].name.formula, 'Plan!$A$1:$B$3');
+  assert.equal(sheetLiveRanges(book)[0].tag.stamp, stamp);
+  // The text gone, the formula still blocks.
+  sheet.grid.set(3, 0, Kind.Empty, 0, 0);
+  report = await updateSheetLive(book, csvLookup(MEALS5));
+  assert.deepEqual(report.problems.map((p) => [p.code, p.detail]), [['blocked', 'B5']]);
+  assert.ok(sheet.grid.columns[1]!.formulaAt(4));
+  // Room made: it grows, and a formula someone left inside its own cells is taken out.
+  sheet.grid.column(1).setFormula(4, null);
+  sheet.grid.set(4, 1, Kind.Empty, 0, 0);
+  sheet.grid.column(1).setFormula(1, normalFormula('1+1', 1, 1));
+  report = await updateSheetLive(book, csvLookup(MEALS5));
+  assert.deepEqual([report.updated, report.problems], [1, []]);
+  assert.equal(sheetLiveRanges(book)[0].name.formula, 'Plan!$A$1:$B$5');
+  assert.equal(sheet.grid.columns[1]!.formulaAt(1), undefined);
+  assert.equal(sheet.grid.columns[1]!.value(1), 2100);
+  assert.equal(sheet.grid.columns[1]!.value(4), 1800);
+});
+
+test('a live link pasted into a workbook fills only empty cells, even its own first cell, and never another live range', async () => {
+  // Its first update: the anchor cell holds what the person typed.
+  const first = liveBook();
+  first.sheet.grid.set(2, 1, Kind.String, first.book.strings.add('Plan'), 0);
+  addSheetLive(first.book, 0, 2, 1, 'Meals.csv');
+  assert.deepEqual((await updateSheetLive(first.book, csvLookup(MEALS3))).problems.map((p) => [p.code, p.detail]), [['blocked', 'B3']]);
+  assert.equal(first.book.strings.get(first.sheet.grid.columns[1]!.value(2)), 'Plan');
+  // A cell it would grow into on its first update.
+  const beside = liveBook();
+  beside.sheet.grid.set(3, 2, Kind.Number, 7, 0);
+  addSheetLive(beside.book, 0, 2, 1, 'Meals.csv');
+  assert.deepEqual((await updateSheetLive(beside.book, csvLookup(MEALS3))).problems.map((p) => [p.code, p.detail]), [['blocked', 'C4']]);
+  // Another live range below it.
+  const two = liveBook();
+  addSheetLive(two.book, 0, 0, 0, 'Meals.csv');
+  addSheetLive(two.book, 0, 3, 1, 'Budget.xlsx#Total');
+  const lookup = (async (title: string) => (title === 'Meals.csv' ? { name: 'Meals.csv', bytes: new TextEncoder().encode(MEALS5) } : null)) as SourceLookup;
+  const report = await updateSheetLive(two.book, lookup);
+  assert.deepEqual(
+    report.problems.filter((p) => p.source === 'Meals.csv').map((p) => [p.code, p.detail]),
+    [['blocked', 'B4']],
+  );
+  assert.equal(sheetLiveRanges(two.book)[0].name.formula, 'Plan!$A$1:$A$1');
+  // Pasting a live link inside a live range is refused by the model. (Not through contentsWritten: the sheet worker checks
+  // that after the edit, when the new range would refuse its own paste.)
+  assert.equal(contentsWritten({ kind: 'addLive', row: 3, col: 1, source: 'Other.csv' }), null);
+  assert.equal(addSheetLive(two.book, 0, 3, 1, 'Other.csv'), null);
+  assert.equal(sheetLiveRanges(two.book).length, 2);
+});
+
+test('a live range keeps digits with a leading zero (a zip code) as text', () => {
+  assert.equal(numberOf('02134'), null);
+  assert.equal(numberOf('007'), null);
+  assert.equal(numberOf('-02'), null);
+  assert.equal(numberOf('0'), 0);
+  assert.equal(numberOf('0.5'), 0.5);
+  assert.equal(numberOf('-0.25'), -0.25);
+  assert.equal(numberOf('.5'), 0.5);
+  assert.equal(numberOf('2,100'), 2100);
+  assert.equal(numberOf('2134'), 2134);
+  assert.equal(numberOf('50%'), null);
+});
+
 test('the search index knows the sources of a workbook’s live ranges', async () => {
   const bytes = await hostBook('Meals.csv#A1:B2');
   const segments = await segmentsFromBytes(bytes.slice().buffer);
@@ -904,6 +1164,7 @@ test('an address’s options are no part of the title it names, and make a plain
 });
 
 import { drawingLiveSources, fillGroup, liveGroup, updateStoredDrawing } from '../src/live/drawingHost.ts';
+import type { SceneNode } from '../src/vector/model.ts';
 import { isStoredDrawing } from '../src/live/stored.ts';
 
 const DRAWING = (inner: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">${inner}</svg>`;
@@ -1080,4 +1341,52 @@ test('Edit PDF’s text boxes and pictures can show live blocks: a table as line
   const wrong = await writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'pdf', origin: 'pdf', pagesCurrent: true }, document: null, original, extensions: { pdf: { annotations: [], edits: [{ ...edits[0], live: liveTagText({ source: 'Logo.png', stamp: '' }) }] } } });
   const refused = await updateStoredLive(wrong, 'Form.pdf', lookup);
   assert.deepEqual([refused.bytes, refused.report.problems], [null, [{ source: 'Logo.png', code: 'unsupported' }]]);
+});
+
+// --- Pictures that are updated: one part each, the same stamp on every device, the group's own shapes kept --------------
+
+test('a live picture updated again and again leaves one picture in the file', async () => {
+  const document = await markdownToDocument('<!-- golem:live map.png -->\n<!-- /golem:live -->\n');
+  for (let i = 0; i < 4; i++) {
+    const png = encodePng(1, 1, 4, Uint8Array.from([i, 0, 0, 255]));
+    assert.equal((await updateLive(document, async () => ({ name: 'map.png', bytes: png }))).updated, 1);
+    await document.write();
+  }
+  const read = await WordDocument.read(await document.write());
+  assert.equal(read.pkg.partNames.filter((n) => n.startsWith('word/media/')).length, 1);
+  assert.deepEqual(await read.media(read.pkg.partNames.find((n) => n.startsWith('word/media/'))!), encodePng(1, 1, 4, Uint8Array.from([3, 0, 0, 255])));
+});
+
+test('a drawing, chart or PDF page is stamped by its SVG and size, not by the PNG this device drew', () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"/>';
+  const chromium = stampOf({ kind: 'picture', bytes: new Uint8Array([1, 2, 3]), svg, width: 20, height: 10 });
+  assert.equal(stampOf({ kind: 'picture', bytes: new Uint8Array([4, 5, 6, 7]), svg, width: 20, height: 10 }), chromium);
+  assert.notEqual(stampOf({ kind: 'picture', bytes: new Uint8Array([1, 2, 3]), svg, width: 40, height: 20 }), chromium);
+  assert.notEqual(stampOf({ kind: 'picture', bytes: new Uint8Array([1, 2, 3]), svg: svg.replace('20', '21'), width: 20, height: 10 }), chromium);
+  // A picture file is stamped by its bytes, as it always was (FNV-1a of 1, 2, 3).
+  assert.notEqual(stampOf({ kind: 'picture', bytes: new Uint8Array([1, 2, 4]), width: 20, height: 10 }), stampOf({ kind: 'picture', bytes: new Uint8Array([1, 2, 3]), width: 20, height: 10 }));
+  let h = 0x811c9dc5;
+  for (const b of [1, 2, 3]) h = Math.imul(h ^ b, 0x01000193) >>> 0;
+  assert.equal(stampOf({ kind: 'picture', bytes: new Uint8Array([1, 2, 3]), width: 20, height: 10 }), h.toString(16).padStart(8, '0'));
+});
+
+test('filling a live group replaces only what the last fill put there, keeping shapes the person added', () => {
+  const group = liveGroup('Budget.xlsx#chart:Spending');
+  const frame = { kind: 'rect', x: 0, y: 0, width: 320, height: 220, style: { stroke: 'black' }, attrs: {} } as unknown as SceneNode;
+  fillGroup(group, { kind: 'picture', bytes: new Uint8Array([1, 2, 3]), width: 300, height: 200 }, 'aaaaaaaa');
+  const label = { kind: 'text', x: 0, y: 240, runs: [{ text: 'Spending', style: {} }], style: {}, attrs: {} } as unknown as SceneNode;
+  group.children = [frame, ...group.children, label];
+  fillGroup(group, { kind: 'picture', bytes: new Uint8Array([4, 5, 6]), width: 300, height: 200 }, 'bbbbbbbb');
+  assert.deepEqual(group.children.map((c) => c.kind), ['rect', 'image', 'text']);
+  assert.equal(group.children[0], frame);
+  assert.equal(group.children[2], label);
+  const image = group.children[1];
+  assert.ok(image.kind === 'image' && image.href.endsWith(btoa(String.fromCharCode(4, 5, 6))));
+  // A text result in a group with a label of its own: only the fill's text changes.
+  const table = liveGroup('Budget.xlsx#Sheet1!A1:B2');
+  fillGroup(table, { kind: 'value', text: '2100' }, 'cccccccc');
+  table.children.push(frame);
+  fillGroup(table, { kind: 'value', text: '2200' }, 'dddddddd');
+  assert.deepEqual(table.children.map((c) => c.kind), ['text', 'rect']);
+  assert.ok(table.children[0].kind === 'text' && table.children[0].runs[0].text === '2200');
 });

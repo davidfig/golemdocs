@@ -96,14 +96,45 @@ export function scriptRuntime(port: RuntimePort): void {
     const noClock = (): never => {
       throw new Error('A producer cannot read the clock: use `today`, which the app gives it');
     };
-    class FixedDate extends RealDate {
-      constructor(...args: unknown[]) {
-        if (!args.length) noClock();
-        super(...(args as [number]));
-      }
-      static now(): number {
-        return noClock();
-      }
+    // Not a subclass (its prototype chain would lead back to the real Date), and the real one's instances point here too.
+    const FixedDate = function (this: unknown, ...args: unknown[]) {
+      if (!new.target) return noClock();
+      if (!args.length) noClock();
+      return Reflect.construct(RealDate, args, new.target);
+    } as unknown as DateConstructor;
+    Object.defineProperty(FixedDate, 'prototype', { value: RealDate.prototype });
+    Object.defineProperty(RealDate.prototype, 'constructor', { value: FixedDate, writable: false, configurable: false });
+    for (const key of ['UTC', 'parse'] as const) Object.defineProperty(FixedDate, key, { value: RealDate[key] });
+    Object.defineProperty(FixedDate, 'now', { value: noClock });
+    // Other ways to the time: a formatter given no date, the page's start, and real randomness.
+    const dtf = Intl.DateTimeFormat.prototype;
+    // `format` is a getter that hands out a bound function; `formatToParts` a method.
+    const formatGetter = Object.getOwnPropertyDescriptor(dtf, 'format')!.get!;
+    Object.defineProperty(dtf, 'format', {
+      get(this: Intl.DateTimeFormat) {
+        const real = formatGetter.call(this) as (date?: unknown) => string;
+        return (date?: unknown) => (date === undefined ? noClock() : real(date));
+      },
+    });
+    const toParts = dtf.formatToParts;
+    Object.defineProperty(dtf, 'formatToParts', {
+      value(this: Intl.DateTimeFormat, date?: unknown) {
+        if (date === undefined) noClock();
+        return toParts.call(this, date as Date);
+      },
+    });
+    if (typeof performance === 'object' && performance) Object.defineProperty(performance, 'timeOrigin', { get: noClock });
+    if (typeof crypto === 'object' && crypto) {
+      Object.defineProperty(crypto, 'getRandomValues', {
+        value: <T extends ArrayBufferView | null>(array: T): T => {
+          if (array) {
+            const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
+            for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+          }
+          return array;
+        },
+      });
+      Object.defineProperty(crypto, 'randomUUID', { value: () => { throw new Error('A producer cannot make random ids: its block must show the same for the same files'); } });
     }
     g.Date = FixedDate;
     let state = seed >>> 0 || 1;
@@ -190,6 +221,8 @@ export function scriptRuntime(port: RuntimePort): void {
 
   const start = async (): Promise<void> => {
     const run = started!;
+    // Before the module loads: its top-level code could otherwise keep the real clock.
+    if (mode === 'produce') deterministic(run.seed);
     const loaded = (await port.load(run.program)) as { meta?: unknown; default?: unknown };
     // What it asks for, from `meta`, plain data only.
     let meta: unknown = null;
@@ -202,7 +235,6 @@ export function scriptRuntime(port: RuntimePort): void {
     if (mode === 'describe') return;
     await new Promise<void>((resolve) => (go = resolve));
     if (typeof loaded.default !== 'function') throw new Error('A script exports a function as its default: `export default async function (api) { ... }`');
-    if (mode === 'produce') deterministic(run.seed);
     let usedDate = false;
     const api: Record<string, unknown> = {
       ...results,

@@ -1674,7 +1674,8 @@ class Importer {
 
   private inline(el: HElement, flow: Flow, ctx: Ctx): void {
     const live = htmlLiveTag(el);
-    if (live && !ctx.link && !ctx.pre) {
+    // In a link's text too (the writer puts a value outside its link, but other HTML may not): the link goes on around it.
+    if (live && !ctx.pre) {
       this.liveInline(el, live, flow, ctx);
       return;
     }
@@ -1703,6 +1704,8 @@ class Importer {
     if (flow.para !== st) return;
     st.p.children.push(liveWrapper(tag, st.p.children.splice(start)));
     st.run = null;
+    st.hyperlink = null;
+    st.linkEl = null;
     st.content = true;
   }
 

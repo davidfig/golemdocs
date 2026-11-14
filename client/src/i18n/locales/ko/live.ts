@@ -60,6 +60,7 @@ export const live: Partial<Messages> = {
   'live.error.unsupported': "{source}은(는) 라이브 블록에 표시할 수 없습니다.",
   'live.error.script': "{source}을(를) 실행할 수 없습니다: {detail}",
   'live.error.notAllowed': "{source}은(는) 요청한 항목을 읽을 권한이 없습니다: {detail}",
+  'live.error.blocked': "{source}에 더 많은 공간이 필요합니다. {detail}이(가) 비어 있지 않아 마지막 결과를 유지합니다. 늘어날 셀을 비우세요.",
   'live.script.wholeVault': "전체 보관 폴더",
   'live.script.daily': "매일 {time}에 실행",
   'live.script.weekly': "매주 {day} {time}에 실행",

@@ -45,25 +45,32 @@ function linesOf(result: LiveResult): string[] | null {
   return null;
 }
 
-const first = <K extends SceneNode['kind']>(group: GroupNode, kind: K): Extract<SceneNode, { kind: K }> | undefined =>
-  group.children.find((c): c is Extract<SceneNode, { kind: K }> => c.kind === kind);
+/** The node a live fill put in a group: its first picture or text. Whatever else the group holds is the person's own. */
+const filled = (group: GroupNode): number => group.children.findIndex((c) => c.kind === 'image' || c.kind === 'text');
+
+/** Puts `node` where the group's filled node was (or first, if it had none), leaving the rest of the group as it was. */
+function putFilled(group: GroupNode, node: SceneNode): void {
+  const at = filled(group);
+  group.children = at < 0 ? [node, ...group.children] : group.children.map((c, i) => (i === at ? node : c));
+}
 
 /** Puts a result in a live group, keeping the box or the place and style of what it showed before. */
 export function fillGroup(group: GroupNode, result: LiveResult, stamp: string): boolean {
+  const current = group.children[filled(group)] as SceneNode | undefined;
   if (result.kind === 'picture') {
-    const old = first(group, 'image');
+    const old = current?.kind === 'image' ? current : undefined;
     const href = result.svg ? `data:image/svg+xml;base64,${base64(new TextEncoder().encode(result.svg))}` : `data:image/png;base64,${base64(result.bytes)}`;
     const image: ImageNode = old ? { ...old, href } : { kind: 'image', x: 0, y: 0, width: result.width, height: result.height, href, style: {}, attrs: {} };
-    group.children = [image];
+    putFilled(group, image);
   } else {
     const lines = linesOf(result);
     if (!lines) return false;
-    const old = first(group, 'text');
+    const old = current?.kind === 'text' ? current : undefined;
     const size = parseFloat(old?.style['font-size'] ?? '') || 16;
     const base: TextNode = old ?? { kind: 'text', x: 0, y: size, runs: [], style: { 'font-size': `${size}px`, 'font-family': 'sans-serif' }, attrs: {} };
     // A line each: the first where the text was, each next one a line lower.
     const runs = lines.map((text, i) => ({ text, x: base.x, ...(i === 0 ? { y: base.y } : { dy: size * 1.25 }), style: {} }));
-    group.children = [{ ...base, runs }];
+    putFilled(group, { ...base, runs });
   }
   group.attrs = { ...group.attrs, [STAMP_ATTR]: stamp };
   return true;

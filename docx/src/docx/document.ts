@@ -11,7 +11,7 @@ import type {
   StyleSheet,
   ThemeFonts,
 } from '../model/types.ts';
-import { CONTENT_TYPE, OpcPackage, PackageError, REL, contentTypeForExtension, type Relationships } from '../opc/package.ts';
+import { CONTENT_TYPE, OpcPackage, PackageError, REL, contentTypeForExtension, isRelType, type Relationships } from '../opc/package.ts';
 import { DOCUMENT_NAMESPACES, NS } from '../xml/namespaces.ts';
 import { child, el, elements, type XmlElement } from '../xml/xml.ts';
 import { BLANK_STYLES, BLANK_SETTINGS, BLANK_SECTION } from './blank.ts';
@@ -281,6 +281,8 @@ export class WordDocument {
     ]);
     declareNamespaces(root);
     pkg.set(this.mainPart, root, CONTENT_TYPE.document);
+    // The parts written here, as XML: a picture relationship none of them uses any more is left out of the file (below).
+    const written = new Map<string, XmlElement[]>([[this.mainPart, [root]]]);
 
     if (this.stylesPart || this.styles.styles.length) {
       this.stylesPart ??= 'word/styles.xml';
@@ -288,6 +290,7 @@ export class WordDocument {
       const styles = writeStyles(this.styles, ctx);
       declareNamespaces(styles);
       pkg.set(this.stylesPart, styles, CONTENT_TYPE.styles);
+      written.get(this.mainPart)!.push(styles);
     }
     if (this.numberingPart || this.numbering.abstracts.length || this.numbering.instances.length) {
       this.numberingPart ??= 'word/numbering.xml';
@@ -295,6 +298,7 @@ export class WordDocument {
       const numbering = writeNumbering(this.numbering, ctx);
       declareNamespaces(numbering);
       pkg.set(this.numberingPart, numbering, CONTENT_TYPE.numbering);
+      written.get(this.mainPart)!.push(numbering);
     }
 
     // The comments parts, only if the comments were changed (or are new).
@@ -344,8 +348,17 @@ export class WordDocument {
       const partRoot = el(hf.kind === 'header' ? 'w:hdr' : 'w:ftr', { ...hf.rootAttrs }, writeBlocks(hf.children, partCtx));
       declareNamespaces(partRoot);
       pkg.set(hf.part, partRoot, hf.kind === 'header' ? CONTENT_TYPE.header : CONTENT_TYPE.footer);
+      written.set(hf.part, [partRoot]);
     }
-    return pkg.write();
+    // Pictures nothing shows any more (a live block's last picture, one deleted) are left out of the file, with their
+    // relationships, but kept here: an undo can bring back what showed them.
+    const unused = new Map<string, Set<string>>();
+    for (const [part, roots] of written) {
+      const used = attributeValues(roots);
+      const ids = (await pkg.relationships(part)).list.filter((r) => !r.external && isRelType(r.type, REL.image) && !used.has(r.id)).map((r) => r.id);
+      if (ids.length) unused.set(part, new Set(ids));
+    }
+    return pkg.write({ relationships: unused, unreferencedUnder: 'word/media/' });
   }
 }
 
@@ -384,6 +397,18 @@ function declareNamespaces(root: XmlElement): void {
     for (const prefix of ignorable) listed.add(prefix);
     root.attrs['mc:Ignorable'] = [...listed].join(' ');
   }
+}
+
+/** Every attribute value in some XML (a relationship is used by a part when its id is one of them: r:embed, r:id, o:relid...). */
+function attributeValues(roots: XmlElement[]): Set<string> {
+  const values = new Set<string>();
+  const stack = [...roots];
+  while (stack.length) {
+    const e = stack.pop()!;
+    for (const v of Object.values(e.attrs)) if (v !== undefined) values.add(v);
+    for (const c of e.children) if (typeof c !== 'string') stack.push(c);
+  }
+  return values;
 }
 
 /** Highest wp:docPr id in use, so new drawings get unique ids. */

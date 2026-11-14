@@ -60,3 +60,11 @@ test('bad input is refused', async () => {
   assert.equal((await w.call(ALICE, 'DELETE', '/api/live-marker')).status, 405);
   assert.equal((await w.call(null, 'GET', '/api/live-marker')).status, 401);
 });
+
+test('two devices posting at once keep each other’s deferred documents', async () => {
+  await post(ALICE, { defer: ['a'] });
+  await Promise.all([post(ALICE, { defer: ['b'] }), post(ALICE, { defer: ['c'], done: ['a'] })]);
+  assert.deepEqual([...(await get(ALICE)).deferred].sort(), ['b', 'c']);
+  await post(ALICE, { defer: ['b', 'd'] });
+  assert.deepEqual((await get(ALICE)).deferred.slice(-1), ['d']);
+});

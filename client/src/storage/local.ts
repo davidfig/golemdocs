@@ -200,8 +200,16 @@ interface WriteInput {
 const own = (bytes: Uint8Array): ArrayBuffer => bytes.slice().buffer as ArrayBuffer;
 
 async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo> {
-  const info = (await writeUnlessUnsent(input, cloud))!;
-  if (input.undo) void trimUndo().catch(() => undefined);
+  if (!input.undo) return (await writeUnlessUnsent(input, cloud))!;
+  let info: SavedInfo;
+  try {
+    info = (await writeUnlessUnsent(input, cloud))!;
+  } catch (e) {
+    // Kept undo steps never make a save fail: past the browser's quota, the document is saved without them (which drops the old ones).
+    if ((e as Error)?.name !== 'QuotaExceededError') throw e;
+    return (await writeUnlessUnsent({ ...input, undo: undefined }, cloud))!;
+  }
+  void trimUndo().catch(() => undefined);
   return info;
 }
 

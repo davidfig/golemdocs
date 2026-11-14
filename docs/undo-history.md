@@ -23,7 +23,7 @@ The undo stack (`History` in `ops/src/history.ts`) already holds plain data: eac
 - **The steps always fit the bytes.** They are read in the same synchronous stretch as the body is written, so they describe exactly what the body holds, and they are written in the same transaction as the bytes. Edits made after that point are in the edit journal, and replaying them puts their steps on top.
 - **Any other write drops them.** A save with no `undo` (a copy from the account, the vault file changed on disk, another tab's save with nothing to undo, a version put back, a merge) deletes them in its own transaction, and `getUndo` also checks `forUpdatedAt`. So an outside change ends the kept history, which is the simple choice: steps made for other bytes could put text in the wrong place.
 - **While the document is open, nothing changes.** Changes from outside that arrive while it is open still move the steps (`History.map`), as before, and the next save keeps them.
-- **Only changed steps cross from the worker.** The worker sends the JSON only when `History.version` has moved since the last save; `LayoutClient` keeps the last JSON for the open document (`saveMarked`) and hands it to every save.
+- **Only changed steps cross from the worker.** The worker sends the JSON only when `History.version` has moved since the last save (and again after a save that failed); `LayoutClient` keeps the JSON each save's answer carried, and the last one for each recent document (a save asked for just before switching documents is answered after the switch), and hands it to every save of that document (`saveMarked`).
 - **Recovered edits undo as one step.** After a reload, the edits the [edit journal](edit-journal.md) brings back were this session's own, so Undo takes them back, all at once, as it would have before the reload.
 
 ## Limits
@@ -35,7 +35,8 @@ The undo stack (`History` in `ops/src/history.ts`) already holds plain data: eac
 
 ## Rules with the rest of the app
 
-- **Rooms.** A room that is shared, or a document opened from a room's copy (someone else was already editing it), keeps no steps: the room's copy is the document, and the local one may differ. Alone in a room, it is as with no room.
+- **Rooms.** A room that is shared keeps no steps: the room's copy is the document, and the local one may differ. A document opened from a room's copy (someone else was already editing it) gets no kept steps back, since they were made for the local copy, but keeps the ones made since, once it is alone. Alone in a room, it is as with no room.
+- **Storage full.** Kept steps never make a save fail: past the browser's quota, the document is saved without them (which drops the old ones too).
 - **Typing in progress.** The step being typed into is joined by the next keystrokes in memory. A kept one never is: typing after a reload starts a new step.
 - **Privacy.** The steps hold deleted text. They stay in this browser, Clear Local Data deletes them with the rest of the database, and deleting a document deletes them.
 - **The older shell.** Nothing here touches the shell.

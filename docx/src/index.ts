@@ -24,4 +24,4 @@ export { SYMBOLS } from './math/symbols.ts';
 export { fromMathML, type MathMLElement } from './math/mathmlRead.ts';
 export { TAG_SCHEME, MAX_TAG_CHARS, tagAddress, parseTagAddress, normalizeTag, readTag, tagsIn } from './search/tags.ts';
 export { INDEX_VERSION, buildIndex, parseQuery, normalizePhrase, searchIndex, tagsOf, tokenize, fold, encodeIndex, decodeIndex, type DocIndex, type ParsedQuery, type IndexHit } from './search/index.ts';
-export { DOC_SCHEME, EMBED_PREFIX, LIVE_PREFIX, docAddress, parseDocAddress, embedTitle, docLinkTitles, liveTitle, sourceTitle, sdtTag, textLinkTitles, textLiveTitles, liveInlineTitles } from './search/links.ts';
+export { DOC_SCHEME, EMBED_PREFIX, LIVE_PREFIX, docAddress, parseDocAddress, embedTitle, docLinkTitles, liveTitle, sourceTitle, linkTitle, renamedSource, sdtTag, textLinkTitles, textLiveTitles, liveInlineTitles } from './search/links.ts';

@@ -60,6 +60,7 @@ export const live: Partial<Messages> = {
   'live.error.unsupported': "{source} no se puede mostrar en un bloque en vivo.",
   'live.error.script': "{source} no se pudo ejecutar: {detail}",
   'live.error.notAllowed': "{source} no tiene permiso para leer lo que pidió: {detail}",
+  'live.error.blocked': "{source} necesita más espacio: {detail} no está vacía, así que conserva su último resultado. Vacía las celdas en las que crecería.",
   'live.script.wholeVault': "toda la bóveda",
   'live.script.daily': "Se ejecuta todos los días a las {time}",
   'live.script.weekly': "Se ejecuta cada {day} a las {time}",

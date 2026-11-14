@@ -371,15 +371,46 @@ export class OpcPackage {
     }
   }
 
-  async write(): Promise<Uint8Array> {
+  /** The parts that have relationships ("" for the package itself), read or added. */
+  get relationshipOwners(): string[] {
+    const owners = new Set(this.rels.keys());
+    for (const name of this.relsEntries.keys()) {
+      if (name === '_rels/.rels') owners.add('');
+      else {
+        const m = /^(.*?)_rels\/([^/]*)\.rels$/.exec(name);
+        if (m) owners.add(m[1] + m[2]);
+      }
+    }
+    return [...owners];
+  }
+
+  /**
+   * The package as a file. `omit` leaves things out of the file while keeping them here (so an undo that brings back what
+   * used them finds them): relationships by part and id, and parts under `unreferencedUnder` (`word/media/`) that no
+   * relationship written points at.
+   */
+  async write(omit: { relationships?: Map<string, Set<string>>; unreferencedUnder?: string } = {}): Promise<Uint8Array> {
     const inputs: ZipInput[] = [];
+    const omitRels = omit.relationships ?? new Map<string, Set<string>>();
+    const omitted = new Set<string>();
+    if (omit.unreferencedUnder) {
+      const prefix = omit.unreferencedUnder.toLowerCase();
+      const referenced = new Set<string>();
+      for (const owner of this.relationshipOwners) {
+        const rels = await this.relationships(owner);
+        const skip = omitRels.get(owner);
+        for (const rel of rels.list) if (!rel.external && !skip?.has(rel.id)) referenced.add(rels.partName(rel).toLowerCase());
+      }
+      for (const name of this.parts.keys()) if (name.toLowerCase().startsWith(prefix) && !referenced.has(name.toLowerCase())) omitted.add(name);
+    }
     const types = el('Types', { xmlns: NS.ct }, [
       ...[...this.defaults].map(([ext, type]) => el('Default', { Extension: ext, ContentType: type })),
       ...[...this.overrides]
-        .filter(([name]) => this.lowerCaseNames.has(name))
+        .filter(([name]) => this.lowerCaseNames.has(name) && !omitted.has(this.lowerCaseNames.get(name)!))
         .map(([name, type]) => el('Override', { PartName: `/${this.lowerCaseNames.get(name)}`, ContentType: type })),
     ]);
-    inputs.push(this.typesEntry ? { name: '[Content_Types].xml', entry: this.typesEntry } : { name: '[Content_Types].xml', data: new TextEncoder().encode(serializeXml(types)) });
+    const typesKept = this.typesEntry && ![...omitted].some((name) => this.overrides.has(name.toLowerCase()));
+    inputs.push(typesKept ? { name: '[Content_Types].xml', entry: this.typesEntry! } : { name: '[Content_Types].xml', data: new TextEncoder().encode(serializeXml(types)) });
 
     // Relationship parts: regenerated if modified, otherwise copied.
     const relsWritten = new Set<string>();
@@ -387,8 +418,10 @@ export class OpcPackage {
       const relsName = part === '' ? '_rels/.rels' : relationshipsPartName(part);
       if (relsWritten.has(relsName)) return;
       const rels = this.rels.get(part);
-      if (rels && (rels.modified || !this.relsEntries.has(relsName))) {
-        if (rels.list.length) inputs.push({ name: relsName, data: new TextEncoder().encode(serializeXml(rels.toXml())) });
+      const skip = omitRels.get(part);
+      if (rels && (rels.modified || !this.relsEntries.has(relsName) || skip?.size)) {
+        const kept = skip?.size ? new Relationships(rels.source, rels.list.filter((r) => !skip.has(r.id))) : rels;
+        if (kept.list.length) inputs.push({ name: relsName, data: new TextEncoder().encode(serializeXml(kept.toXml())) });
       } else {
         const entry = this.relsEntries.get(relsName);
         if (entry) inputs.push({ name: relsName, entry });
@@ -397,6 +430,7 @@ export class OpcPackage {
     };
     addRels('');
     for (const [name, part] of this.parts) {
+      if (omitted.has(name)) continue;
       inputs.push(part.data ? { name, data: part.data, compress: !isCompressedMedia(name) } : part.deflated ? { name, ...part.deflated } : { name, entry: part.entry! });
       addRels(name);
     }

@@ -116,6 +116,7 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-08 | `e2e/files/folders.spec.ts` › deleting a folder deletes the folders inside it too | Failed at 15.5 s in the 0.36.0 release run, right after the test above; alone, passed four times |
 | 2026-11-09 | `e2e/collab/comments-files.spec.ts` › comments persist › a reply and a resolved state survive a reload | Timed out at 1 min in pass one of the 0.37.0 release run, passed its retry; alone, passed three times |
 | 2026-11-09 | `e2e/collab/folders.spec.ts` › documents made in the app (with a copy in this browser) stay in their folder as the dashboard refreshes | Already `@heavy`: the folder still did not show "2 items" at 23 s in the heavy pass of the 0.37.0 release run, passed its retry; alone, passed three times |
+| 2026-11-14 | `e2e/collab/cloud-room.spec.ts` › a cloud picture in a room › shapes drawn on whichever device holds it appear on the other… | Failed at 34.7 s in pass one of the live-blocks branch's full run, passed its retry; alone, passed five times |
 
 ## Performance traces (`golem:*`)
 

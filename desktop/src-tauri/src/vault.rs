@@ -121,6 +121,56 @@ fn walk(dir: &Path, prefix: &str, found: &mut Vec<Entry>) -> std::io::Result<()>
     Ok(())
 }
 
+/// Every folder in the vault, empty ones included, sorted by path. Hidden names and links are left out, and so is
+/// everything under them, as `scan` does.
+pub fn folders(root: &Path) -> Result<Vec<String>, String> {
+    fn walk_dirs(dir: &Path, prefix: &str, found: &mut Vec<String>) -> std::io::Result<()> {
+        for item in fs::read_dir(dir)? {
+            let item = item?;
+            let name = item.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') || !item.file_type()?.is_dir() {
+                continue;
+            }
+            let relative = if prefix.is_empty() { name } else { format!("{prefix}/{name}") };
+            walk_dirs(&item.path(), &relative, found)?;
+            found.push(relative);
+        }
+        Ok(())
+    }
+    let mut found = Vec::new();
+    walk_dirs(root, "", &mut found).map_err(|e| e.to_string())?;
+    found.sort();
+    Ok(found)
+}
+
+/// Makes a folder (and the ones it is in) inside the vault; one that is already there is left as it is.
+pub fn make_folder(root: &Path, relative: &str) -> Result<(), String> {
+    let target = resolve(root, relative, false)?;
+    fs::create_dir_all(&target).map_err(|e| e.to_string())
+}
+
+/// Removes a folder that holds nothing (Finder's `.DS_Store` aside). True when it is gone, or was never there; false when
+/// something is in it, which is then left as it is.
+pub fn remove_folder(root: &Path, relative: &str) -> Result<bool, String> {
+    let target = resolve(root, relative, false)?;
+    if !target.is_dir() {
+        return Ok(!target.exists());
+    }
+    let mut litter = Vec::new();
+    for item in fs::read_dir(&target).map_err(|e| e.to_string())? {
+        let item = item.map_err(|e| e.to_string())?;
+        if item.file_name() != ".DS_Store" {
+            return Ok(false);
+        }
+        litter.push(item.path());
+    }
+    for file in litter {
+        fs::remove_file(file).map_err(|e| e.to_string())?;
+    }
+    fs::remove_dir(&target).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 fn modified_ms(meta: &fs::Metadata) -> u64 {
     meta.modified()
         .ok()
@@ -439,6 +489,21 @@ pub fn vault_remove(path: String, vault: State<'_, Vault>) -> Result<(), String>
     remove(&vault.root()?, &path)
 }
 
+#[tauri::command]
+pub fn vault_folders(vault: State<'_, Vault>) -> Result<Vec<String>, String> {
+    folders(&vault.root()?)
+}
+
+#[tauri::command]
+pub fn vault_make_folder(path: String, vault: State<'_, Vault>) -> Result<(), String> {
+    make_folder(&vault.root()?, &path)
+}
+
+#[tauri::command]
+pub fn vault_remove_folder(path: String, vault: State<'_, Vault>) -> Result<bool, String> {
+    remove_folder(&vault.root()?, &path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -506,6 +571,29 @@ mod tests {
         assert!(!root.join("Notes").exists(), "the empty folder goes too");
         assert!(root.exists());
         assert!(remove(root, ".golemdocs/state.json").is_err());
+    }
+
+    #[test]
+    fn folders_are_listed_made_and_removed_only_when_empty() {
+        let dir = vault();
+        let root = dir.path();
+        write(root, "Notes/Deep/one.md", b"x").unwrap();
+        make_folder(root, "Empty/Inner").unwrap();
+        make_folder(root, "Empty/Inner").unwrap();
+        fs::create_dir_all(root.join(".obsidian/plugins")).unwrap();
+        write(root, ".golemdocs/state.json", b"{}").unwrap();
+        assert_eq!(folders(root).unwrap(), ["Empty", "Empty/Inner", "Notes", "Notes/Deep"]);
+        assert!(make_folder(root, ".hidden").is_err());
+
+        assert_eq!(remove_folder(root, "Notes/Deep").unwrap(), false, "a folder with a file stays");
+        assert!(root.join("Notes/Deep/one.md").exists());
+        assert_eq!(remove_folder(root, "Empty").unwrap(), false, "a folder with a folder in it stays");
+        fs::write(root.join("Empty/Inner/.DS_Store"), b"").unwrap();
+        assert_eq!(remove_folder(root, "Empty/Inner").unwrap(), true, "Finder's .DS_Store does not count");
+        assert_eq!(remove_folder(root, "Empty").unwrap(), true);
+        assert_eq!(remove_folder(root, "Empty").unwrap(), true, "one that is gone already is fine");
+        assert_eq!(folders(root).unwrap(), ["Notes", "Notes/Deep"]);
+        assert!(remove_folder(root, ".obsidian").is_err());
     }
 
     #[test]

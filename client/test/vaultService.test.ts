@@ -24,6 +24,9 @@ function bridge(scan: () => Promise<{ path: string; size: number; mtimeMs: numbe
     read: never,
     write: never,
     remove: never,
+    folders: async () => [],
+    makeFolder: never,
+    removeFolder: never,
   });
 }
 

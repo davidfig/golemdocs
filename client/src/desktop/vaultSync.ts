@@ -7,7 +7,7 @@
 // sync runs in tests against in-memory stand-ins. One action failing is reported and the rest carry on; what failed
 // is still different from the manifest, so the next sync tries it again.
 
-import { cloudPaths, folderPaths, foldersOf, needsHash, planVault, vanishedFolders, type CloudDoc, type CloudFile, type CloudFolder, type LocalFile, type ManifestEntry, type VaultAction, type VaultPlan } from './vaultPlan.ts';
+import { cloudPaths, folderPaths, foldersOf, needsHash, planVault, safeName, vanishedFolders, type CloudDoc, type CloudFile, type CloudFolder, type LocalFile, type ManifestEntry, type VaultAction, type VaultPlan } from './vaultPlan.ts';
 
 /** Failures in a row after which a sync stops: a bad file is skipped, but every file failing is a problem to show now. */
 const GIVE_UP_AFTER = 5;
@@ -25,6 +25,15 @@ export interface VaultDisk {
   /** Returns the new modification time. */
   write(path: string, bytes: Uint8Array): Promise<number>;
   remove(path: string): Promise<void>;
+  /**
+   * Every folder, empty ones included; null when they can't be listed (a shell older than the page). With these three the
+   * vault and the account have the same folders, empty ones too; without them a folder is seen only through its files.
+   */
+  folders?(): Promise<string[] | null>;
+  /** Makes a folder (and the ones it is in). */
+  makeFolder?(path: string): Promise<void>;
+  /** Removes a folder that holds nothing; false when something is in it, which is left. */
+  removeFolder?(path: string): Promise<boolean>;
 }
 
 export interface VaultCloud {
@@ -42,6 +51,8 @@ export interface VaultCloud {
   trash(id: string): Promise<void>;
   /** Removes an empty folder (see `vanishedFolders`). */
   removeFolder(id: string): Promise<void>;
+  /** Makes the folder named by `directory` and the ones it is in, unless they are there already. */
+  makeFolder(directory: string[]): Promise<void>;
 }
 
 export interface VaultCodec {
@@ -77,8 +88,13 @@ interface State {
   version: 1;
   account: string;
   entries: ManifestEntry[];
-  /** The folders that held files in the vault after the last sync, so one removed from the vault can be told from one never in it. */
+  /**
+   * The folders in the vault after the last sync, so one removed from the vault can be told from one never in it (and, with
+   * `mirrored`, one removed from the account from one new in the vault). Before `mirrored`, only those that held files.
+   */
   folders?: string[];
+  /** The vault has had all of the account's folders, empty ones too, since the last sync (see `mirrorFolders`). */
+  mirrored?: boolean;
 }
 
 /** Where a running sync is, for the dialog: the step, and for the last one how many of the changes are done and which file is being worked on. */
@@ -109,6 +125,8 @@ export interface SyncReport {
   trashed: number;
   /** Folders removed from the account because they were removed from the vault. */
   foldersRemoved: number;
+  /** Folders made in the account because they were made in the vault (empty ones: a file's folder comes with it). */
+  foldersMade: number;
   /** Documents the vault does not keep (a name with no file format the app opens) and so left alone, plus any that had no file to write. */
   skipped: number;
   errors: { action: VaultAction; message: string }[];
@@ -156,7 +174,7 @@ function adoptable(entries: ManifestEntry[], account: string, listed: ReadonlySe
 }
 
 export async function syncVault(host: VaultHost, options: { allowMassDelete?: boolean; progress?: (progress: SyncProgress) => void } = {}): Promise<SyncReport> {
-  const report: SyncReport = { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, foldersRemoved: 0, skipped: 0, errors: [], touched: [], missing: [] };
+  const report: SyncReport = { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, foldersRemoved: 0, foldersMade: 0, skipped: 0, errors: [], touched: [], missing: [] };
   const { disk, cloud, codec } = host;
 
   const remembered = parseState(await host.memory.load());
@@ -182,6 +200,8 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
   const kept: CloudFile[] = all.filter((c) => codec.kept(nameOf.get(c.id) ?? ''));
   report.skipped = all.length - kept.length;
   const scanned = await disk.scan();
+  // Taken with the files, before the sync changes anything: a folder missing from this was removed by the person, not by this sync.
+  const diskFolders = disk.folders && disk.makeFolder && disk.removeFolder ? await disk.folders() : null;
   report.folderFiles = scanned.length;
   const local = scanned.filter((f) => codec.kept(baseName(f.path)));
   const localByPath = new Map(local.map((f) => [f.path, f]));
@@ -298,8 +318,18 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
         await cloud.removeFolder(action.id);
         report.foldersRemoved++;
         return;
+      case 'makeFolder':
+        if (action.where === 'local') return void (await disk.makeFolder!(action.path));
+        await cloud.makeFolder(action.path.split('/'));
+        report.foldersMade++;
+        return;
+      case 'removeLocalFolder':
+        if (!(await disk.removeFolder!(action.path))) leftHere.add(action.path);
+        return;
     }
   }
+  /** Folders removed from the account that still hold something in the vault, so they stay here (see `mirrorFolders`). */
+  const leftHere = new Set<string>();
 
   let done = 0;
   let inARow = 0;
@@ -334,31 +364,75 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
     }
   }
 
+  const attempt = (action: VaultAction): Promise<boolean> =>
+    run(action).then(
+      () => true,
+      (error) => {
+        report.errors.push({ action, message: error instanceof Error ? error.message : String(error) });
+        return false;
+      },
+    );
+
   // Folders removed from the vault (deleted, or renamed: their files are in the new one by now) go from the account once empty there.
-  // Only those that held files at the last sync: with no memory of folders yet, nothing is removed. One that is not removed yet
+  // Only those the vault had at the last sync: with no memory of folders yet, nothing is removed. One that is not removed yet
   // (it still holds documents, say a held-back delete's, or the account could not be reached) is looked at again next time.
-  const onDisk = foldersOf(scanned.map((f) => f.path));
+  const onDisk = new Set([...foldersOf(scanned.map((f) => f.path)), ...(diskFolders ?? [])]);
   const stillGone = new Set((state.folders ?? []).filter((path) => !onDisk.has(path)));
-  if (stillGone.size) {
+  // With the vault's folders listed, the two sides have the same folders, empty ones included (`mirrorFolders`).
+  let mirrored: string[] | null = null;
+  if (stillGone.size || diskFolders) {
     try {
       const after = await cloud.list();
-      for (const { id, path } of vanishedFolders(stillGone, onDisk, after.docs, after.folders)) {
-        const action: VaultAction = { kind: 'removeFolder', id, path };
-        await run(action).then(
-          () => stillGone.delete(path),
-          (error) => report.errors.push({ action, message: error instanceof Error ? error.message : String(error) }),
-        );
+      // The first sync to do so, of a vault synced before, takes the account's folders the vault does not have for removed from
+      // it: until then only folders that held files were written, so one missing here was removed from the vault or emptied in it.
+      const firstMirror = !!diskFolders && !state.mirrored && saved?.account === host.account;
+      const missing = firstMirror ? [...folderPaths(after.folders).values()].filter((path) => !onDisk.has(path)) : [];
+      const removed = new Set<string>();
+      for (const { id, path } of vanishedFolders([...stillGone, ...missing], onDisk, after.docs, after.folders)) {
+        if (await attempt({ kind: 'removeFolder', id, path })) {
+          stillGone.delete(path);
+          removed.add(id);
+        }
       }
-      const inAccount = new Set(folderPaths(after.folders).values());
+      const inAccount = new Set(folderPaths(after.folders.filter((f) => !removed.has(f.id))).values());
       for (const path of stillGone) if (!inAccount.has(path)) stillGone.delete(path);
+      if (diskFolders) mirrored = await mirrorFolders(new Set(state.folders ?? []), onDisk, inAccount, stillGone);
     } catch {
       /* the account could not be listed: try again next time */
     }
   }
 
+  /**
+   * Gives each side the folders the other has, empty ones too, and returns the folders the vault has now that the account has
+   * as well (with those left on one side on purpose), to remember for the next sync. `remembered` is what both had at the last
+   * sync, so a folder only one side has now was either made there (and is made on the other side) or removed from the other
+   * (and is removed here too, if nothing is left in it).
+   */
+  async function mirrorFolders(remembered: ReadonlySet<string>, onDisk: ReadonlySet<string>, inAccount: Set<string>, stillGone: ReadonlySet<string>): Promise<string[]> {
+    const depth = (path: string) => path.split('/').length;
+    for (const path of [...remembered].filter((p) => onDisk.has(p) && !inAccount.has(p)).sort((a, b) => depth(b) - depth(a))) {
+      await attempt({ kind: 'removeLocalFolder', path });
+    }
+    // A name the account would spell differently (`a:b` is `a_b` there) would be made again on every sync: such a folder is left out.
+    const spelledAlike = (path: string) => path.split('/').every((name) => safeName(name) === name);
+    for (const path of [...onDisk].filter((p) => !remembered.has(p) && !inAccount.has(p) && spelledAlike(p)).sort((a, b) => depth(a) - depth(b))) {
+      if (await attempt({ kind: 'makeFolder', path, where: 'cloud' })) inAccount.add(path);
+    }
+    // In the account and not here: new there, or emptied by this sync's moves and deletes (a file's folder goes with its last file).
+    const here = new Set((await disk.folders!()) ?? []);
+    const inGone = (path: string) => [...foldersOf([path]), path].some((p) => stillGone.has(p));
+    for (const path of [...inAccount].filter((p) => !here.has(p) && !inGone(p)).sort((a, b) => depth(a) - depth(b))) {
+      if (await attempt({ kind: 'makeFolder', path, where: 'local' })) here.add(path);
+    }
+    return [...inAccount].filter((p) => here.has(p));
+  }
+
   state.entries = [...entries.values()];
   const filesNow = [...scanned.map((f) => f.path).filter((path) => !removedHere.has(path)), ...state.entries.map((e) => e.path)];
-  state.folders = [...new Set([...foldersOf(filesNow), ...stillGone])].sort();
+  if (mirrored) state.mirrored = true;
+  // Not compared this time (the account could not be listed): what was remembered stays, so no folder is taken for new or removed.
+  const known = mirrored ?? [...foldersOf(filesNow), ...(diskFolders && state.mirrored ? (state.folders ?? []) : [])];
+  state.folders = [...new Set([...known, ...leftHere, ...stillGone])].sort();
   await host.memory.save(JSON.stringify(state));
   if (folderState?.account !== host.account || folderState.entries.length) {
     await disk.write(STATE_PATH, new TextEncoder().encode(JSON.stringify({ version: 1, account: host.account, entries: [] } satisfies State)));

@@ -37,6 +37,19 @@ test('Show in Finder and Open Privacy Settings say the app needs updating when t
   await assert.rejects(desktopBridge()!.reveal(), ShellTooOldError);
 });
 
+test('folders are listed, made and removed, and a shell too old to list them gives none', async () => {
+  shell({ vault_folders: ['Notes', 'Notes/Empty'], vault_make_folder: undefined, vault_remove_folder: false });
+  const bridge = desktopBridge()!;
+  assert.deepEqual(await bridge.folders(), ['Notes', 'Notes/Empty']);
+  await bridge.makeFolder('New');
+  assert.equal(await bridge.removeFolder('Notes'), false);
+  shell({});
+  assert.equal(await desktopBridge()!.folders(), null);
+  await assert.rejects(desktopBridge()!.makeFolder('New'), ShellTooOldError);
+  shell({ vault_folders: Promise.reject('Permission denied') });
+  await assert.rejects(desktopBridge()!.folders(), /Permission denied/);
+});
+
 test('a shell that has the commands works as before', async () => {
   shell({ vault_check: undefined, vault_reveal: undefined, vault_open_privacy: undefined });
   const bridge = desktopBridge()!;

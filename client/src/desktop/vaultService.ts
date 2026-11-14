@@ -173,6 +173,12 @@ export class VaultService {
     this.set({ state: 'syncing', progress: { ...progress, since: same ? previous.since : Date.now() } });
   }
 
+  /** What the folder holds, as text that changes when anything in it does: its files, and its folders (an empty one made or removed is a change too). */
+  private async fingerprint(): Promise<string> {
+    const [files, folders] = await Promise.all([this.bridge.scan(), this.bridge.folders()]);
+    return [...files.map((f) => `${f.path}|${f.size}|${f.mtimeMs}`), ...(folders ?? []).map((f) => `${f}/`)].join('\n');
+  }
+
   private async look(): Promise<void> {
     this.lastLook = Date.now();
     // A sync that ended with errors is not started again every few seconds (that would repeat the same failures for ever): it tries again with the next look at the account.
@@ -180,7 +186,7 @@ export class VaultService {
     if (!this.wanted || this.running || !this.status.root || this.status.state === 'access') return;
     if (this.status.state === 'waiting' && this.status.message === ICLOUD_DOWNLOADING) return void (await this.syncNow());
     try {
-      const local = (await this.bridge.scan()).map((f) => `${f.path}|${f.size}|${f.mtimeMs}`).join('\n');
+      const local = await this.fingerprint();
       const due = Date.now() - this.lastAccountLook >= ACCOUNT_MS;
       if (local !== this.signature || due || this.status.state === 'offline') await this.syncNow();
     } catch {
@@ -218,12 +224,12 @@ export class VaultService {
       const account = this.account(); // signing out can happen while waiting
       const report = await syncVault(realHost(root, this.bridge, this.codec, account, () => this.hooks.openLocalId?.() ?? null), { ...options, progress: (p) => this.progress(p) });
       // What the sync itself wrote is not a change to sync again.
-      this.signature = (await this.bridge.scan()).map((f) => `${f.path}|${f.size}|${f.mtimeMs}`).join('\n');
+      this.signature = await this.fingerprint();
       this.lastAccountLook = Date.now();
       // Signed out, a folder that belongs to an account waits for that account to sign in.
       const state: VaultState = report.wrongAccount ? (account ? 'wrongAccount' : 'signedOut') : report.blocked ? 'blocked' : report.errors.length ? 'error' : 'idle';
       this.set({ state, report, progress: undefined, lastSync: Date.now(), message: report.errors[0]?.message });
-      if (report.downloaded + report.uploaded + report.created + report.renamed + report.movedHere + report.deletedHere + report.trashed + report.foldersRemoved > 0) this.hooks.changed(report.touched);
+      if (report.downloaded + report.uploaded + report.created + report.renamed + report.movedHere + report.deletedHere + report.trashed + report.foldersRemoved + report.foldersMade > 0) this.hooks.changed(report.touched);
     } catch (error) {
       const offline = error instanceof TypeError || (error instanceof CloudError && error.status >= 500);
       this.set({ progress: undefined, state: offline ? 'offline' : error instanceof CloudError && error.status === 401 ? 'signedOut' : 'error', message: error instanceof Error ? error.message : String(error) });

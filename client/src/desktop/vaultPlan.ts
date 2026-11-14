@@ -65,7 +65,11 @@ export type VaultAction =
   /** Gone from both: drop the link. */
   | { kind: 'forget'; id: string }
   /** The folder was removed from the vault and holds nothing in the account: remove it there too (see `vanishedFolders`). */
-  | { kind: 'removeFolder'; id: string; path: string };
+  | { kind: 'removeFolder'; id: string; path: string }
+  /** A folder made in the vault that the account does not have, or one the account has that the vault does not: make it on that side (see `mirrorFolders`). */
+  | { kind: 'makeFolder'; path: string; where: 'cloud' | 'local' }
+  /** A folder removed from the account: remove it from the vault too, if nothing is left in it. */
+  | { kind: 'removeLocalFolder'; path: string };
 
 export interface VaultPlan {
   actions: VaultAction[];

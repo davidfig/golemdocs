@@ -32,6 +32,12 @@ export interface DesktopBridge {
   /** Writes through a temporary file and a rename. Returns the new modification time in milliseconds. */
   write(path: string, bytes: Uint8Array): Promise<number>;
   remove(path: string): Promise<void>;
+  /** Every folder in the vault, empty ones included; null in a shell too old to list them. */
+  folders(): Promise<string[] | null>;
+  /** Makes a folder (and the ones it is in); one already there is fine. */
+  makeFolder(path: string): Promise<void>;
+  /** Removes a folder if nothing is in it: true when it is gone, false when it holds something and was left. */
+  removeFolder(path: string): Promise<boolean>;
 }
 
 /**
@@ -147,6 +153,13 @@ export function desktopBridge(): DesktopBridge | null {
       return core.invoke<number>('vault_write', data as unknown as Record<string, unknown>, { headers: { path: encodeURIComponent(path).replace(/%2F/gi, '/') } });
     },
     remove: (path) => core.invoke<void>('vault_remove', { path }),
+    // An older shell lists files only: the sync then keeps the folders it can see through them, as it did before.
+    folders: () => core.invoke<string[]>('vault_folders').catch((error: unknown) => {
+      if (isMissingCommand(error)) return null;
+      throw error;
+    }),
+    makeFolder: (path) => needsNewerShell(() => core.invoke<void>('vault_make_folder', { path })),
+    removeFolder: (path) => needsNewerShell(() => core.invoke<boolean>('vault_remove_folder', { path })),
   };
 }
 

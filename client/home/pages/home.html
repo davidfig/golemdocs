@@ -99,6 +99,15 @@
           <figcaption><b>{{home.p.write.h}}</b> {{home.p.write.p}}</figcaption>
         </figure>
 
+        <h2>{{home.sheet.h}}</h2>
+        <figure class="point sheet-shot">
+          <div class="plate flush sheet-plate">
+            <video data-src="/home/workbook.webm" data-src-dark="/home/workbook-dark.webm" muted loop playsinline preload="none" aria-label="{{home.sheet.label}}"></video>
+            <span class="callout" style="right: 12px; bottom: 12px">{{home.sheet.callout}}</span>
+          </div>
+          <figcaption><b>{{home.sheet.capH}}</b> {{home.sheet.capP}} <a href="{{base}}/formats">{{home.p.everything.link}}</a></figcaption>
+        </figure>
+
         <h2>{{home.brain.h}}</h2>
         <div class="points split wide">
           <figure class="point">
@@ -223,7 +232,7 @@
 
           <figure class="point">
             <div class="plate flush">
-              <video data-src="/home/war-and-peace.webm" muted loop playsinline preload="none" aria-label="{{home.clip.label}}"></video>
+              <video data-src="/home/war-and-peace.webm" data-src-dark="/home/war-and-peace-dark.webm" muted loop playsinline preload="none" aria-label="{{home.clip.label}}"></video>
               <span class="callout" style="left: 12px; bottom: 12px">{{home.clip.callout}}</span>
             </div>
             <figcaption><b>{{home.p.everything.h}}</b> {{home.p.everything.p}} <a href="{{base}}/formats">{{home.p.everything.link}}</a></figcaption>

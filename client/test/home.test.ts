@@ -60,9 +60,9 @@ test('every page in every language declares its language, links its alternates, 
 
 test('links between the pages go to pages that exist', () => {
   const known = new Set(allPaths());
-  const guides = /^\/home\/(convert|pdf|images|vector|documents|collaborate|customize|import|obsidian|large-files|privacy|terms|site\.css|site\.js|war-and-peace\.webm)$/;
+  const guides = /^\/home\/(convert|pdf|images|vector|documents|collaborate|customize|import|obsidian|large-files|privacy|terms|site\.css|site\.js|(war-and-peace|workbook)(-dark)?\.webm)$/;
   for (const [file, html] of renderAll()) {
-    for (const [, href] of html.matchAll(/(?:href|src|data-src)="(\/home[^"#]*)/g)) assert.ok(known.has(href) || guides.test(href), `${file} links ${href}`);
+    for (const [, href] of html.matchAll(/(?:href|src|data-src(?:-dark)?)="(\/home[^"#]*)/g)) assert.ok(known.has(href) || guides.test(href), `${file} links ${href}`);
   }
 });
 

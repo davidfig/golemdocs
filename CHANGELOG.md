@@ -29,6 +29,8 @@
 - The saving indicator no longer pulses when your system asks for reduced motion.
 - Escape now closes the link form even when it opened because the pointer rested on a link.
 - Grammar mistakes are underlined with a dashed double line, so they can be told apart from spelling mistakes without relying on color.
+- The website’s home page now says Golem Docs opens Excel files, and plays a recording of the app zooming out over a workbook of a million rows and back; the Formats page lists .xlsx.
+- In dark mode, the website’s home page plays its workbook and War and Peace clips in the app’s dark theme too, instead of bright white pages.
 - A new install of the desktop app keeps your documents in a GolemDocs folder in your home folder from the start, on Mac, Windows and Linux. File › Vault Folder can change it.
 - Right-click menus (the document’s, with synonyms and spelling suggestions, the Files sidebar’s and the layers panel’s) open with Shift+F10 or the menu key and work with the arrow keys, Enter and Escape.
 - Tabs in dialogs and the Bullets and Numbering galleries move with the arrow keys, and screen readers read them as tabs and choices.

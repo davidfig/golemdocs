@@ -27,7 +27,7 @@ Dependencies only point down: `docx` (document model, reader/writer) is the base
 | `e2e/`, `playwright.config.ts` | End-to-end tests |
 | `docs/` | Docs; `server/AUTH.md` covers sign-in providers |
 
-Root scripts (`package.json`): `dev`, `dev:client`, `dev:server`, `kill`, `build`, `typecheck` (root `tsc` over `scripts/`, then each package's `tsc`), `build:home`, `fonts`, `test`, `test:coverage`, `e2e`, `record:home`. TypeScript is shared via `tsconfig.base.json`.
+Root scripts (`package.json`): `dev`, `dev:client`, `dev:server`, `kill`, `build`, `typecheck` (root `tsc` over `scripts/`, then each package's `tsc`), `build:home`, `fonts`, `test`, `test:coverage`, `e2e`, `record:home`, `record:workbook`. TypeScript is shared via `tsconfig.base.json`.
 
 ## Client build and lazy chunks
 
@@ -54,7 +54,8 @@ Rules (AGENTS.md "Bundle size and lazy loading"): split into its own chunk only 
 | `scripts/e2e.ts` (`pnpm e2e`) | Runs Playwright in two passes (below) |
 | `scripts/coverage.ts` (`pnpm test:coverage`) | Node built-in line coverage per package; lists files no test loads |
 | `scripts/fonts/` (`pnpm fonts`) | Font atlas generation (below) |
-| `scripts/marketing/record-war-and-peace.ts` (`pnpm record:home`) | Re-records `client/public/home/war-and-peace.webm` from the user's dev server |
+| `scripts/marketing/record-war-and-peace.ts` (`pnpm record:home`) | Re-records `client/public/home/war-and-peace.webm` and its dark-theme twin `war-and-peace-dark.webm` from the user's dev server (`--theme light` or `dark` for one) |
+| `scripts/marketing/record-workbook.ts` (`pnpm record:workbook`) | Re-records `client/public/home/workbook.webm` and `workbook-dark.webm` the same way, opening the million-row workbook `make-workbook.ts` writes to `.cache/marketing/orders.xlsx`; both scripts share `clip.ts` (the browser, the frame-by-frame zoom, the encoding) |
 
 ### Fonts generation
 

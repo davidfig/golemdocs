@@ -33,6 +33,7 @@
 
 ### Changed
 
+- A new install of the desktop app keeps your documents in a GolemDocs folder in your home folder from the start, on Mac, Windows and Linux. File › Vault Folder can change it.
 - Undo and Redo keep working after a reload, a closed tab or the next day: each document's undo steps are kept on this device with its saved copy (not uploaded). Edits brought back after a reload undo as one step.
 - Until March 2027, signed-in apps send one anonymous daily total: how often live blocks were out of date when a document opened. It never says who or which document, and the pricing page now says so.
 

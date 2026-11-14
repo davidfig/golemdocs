@@ -108,9 +108,9 @@ test('a document renamed in the account moves the untouched file', () => {
   assert.deepEqual(result.actions, [{ kind: 'moveLocal', id: 'a', from: 'a.md', to: 'Folder/a.md' }]);
 });
 
-test('a vault that was filled before it was linked uploads over the account copy, keeping its version', () => {
+test('a vault that was filled before it was linked uploads over the account copy, keeping its version, unless they are the same', () => {
   const result = plan({ local: [file('a.md')], cloud: [remote('a')] });
-  assert.deepEqual(result.actions, [{ kind: 'upload', id: 'a', path: 'a.md', keepCloudVersion: true }]);
+  assert.deepEqual(result.actions, [{ kind: 'upload', id: 'a', path: 'a.md', keepCloudVersion: true, unlinked: true }]);
 });
 
 test('deleting most of the vault at once is held back until confirmed', () => {

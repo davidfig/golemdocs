@@ -34,6 +34,11 @@ export interface VaultDisk {
   makeFolder?(path: string): Promise<void>;
   /** Removes a folder that holds nothing; false when something is in it, which is left. */
   removeFolder?(path: string): Promise<boolean>;
+  /**
+   * Gives a file dates (milliseconds), so it shows when its document was made, and last changed, rather than when this computer
+   * wrote it. A creation date only moves earlier. Returns the modification time after, or null when files can't be dated here.
+   */
+  setTimes?(path: string, times: { created?: number; modified?: number }): Promise<number | null>;
 }
 
 export interface VaultCloud {
@@ -123,6 +128,8 @@ export interface SyncReport {
   movedHere: number;
   deletedHere: number;
   trashed: number;
+  /** Files that were already the same as their document, found by path when the vault had no memory of them: linked, not uploaded. */
+  linked: number;
   /** Folders removed from the account because they were removed from the vault. */
   foldersRemoved: number;
   /** Folders made in the account because they were made in the vault (empty ones: a file's folder comes with it). */
@@ -174,7 +181,7 @@ function adoptable(entries: ManifestEntry[], account: string, listed: ReadonlySe
 }
 
 export async function syncVault(host: VaultHost, options: { allowMassDelete?: boolean; progress?: (progress: SyncProgress) => void } = {}): Promise<SyncReport> {
-  const report: SyncReport = { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, foldersRemoved: 0, foldersMade: 0, skipped: 0, errors: [], touched: [], missing: [] };
+  const report: SyncReport = { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, linked: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, foldersRemoved: 0, foldersMade: 0, skipped: 0, errors: [], touched: [], missing: [] };
   const { disk, cloud, codec } = host;
 
   const remembered = parseState(await host.memory.load());
@@ -219,8 +226,10 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
   const taken = new Set(local.map((f) => f.path)); // paths in use, so a move or download never writes over a different file
   const removedHere = new Set<string>(); // files this sync deleted or moved away
 
-  const record = (id: string, path: string, bytes: Uint8Array, mtimeMs: number, cloudUpdatedAt: number, hash: string) =>
-    entries.set(id, { id, path, hash, size: bytes.byteLength, mtimeMs, cloudUpdatedAt });
+  const record = (id: string, path: string, bytes: Uint8Array, mtimeMs: number, cloudUpdatedAt: number, hash: string, dated = entries.get(id)?.dated) =>
+    entries.set(id, { id, path, hash, size: bytes.byteLength, mtimeMs, cloudUpdatedAt, ...(dated ? { dated } : {}) });
+  /** Dates a file the sync just wrote. Null when it can't be: the file keeps the date the disk gave it, and is not `dated`. */
+  const date = async (path: string, times: { created?: number; modified?: number }): Promise<number | null> => (disk.setTimes ? disk.setTimes(path, times).catch(() => null) : null);
 
   async function run(action: VaultAction): Promise<void> {
     switch (action.kind) {
@@ -247,14 +256,38 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
         // The same file (only what the account keeps beside it changed, such as a CSV's column widths): it is left as it is, so nothing watching the folder sees a change.
         const hash = await host.hash(file);
         const same = existing?.path === action.path && existing.hash === hash && localByPath.has(action.path);
-        const mtime = same ? existing.mtimeMs : await disk.write(action.path, file);
+        const remote = remoteById.get(action.id);
+        let mtime = same ? existing.mtimeMs : await disk.write(action.path, file);
+        let dated = same ? existing.dated : undefined;
+        if (!same) {
+          // Made when the account made it. Changed when the account changed it, unless the bytes are the ones it had (a document
+          // moved or renamed in the account, whose time there moves too): then it keeps the time it had.
+          const after = await date(action.path, { created: remote?.createdAt, modified: existing?.hash === hash ? existing.mtimeMs : remote?.updatedAt });
+          if (after !== null) [mtime, dated] = [after, remote?.createdAt !== undefined];
+        }
         taken.add(action.path);
-        record(action.id, action.path, file, mtime, remoteById.get(action.id)?.updatedAt ?? 0, hash);
+        record(action.id, action.path, file, mtime, remote?.updatedAt ?? 0, hash, dated);
         report.downloaded++;
         return;
       }
       case 'upload': {
         const file = await disk.read(action.path);
+        if (action.unlinked) {
+          // A file that was there before the vault knew this document (a folder used signed out, or new to this computer). When it is
+          // what the account would write, the two are only linked: no upload, and no version of an unchanged document. Any doubt (no
+          // copy, a format the vault doesn't write) uploads as before; the file still wins.
+          const remote = remoteById.get(action.id);
+          const ours = await cloud
+            .download(action.id)
+            .then((stored) => codec.toFile(stored, baseName(action.path)))
+            .catch(() => null);
+          const hash = await host.hash(file);
+          if (ours && remote && (await host.hash(ours)) === hash) {
+            record(action.id, action.path, file, localByPath.get(action.path)?.mtimeMs ?? 0, remote.updatedAt, hash);
+            report.linked++;
+            return;
+          }
+        }
         const previous = codec.keepsLayout?.(baseName(action.path)) ? await cloud.download(action.id).catch(() => undefined) : undefined;
         const stored = await codec.fromFile(file, baseName(action.path), previous);
         if (action.keepCloudVersion) await cloud.keepVersion(action.id);
@@ -289,13 +322,18 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
       case 'moveLocal': {
         if (taken.has(action.to)) throw new Error(`a different file is already at ${action.to}`);
         const file = await disk.read(action.from);
-        const mtime = await disk.write(action.to, file);
+        const entry = entries.get(action.id)!;
+        const remote = remoteById.get(action.id);
+        let mtime = await disk.write(action.to, file);
+        // Moving a file changes neither when it was made nor when it was last changed.
+        const after = await date(action.to, { created: remote?.createdAt, modified: entry.mtimeMs });
+        if (after !== null) mtime = after;
+        const dated = after !== null ? remote?.createdAt !== undefined : entry.dated;
         await disk.remove(action.from);
         removedHere.add(action.from);
         taken.delete(action.from);
         taken.add(action.to);
-        const entry = entries.get(action.id)!;
-        entries.set(action.id, { ...entry, path: action.to, mtimeMs: mtime, cloudUpdatedAt: remoteById.get(action.id)?.updatedAt ?? entry.cloudUpdatedAt });
+        entries.set(action.id, { ...entry, path: action.to, mtimeMs: mtime, cloudUpdatedAt: remote?.updatedAt ?? entry.cloudUpdatedAt, ...(dated ? { dated } : {}) });
         report.movedHere++;
         return;
       }
@@ -348,6 +386,22 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
       report.errors.push({ action, message: error instanceof Error ? error.message : String(error) });
     }
     done++;
+  }
+
+  // Files linked before files were dated (or by a shell that couldn't date them) get the account's creation date, once. Only that
+  // date: the modification time is the file's own, and the sync tells edits by it. A file made here keeps its own creation date,
+  // which is earlier than the account's. One that isn't there now (a failed action) is tried again next time.
+  for (const entry of entries.values()) {
+    const created = remoteById.get(entry.id)?.createdAt;
+    if (entry.dated || created === undefined || !disk.setTimes) continue;
+    let after: number | null;
+    try {
+      after = await disk.setTimes(entry.path, { created });
+    } catch {
+      continue;
+    }
+    if (after === null) break; // this shell can't date files
+    entries.set(entry.id, { ...entry, dated: true });
   }
 
   // Renaming or moving a document in the account changes its time there too; take the new one, or the next sync would download it again.

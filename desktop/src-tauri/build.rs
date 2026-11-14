@@ -24,6 +24,7 @@ fn main() {
             "vault_folders",
             "vault_make_folder",
             "vault_remove_folder",
+            "vault_set_times",
             "set_native_menu",
             "print_open_pdf",
             "update_check",

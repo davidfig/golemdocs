@@ -100,6 +100,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.items': '{count}개 항목',
   'panels.dashboard.rename': '이름 바꾸기',
   'panels.dashboard.move': '이동…',
+  'panels.dashboard.moveHere': '이동',
   'panels.dashboard.moveTitle': '“{name}” 이동 위치…',
   'panels.dashboard.cancel': '취소',
   'panels.dashboard.deleteFolder': '폴더 삭제',

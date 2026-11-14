@@ -118,6 +118,7 @@ export const panels: Catalog = {
   'panels.dashboard.items': '{count} элементов',
   'panels.dashboard.rename': 'Переименовать',
   'panels.dashboard.move': 'Переместить…',
+  'panels.dashboard.moveHere': 'Переместить',
   'panels.dashboard.moveTitle': 'Переместить «{name}» в…',
   'panels.dashboard.cancel': 'Отмена',
   'panels.dashboard.deleteFolder': 'Удалить папку',

@@ -431,53 +431,6 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   background: var(--wm-hot, #c1d2ee);
 }
 
-.wm-move-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  background: rgb(0 0 0 / 0.3);
-}
-
-.wm-move {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: min(360px, calc(100% - 24px));
-  max-height: min(480px, calc(100% - 24px));
-  padding: 14px;
-  border: 1px solid var(--wm-border, #b9b9b9);
-  border-radius: 4px;
-  background: var(--wm-face, #f0f0f0);
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.3);
-}
-
-.wm-move h2 {
-  margin: 0;
-  font-size: 14px;
-  overflow-wrap: anywhere;
-}
-
-.wm-move-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow-y: auto;
-  min-height: 0;
-}
-
-.wm-dashboard .wm-move-choice {
-  text-align: left;
-  border-color: transparent;
-  background: none;
-}
-
-.wm-move-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
 /* Selecting: a tick box on each card, and Move / Delete for the ticked ones beside the new buttons. */
 .wm-dash-selection {
   margin-left: auto;
@@ -542,39 +495,6 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
 .wm-dashboard .wm-button .icon svg {
   width: 14px;
   height: 14px;
-}
-
-/* The delete confirmation (see deleteDialog.ts): over the whole window, with a list box of what goes. */
-.wm-delete-backdrop {
-  position: fixed;
-  z-index: 1000;
-}
-
-.wm-delete-note {
-  margin: 0;
-}
-
-.wm-delete-list {
-  flex: 1;
-  min-height: 60px;
-  max-height: 260px;
-  margin: 0;
-  padding: 2px;
-  overflow-y: auto;
-  list-style: none;
-  border: 1px solid var(--wm-border, #b9b9b9);
-  background: var(--wm-menu-bg, #fff);
-}
-
-.wm-delete-list li {
-  padding: 2px 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.wm-delete .wm-move-actions {
-  gap: 8px;
 }
 
 /* New and the arrow listing the types to make, one control. */

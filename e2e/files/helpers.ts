@@ -7,6 +7,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, type App } from './fixtures';
 
+// --- The Move dialog ----------------------------------------------------------------------------
+
+/** Moves to `folder` in the Move dialog (`dialog`, or the one open): picks it in the list, then presses Move. */
+export async function moveTo(page: Page, folder: string, dialog: Locator = page.getByRole('dialog', { name: /^Move / })): Promise<void> {
+  await dialog.getByRole('option', { name: folder, exact: true }).click();
+  await dialog.getByRole('button', { name: 'Move', exact: true }).click();
+}
+
 // --- ZIP and PNG builders -----------------------------------------------------------------------
 
 const CRC_TABLE = (() => {

@@ -100,6 +100,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.items': '{count} 项',
   'panels.dashboard.rename': '重命名',
   'panels.dashboard.move': '移动…',
+  'panels.dashboard.moveHere': '移动',
   'panels.dashboard.moveTitle': '将“{name}”移动到…',
   'panels.dashboard.cancel': '取消',
   'panels.dashboard.deleteFolder': '删除文件夹',

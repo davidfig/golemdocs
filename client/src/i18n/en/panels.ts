@@ -115,6 +115,7 @@ export const panels = {
   'panels.dashboard.items': '{count} items',
   'panels.dashboard.rename': 'Rename',
   'panels.dashboard.move': 'Move…',
+  'panels.dashboard.moveHere': 'Move',
   'panels.dashboard.moveTitle': 'Move “{name}” to…',
   'panels.dashboard.cancel': 'Cancel',
   'panels.dashboard.deleteFolder': 'Delete folder',

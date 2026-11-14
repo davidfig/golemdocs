@@ -2,7 +2,7 @@
 
 import type { Locator, Page } from '@playwright/test';
 import { expect, test, type App } from './fixtures';
-import { dropFileOn, importFile, text, waitForOpen, waitForSaved } from './helpers';
+import { dropFileOn, importFile, moveTo, text, waitForOpen, waitForSaved } from './helpers';
 
 const dashboard = (page: Page) => page.locator('.wm-dashboard');
 const cards = (page: Page) => dashboard(page).locator('article.wm-card:not(.wm-folder)');
@@ -56,7 +56,7 @@ test('Move… files a document in a folder, which opens to show it, with a way b
   await makeFolder(page, 'Reports');
   await card(page, 'alpha.txt').hover();
   await card(page, 'alpha.txt').getByRole('button', { name: 'Move…' }).click();
-  await dashboard(page).getByRole('dialog').getByRole('button', { name: 'Reports' }).click();
+  await moveTo(page, 'Reports');
 
   await expectNames(cards(page), ['beta.md']);
   await expect(folder(page, 'Reports').locator('.wm-card-meta')).toHaveText('1 item');
@@ -101,8 +101,9 @@ test('folders nest, can be renamed, and cannot be moved into themselves', async 
   await dashboard(page).getByRole('navigation').getByRole('button', { name: 'Documents' }).click();
   await folder(page, 'Outer').hover();
   await folder(page, 'Outer').getByRole('button', { name: 'Move…' }).click();
-  const picker = dashboard(page).getByRole('dialog');
-  await expect(picker.getByRole('button', { name: 'Deeper' })).toHaveCount(0);
+  const picker = page.getByRole('dialog', { name: 'Move “Outer” to…' });
+  await expect(picker.getByRole('option', { name: 'Documents', exact: true })).toHaveCount(1);
+  await expect(picker.getByRole('option', { name: 'Deeper' })).toHaveCount(0);
   await picker.getByRole('button', { name: 'Cancel' }).click();
   await expect(picker).toHaveCount(0);
 });

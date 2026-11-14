@@ -100,6 +100,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.items': '{count} 項目',
   'panels.dashboard.rename': '名前の変更',
   'panels.dashboard.move': '移動…',
+  'panels.dashboard.moveHere': '移動',
   'panels.dashboard.moveTitle': '「{name}」の移動先…',
   'panels.dashboard.cancel': 'キャンセル',
   'panels.dashboard.deleteFolder': 'フォルダーを削除',

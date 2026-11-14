@@ -43,7 +43,7 @@ A document the person deletes is not deleted when no account's trash is keeping 
 
 ## The app (`client/src/history.ts`, `ui/versionHistoryDialog.ts`, `ui/trashDialog.ts`)
 
-File › Version History lists this browser's and the account's versions of the open document together (each marked *On this device* or *In your account*, so one moment may appear twice). A source that cannot be reached (offline, no subscription) is reported and the other still shows. File › Trash and a Trash button on the Documents screen (the menu bar is behind it) open the trash, which lists this browser's and the account's deleted documents together (`client/src/trash.ts`: each marked *On this device* or *In your account*; the account's failing does not hide this browser's). Both are modal dialogs, so a confirmation asked from inside one (`confirmDelete(…, parent)`) is put inside it: everything outside a modal dialog is inert.
+File › Version History lists this browser's and the account's versions of the open document together (each marked *On this device* or *In your account*, so one moment may appear twice). A source that cannot be reached (offline, no subscription) is reported and the other still shows. File › Trash and a Trash button on the Documents screen (the menu bar is behind it) open the trash, which lists this browser's and the account's deleted documents together (`client/src/trash.ts`: each marked *On this device* or *In your account*; the account's failing does not hide this browser's). Both are modal dialogs; a confirmation asked from inside one (`confirmDelete`) is another modal dialog, opened over it.
 
 ## Cost
 

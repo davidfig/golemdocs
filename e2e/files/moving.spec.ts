@@ -5,7 +5,7 @@
 import { expect, test, webkit, type Browser, type Locator, type Page } from '@playwright/test';
 import { App, boxOf, dragOnto } from '../fixtures';
 import { signInAs, uniqueEmail } from '../collab/helpers';
-import { importFile, text } from './helpers';
+import { importFile, moveTo, text } from './helpers';
 
 const VIEWPORT = { width: 1280, height: 800 };
 
@@ -181,7 +181,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
 
       await row(page, 'alpha').click({ button: 'right' });
       await page.getByRole('menuitem', { name: 'Move…' }).click();
-      await dialog.getByRole('button', { name: 'Target' }).click();
+      await moveTo(page, 'Target', dialog);
       await expect(dialog).toHaveCount(0);
       await expect(row(page, 'alpha')).toHaveAttribute('aria-level', '2');
 
@@ -189,7 +189,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
       await page.getByRole('menuitem', { name: 'Move…' }).click();
       const folderDialog = page.getByRole('dialog', { name: 'Move “Inner” to…' });
       await expect(folderDialog).toBeInViewport({ ratio: 1 });
-      await folderDialog.getByRole('button', { name: 'Target' }).click();
+      await moveTo(page, 'Target', folderDialog);
       await expect(folderRow(page, 'Inner')).toHaveAttribute('aria-level', '2');
     });
 
@@ -259,7 +259,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
 
       await card(page, 'alpha').hover();
       await card(page, 'alpha').getByRole('button', { name: 'Move…' }).click();
-      await page.getByRole('dialog', { name: 'Move “alpha.txt” to…' }).getByRole('button', { name: 'Target' }).click();
+      await moveTo(page, 'Target', page.getByRole('dialog', { name: 'Move “alpha.txt” to…' }));
       await expect(card(page, 'alpha')).toHaveCount(0);
 
       answer();
@@ -292,7 +292,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
       await card(page, 'alpha').getByRole('button', { name: 'Move…' }).click();
       const dialog = page.getByRole('dialog', { name: 'Move “alpha.txt” to…' });
       await expect(dialog).toBeInViewport({ ratio: 1 });
-      await dialog.getByRole('button', { name: 'Target' }).click();
+      await moveTo(page, 'Target', dialog);
       await expect(card(page, 'alpha')).toHaveCount(0);
       await expect(folderCard(page, 'Target').locator('.wm-card-meta')).toHaveText('1 item');
 
@@ -300,7 +300,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
       await folderCard(page, 'Inner').getByRole('button', { name: 'Move…' }).click();
       const folderDialog = page.getByRole('dialog', { name: 'Move “Inner” to…' });
       await expect(folderDialog).toBeInViewport({ ratio: 1 });
-      await folderDialog.getByRole('button', { name: 'Target' }).click();
+      await moveTo(page, 'Target', folderDialog);
       await expect(folderCard(page, 'Inner')).toHaveCount(0);
     });
 
@@ -315,7 +315,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
       await screen(page).locator('.wm-dash-selection').getByRole('button', { name: 'Move…' }).click();
       const dialog = page.getByRole('dialog', { name: 'Move 2 items to…' });
       await expect(dialog).toBeInViewport({ ratio: 1 });
-      await dialog.getByRole('button', { name: 'Target' }).click();
+      await moveTo(page, 'Target', dialog);
       await expect(screen(page).locator('article.wm-card:not(.wm-folder)')).toHaveCount(0);
       await expect(folderCard(page, 'Target').locator('.wm-card-meta')).toHaveText('2 items');
     });

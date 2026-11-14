@@ -43,6 +43,7 @@
 - A Word document with a live table, saved in LibreOffice, keeps the table live. The next update used to put the whole table in its first cell.
 - An SVG file imported from a ZIP or a dropped folder now opens as a drawing. It used to be renamed to a PNG.
 - The Down arrow on the line above a table goes into the table's first row, and Up from below it into the last row. It used to jump over the whole table.
+- The Delete and Move dialogs (from Trash, Version History, the Files sidebar and the Documents screen) now look like every other dialog, with the same title bar and buttons. Move lists folders in a list box: pick one, then press Move (or double-click it).
 
 ## 0.37.2 - 2026-11-11
 

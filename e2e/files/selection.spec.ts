@@ -2,7 +2,7 @@
 
 import type { Page } from '@playwright/test';
 import { expect, test, type App } from './fixtures';
-import { importFile, text, waitForSaved } from './helpers';
+import { importFile, moveTo, text, waitForSaved } from './helpers';
 
 const dashboard = (page: Page) => page.locator('.wm-dashboard');
 const cards = (page: Page) => dashboard(page).locator('article.wm-card:not(.wm-folder)');
@@ -34,7 +34,7 @@ test('ticked documents and a folder move together; Esc clears the selection befo
   await expect(dashboard(page).getByRole('status').filter({ hasText: 'selected' })).toHaveText('2 selected');
 
   await dashboard(page).locator('.wm-dash-selection').getByRole('button', { name: 'Move…' }).click();
-  await dashboard(page).getByRole('dialog').getByRole('button', { name: 'Reports' }).click();
+  await moveTo(page, 'Reports');
   await expect(cards(page)).toHaveCount(0);
   await expect(folders(page).locator('.wm-card-meta')).toHaveText('2 items');
 

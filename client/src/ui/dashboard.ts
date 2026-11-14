@@ -887,7 +887,7 @@ export class Dashboard {
   }
 
   private pickFolder(title: string, excluded: (id: string) => boolean, current: string | null | undefined, pick: (id: string | null) => void): void {
-    pickFolder(this.root, this.folders, title, excluded, current, pick);
+    pickFolder(this.folders, title, excluded, current, pick);
   }
 
   /** A button that needs a second click, within a few seconds, to do something that can't be undone. */

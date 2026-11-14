@@ -2,7 +2,7 @@
 
 import type { Page } from '@playwright/test';
 import { expect, test, type App } from './fixtures';
-import { importFile, text, waitForOpen, waitForSaved } from './helpers';
+import { importFile, moveTo, text, waitForOpen, waitForSaved } from './helpers';
 
 const palette = (page: Page) => page.getByRole('dialog', { name: 'Command palette' });
 const search = (page: Page) => palette(page).getByRole('textbox', { name: 'Search commands and documents' });
@@ -90,8 +90,8 @@ test('a document in a folder says which, so two of the same name can be told apa
   const card = dashboard.locator('article.wm-card:not(.wm-folder)').filter({ hasText: 'quarterly plan.txt' });
   await card.hover();
   await card.getByRole('button', { name: 'Move…' }).click();
-  await dashboard.getByRole('dialog').getByRole('button', { name: 'Reports' }).click();
-  await expect(dashboard.getByRole('dialog')).toHaveCount(0);
+  await moveTo(page, 'Reports');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await app.goto('?doc=welcome'); // the palette's button is covered by the dashboard
   await openPalette(app);

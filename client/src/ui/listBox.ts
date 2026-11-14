@@ -4,8 +4,11 @@
 
 import { h } from './dom.ts';
 
-/** A row: a choice, a heading over the rows after it, or a row that can't be picked (a note such as "(no suggestions)"). */
-export type ListRow = string | { heading: string } | { note: string };
+/**
+ * A row: a choice, a heading over the rows after it, or a row that can't be picked (a note such as "(no suggestions)").
+ * A choice or a note can be indented `indent` steps, to show a tree (Move's folders).
+ */
+export type ListRow = string | { heading: string } | { note: string; indent?: number } | { choice: string; indent?: number };
 
 export interface ListBox {
   readonly el: HTMLElement;
@@ -62,16 +65,25 @@ export function listBox(label: string, options: { rows?: number; onPick?: (value
       choices = [];
       picked = -1;
       el.removeAttribute('aria-activedescendant');
+      const indent = (option: HTMLElement, steps: number | undefined) => {
+        if (steps) option.style.paddingLeft = `${8 + steps * 16}px`;
+        return option;
+      };
       for (const row of rows) {
-        if (typeof row !== 'string') {
-          el.append('heading' in row ? h('div', { class: 'wm-list-heading', text: row.heading, attrs: { role: 'presentation' } }) : h('div', { class: 'wm-option disabled', text: row.note, attrs: { role: 'option', 'aria-disabled': 'true' } }));
+        if (typeof row !== 'string' && 'heading' in row) {
+          el.append(h('div', { class: 'wm-list-heading', text: row.heading, attrs: { role: 'presentation' } }));
           continue;
         }
+        if (typeof row !== 'string' && 'note' in row) {
+          el.append(indent(h('div', { class: 'wm-option disabled', text: row.note, attrs: { role: 'option', 'aria-disabled': 'true' } }), row.indent));
+          continue;
+        }
+        const text = typeof row === 'string' ? row : row.choice;
         const index = choices.length;
-        const option = h('div', { class: 'wm-option', text: row, attrs: { role: 'option', id: `wm-list-${Math.random().toString(36).slice(2)}`, 'aria-selected': 'false' } });
-        option.dataset.value = row;
+        const option = indent(h('div', { class: 'wm-option', text, attrs: { role: 'option', id: `wm-list-${Math.random().toString(36).slice(2)}`, 'aria-selected': 'false' } }), typeof row === 'string' ? 0 : row.indent);
+        option.dataset.value = text;
         option.addEventListener('mousedown', () => show(index, true));
-        option.addEventListener('dblclick', () => options.onChoose?.(row));
+        option.addEventListener('dblclick', () => options.onChoose?.(text));
         choices.push(option);
         el.append(option);
       }

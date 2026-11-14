@@ -157,7 +157,7 @@ test('a document deleted while signed out goes to this browser’s trash, and Re
   await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
   await dashboard(page).getByRole('button', { name: 'Trash' }).click();
   await trash.getByRole('button', { name: 'Delete Forever' }).click();
-  await trash.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
   await expect(trash.getByText('The trash is empty.')).toBeVisible();
   await context.close();
 });

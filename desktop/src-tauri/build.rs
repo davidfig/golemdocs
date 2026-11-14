@@ -10,6 +10,7 @@ fn main() {
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
             "vault_root",
             "vault_choose",
+            "vault_use_default",
             "vault_forget",
             "vault_reveal",
             "vault_check",

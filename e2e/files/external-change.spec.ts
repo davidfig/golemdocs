@@ -3,7 +3,7 @@
 // The vault folder is only watched in the desktop app, so the change is handed to the page through its `refreshWith` hook.
 
 import { expect, test } from './fixtures';
-import { importFile, text } from './helpers';
+import { importFile, text, waitForSaved } from './helpers';
 
 type Hooks = {
   refreshWith: (source: { kind: string; name: string; bytes: ArrayBuffer }) => Promise<boolean>;
@@ -30,6 +30,20 @@ test('a changed file is put in place: the caret stays on its text and the change
   await expect.poll(() => focus(page)).toEqual([3, 29]);
   await expect.poll(() => fading(page)).toBe(true);
   await expect.poll(() => fading(page), { timeout: 5000 }).toBe(false);
+});
+
+test('a document edited and saved here is still changed in place, not opened again', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await importFile(app, text('Edited.md', '# Edited\n\nFirst point.\n\nSecond point.\n'));
+  await app.focus();
+  await app.press('ControlOrMeta+End');
+  await app.type(' Typed here.');
+  // The save records when the document was modified, which a Markdown file read again doesn't say: that alone mustn't open it again.
+  await waitForSaved(page);
+
+  expect(await refresh(page, 'Edited.md', '# Edited\n\nFirst point, with [a link](https://example.com).\n\nSecond point. Typed here.\n')).toBe(true);
+  await expect.poll(() => app.text()).toContain('a link');
+  await expect.poll(() => fading(page)).toBe(true);
 });
 
 test('text added above the view leaves the view on what it showed', async ({ app, page }) => {

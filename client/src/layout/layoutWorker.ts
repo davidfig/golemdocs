@@ -1940,8 +1940,14 @@ class OpenDocument {
     await session.ensureFor(loaded.document);
     if (this.closed || this.editor !== editor) return false;
     if (this.typedAt !== typed || this.waiting || (changes !== undefined && this.changes !== changes)) return 'typed';
+    // The document's properties (title, author, when it was modified) aren't laid out, and a file may not keep them all: a save here
+    // sets "modified", which a Markdown file has nowhere to put. Compared, they would make every outside change to a document edited
+    // here open it all over again. The file's are taken as they are instead.
+    const properties = loaded.document.properties;
+    loaded.document.properties = document.properties;
     const diff = diffDocuments(document, loaded.document, () => replica.newId());
     if (!diff) return false;
+    document.properties = properties;
     this.extensions = loaded.extensions;
     if (diff.ops.length === 0) return true;
     // The text at the top of the view, and how far below the top of its line the view starts.

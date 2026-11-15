@@ -1,5 +1,16 @@
 # What’s New in Golem Docs
 
+## 0.38.1 - Unreleased
+
+### Changed
+
+- Comments sit right beside the page when the window has room for them, instead of against the window's right edge.
+
+### Fixed
+
+- Comments stay beside their text as you scroll. Comments on text you had scrolled past used to pile up at the top of the column and push the rest away from their text, off the bottom.
+- Desktop app: when a document you had edited and saved changed in your vault folder (a Markdown note above all), the whole page flashed as it opened again. Only what changed is updated and highlighted now, as for a document you hadn't edited.
+
 ## 0.38.0 - 2026-11-14
 
 ### Added

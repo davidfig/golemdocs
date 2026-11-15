@@ -178,7 +178,7 @@ export class LayersPanel {
       editor.clipped ? item(t('vector.releaseClip'), () => editor.releaseClip()) : item(t('vector.makeClip'), () => editor.makeClip(), !many),
       editor.masked ? item(t('vector.releaseMask'), () => editor.releaseMask()) : item(t('vector.makeMask'), () => editor.makeMask(), !many),
       // A live block (docs/live-blocks.md §9): kept as it is, no longer filled from its source.
-      ...(editor.pickedLive ? (['separator', item(t('live.field.unlink'), () => editor.stopLive())] as PopupItem[]) : []),
+      ...(editor.pickedLive ? [item(t('live.field.unlink'), () => editor.stopLive())] : []),
     ];
   }
 }

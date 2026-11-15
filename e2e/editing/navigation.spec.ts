@@ -84,7 +84,7 @@ test.describe('caret movement', () => {
     expect(text).toMatch(/#gamma/);
   });
 
-  test('PageDown and PageUp scroll the view', async ({ app }) => {
+  test('PageDown and PageUp scroll the view', { tag: '@heavy' }, async ({ app }) => {
     await app.blank();
     await app.editor.focus();
     for (let i = 0; i < 40; i++) {

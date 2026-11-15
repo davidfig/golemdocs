@@ -4629,7 +4629,6 @@ function textMenu(at: { x: number; y: number }, word: NonNullable<SelectionUpdat
   }
   // In a live block: it can be turned into ordinary content (docs/live-blocks.md §9).
   if (live) {
-    if (items.length) items.push('separator');
     items.push({ label: t('live.field.unlink'), run: () => worker.command({ kind: 'stopLive', source: live }) });
   }
   showPopupMenu(items, at.x, at.y, word ? t('spelling.synonyms') : table ? stripMnemonic(t('chrome.menu.table')) : t('live.card.title'), focusInput);

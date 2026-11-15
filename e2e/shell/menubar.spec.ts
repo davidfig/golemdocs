@@ -185,11 +185,11 @@ test.describe('menu bar with the keyboard', () => {
     await expect(menuRow(page, 'Paste')).toHaveClass(/active/);
     await page.keyboard.press('End');
     await expect(page.locator('.wm-menu .wm-item.active')).toHaveCount(1);
-    await expect(menuRow(page, 'Search All Documents…')).toHaveClass(/active/);
+    await expect(menuRow(page, 'Previous Table')).toHaveClass(/active/);
     await page.keyboard.press('ArrowDown'); // wraps
     await expect(menuRow(page, 'Copy as Live Link')).toHaveClass(/active/);
     await page.keyboard.press('ArrowUp'); // wraps back
-    await expect(menuRow(page, 'Search All Documents…')).toHaveClass(/active/);
+    await expect(menuRow(page, 'Previous Table')).toHaveClass(/active/);
     await page.keyboard.press('Home');
     await expect(menuRow(page, 'Copy as Live Link')).toHaveClass(/active/);
   });
@@ -214,7 +214,9 @@ test.describe('menu bar with the keyboard', () => {
     await page.keyboard.press('ArrowRight'); // Edit
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown'); // Select All is further down; walk to it
-    await page.keyboard.press('End');
+    await page.keyboard.press('End'); // Previous Table; Go To… heads its group, four rows up
+    for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowUp');
+    await expect(menuRow(page, 'Go To…')).toHaveClass(/active/);
     // Go To… opens a dialog, which proves Enter ran a command (and the menu closed).
     await page.keyboard.press('Enter');
     await expect(page.getByRole('menu')).toHaveCount(0);

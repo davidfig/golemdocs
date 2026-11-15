@@ -11,6 +11,7 @@ import { h, isFormField, mnemonicLabel, setAttr, stripMnemonic } from './dom.ts'
 import { ICONS, iconElement } from './icons.ts';
 import { IS_MAC } from './shortcuts.ts';
 import { showMenuDrawer, type DrawerDocument, type DrawerEntry } from './menuDrawer.ts';
+import { tidyGroups } from './menuGroups.ts';
 
 export type MenuItem =
   | { type: 'command'; id: string }
@@ -53,7 +54,7 @@ export const sep: MenuItem = { type: 'separator' };
 export const cmd = (id: string): MenuItem => ({ type: 'command', id });
 export const sub = (label: string, items: MenuItem[] | (() => MenuItem[]), icon?: string): MenuItem => ({ type: 'submenu', label, items, icon });
 
-/** The items of a menu that the open format can express, with no separator at either end or doubled. */
+/** The items of a menu that the open format can express, with its dividers tidied (see tidyGroups). */
 export function visibleItems(registry: CommandRegistry, items: MenuItem[]): (RowItem | HeadingItem | 'separator')[] {
   const out: (RowItem | HeadingItem | 'separator')[] = [];
   for (const item of items) {
@@ -62,7 +63,7 @@ export function visibleItems(registry: CommandRegistry, items: MenuItem[]): (Row
       continue;
     }
     if (item.type === 'separator') {
-      if (out.length && out[out.length - 1] !== 'separator') out.push('separator');
+      out.push('separator');
       continue;
     }
     // What the format can't express isn't offered at all (see CommandRegistry.isAvailable).
@@ -71,13 +72,13 @@ export function visibleItems(registry: CommandRegistry, items: MenuItem[]): (Row
     if (item.type === 'item' && item.available && !item.available()) continue;
     out.push(item);
   }
-  if (out[out.length - 1] === 'separator') out.pop();
   // A heading with no row under it is left out.
-  return out.filter((entry, i) => {
+  const rows = out.filter((entry, i) => {
     if (typeof entry !== 'object' || entry.type !== 'heading') return true;
     const next = out[i + 1];
     return next !== undefined && next !== 'separator' && next.type !== 'heading';
   });
+  return tidyGroups(rows, (entry) => entry.type === 'heading');
 }
 
 /** What a menu row shows and does, whether it is drawn in a drop-down or the phone drawer. */

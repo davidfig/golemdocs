@@ -140,11 +140,11 @@ test.describe('Help menu documents', () => {
     await expect.poll(() => new URL(tab.url()).pathname).toMatch(/^\/home\/?$/);
   });
 
-  test('the Help menu lists its items in order', async ({ app, page }) => {
+  test('the Help menu lists its items in order, in groups', async ({ app, page }) => {
     await app.goto('?doc=welcome');
     await openMenu(app, 'Help');
-    const labels = await page.locator('.wm-menu .wm-item span.label').allTextContents();
-    expect(labels).toEqual(['Keyboard Shortcuts', 'Send Feedback…', 'Open Sample', 'What’s New', 'About Golem Docs', 'Golem Docs Website', 'Privacy Policy', 'Terms of Service']);
+    const rows = await page.locator('.wm-menu > .wm-item, .wm-menu > [role=separator]').evaluateAll((els) => els.map((el) => (el.getAttribute('role') === 'separator' ? '—' : (el.querySelector('span.label')?.textContent ?? ''))));
+    expect(rows).toEqual(['Keyboard Shortcuts', 'Open Sample', '—', 'What’s New', 'Send Feedback…', '—', 'About Golem Docs', 'Golem Docs Website', 'Privacy Policy', 'Terms of Service']);
   });
 });
 

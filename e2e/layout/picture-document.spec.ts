@@ -205,7 +205,7 @@ test.describe('effects', () => {
   const COLOR = makePng(40, 40, () => [200, 100, 50, 255]);
   const STRIPES = makePng(40, 40, (x) => (x < 20 ? [0, 0, 0, 255] : [255, 255, 255, 255]));
 
-  test('Grayscale makes every pixel grey', async ({ app }) => {
+  test('Grayscale makes every pixel grey', { tag: '@heavy' }, async ({ app }) => {
     await openPicture(app, GRADIENT);
     await app.menu('Picture', 'Grayscale');
     await expectPicture(app, (i) => {

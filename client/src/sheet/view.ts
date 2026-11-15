@@ -811,7 +811,6 @@ export class SheetEditorView {
       { label: t('sheet.chart.legend'), items: legends },
       { label: t('sheet.chart.editTitle'), run: () => void this.editChartTitle(index) },
       { label: t('sheet.chart.data'), run: () => void this.editChartData(index) },
-      'separator',
       { label: t('sheet.chart.delete'), run: change({ remove: true }) },
     ];
   }
@@ -1856,7 +1855,7 @@ export class SheetEditorView {
     void this.ask<Extract<FromWorker, { t: 'liveAt' }>>({ t: 'liveAt', id: this.id(), sheet: this.sheetIndex, ...at }).then(
       ({ source }) => {
         const items = this.cellItems(hit.kind);
-        if (source) items.push('separator', { label: t('live.field.unlink'), run: () => void this.edit({ kind: 'stopLive', ...at }) });
+        if (source) items.push({ label: t('live.field.unlink'), run: () => void this.edit({ kind: 'stopLive', ...at }) });
         this.menu(clientX, clientY, items);
       },
       () => this.menu(clientX, clientY, this.cellItems(hit.kind)),

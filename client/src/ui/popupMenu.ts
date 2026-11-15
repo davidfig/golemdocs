@@ -5,6 +5,7 @@
 
 import { h } from './dom.ts';
 import { ICONS } from './icons.ts';
+import { tidyGroups } from './menuGroups.ts';
 
 /**
  * A row of the menu. A row's `icon` is SVG markup, drawn in the gutter before its label. A submenu's `items` can be a promise
@@ -65,7 +66,7 @@ export function showPopupMenu(items: readonly PopupItem[], x: number, y: number,
       for (const child of menus.splice(depth + 1)) child.remove();
       for (const row of rows) if (row.getAttribute('aria-expanded') === 'true') row.setAttribute('aria-expanded', 'false');
     };
-    for (const item of list) {
+    for (const item of tidyGroups(list)) {
       if (item === 'separator') {
         menu.append(h('div', { class: 'wm-sep', attrs: { role: 'separator' } }));
         continue;

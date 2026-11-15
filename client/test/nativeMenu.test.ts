@@ -45,7 +45,7 @@ test('shortcuts become system accelerators only when they cannot be a typed key'
 
 test('the snapshot has the labels without mnemonics, shortcuts, and checked states', () => {
   const { registry } = setup({ hasSelection: true });
-  const menus: TopMenu[] = [{ label: '&File', items: [cmd('file.new'), sep, cmd('edit.bold'), cmd('tools.disabled')] }];
+  const menus: TopMenu[] = [{ label: '&File', items: [cmd('file.new'), cmd('edit.copy'), sep, cmd('edit.bold'), cmd('tools.disabled')] }];
   const { menus: out } = snapshotMenus(registry, menus);
   assert.equal(out.length, 1);
   assert.equal(out[0]!.label, 'File');
@@ -54,7 +54,7 @@ test('the snapshot has the labels without mnemonics, shortcuts, and checked stat
   assert.equal(bold.checked, true);
   assert.equal(bold.accelerator, 'Cmd+B');
   assert.equal((find(out[0]!.items, 'Disabled') as Extract<NativeEntry, { kind: 'item' }>).enabled, false);
-  assert.equal(out[0]!.items[1]!.kind, 'separator');
+  assert.equal(out[0]!.items[2]!.kind, 'separator');
 });
 
 test('Copy is a system item, and a shortcut that is a plain key is left to the page', () => {

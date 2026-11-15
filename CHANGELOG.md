@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.40.0 - Unreleased
+
+### Changed
+
+- Menus are easier to scan: related commands are grouped with dividers (Help, Edit, Insert, Tools, Sheet, Picture and Drawing especially), and no command sits alone between two dividers, whatever kind of document is open. This covers right-click menus too.
+
 ## 0.39.0 - 2026-11-15
 
 ### Added

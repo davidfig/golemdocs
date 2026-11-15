@@ -95,7 +95,8 @@ export class SpellMenu {
           ),
         );
     else menu.append(h('div', { class: 'wm-item disabled', attrs: { role: 'menuitem', 'aria-disabled': 'true' } }, h('span', { class: 'wm-gutter' }), h('span', { class: 'label', text: t('spelling.noSuggestions') })));
-    menu.append(separator());
+    // A grammar issue has one action, which joins the suggestions rather than standing alone.
+    if (!grammar) menu.append(separator());
     if (grammar) {
       if (issue.rule) menu.append(item(t('spelling.ignoreRule'), () => this.host.ignore([], [issue.rule!])));
     } else {

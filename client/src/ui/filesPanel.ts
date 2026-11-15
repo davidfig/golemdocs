@@ -329,7 +329,6 @@ export class FilesPanel {
       ...(entry.cloud ? [{ label: t('panels.dashboard.share'), run: () => this.host.share(entry.cloud!.id, entry.cloud!.name) }] : []),
       { label: t('panels.dashboard.rename'), run: () => this.startRename(`doc:${entry.key}`) },
       { label: t('panels.dashboard.move'), run: () => pickFolder(this.folders, t('panels.dashboard.moveTitle', { name: entry.name }), () => false, folderOf(entry, this.folders), (to) => void this.relocate({ kind: 'doc', entry }, to)) },
-      'separator',
       { label: t('panels.dashboard.delete'), run: () => void this.ask([], [entry], () => this.host.delete([entry])) },
     ];
     return items;
@@ -338,17 +337,15 @@ export class FilesPanel {
   private folderItems(folder: Folder, open: boolean): PopupItem[] {
     return [
       { label: open ? t('panels.files.closeFolder') : t('panels.files.openFolder'), run: () => this.toggleFolder(folder.id) },
+      { label: t('panels.dashboard.rename'), run: () => this.startRename(folder.id) },
+      { label: t('panels.dashboard.move'), run: () => pickFolder(this.folders, t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => void this.relocate({ kind: 'folder', folder }, to)) },
+      { label: t('panels.dashboard.deleteFolder'), run: () => void this.ask([folder], [], (before) => removeFolderTree(before.folders, before.entries, [folder], (entries, folderIds) => this.host.delete(entries, folderIds))) },
       'separator',
       ...newMenuItems((kind) => this.host.newDocument(folder.id, kind)),
       'separator',
       { label: t('panels.dashboard.import'), run: () => this.host.importFile(folder.id) },
       { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folder.id) },
       { label: t('panels.dashboard.newFolder'), run: () => void this.newFolder(folder.id) },
-      'separator',
-      { label: t('panels.dashboard.rename'), run: () => this.startRename(folder.id) },
-      { label: t('panels.dashboard.move'), run: () => pickFolder(this.folders, t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => void this.relocate({ kind: 'folder', folder }, to)) },
-      'separator',
-      { label: t('panels.dashboard.deleteFolder'), run: () => void this.ask([folder], [], (before) => removeFolderTree(before.folders, before.entries, [folder], (entries, folderIds) => this.host.delete(entries, folderIds))) },
     ];
   }
 

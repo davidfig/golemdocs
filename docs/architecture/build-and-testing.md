@@ -121,6 +121,8 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-15 | `e2e/files/moving.spec.ts` › sidebar: a folder can't be dragged into itself or into a folder inside it | The first drop (Inner onto Outer) never landed in a three-worker side run of the live-blocks fixes (still level 1 at 10 s), passed its retry; alone, passed three times |
 | 2026-11-15 | `e2e/viewer/sandbox.spec.ts` › Chromium: the sandboxed viewer starts its worker, draws with WebGL and loads its fonts under a strict CSP | Timed out at 3.0 min in pass one of the 0.39.0 release run (it builds the viewer itself, which takes 1.4 min alone); alone, passed twice |
 | 2026-11-15 | `e2e/collab/comments-files.spec.ts` › comments persist › a reply and a resolved state survive a reload | Already `@heavy`, logged on 2026-11-09: timed out at 1 min in the heavy pass of the 0.39.0 release run (with another session's browsers loading the machine to a load average near 100), and once in four side runs at a load average of about 80, a click still waiting; the other three took 31–34 s. A slow test under load rather than a lost state |
+| 2026-11-15 | `e2e/layout/picture-document.spec.ts` › effects › Grayscale makes every pixel grey | Timed out at 30.4 s in pass one of the 0.39.1 release run; alone, passed |
+| 2026-11-15 | `e2e/editing/navigation.spec.ts` › caret movement › PageDown and PageUp scroll the view | Timed out at 30.6 s in pass one of the same run, in the same minute; alone, passed |
 
 ## Performance traces (`golem:*`)
 

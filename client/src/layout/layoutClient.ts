@@ -7,7 +7,7 @@ import type { Format } from '../formats/convert.ts';
 import { t } from '../i18n/index.ts';
 import type { LookUp } from '../spelling/thesaurus.ts';
 import type { A11yHeading, A11yPage } from './a11y.ts';
-import { layoutWorkerName, type DocumentSource, type FromWorker, type LayoutTimings, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireCommand } from './protocol.ts';
+import { layoutWorkerName, type DocumentSource, type FromWorker, type LayoutTimings, type LayoutUpdate, type ReaderText, type RoomOptions, type RoomState, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireCommand } from './protocol.ts';
 
 /** Callbacks for one document. None fire after another document is opened. */
 export interface DocumentListener {
@@ -67,6 +67,7 @@ export class LayoutClient {
   private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
   private readonly textRequests = new Map<number, (place: [number, number] | null) => void>();
   private readonly partRequests = new Map<number, (part: string | null) => void>();
+  private readonly readerRequests = new Map<number, (text: ReaderText | null) => void>();
   private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
   private readonly refreshRequests = new Map<number, (done: boolean | 'typed') => void>();
 
@@ -252,6 +253,15 @@ export class LayoutClient {
     });
   }
 
+  /** The open document as the readers read it (docs/afterward.md), or null when no text document is open. */
+  readerText(): Promise<ReaderText | null> {
+    const request = this.nextRequest++;
+    return new Promise((resolve) => {
+      this.readerRequests.set(request, resolve);
+      this.send({ type: 'readerText', doc: this.doc, request });
+    });
+  }
+
   /** Brings a place in the text (`textAt`'s) to the top of the view, through the layout updates' `keep`, as the pages up to it are laid out. */
   goTo(place: [number, number]): void {
     this.send({ type: 'goTo', doc: this.doc, place });
@@ -399,6 +409,11 @@ export class LayoutClient {
     if (message.type === 'livePart') {
       this.partRequests.get(message.request)?.(message.part);
       this.partRequests.delete(message.request);
+      return;
+    }
+    if (message.type === 'readerText') {
+      this.readerRequests.get(message.request)?.(message.text);
+      this.readerRequests.delete(message.request);
       return;
     }
     if (message.type === 'linkAt') {

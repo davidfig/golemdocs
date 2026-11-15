@@ -53,7 +53,10 @@ import { rereadFullScreenOptions } from './ui/fullScreen.ts';
 import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary, localCopies, putDocInCatalogue, type LibraryEntry } from './sync.ts';
 import { QuietRunner, traced } from './quietRunner.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage, textThumbnail } from './thumbnail.ts';
-import { CommentsPanel } from './ui/commentsPanel.ts';
+import { CommentsPanel, type CommentAgents } from './ui/commentsPanel.ts';
+import { agentColor, agentOf, BOARD } from './afterward/authors.ts';
+import { afterwardMarksChanged } from './afterward/marks.ts';
+import type { Afterward } from './afterward/afterward.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
 import { BookReading, type ReadingPlace } from './reading.ts';
 import { FilesPanel } from './ui/filesPanel.ts';
@@ -736,6 +739,8 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   screenReader.opened(name);
   commentsPanel.reset();
   comments = [];
+  allComments = [];
+  afterward?.documentChanged();
   formLayer.update(null);
   pdfTextLayer.update(null);
   pdfTools.update(null, null);
@@ -1336,6 +1341,7 @@ window.addEventListener('pageshow', (event) => {
 let keepPages = false;
 
 function applyLayout(update: LayoutUpdate): void {
+  afterward?.layoutChanged();
   if (keepPages) {
     keepPages = false;
     for (const page of pagesById.values()) page.dispose(gl!);
@@ -1573,6 +1579,10 @@ interface OpenDocument {
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
+/** Afterward (docs/afterward.md): every comment of the open document, replies too (`comments` holds only the threads), and the feature once loaded. */
+let allComments: SelectionUpdate['comments'] = [];
+let afterward: Afterward | null = null;
+let afterwardLoading: Promise<Afterward> | null = null;
 let current: OpenDocument = { localId: null, journal: null, unsavedSince: 0, builtIn: false, room: null, roomRequested: false, ignored: { words: [], rules: [] }, shared: null, newFolder: null, name: '', kind: 'docx' };
 /** Screen Reader Mode: the textarea mirroring the caret's text, the reading layer over the pages, and what is announced (screenReaderSupport.ts). */
 const screenReader = new ScreenReaderSupport(input, worker, {
@@ -1895,6 +1905,7 @@ const SETTING_APPLIED: Record<SyncedKey, (() => void) | null> = {
   'golem.screenReader': rereadScreenReader,
   'golem.caretWidth': rereadCaretOptions,
   'golem.caretBlink': rereadCaretOptions,
+  'golem.afterward.marks': afterwardMarksChanged,
 };
 
 function rereadSpelling(): void {
@@ -4651,6 +4662,7 @@ function applySelection(update: SelectionUpdate): void {
   commentsPanel.update(update.comments, update.activeComment);
   selectionFormat = update.format;
   comments = update.comments.filter((c) => !c.parentId);
+  if (allComments !== update.comments) afterwardCommentsChanged(update.comments);
   painting = update.painting ?? false;
   inTable = update.inTable ?? false;
   sectionColumns = update.columns;
@@ -6207,6 +6219,10 @@ const chromeHost = createChromeHost({
   makeLivePdf: () => void makeLivePdf().catch((e: unknown) => reportError((e as Error).message)),
   showScripts,
   runScript: () => void runScriptByHand().catch((e: unknown) => reportError((e as Error).message)),
+  afterward: (op) =>
+    void loadAfterward()
+      .then((a) => (op === 'start' ? a.start() : op === 'book' ? a.readBook() : op === 'again' ? a.readAgain() : op === 'studies' ? a.makeStudies() : op === 'outline' ? a.outline() : a.findQuotes()))
+      .catch((e: unknown) => reportError((e as Error).message)),
   showLiveBlockDialog: () => {
     const folders = library.folders.map((f) => folderPath(library.folders, f.id).map((p) => p.name).join('/')).sort((a, b) => a.localeCompare(b));
     // The files a table can come from, by the name a live block finds them by.
@@ -7568,9 +7584,16 @@ const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
   },
   edit: (id, text) => send({ kind: 'editComment', id, text }),
   remove: (id) => send({ kind: 'deleteComment', id }),
-  reply: (id, text) => send({ kind: 'replyComment', id, text, author: commentAuthor() }),
+  reply: (id, text) => {
+    send({ kind: 'replyComment', id, text, author: commentAuthor() });
+    // Afterward answers in its own threads, and wherever it is called in with @Afterward (docs/afterward.md).
+    if (afterward || text.includes('@') || readersThread(id)) void loadAfterward().then((a) => a.replied(id, text));
+  },
   resolve: (id, resolved) => send({ kind: 'resolveComment', id, resolved }),
-  add: (text) => send({ kind: 'addComment', text, author: commentAuthor() }),
+  add: (text) => {
+    if (afterward || text.includes('@')) void loadAfterward().then((a) => a.commenting(text));
+    send({ kind: 'addComment', text, author: commentAuthor() });
+  },
   place: (pageId, y) => {
     const page = pagesById.get(pageId);
     return page ? (page.y + y - camera.y) * camera.zoom * CSS_PX_PER_POINT : null;
@@ -7580,8 +7603,97 @@ const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
     const page = caret && pagesById.get(caret.page);
     return caret && page ? (page.y + caret.y - camera.y) * camera.zoom * CSS_PX_PER_POINT : null;
   },
+  pagesRight: () => {
+    if (!pages.length) return null;
+    // Page points are the canvas's, which runs under the side panels; the comments panel is placed in the viewport.
+    const offset = canvas.getBoundingClientRect().left - document.getElementById('viewport')!.getBoundingClientRect().left;
+    return offset + (Math.max(...pages.map((p) => p.x + p.width)) - camera.x) * camera.zoom * CSS_PX_PER_POINT;
+  },
   focusEditor: focusInput,
 });
+
+// --- Afterward: readers in the comments (docs/afterward.md) ------------------------------------------------------
+
+
+/** Until Afterward is loaded, the panel still shows its comments as Afterward's and suggests it after "@". */
+const readerAuthors: CommentAgents = {
+  agent: (author) => {
+    const who = agentOf(author);
+    return who && { name: who.name, color: agentColor(who.name, who.board) };
+  },
+  note: () => null,
+  actions: () => [],
+  mentions: () => [BOARD],
+  key: () => '',
+};
+commentsPanel.setAgents(readerAuthors);
+
+/** Loads Afterward (its own chunk) the first time it is needed. */
+function loadAfterward(): Promise<Afterward> {
+  afterwardLoading ??= import('./afterward/afterward.ts').then(({ Afterward }) => {
+    const loaded = new Afterward({
+      readerText: () => (current.none ? Promise.resolve(null) : worker.readerText()),
+      send,
+      docKey: () => (current.none ? null : (current.localId ?? current.shared?.id ?? (current.name ? `name:${current.name}` : null))),
+      docTitle: () => current.name,
+      comments: () => allComments,
+      writer: commentAuthor,
+      refresh: () => commentsPanel.refresh(),
+      openThread: (id) => commentsPanel.openThread(id),
+      setMarks: (marks, key) => {
+        commentsPanel.setMarks(marks, key);
+        commentsPanel.position();
+      },
+      findSources: afterwardSources,
+      goToParagraph: (index) => {
+        send({ kind: 'select', paragraph: index, from: 0, to: 0 });
+        focusInput();
+      },
+    });
+    afterward = loaded;
+    commentsPanel.setAgents(loaded);
+    loaded.layoutChanged();
+    return loaded;
+  });
+  afterwardLoading.catch(() => (afterwardLoading = null));
+  return afterwardLoading;
+}
+
+/**
+ * Afterward's sources (Find Quotes): the writer's own documents the searches find, best first, at most six, not the open one,
+ * each read whole by the search index's worker.
+ */
+async function afterwardSources(queries: readonly string[]): Promise<{ name: string; paragraphs: string[] }[]> {
+  const docs = searchableDocuments(library.entries, [], searchSources);
+  await searchLibrary.sync(docs, { remote: false }).catch(() => {});
+  const score = new Map<string, number>();
+  for (const query of queries) for (const hit of (await searchLibrary.search(query, docs)).hits.slice(0, 6)) score.set(hit.key, (score.get(hit.key) ?? 0) + hit.score);
+  const found: { name: string; paragraphs: string[] }[] = [];
+  for (const [key] of [...score].sort((a, b) => b[1] - a[1])) {
+    const doc = docs.find((d) => d.key === key);
+    if (!doc || doc.name === current.name || (current.localId && key.includes(current.localId))) continue;
+    try {
+      const paragraphs = await indexWorker.text(await doc.bytes());
+      if (paragraphs.length) found.push({ name: doc.name, paragraphs });
+    } catch {
+      /* a document that can't be read is left out */
+    }
+    if (found.length === 6) break;
+  }
+  return found;
+}
+
+/** Whether a thread is one Afterward is in (so a reply there is answered). */
+function readersThread(id: string): boolean {
+  return allComments.some((c) => (c.id === id || c.parentId === id) && agentOf(c.author) !== null);
+}
+
+/** The comments changed: Afterward hears of it, and is loaded for a document a review is in (its buttons, its marks). */
+function afterwardCommentsChanged(list: SelectionUpdate['comments']): void {
+  allComments = list;
+  if (afterward) afterward.commentsChanged();
+  else if (list.some((c) => c.author === BOARD)) void loadAfterward();
+}
 
 // --- Getting around from the keyboard (ui/focusRegions.ts) -----------------------------------------------------
 

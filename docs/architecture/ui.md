@@ -47,6 +47,8 @@ The editor itself is a WebGL canvas; everything around it (menus, toolbars, dial
 | `client/src/viewMemory.ts` | Per-document scroll, zoom, caret and selection (device-local) |
 | `client/src/settingsSync.ts` | Account-synced preferences |
 | `client/src/reading.ts` | Where each book (EPUB) is being read: kept here and in the account, so it opens there on every device (`BookReading`) |
+| `client/src/ui/commentsPanel.ts` | Comment threads beside their text; `CommentAgents` lets a feature take part (its authors, a note under a thread, more buttons, "@" suggestions, marks down the side) |
+| `client/src/afterward/` | Afterward ([plan and status](../afterward.md)): one reader that reviews a piece through the comments. `authors.ts` and `marks.ts` load with the app; the rest (`afterward.ts`, its prompts and the model call) is one lazy chunk. The only place the app calls a model |
 | `client/src/spelling/` | `dictionary.ts` (Hunspell reader), `check.ts`, `grammar.ts`, `languages.ts`, `appWords.ts` |
 | `client/src/i18n/` | `t()`, `en/` catalog, `locales.ts`, `locales/` translations |
 | `client/home/`, `client/public/home/`, `client/site/`, `client/seo.ts` | Marketing site generation |
@@ -101,4 +103,4 @@ Reuse before you build, and centralize what you would copy. One implementation p
 
 ## Related docs
 
-[Rendering](rendering.md), [Accessibility](accessibility.md), [Layout](layout.md), [Document model](document-model.md), [Collaboration](collaboration.md), [Server](server.md), [Build and testing](build-and-testing.md); [Localization](../localization.md); [Toolbar and file actions status](../actions-status.md).
+[Rendering](rendering.md), [Accessibility](accessibility.md), [Layout](layout.md), [Document model](document-model.md), [Collaboration](collaboration.md), [Server](server.md), [Build and testing](build-and-testing.md); [Localization](../localization.md); [Toolbar and file actions status](../actions-status.md); [Afterward](../afterward.md).

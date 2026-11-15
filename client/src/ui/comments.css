@@ -189,3 +189,123 @@
   color: #23572b;
   font-size: 10px;
 }
+
+/* A reader's avatar (Afterward, docs/afterward.md): a drawn book instead of initials. */
+.wm-comment-agent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* A note under a thread: the readers are reading, or what went wrong. */
+.wm-comment-note {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--wm-note-border);
+  color: var(--wm-muted);
+  font-style: italic;
+}
+
+.wm-comment-note p {
+  margin: 0;
+}
+
+.wm-comment-note-error {
+  color: var(--wm-text);
+  font-style: normal;
+}
+
+.wm-comment-buttons-wrap {
+  flex-wrap: wrap;
+}
+
+.wm-comment-mentions {
+  margin-top: 4px;
+}
+
+.wm-comment-mentions[hidden] {
+  display: none;
+}
+
+/* Marks beside the text (the readers' attention): a narrow column on the panel's left, the cards moved over for it. */
+.wm-comments-marks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 12px;
+}
+
+.wm-comments-with-marks .wm-comments-list,
+.wm-comments-with-marks .wm-comments-bar {
+  left: 16px;
+}
+
+.wm-comments-mark {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: auto;
+}
+
+.wm-comments-mark[hidden] {
+  display: none;
+}
+
+.wm-comments-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  box-sizing: border-box;
+}
+
+.wm-dot-leans_in {
+  background: #3f9a52;
+}
+
+.wm-dot-holds {
+  background: #c9c9c9;
+}
+
+.wm-dot-drifts {
+  background: #e0a630;
+}
+
+.wm-dot-lost {
+  background: #cf4b3f;
+}
+
+/* The marks' key, under the panel's title. */
+.wm-comments-bar:has(.wm-comments-key) {
+  flex-wrap: wrap;
+}
+
+.wm-comments-key {
+  flex-basis: 100%;
+  color: var(--wm-muted);
+}
+
+.wm-comments-key p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: 2px 0 0;
+}
+
+.wm-comments-key-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* A chapter's dot (a whole-book read): larger, on the chapter's heading. */
+.wm-comments-dot-chapter {
+  width: 12px;
+  height: 12px;
+  margin-left: -2px;
+  border-width: 2px;
+}

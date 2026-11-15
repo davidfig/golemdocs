@@ -256,6 +256,44 @@ test('comment threads: replies share the range, resolve, and deleting the first 
   assert.equal(doc.body[0].kind === 'paragraph' && doc.body[0].children.every((c) => c.kind === 'run'), true, 'no markers are left');
 });
 
+test('addComments puts several comments at given places in one step and keeps the selection on its text', skip, async () => {
+  const { doc, editor, apply } = await setup(['Hello big world', 'Second line here']);
+  // The caret after "world": markers put in before it must not move it off the text.
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'lineEnd' });
+  await apply({
+    kind: 'addComments',
+    comments: [
+      { paragraph: 0, from: 6, to: 9, text: 'big?', author: 'The editor · Afterward', id: '123' },
+      // Touching ranges: one ends where the next starts.
+      { paragraph: 0, from: 0, to: 6, text: 'opening', author: 'Afterward' },
+      { paragraph: 1, from: 7, to: 99, text: 'cut to fit', author: 'Afterward' },
+      { paragraph: 5, from: 0, to: 1, text: 'no such paragraph', author: 'Afterward' },
+    ],
+  });
+  assert.equal(doc.comments.length, 3);
+  assert.ok(doc.comments.some((c) => c.id === '123'), 'the id asked for is used');
+  const select = async (text: string) => {
+    const comment = editor.comments().find((c) => c.text === text)!;
+    await apply({ kind: 'selectComment', id: comment.id });
+    return editor.selectedText();
+  };
+  assert.equal(await select('big?'), 'big');
+  assert.equal(await select('opening'), 'Hello ');
+  assert.equal(await select('cut to fit'), 'line here');
+  // One undo takes them all away.
+  editor.undo();
+  assert.equal(doc.comments.length, 0);
+  assert.equal(paragraphText(paragraphsIn(doc.body)[0]), 'Hello big world');
+});
+
+test('addComments leaves the caret after the text it was after', skip, async () => {
+  const { editor, apply } = await setup(['Hello big world']);
+  await apply({ kind: 'move', to: 'documentStart' }, { kind: 'move', to: 'lineEnd' });
+  await apply({ kind: 'addComments', comments: [{ paragraph: 0, from: 0, to: 5, text: 'x', author: 'Afterward' }] });
+  await apply({ kind: 'insertText', text: '!' });
+  assert.equal(paragraphText(paragraphsIn(editor.doc.body)[0]).replace(/￼/g, ''), 'Hello big world!');
+});
+
 test('a comment with nothing selected goes on the word at the caret', skip, async () => {
   const { editor, apply } = await setup(['Hello world']);
   await apply({ kind: 'move', to: 'documentEnd' }, { kind: 'move', to: 'left' }, { kind: 'addComment', text: 'Which?', author: 'Ada' });

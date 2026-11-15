@@ -30,6 +30,7 @@ export const panels: Partial<Messages> = {
   'panels.comments.edit': '편집',
   'panels.comments.delete': '삭제',
   'panels.comments.unknown': '알 수 없음',
+  'panels.comments.mention': '제안',
   'panels.comments.reply': '답글',
   'panels.comments.replyPlaceholder': '답글…',
   'panels.comments.addPlaceholder': '댓글 추가…',

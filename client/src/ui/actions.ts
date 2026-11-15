@@ -148,6 +148,9 @@ export const SHEET_OPS = [
   'borderNone',
 ] as const;
 
+/** What Tools › Afterward does (docs/afterward.md). */
+export type AfterwardOp = 'start' | 'book' | 'again' | 'studies' | 'outline' | 'quotes';
+
 export type DialogName =
   | 'font'
   | 'paragraph'
@@ -307,6 +310,8 @@ export type Action =
   | { kind: 'scripts' }
   /** Tools › Run Script: an action run by hand. */
   | { kind: 'runScript' }
+  /** Tools › Afterward: readers review the piece through the comments (docs/afterward.md). */
+  | { kind: 'afterward'; op: AfterwardOp }
   | { kind: 'insertTextBox' }
   | { kind: 'insertCodeBlock' }
   | { kind: 'insertHorizontalRule' }

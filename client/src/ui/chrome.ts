@@ -42,6 +42,7 @@ import { inAppMenuOnMac, installFullScreen, isFullScreen, onFullScreenChange, on
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type PaletteControl, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
 import { autoFormatOn, setAutoFormat } from './autoFormat.ts';
+import { afterwardMarksShown, toggleAfterwardMarks } from '../afterward/marks.ts';
 import { SCREEN_READER_SHORTCUT, screenReaderOn, setScreenReader } from './screenReader.ts';
 import { rowControls, type Region } from './focusRegions.ts';
 import { lockGuidesOn, selectAfterPencilOn, setLockGuides, setSelectAfterPencil, setShowGuides, showGuidesOn } from './drawingOptions.ts';
@@ -538,6 +539,13 @@ export class Chrome {
       dialog('tools.options', t('chrome.tools.options'), 'options', { shortcut: 'Mod+,' }),
       a('tools.runScript', t('chrome.tools.runScript'), { kind: 'runScript' }, { tooltip: t('chrome.tools.runScript.tip') }),
       a('tools.scripts', t('chrome.tools.scripts'), { kind: 'scripts' }, { tooltip: t('chrome.tools.scripts.tip') }),
+      a('tools.afterward', t('chrome.tools.afterward'), { kind: 'afterward', op: 'start' }, { tooltip: t('chrome.tools.afterward.tip') }),
+      a('tools.afterwardBook', t('chrome.tools.afterwardBook'), { kind: 'afterward', op: 'book' }, { tooltip: t('chrome.tools.afterwardBook.tip') }),
+      a('tools.afterwardAgain', t('chrome.tools.afterwardAgain'), { kind: 'afterward', op: 'again' }, { tooltip: t('chrome.tools.afterwardAgain.tip') }),
+      a('tools.afterwardStudies', t('chrome.tools.afterwardStudies'), { kind: 'afterward', op: 'studies' }, { tooltip: t('chrome.tools.afterwardStudies.tip') }),
+      a('tools.afterwardOutline', t('chrome.tools.afterwardOutline'), { kind: 'afterward', op: 'outline' }, { tooltip: t('chrome.tools.afterwardOutline.tip') }),
+      a('tools.afterwardQuotes', t('chrome.tools.afterwardQuotes'), { kind: 'afterward', op: 'quotes' }, { tooltip: t('chrome.tools.afterwardQuotes.tip') }),
+      { id: 'tools.afterwardMarks', label: t('chrome.tools.afterwardMarks'), tooltip: t('chrome.tools.afterwardMarks.tip'), run: toggleAfterwardMarks, checked: afterwardMarksShown },
       { id: 'tools.autoFormat', label: t('chrome.tools.autoFormat'), tooltip: t('chrome.tools.autoFormat.tip'), run: () => setAutoFormat(!autoFormatOn()), checked: autoFormatOn },
       { id: 'tools.screenReader', label: t('a11y.mode'), tooltip: t('a11y.mode.tip'), shortcut: SCREEN_READER_SHORTCUT, run: () => setScreenReader(!screenReaderOn()), checked: screenReaderOn },
     );
@@ -985,7 +993,7 @@ export class Chrome {
       },
       {
         label: t('chrome.menu.tools'),
-        items: [cmd('tools.spelling'), cmd('tools.thesaurus'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), cmd('tools.autoFormat'), sep, cmd('tools.runScript'), cmd('tools.scripts'), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.screenReader'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
+        items: [cmd('tools.spelling'), cmd('tools.thesaurus'), cmd('tools.wordCount'), sep, cmd('tools.trackChanges'), cmd('tools.autoFormat'), sep, cmd('tools.runScript'), cmd('tools.scripts'), sep, sub(t('chrome.tools.afterwardMenu'), [cmd('tools.afterward'), cmd('tools.afterwardBook'), cmd('tools.afterwardAgain'), cmd('tools.afterwardStudies'), sep, cmd('tools.afterwardOutline'), cmd('tools.afterwardQuotes'), sep, cmd('tools.afterwardMarks')]), sep, cmd('view.customizeToolbars'), cmd('tools.options'), cmd('tools.screenReader'), cmd('tools.commandPalette'), sep, sub(t('chrome.tools.language'), languageItems)],
       },
       {
         label: t('chrome.menu.table'),

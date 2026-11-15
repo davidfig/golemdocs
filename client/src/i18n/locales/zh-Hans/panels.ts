@@ -30,6 +30,7 @@ export const panels: Partial<Messages> = {
   'panels.comments.edit': '编辑',
   'panels.comments.delete': '删除',
   'panels.comments.unknown': '未知',
+  'panels.comments.mention': '建议',
   'panels.comments.reply': '回复',
   'panels.comments.replyPlaceholder': '回复…',
   'panels.comments.addPlaceholder': '添加批注…',

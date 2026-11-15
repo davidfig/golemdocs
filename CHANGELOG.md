@@ -1,5 +1,25 @@
 # What’s New in Golem Docs
 
+## 0.39.0 - Unreleased
+
+### Added
+
+- Tools › Afterward › Read It Afterward: Afterward reads your finished piece as one thoughtful reader and marks the moments worth studying as comments. Each asks you a question first; once you answer, it tells you how it read that moment, and you can keep talking it through in the thread. Say who the piece is for, and it reads as one of them. Revise, then Read Again, and it says what changed for it. It never writes a word for you. Runs on your own Anthropic API key, kept on this device only.
+- Write `@Afterward` in any comment and Afterward answers in the thread.
+- Afterward reads long pieces, such as a book in one document, a chapter at a time: it reads the chapter your cursor is in, remembering the chapters before it and knowing nothing of what comes after. Replies, Read Again, Reverse Outline, studies and quotes work on that chapter too.
+- Tools › Afterward › Read the Whole Book reads a long piece chapter by chapter, keeping a reader's journal, then comments on the book as a whole: dropped threads, setups with no payoff, where the middle sags, and what works across the whole. It says how many requests it makes and about what they cost before it starts, puts a dot on each chapter for how it held, and reading again remembers the chapters that haven't changed.
+- Tools › Afterward › Reverse Outline lists what each paragraph of your piece does for the reader, as written, and where the main point arrives; click a line to go to its paragraph.
+- Tools › Afterward › Find Quotes in My Notes searches your own documents for passages that bear on the selected text and posts them as comments, quoted word for word with their source. A quote is only shown if those exact words are in your document.
+- Tools › Afterward › Make Studies posts short exercises on passages you wrote, and Show Reader Attention puts a dot beside each paragraph for where Afterward leaned in, held, drifted or got lost.
+
+### Changed
+
+- Comments sit right beside the page when the window has room for them, instead of against the window's right edge.
+
+### Fixed
+
+- Comments stay beside their text as you scroll. Comments on text you had scrolled past used to pile up at the top of the column and push the rest away from their text, off the bottom.
+
 ## 0.38.0 - 2026-11-14
 
 ### Added

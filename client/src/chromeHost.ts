@@ -17,7 +17,7 @@ import type { GpuPage } from './webgl/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
 import type { FindTab } from './ui/findDialog.ts';
 import { blankSource, lastNewKind } from './ui/newKinds.ts';
-import { acceptList, worksWithoutDocument, type ImageOp, type SheetOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type ListedDocument, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
+import { acceptList, worksWithoutDocument, type AfterwardOp, type ImageOp, type SheetOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type ListedDocument, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
 import { t } from './i18n/index.ts';
 
 export interface AppHooks {
@@ -92,6 +92,8 @@ export interface AppHooks {
   makeLivePdf(): void;
   showScripts(): void;
   runScript(): void;
+  /** Tools › Read It Afterward…, Read Again, Make Studies (docs/afterward.md). */
+  afterward(op: AfterwardOp): void;
   /** Show the Spelling and Grammar dialog and look for the first problem. */
   showSpelling(): void;
   showThesaurus(): void;
@@ -246,6 +248,7 @@ const SUPPORTED = new Set<ActionKind>([
   'livePdf',
   'scripts',
   'runScript',
+  'afterward',
   'insertMath',
 ]);
 
@@ -580,6 +583,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.showScripts();
         case 'runScript':
           return app.runScript();
+        case 'afterward':
+          return app.afterward(action.op);
         case 'insertComment': {
           if (!app.annotating()) return app.startComment();
           const text = window.prompt(t('app.notePrompt'));

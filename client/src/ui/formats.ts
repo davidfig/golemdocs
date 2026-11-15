@@ -629,6 +629,10 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       return profile.math;
     case 'insertComment':
       return profile.comments;
+    // The readers comment, so they read documents that keep comments (docs/afterward.md). Markdown keeps them as
+    // CriticMarkup, though Insert › Comment isn't offered there.
+    case 'afterward':
+      return (profile.comments || profile.kind === 'md') && profile.kind !== 'pdf';
     case 'insertFootnote':
       return profile.footnotes;
     case 'insertBookmark':

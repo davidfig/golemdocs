@@ -118,6 +118,12 @@ export class Editor extends EditorTables {
         return this.editInPlace(this.changeCaseOps(command.change));
       case 'addComment':
         return this.edit(this.addCommentOps(command));
+      case 'addComments': {
+        const plan = this.addCommentsOps(command);
+        if (!plan) return NO_CHANGE;
+        const change = this.replica.edit(plan[0], { before: this.selectionIds, after: plan[1] });
+        return this.changed(change.applied, plan[1]);
+      }
       case 'editComment': {
         const comment = this.doc.comments.find((c) => c.id === command.id);
         if (!comment) return NO_CHANGE;

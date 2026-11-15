@@ -30,6 +30,7 @@ export const panels: Partial<Messages> = {
   'panels.comments.edit': 'Modifica',
   'panels.comments.delete': 'Elimina',
   'panels.comments.unknown': 'Sconosciuto',
+  'panels.comments.mention': 'Suggerimenti',
   'panels.comments.reply': 'Rispondi',
   'panels.comments.replyPlaceholder': 'Rispondi…',
   'panels.comments.addPlaceholder': 'Aggiungi un commento…',

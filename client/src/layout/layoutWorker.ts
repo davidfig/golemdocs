@@ -2,7 +2,7 @@
 // (as transferable GPU-ready buffers) and selection geometry to the page. Everything heavy
 // happens here, so the page keeps rendering and responding while a document lays out.
 
-import { isMathInline, paragraphLength, sha256Hex, sharedMediaHash, sharedMediaPart, paragraphText, plainText, type DocumentProperties, type Inline, type Paragraph, runPropertiesAt, StyleResolver, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
+import { commentRanges, isMathInline, paragraphLength, sha256Hex, sharedMediaHash, sharedMediaPart, paragraphText, plainText, type DocumentProperties, type Inline, type Paragraph, runPropertiesAt, StyleResolver, WordDocument, type ParagraphProperties, type RunProperties } from '@golemdocs/docx';
 import { Editor, type Command } from '@golemdocs/editor';
 import { wordRange } from '@golemdocs/editor/textUnits';
 import { diffDocuments, Replica, ROOM_POLICY, type ClientMessage, type DocumentChange, type HistorySnapshot, type Pos, type Operation, type RunFormat, type Pointer, type Selection as OpSelection } from '@golemdocs/ops';
@@ -75,7 +75,7 @@ async function changelogText(): Promise<string> {
   return (await import('../../../CHANGELOG.md?raw')).default;
 }
 import { CHANGE_MS } from '../webgl/overlayColors.ts';
-import { DICTIONARY_BASE, fontBaseOf, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type RoomOptions, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireBox, type WireCommand, type WordStats, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
+import { DICTIONARY_BASE, fontBaseOf, isPdfCommand, type LegalPage, type DocumentSource, type FromWorker, type LayoutUpdate, type ReaderText, type RoomOptions, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireBox, type WireCommand, type WordStats, type WireField, type WirePickedObject, type WirePickedText } from './protocol.ts';
 import { fontShowcase, plainTextDocument } from './samples.ts';
 import { FormatReader } from './selectionFormat.ts';
 import { bookmarksOf, stylesOf } from './dialogFormats.ts';
@@ -2274,7 +2274,31 @@ class OpenDocument {
     } else this.sendSelection();
   }
 
-  /** The live block the caret is in (its source), for the block's label. */
+  /** What the readers read (docs/afterward.md): the paragraphs' text, headings and places, and the comments' ranges. */
+  readerText(): ReaderText | null {
+    const { editor, document, session } = this;
+    if (!editor || !document || this.closed || this.annotator) return null;
+    if (this.headingReader?.doc !== document) this.headingReader = new HeadingReader(document);
+    const reader = this.headingReader;
+    const paragraphs = editor.paragraphs();
+    const places = new Map<Paragraph, [number, number]>();
+    for (const page of session?.displayPages ?? []) for (const line of page.lines) if (!places.has(line.paragraph)) places.set(line.paragraph, [page.id, line.y]);
+    const index = new Map(paragraphs.map((p, i) => [p, i]));
+    const comments: ReaderText['comments'] = [];
+    for (const [id, range] of commentRanges(paragraphs)) {
+      const a = index.get(range.start.paragraph);
+      const b = index.get(range.end.paragraph);
+      if (a !== undefined && b !== undefined) comments.push({ id, start: [a, range.start.offset], end: [b, range.end.offset] });
+    }
+    const at = editor.selectionIndex();
+    const [start, end] = at ? [at.anchor, at.focus].sort((a, b) => a[0] - b[0] || a[1] - b[1]) : [];
+    return {
+      paragraphs: paragraphs.map((p) => ({ text: paragraphText(p), heading: reader.level(p), table: editor.paragraphInTable(p), place: places.get(p) ?? null })),
+      comments,
+      selection: start && end ? { start, end } : null,
+    };
+  }
+
   /** The part of the document at the caret that a live block elsewhere could show (Copy as Live Link). */
   partAtCaret(): string | null {
     const editor = this.editor;
@@ -3312,6 +3336,9 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'livePart':
       post({ type: 'livePart', request: message.request, part: current?.doc === message.doc ? current.partAtCaret() : null });
+      break;
+    case 'readerText':
+      post({ type: 'readerText', request: message.request, text: current?.doc === message.doc ? current.readerText() : null });
       break;
     case 'linkAt':
       post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, text: '', checkbox: false }) });

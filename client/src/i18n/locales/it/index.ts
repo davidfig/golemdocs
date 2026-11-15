@@ -2,6 +2,7 @@
 
 import type { Messages } from '../../index.ts';
 import { a11y } from './a11y.ts';
+import { afterward } from './afterward.ts';
 import { a11ySheet } from './a11ySheet.ts';
 import { app } from './app.ts';
 import { chrome } from './chrome.ts';
@@ -29,4 +30,4 @@ import { pasteSpecial } from './pasteSpecial.ts';
 import { properties } from './properties.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Partial<Messages> = { ...a11y, ...a11ySheet, ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...live, ...scripts, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };
+export const messages: Partial<Messages> = { ...a11y, ...afterward, ...a11ySheet, ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...live, ...scripts, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };

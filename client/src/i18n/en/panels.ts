@@ -44,6 +44,7 @@ export const panels = {
   'panels.comments.edit': 'Edit',
   'panels.comments.delete': 'Delete',
   'panels.comments.unknown': 'Unknown',
+  'panels.comments.mention': 'Suggestions',
   'panels.comments.reply': 'Reply',
   'panels.comments.replyPlaceholder': 'Reply…',
   'panels.comments.addPlaceholder': 'Add a comment…',

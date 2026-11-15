@@ -34,6 +34,7 @@ export const panels: Catalog = {
   'panels.comments.edit': 'Изменить',
   'panels.comments.delete': 'Удалить',
   'panels.comments.unknown': 'Неизвестно',
+  'panels.comments.mention': 'Подсказки',
   'panels.comments.reply': 'Ответить',
   'panels.comments.replyPlaceholder': 'Ответить…',
   'panels.comments.addPlaceholder': 'Добавить комментарий…',

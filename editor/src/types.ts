@@ -74,6 +74,12 @@ export type Command =
   | { kind: 'selectWord' }
   /** Comments the selection (or, with none, the word at the caret). */
   | { kind: 'addComment'; text: string; author: string; date?: string }
+  /**
+   * Comments places in the text, as one undoable step that leaves the selection with the text it is in: each comment is on
+   * positions [from, to) of the paragraph at `paragraph` (its index among the document's paragraphs), cut to fit the paragraph.
+   * `id` is used when no comment has it yet (so the sender knows which comment is which); otherwise one is made.
+   */
+  | { kind: 'addComments'; comments: { paragraph: number; from: number; to: number; text: string; author: string; date?: string; id?: string }[] }
   /** Changes a comment's text. */
   | { kind: 'editComment'; id: string; text: string }
   /** Adds a reply to a comment's thread (replying to a reply replies to the thread). */

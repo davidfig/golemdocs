@@ -46,6 +46,7 @@ const KEYS = [
   'vector.nudgeSize', // the Nudge brush (its options strip)
   'vector.nudgeStrength',
   'golem.liveBackgroundLimit', // Tools › Options: the largest live block update done in the background (a phone's is its own)
+  'golem.afterward.marks', // Tools › Afterward › Show Reader Attention (never the API key: that stays on the device)
 ] as const;
 
 export type SyncedKey = (typeof KEYS)[number];

@@ -1,0 +1,79 @@
+/* Tools › Afterward › Read It Afterward (dialog.ts): layout only; fonts, colours and controls are the shared ones. */
+
+.wm-afterward-dialog .wm-dialog-body {
+  max-width: 440px;
+}
+
+
+
+.wm-afterward-dialog .wm-page-field {
+  margin-bottom: 6px;
+}
+
+.wm-afterward-dialog .wm-page-field > span:first-child {
+  min-width: 140px;
+}
+
+.wm-afterward-about {
+  resize: vertical;
+  font: inherit;
+}
+
+/* Reverse Outline (outline.ts). */
+.wm-afterward-outline-body {
+  max-width: 520px;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.wm-afterward-outline,
+.wm-afterward-outline-notes {
+  margin: 0;
+  padding: 0 0 0 4px;
+  list-style: none;
+}
+
+.wm-afterward-outline-notes {
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.wm-afterward-outline-heading {
+  margin: 8px 0 2px;
+  font-weight: 600;
+}
+
+.wm-afterward-outline-line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wm-afterward-outline-line:hover,
+.wm-afterward-outline-line:focus-visible {
+  background: var(--wm-checked);
+}
+
+.wm-afterward-outline-n {
+  flex: none;
+  min-width: 28px;
+  color: var(--wm-muted);
+}
+
+.wm-afterward-notices {
+  margin: 10px 0 4px;
+}
+
+/* Which chapter of a long piece a read covers. */
+.wm-afterward-scope {
+  margin: 8px 0;
+}

@@ -30,6 +30,7 @@ export const panels: Partial<Messages> = {
   'panels.comments.edit': '編集',
   'panels.comments.delete': '削除',
   'panels.comments.unknown': '不明',
+  'panels.comments.mention': '候補',
   'panels.comments.reply': '返信',
   'panels.comments.replyPlaceholder': '返信…',
   'panels.comments.addPlaceholder': 'コメントを追加…',

@@ -307,6 +307,8 @@ export type ToWorker =
   | { type: 'linkAt'; doc: number; request: number; page: number; x: number; y: number }
   /** Copy as Live Link: the part of the document at the caret, as an address's part after `#` (live/partAddress.ts). */
   | { type: 'livePart'; doc: number; request: number }
+  /** What the readers read (docs/afterward.md): answered with `readerText`. */
+  | { type: 'readerText'; doc: number; request: number }
   /** The text at a page point (the top of the view, where a book is being read): answered with `textAt`. */
   | { type: 'textAt'; doc: number; request: number; page: number; x: number; y: number }
   /** Brings a place in the text (paragraph index, offset) to the top of the view, through the layout updates' `keep`, while the pages up to it are laid out. */
@@ -509,6 +511,7 @@ export type FromWorker =
   | { type: 'embed'; request: number; title: string }
   | { type: 'linkAt'; request: number; url: string | null; text: string; checkbox: boolean }
   | { type: 'livePart'; request: number; part: string | null }
+  | { type: 'readerText'; request: number; text: ReaderText | null }
   /** The text at the point a `textAt` asked about: paragraph index and offset, or null (no text there, or no document). */
   | { type: 'textAt'; request: number; place: [number, number] | null }
   /** `seq`: the last edit (see `journal`) the bytes hold. */
@@ -580,4 +583,25 @@ export function fontBaseOf(workerName: string | undefined): string {
   const base = workerName?.startsWith('layout ') ? workerName.slice('layout '.length).trim() : '';
   if (!base) return FONT_BASE;
   return base.endsWith('/') ? base : `${base}/`;
+}
+
+/**
+ * The document as the readers read it (docs/afterward.md): every paragraph of the document, in the order and numbering of
+ * the editor's `paragraphs()`, and where each comment is.
+ */
+export interface ReaderText {
+  paragraphs: {
+    /** Its positions as text (`paragraphText`): one character per model position, U+FFFC for anything that isn't text. */
+    text: string;
+    /** 1–6 for a heading, 0 for any other paragraph. */
+    heading: number;
+    /** It is in a table. */
+    table: boolean;
+    /** Where its first line is shown (page id and y), or null when it isn't laid out. */
+    place: [number, number] | null;
+  }[];
+  /** Each comment's range: paragraph index and offset of its start and end. */
+  comments: { id: string; start: [number, number]; end: [number, number] }[];
+  /** The selection (paragraph index and offset of each end, in document order), or null when it isn't in the body's text. */
+  selection: { start: [number, number]; end: [number, number] } | null;
 }

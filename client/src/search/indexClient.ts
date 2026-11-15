@@ -19,7 +19,7 @@ export interface IndexWorkerHandle {
 
 export class IndexWorker {
   private worker: IndexWorkerHandle | null = null;
-  private readonly waiting = new Map<number, { resolve(index: DocIndex): void; reject(error: Error): void }>();
+  private readonly waiting = new Map<number, { resolve(answer: DocIndex | string[]): void; reject(error: Error): void }>();
   private nextId = 1;
   private idle: ReturnType<typeof setTimeout> | undefined;
 
@@ -30,13 +30,22 @@ export class IndexWorker {
 
   /** The index of a document's bytes, made in the worker. The bytes are handed over (the caller's copy is emptied). */
   build(bytes: ArrayBuffer): Promise<DocIndex> {
+    return this.ask(bytes, false) as Promise<DocIndex>;
+  }
+
+  /** A document's paragraphs, whole, read in the worker as an index is (Afterward's sources). The bytes are handed over. */
+  text(bytes: ArrayBuffer): Promise<string[]> {
+    return this.ask(bytes, true) as Promise<string[]>;
+  }
+
+  private ask(bytes: ArrayBuffer, text: boolean): Promise<DocIndex | string[]> {
     clearTimeout(this.idle);
     const worker = (this.worker ??= this.launch());
     const id = this.nextId++;
-    return new Promise<DocIndex>((resolve, reject) => {
+    return new Promise<DocIndex | string[]>((resolve, reject) => {
       this.waiting.set(id, { resolve, reject });
       try {
-        worker.postMessage({ id, bytes }, [bytes]);
+        worker.postMessage({ id, bytes, ...(text && { text }) }, [bytes]);
       } catch (e) {
         this.waiting.delete(id);
         reject(e instanceof Error ? e : new Error(String(e)));
@@ -52,7 +61,7 @@ export class IndexWorker {
       if (!job) return;
       this.waiting.delete(reply.id);
       if ('error' in reply) job.reject(new Error(reply.error));
-      else job.resolve(reply.index);
+      else job.resolve('text' in reply ? reply.text : reply.index);
       if (!this.waiting.size) this.idle = setTimeout(() => this.stop(), this.idleMs);
     };
     // A worker that dies (out of memory, a script error) takes what it was doing with it: those documents are tried again later.

@@ -48,7 +48,7 @@ The editor itself is a WebGL canvas; everything around it (menus, toolbars, dial
 | `client/src/settingsSync.ts` | Account-synced preferences |
 | `client/src/reading.ts` | Where each book (EPUB) is being read: kept here and in the account, so it opens there on every device (`BookReading`) |
 | `client/src/ui/commentsPanel.ts` | Comment threads beside their text; `CommentAgents` lets a feature take part (its authors, a note under a thread, more buttons, "@" suggestions, marks down the side) |
-| `client/src/afterward/` | Afterward ([plan and status](../afterward.md)): one reader that reviews a piece through the comments. `authors.ts` and `marks.ts` load with the app; the rest (`afterward.ts`, its prompts and the model call) is one lazy chunk. The only place the app calls a model |
+| `client/src/afterward/` | Afterward ([plan and status](../afterward.md)): an editor in the margin that reads along and answers when asked. `authors.ts` and `marks.ts` load with the app; the rest (`afterward.ts`, its prompts and the model call) is one lazy chunk. The only place the app calls a model |
 | `client/src/spelling/` | `dictionary.ts` (Hunspell reader), `check.ts`, `grammar.ts`, `languages.ts`, `appWords.ts` |
 | `client/src/i18n/` | `t()`, `en/` catalog, `locales.ts`, `locales/` translations |
 | `client/home/`, `client/public/home/`, `client/site/`, `client/seo.ts` | Marketing site generation |

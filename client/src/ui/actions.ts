@@ -149,7 +149,7 @@ export const SHEET_OPS = [
 ] as const;
 
 /** What Tools › Afterward does (docs/afterward.md). */
-export type AfterwardOp = 'start' | 'book' | 'again' | 'studies' | 'outline' | 'quotes';
+export type AfterwardOp = 'ask' | 'outline' | 'quotes';
 
 export type DialogName =
   | 'font'

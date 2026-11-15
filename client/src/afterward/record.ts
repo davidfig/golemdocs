@@ -1,39 +1,49 @@
-// What Afterward keeps about a document beyond its comments (docs/afterward.md §5), and its settings. Kept in this browser's
-// storage, per document: who the piece is for, which threads are Afterward's and what it holds back, the paragraphs' attention,
-// and the choices the writer said were on purpose. Losing it loses little: the comments are the review. Wrapped in try/catch,
-// since storage can be blocked.
+// What Afterward keeps about a document (docs/afterward.md §5), and the key. Kept in this browser's storage, per document, not
+// in the document: the editor's notes in the margin, its reading of the piece, which paragraphs it has read, and the notes the
+// writer dismissed. A note the writer wants to keep is pinned, and becomes an ordinary comment in the document. Losing this
+// loses little. Wrapped in try/catch, since storage can be blocked.
 
-import type { Attention, JournalEntry, Outline } from './prompts.ts';
+import type { Outline, Turn } from './prompts.ts';
 
-export interface ThreadRecord {
-  kind: 'moment' | 'study' | 'quotes' | 'book';
-  /** The words the thread is on, and its paragraph, when the readers last read it. */
-  passage: string;
+/** One of the editor's notes in the margin, with the conversation under it. */
+export interface EditorNote {
+  id: string;
+  /** The words it is on, found again in the text as it changes; '' for a whole paragraph. */
+  quote: string;
+  /** The fingerprint of the paragraph it is on, when it was made (to find a whole-paragraph note again). */
   paragraph: string;
-  /** A moment: Afterward's first reaction, kept back until the writer answers. */
-  reaction?: string;
-  revealed?: boolean;
-  /** A study: what it asks. */
-  pattern?: string;
-  exercise?: string;
+  /** What the editor noticed; '' for a question the writer started. */
+  note: string;
+  /** Where it came from: reading along, the writer asking, or quotes found in the writer's notes. */
+  from: 'read' | 'ask' | 'quotes';
+  /** A change it suggests to the writer's own words: cut, move (after `after`), or a word to replace with one of `words`. */
+  cut?: string;
+  move?: string;
+  after?: string;
+  replace?: string;
+  words?: string[];
+  /** Exact words of the piece the last answer points at. */
+  show?: string[];
+  /** Passages from the writer's own notes, word for word (Find Quotes). */
+  quotes?: { text: string; source: string; why: string }[];
+  talk: Turn[];
+  at: number;
 }
 
 export interface ReviewRecord {
-  v: 2;
-  /** Who the writer says the piece is for ('' when they didn't say). */
-  audience: string;
-  threads: Record<string, ThreadRecord>;
-  /** Attention by paragraph (its fingerprint, so it follows the text, not its place). */
-  attention: Record<string, { level: Attention; note: string }>;
-  /** Choices the writer said are on purpose. */
-  notes: string[];
+  v: 3;
+  /** The editor's one-line reading of the piece, shown above its notes. */
+  readsAs: string;
+  /** Fingerprints of the paragraphs it has read as they are (a changed paragraph is read again). */
+  read: string[];
+  notes: EditorNote[];
+  /** Notes the writer dismissed ("words": note), so they aren't raised again. */
+  dismissed: string[];
   /** Reverse outlines by the fingerprint of the piece (or chapter) they were made from: shown again while it is the same. */
   outlines?: Record<string, Outline>;
-  /** The whole-book read's journal: an entry a chapter, in order, each with its chapter's fingerprint (a changed chapter, and those after it, are read again). */
-  journal?: { chapter: string; title: string; entry: JournalEntry }[];
 }
 
-export const emptyRecord = (audience = ''): ReviewRecord => ({ v: 2, audience, threads: {}, attention: {}, notes: [] });
+export const emptyRecord = (): ReviewRecord => ({ v: 3, readsAs: '', read: [], notes: [], dismissed: [] });
 
 const PREFIX = 'golem.afterward.review.';
 
@@ -41,8 +51,8 @@ export function loadRecord(doc: string): ReviewRecord | null {
   try {
     const raw = localStorage.getItem(PREFIX + doc);
     const value = raw ? (JSON.parse(raw) as ReviewRecord) : null;
-    // A record from before Afterward was one voice (v1) is left: its readers' threads still read as comments.
-    return value?.v === 2 ? { ...emptyRecord(), ...value } : null;
+    // Records from before the margin editor (v1, v2) are left: their threads still read as comments.
+    return value?.v === 3 ? { ...emptyRecord(), ...value } : null;
   } catch {
     return null;
   }
@@ -52,7 +62,7 @@ export function saveRecord(doc: string, record: ReviewRecord): void {
   try {
     localStorage.setItem(PREFIX + doc, JSON.stringify(record));
   } catch {
-    /* storage unavailable: the review still works for this visit */
+    /* storage unavailable: the notes still work for this visit */
   }
 }
 

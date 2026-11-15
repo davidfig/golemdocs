@@ -309,6 +309,8 @@ export type ToWorker =
   | { type: 'livePart'; doc: number; request: number }
   /** What the readers read (docs/afterward.md): answered with `readerText`. */
   | { type: 'readerText'; doc: number; request: number }
+  /** The editor's marks on the text (docs/afterward.md): drawn with the squiggles, kinds as in `SQUIGGLE_COLORS` (2 to 5). */
+  | { type: 'editorMarks'; doc: number; marks: { paragraph: number; from: number; to: number; kind: number }[] }
   /** The text at a page point (the top of the view, where a book is being read): answered with `textAt`. */
   | { type: 'textAt'; doc: number; request: number; page: number; x: number; y: number }
   /** Brings a place in the text (paragraph index, offset) to the top of the view, through the layout updates' `keep`, while the pages up to it are laid out. */
@@ -404,7 +406,7 @@ export interface SelectionUpdate {
   format: FormatState;
   /** Set once after a `spellNext`: what is wrong at the selection, or null when nothing more is. */
   spell?: { issue: SpellIssue | null; /** After a `spellAt`: for the right-click menu, not the dialog. */ menu?: boolean; /** After a `spellAt`: the point is in an editable table (the caret is moved there unless it was already in the selection), so the menu can offer the table's commands. */ table?: boolean; /** After a right-click `spellAt` on no mistake in editable text: the word under the point (its paragraph among the document's, and where it is in it), for its synonyms. */ word?: { text: string; paragraph: number; from: number; to: number }; /** After a right-click `spellAt` in a live block of an editable document: its source, for Stop Updating (the caret is put in it). */ live?: string };
-  /** The squiggles under what is wrong (check-as-you-type): page id, x, y, width, height, kind (0 spelling, 1 grammar) per mark. */
+  /** The squiggles under what is wrong (check-as-you-type), and the editor's marks: page id, x, y, width, height, kind (0 spelling, 1 grammar, 2–5 the editor's) per mark. */
   spellMarks?: Float64Array;
   /** Set once after `getProperties`. */
   docProperties?: DocumentProperties;

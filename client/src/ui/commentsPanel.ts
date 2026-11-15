@@ -53,6 +53,22 @@ export interface CommentAgents {
   mentions(): string[];
   /** Changes whenever what the hooks say changes (the panel redraws then). */
   key(): string;
+  /** Cards of the feature's own, beside the text they are about (an editor's notes), placed with the comments. */
+  cards?(): AgentCard[];
+  /** A line under the panel's title (what the feature makes of the document), or ''. */
+  subtitle?(): string;
+  /** The panel's title while there are no comments, only the feature's cards, or ''. */
+  title?(): string;
+  /** After the panel has drawn the feature's cards (to put the keyboard in one). */
+  drawn?(): void;
+}
+
+/** A feature's card in the panel: its element (the feature builds it), where on a page it belongs, and whether it is open. */
+export interface AgentCard {
+  id: string;
+  el: HTMLElement;
+  at: { page: number; y: number } | null;
+  active?: boolean;
 }
 
 /** A mark beside the text: where it is (page id and y) and its dots, each with what it says there. */
@@ -78,6 +94,8 @@ interface Item {
   el: HTMLElement;
   /** Where its text is, in the panel (null: not on a page shown). */
   desired: number | null;
+  /** A feature's card: the place on a page it belongs beside. */
+  at?: { page: number; y: number } | null;
   height: number;
   active: boolean;
   top: number;
@@ -154,6 +172,11 @@ export class CommentsPanel {
     this.render();
   }
 
+  /** Measures the cards again and places them (a card grew: text streaming into it), without drawing them again. */
+  reflow(): void {
+    this.remeasure();
+  }
+
   /** Draws the panel again when what the agents say has changed. */
   refresh(): void {
     if (renderKey(this.comments, this.active) + (this.agents?.key() ?? '') !== this.shown) this.render();
@@ -215,15 +238,22 @@ export class CommentsPanel {
   private render(): void {
     this.shown = renderKey(this.comments, this.active) + (this.agents?.key() ?? '');
     const threads = this.threads();
-    this.el.hidden = threads.length === 0 && !this.drafting && this.marks.length === 0;
+    const cards = this.agents?.cards?.() ?? [];
+    const subtitle = this.agents?.subtitle?.() ?? '';
+    this.el.hidden = threads.length === 0 && !this.drafting && this.marks.length === 0 && cards.length === 0 && !subtitle;
     this.el.ariaLabel = t('panels.comments.label');
     this.buildBar(threads);
     const visible = threads.filter((th) => this.showResolved || !th.root.resolved || th.root.id === this.active);
     this.items = visible.map((th) => this.threadItem(th));
     if (this.drafting) this.items.push(this.draftItem());
+    for (const card of cards) {
+      card.el.classList.add('wm-agent-card');
+      this.items.push({ el: card.el, at: card.at, desired: card.at ? this.host.place(card.at.page, card.at.y) : null, height: 0, active: !!card.active, top: NaN });
+    }
     this.list.replaceChildren(...this.items.map((i) => i.el));
     for (const item of this.items) item.height = item.el.offsetHeight;
     this.position();
+    if (cards.length) this.agents?.drawn?.();
     if (this.focusBox !== null) {
       const box = this.list.querySelector<HTMLTextAreaElement>(`textarea[data-box="${CSS.escape(this.focusBox)}"]`);
       this.focusBox = null;
@@ -254,11 +284,13 @@ export class CommentsPanel {
     });
     const total = this.comments.length;
     this.bar.replaceChildren(
-      h('h2', { text: t('panels.comments.title', { count: total }) }),
+      h('h2', { text: total === 0 && this.agents?.title?.() ? this.agents.title() : t('panels.comments.title', { count: total }) }),
       previous,
       next,
       h('label', {}, toggle, h('span', { text: t('panels.comments.showResolved') })),
     );
+    const subtitle = this.agents?.subtitle?.() ?? '';
+    if (subtitle) this.bar.append(h('p', { class: 'wm-comments-subtitle', text: subtitle }));
     // The marks' key: what each colour says.
     if (this.legend) {
       const levels = this.legend.levels.map((l) => h('span', { class: 'wm-comments-key-level' }, h('span', { class: `wm-comments-dot wm-dot-${l.level}` }), l.label));
@@ -501,7 +533,7 @@ export class CommentsPanel {
   /** Puts each card beside its text, pushing them apart so none overlaps, keeping the open one on its text. */
   position(): void {
     if (this.el.hidden || (!this.items.length && !this.marks.length)) return;
-    const BAR = this.legend ? this.bar.offsetTop + this.bar.offsetHeight + UNDER_BAR : BAR_HEIGHT;
+    const BAR = this.legend || this.agents?.subtitle?.() ? this.bar.offsetTop + this.bar.offsetHeight + UNDER_BAR : BAR_HEIGHT;
     // Beside the pages, as a margin of their own, when the window has room; else against the window's right edge.
     const right = this.host.pagesRight?.() ?? null;
     const room = this.el.parentElement?.clientWidth ?? 0;
@@ -519,6 +551,7 @@ export class CommentsPanel {
       const id = item.el.dataset.thread;
       const root = id ? byId.get(id) : undefined;
       if (root) item.desired = root.page === null ? null : this.host.place(root.page, root.y);
+      else if (item.at !== undefined) item.desired = item.at ? this.host.place(item.at.page, item.at.y) : null;
       else if (item.el.classList.contains('wm-comment-draft')) item.desired = this.host.placeCaret();
     }
     // Cards in the order their text is on the page; the new-comment card goes where the caret is. A card scrolls with its
@@ -596,7 +629,7 @@ function initialsOf(initials: string | undefined, name: string): string {
 }
 
 /** The avatar of a reader rather than a person: an open book, drawn (not a character, see AGENTS.md). */
-function readerIcon(): SVGSVGElement {
+export function readerIcon(): SVGSVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 16 16');
   svg.setAttribute('width', '12');

@@ -54,8 +54,8 @@ import { forgetCatalogue, forgetInCatalogue, hasUnsentChanges, loadLocalLibrary,
 import { QuietRunner, traced } from './quietRunner.ts';
 import { capturePageThumbnail, drawPages, pictureLayout, readPage, textThumbnail } from './thumbnail.ts';
 import { CommentsPanel, type CommentAgents } from './ui/commentsPanel.ts';
-import { agentColor, agentOf, BOARD } from './afterward/authors.ts';
-import { afterwardMarksChanged } from './afterward/marks.ts';
+import { agentColor, agentOf } from './afterward/authors.ts';
+import { onReadAlong, readAlongChanged, readAlongOn } from './afterward/marks.ts';
 import type { Afterward } from './afterward/afterward.ts';
 import { loadView, saveView, type SavedView } from './viewMemory.ts';
 import { BookReading, type ReadingPlace } from './reading.ts';
@@ -1905,7 +1905,7 @@ const SETTING_APPLIED: Record<SyncedKey, (() => void) | null> = {
   'golem.screenReader': rereadScreenReader,
   'golem.caretWidth': rereadCaretOptions,
   'golem.caretBlink': rereadCaretOptions,
-  'golem.afterward.marks': afterwardMarksChanged,
+  'golem.afterward.readAlong': readAlongChanged,
 };
 
 function rereadSpelling(): void {
@@ -6221,7 +6221,7 @@ const chromeHost = createChromeHost({
   runScript: () => void runScriptByHand().catch((e: unknown) => reportError((e as Error).message)),
   afterward: (op) =>
     void loadAfterward()
-      .then((a) => (op === 'start' ? a.start() : op === 'book' ? a.readBook() : op === 'again' ? a.readAgain() : op === 'studies' ? a.makeStudies() : op === 'outline' ? a.outline() : a.findQuotes()))
+      .then((a) => (op === 'ask' ? a.askAbout() : op === 'outline' ? a.outline() : a.findQuotes()))
       .catch((e: unknown) => reportError((e as Error).message)),
   showLiveBlockDialog: () => {
     const folders = library.folders.map((f) => folderPath(library.folders, f.id).map((p) => p.name).join('/')).sort((a, b) => a.localeCompare(b));
@@ -7584,16 +7584,9 @@ const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
   },
   edit: (id, text) => send({ kind: 'editComment', id, text }),
   remove: (id) => send({ kind: 'deleteComment', id }),
-  reply: (id, text) => {
-    send({ kind: 'replyComment', id, text, author: commentAuthor() });
-    // Afterward answers in its own threads, and wherever it is called in with @Afterward (docs/afterward.md).
-    if (afterward || text.includes('@') || readersThread(id)) void loadAfterward().then((a) => a.replied(id, text));
-  },
+  reply: (id, text) => send({ kind: 'replyComment', id, text, author: commentAuthor() }),
   resolve: (id, resolved) => send({ kind: 'resolveComment', id, resolved }),
-  add: (text) => {
-    if (afterward || text.includes('@')) void loadAfterward().then((a) => a.commenting(text));
-    send({ kind: 'addComment', text, author: commentAuthor() });
-  },
+  add: (text) => send({ kind: 'addComment', text, author: commentAuthor() }),
   place: (pageId, y) => {
     const page = pagesById.get(pageId);
     return page ? (page.y + y - camera.y) * camera.zoom * CSS_PX_PER_POINT : null;
@@ -7612,10 +7605,10 @@ const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
   focusEditor: focusInput,
 });
 
-// --- Afterward: readers in the comments (docs/afterward.md) ------------------------------------------------------
+// --- Afterward: an editor in the margin (docs/afterward.md) ------------------------------------------------------
 
 
-/** Until Afterward is loaded, the panel still shows its comments as Afterward's and suggests it after "@". */
+/** Until Afterward is loaded, the panel still shows comments pinned from its notes as Afterward's. */
 const readerAuthors: CommentAgents = {
   agent: (author) => {
     const who = agentOf(author);
@@ -7623,7 +7616,7 @@ const readerAuthors: CommentAgents = {
   },
   note: () => null,
   actions: () => [],
-  mentions: () => [BOARD],
+  mentions: () => [],
   key: () => '',
 };
 commentsPanel.setAgents(readerAuthors);
@@ -7637,17 +7630,19 @@ function loadAfterward(): Promise<Afterward> {
       docKey: () => (current.none ? null : (current.localId ?? current.shared?.id ?? (current.name ? `name:${current.name}` : null))),
       docTitle: () => current.name,
       comments: () => allComments,
-      writer: commentAuthor,
       refresh: () => commentsPanel.refresh(),
-      openThread: (id) => commentsPanel.openThread(id),
-      setMarks: (marks, key) => {
-        commentsPanel.setMarks(marks, key);
-        commentsPanel.position();
-      },
+      reflow: () => commentsPanel.reflow(),
+      marks: (marks) => worker.editorMarks(marks),
       findSources: afterwardSources,
       goToParagraph: (index) => {
         send({ kind: 'select', paragraph: index, from: 0, to: 0 });
         focusInput();
+      },
+      select: (paragraph, from, to) => send({ kind: 'select', paragraph, from, to }),
+      // The writer accepted a change to their own words: made as their edit, so Undo takes it back.
+      replace: (paragraph, from, to, text) => {
+        send({ kind: 'select', paragraph, from, to });
+        send(text ? { kind: 'insertText', text } : { kind: 'delete', direction: 'backward' });
       },
     });
     afterward = loaded;
@@ -7683,17 +7678,17 @@ async function afterwardSources(queries: readonly string[]): Promise<{ name: str
   return found;
 }
 
-/** Whether a thread is one Afterward is in (so a reply there is answered). */
-function readersThread(id: string): boolean {
-  return allComments.some((c) => (c.id === id || c.parentId === id) && agentOf(c.author) !== null);
-}
-
-/** The comments changed: Afterward hears of it, and is loaded for a document a review is in (its buttons, its marks). */
+/** The comments changed: Afterward hears of it. */
 function afterwardCommentsChanged(list: SelectionUpdate['comments']): void {
   allComments = list;
-  if (afterward) afterward.commentsChanged();
-  else if (list.some((c) => c.author === BOARD)) void loadAfterward();
+  afterward?.commentsChanged();
 }
+
+// Reading along turned on (here or from the account): Afterward is loaded to read.
+onReadAlong(() => {
+  if (readAlongOn()) void loadAfterward();
+});
+if (readAlongOn()) queueMicrotask(() => void loadAfterward());
 
 // --- Getting around from the keyboard (ui/focusRegions.ts) -----------------------------------------------------
 

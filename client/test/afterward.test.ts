@@ -1,15 +1,14 @@
-// Afterward (docs/afterward.md): the text it reads, finding its quotes again, calling it in, the answers' shapes, the
-// direct model call, and where the key is kept.
+// Afterward (docs/afterward.md), the editor in the margin: the text it reads, finding notes and quotes again, the answers'
+// shapes, the model call (streamed or not), and where the key is kept.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ReaderText } from '../src/layout/protocol.ts';
 import { agentOf, BOARD, readerAuthor } from '../src/afterward/authors.ts';
-import { answerOf, directModel, errorOf, ModelError, retryable, retryDelay } from '../src/afterward/model.ts';
-import { BOOK_SCHEMA, bookTask, checkBook, checkJournal, JOURNAL_SCHEMA, journalTask, journalText, checkOutline, checkQueries, checkQuotes, checkReply, checkReview, OUTLINE_SCHEMA, QUERIES_SCHEMA, QUOTES_SCHEMA, REPLY_SCHEMA, REREAD_SCHEMA, REVIEW_SCHEMA, ShapeError, STUDIES_SCHEMA, system } from '../src/afterward/prompts.ts';
+import { answerOf, directModel, errorOf, FAST_MODEL, ModelError, partialField, readStream, retryable, retryDelay } from '../src/afterward/model.ts';
+import { ANSWER_SCHEMA, askTask, checkAnswer, checkOutline, checkQueries, checkQuotes, checkReadAlong, OUTLINE_SCHEMA, QUERIES_SCHEMA, QUOTES_SCHEMA, READ_ALONG_SCHEMA, readAlongTask, ShapeError, system } from '../src/afterward/prompts.ts';
 import { KEY_SETTING } from '../src/afterward/record.ts';
-import { estimateBook } from '../src/afterward/cost.ts';
-import { anchorFor, callsAfterward, chaptersOf, commentedText, findQuote, fingerprint, LONG_WORDS, numbered, PART_WORDS, scopeOf, pieceOf, selectedPassage, trimSources, verifyQuote } from '../src/afterward/text.ts';
+import { chaptersOf, cutRange, findQuote, fingerprint, LONG_WORDS, locateNote, numbered, PART_WORDS, scopeOf, pieceOf, selectedPassage, trimSources, verifyQuote } from '../src/afterward/text.ts';
 import { SYNCED_KEYS } from '../src/settingsSync.ts';
 
 const O = '￼';
@@ -58,38 +57,9 @@ test('a quote is found exactly, or ignoring quotes, dashes, case, spacing and ob
   assert.equal(findQuote(text, 'not in the text'), null);
 });
 
-test('a comment goes on the quote, in a paragraph next to the one given if need be, else on the whole paragraph', () => {
-  const piece = pieceOf(DOC);
-  assert.deepEqual(anchorFor(piece, DOC, 1, 'starts slowly'), { paragraph: 1, from: DOC.paragraphs[1].text.indexOf('starts'), to: DOC.paragraphs[1].text.length - 1 });
-  // Paragraph 2 named, but the words are in paragraph 1.
-  assert.equal(anchorFor(piece, DOC, 2, 'starts slowly')?.paragraph, 1);
-  assert.deepEqual(anchorFor(piece, DOC, 2, 'nowhere at all'), { paragraph: 3, from: 0, to: DOC.paragraphs[3].text.length });
-  assert.equal(anchorFor(piece, DOC, 9, 'nowhere'), null);
-});
-
-test('the text a comment is on reads without its objects', () => {
-  assert.equal(commentedText(DOC, '7'), 'Second');
-  assert.equal(commentedText(DOC, 'missing'), '');
-});
-
 test('fingerprints follow the visible text, not the markers', () => {
   assert.equal(fingerprint(`Second${O} paragraph`), fingerprint('Second paragraph'));
   assert.notEqual(fingerprint('Second paragraph'), fingerprint('Second paragraph!'));
-});
-
-test('a comment calls Afterward in with @Afterward, in any case, and not inside an address', () => {
-  assert.ok(callsAfterward('@Afterward does this opening work?'));
-  assert.ok(callsAfterward('Thanks. @afterward, one more thing'));
-  assert.ok(!callsAfterward('mail me at someone@afterward.com'));
-  assert.ok(!callsAfterward('Afterward, does it?'));
-});
-
-test('who the piece is for goes in the rules, and the piece stays cacheable after it', () => {
-  const piece = pieceOf(DOC);
-  const [rules, text] = system(piece, 'Title', 'game developers');
-  assert.ok(rules.text.endsWith('The writer says the piece is for: game developers'));
-  assert.equal(text.cache_control?.type, 'ephemeral');
-  assert.ok(!system(piece, 'Title')[0].text.includes('is for:'));
 });
 
 test("a reader's comments are signed so they read as the reader's in any file", () => {
@@ -109,23 +79,7 @@ test('every schema is strict: every object closed and every property required', 
     }
     if (schema.type === 'array') walk(schema.items as Record<string, unknown>);
   };
-  for (const schema of [JOURNAL_SCHEMA, BOOK_SCHEMA, REVIEW_SCHEMA, REPLY_SCHEMA, REREAD_SCHEMA, STUDIES_SCHEMA, OUTLINE_SCHEMA, QUERIES_SCHEMA, QUOTES_SCHEMA]) walk(schema);
-});
-
-test('answers are checked before anything goes in the document', () => {
-  const review = checkReview({
-    attention: [{ paragraph: 1, level: 'drifts', note: ' I drifted. ' }],
-    moments: [{ paragraph: 1, quote: 'starts slowly', kind: 'audience_split', question: 'Why open here?', reaction: 'Slow.' }],
-  });
-  assert.equal(review.attention[0].note, 'I drifted.');
-  assert.equal(review.moments[0].reaction, 'Slow.');
-  assert.throws(() => checkReview({ attention: [{ paragraph: 1, level: 'bored', note: '' }], moments: [] }), ShapeError);
-  assert.throws(() => checkReview({ attention: [], moments: [{ paragraph: 1, quote: 'q', kind: 'readers_disagree', question: 'q', reaction: 'r' }] }), ShapeError);
-  assert.throws(() => checkReview({ attention: [], moments: [{ paragraph: '1' }] }), ShapeError);
-  // Empty replies are dropped.
-  assert.equal(checkReply({ reply: ' Yes. ' }), 'Yes.');
-  assert.equal(checkReply({ reply: '' }), '');
-  assert.throws(() => checkReply({ replies: [] }), ShapeError);
+  for (const schema of [READ_ALONG_SCHEMA, ANSWER_SCHEMA, OUTLINE_SCHEMA, QUERIES_SCHEMA, QUOTES_SCHEMA]) walk(schema);
 });
 
 test('the direct call sends the key only to Anthropic, asks for structured output, and reads the JSON back', async () => {
@@ -134,7 +88,7 @@ test('the direct call sends the key only to Anthropic, asks for structured outpu
     seen = { url, init };
     return new Response(JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: '{"replies":[]}' }] }), { status: 200 });
   }) as unknown as typeof fetch;
-  const answer = await directModel('sk-test', { model: 'claude-opus-5-5', fetch: fake }).ask({ system: [{ type: 'text', text: 'rules' }], task: 'task', schema: REPLY_SCHEMA, effort: 'medium' });
+  const answer = await directModel('sk-test', { model: 'claude-opus-5-5', fetch: fake }).ask({ system: [{ type: 'text', text: 'rules' }], task: 'task', schema: ANSWER_SCHEMA, effort: 'medium' });
   assert.deepEqual(answer, { replies: [] });
   const sent = seen as unknown as { url: string; init: RequestInit };
   assert.equal(sent.url, 'https://api.anthropic.com/v1/messages');
@@ -143,7 +97,7 @@ test('the direct call sends the key only to Anthropic, asks for structured outpu
   assert.equal(headers['anthropic-dangerous-direct-browser-access'], 'true');
   const body = JSON.parse(sent.init.body as string);
   assert.equal(body.model, 'claude-opus-5-5');
-  assert.deepEqual(body.output_config, { effort: 'medium', format: { type: 'json_schema', schema: REPLY_SCHEMA } });
+  assert.deepEqual(body.output_config, { effort: 'medium', format: { type: 'json_schema', schema: ANSWER_SCHEMA } });
   assert.deepEqual(body.messages, [{ role: 'user', content: 'task' }]);
   assert.equal(body.fallbacks, 'default');
 });
@@ -160,12 +114,6 @@ test('failures become kinds the app explains', async () => {
     throw new TypeError('Failed to fetch');
   }) as unknown as typeof fetch;
   await assert.rejects(directModel('k', { fetch: offline, sleep: async () => {} }).ask({ system: [], task: '', schema: {}, effort: 'low' }), (e: unknown) => e instanceof ModelError && e.kind === 'network');
-});
-
-test('the API key never follows the account; the attention view does', () => {
-  assert.ok(!SYNCED_KEYS.includes(KEY_SETTING));
-  assert.ok(!SYNCED_KEYS.some((k) => k.includes('afterward.key') || k.includes('afterward.review')));
-  assert.ok(SYNCED_KEYS.includes('golem.afterward.marks'));
 });
 
 /** A fetch that answers with each of `replies` in turn (a status, or a thrown network error), counting the calls. */
@@ -332,7 +280,7 @@ test('a chapter is read knowing what came before and nothing after, each earlier
   const text = book(3, 10, 300);
   const at = scopeOf(text, 15);
   const piece = pieceOf(text, at.range);
-  const blocks = system(piece, 'The Book', '', { title: 'Chapter 2', before: [{ title: 'Chapter 1', text: 'Chapter 1 text' }] });
+  const blocks = system(piece, 'The Book', { title: 'Chapter 2', before: [{ title: 'Chapter 1', text: 'Chapter 1 text' }] });
   assert.equal(blocks.length, 3);
   assert.ok(blocks[1].text.includes('What you have read so far') && blocks[1].text.includes('# Chapter 1'));
   assert.equal(blocks[1].cache_control?.type, 'ephemeral');
@@ -341,35 +289,114 @@ test('a chapter is read knowing what came before and nothing after, each earlier
   assert.ok(!blocks.some((b) => b.text.includes('Chapter 3')), 'nothing after the chapter');
 });
 
-test('a whole-book read says what it costs: a request a chapter not remembered, and one to look back', () => {
-  const chapters = Array.from({ length: 20 }, () => 25_000);
-  const all = estimateBook(chapters);
-  assert.equal(all.requests, 21);
-  assert.ok(all.dollars > 0.5 && all.dollars < 2, String(all.dollars));
-  const later = estimateBook(chapters, 18);
-  assert.equal(later.requests, 3);
-  assert.ok(later.dollars < all.dollars / 5);
+
+test('the API key never follows the account; reading along, a choice of behaviour, does', () => {
+  assert.ok(!SYNCED_KEYS.includes(KEY_SETTING));
+  assert.ok(!SYNCED_KEYS.some((k) => k.includes('afterward.key') || k.includes('afterward.review')));
+  assert.ok(SYNCED_KEYS.includes('golem.afterward.readAlong'));
 });
 
-test('journal entries and the look back are checked, and the journal reads back in order', () => {
-  const entry = checkJournal({ attention: 'drifts', note: ' Slow. ', entry: 'Waiting for the flood.', marks: [{ about: 'the letter', quote: 'She folded the letter.' }] });
-  assert.equal(entry.note, 'Slow.');
-  assert.throws(() => checkJournal({ attention: 'bored', note: '', entry: '', marks: [] }), ShapeError);
-  const text = journalText([
-    { title: 'Morning', entry },
-    { title: '', entry: { ...entry, attention: 'leans_in', marks: [] } },
-  ]);
-  assert.ok(text.startsWith('Chapter 1: Morning (drifts)'));
-  assert.ok(text.includes('Marked: the letter ("She folded the letter.")'));
-  assert.ok(text.includes('Chapter 2 (leans_in)'));
-  const book = checkBook({ overview: 'It held.', moments: [{ chapter: 2, quote: 'q', kind: 'dropped_thread', question: 'Where did the letter go?', reaction: 'I waited for it.' }] });
-  assert.equal(book.moments[0].kind, 'dropped_thread');
-  assert.throws(() => checkBook({ overview: '', moments: [{ chapter: 1, quote: 'q', kind: 'strength!', question: 'q', reaction: 'r' }] }), ShapeError);
+test('reading along: a sentence of reading, and at most three notes, each with a cut or words only when they fit', () => {
+  const read = checkReadAlong({
+    reads_as: ' An essay on procrastination. ',
+    notes: [
+      { paragraph: 2, quote: 'protective panacea', note: 'A panacea cures; it does not protect.', cut: '', words: ['refuge', 'lifeline', 'a whole new sentence of words'] },
+      { paragraph: 3, quote: '', note: 'no quote', cut: '', words: [] },
+      { paragraph: 4, quote: 'a', note: 'b', cut: 'c', words: [] },
+      { paragraph: 5, quote: 'd', note: 'e', cut: '', words: [] },
+      { paragraph: 6, quote: 'f', note: 'g', cut: '', words: [] },
+    ],
+  });
+  assert.equal(read.readsAs, 'An essay on procrastination.');
+  assert.equal(read.notes.length, 3, 'three at most, the one with no words dropped');
+  assert.deepEqual(read.notes[0].words, ['refuge', 'lifeline'], 'a word or a short phrase, never a sentence');
+  assert.equal(read.notes[1].cut, 'c');
+  assert.throws(() => checkReadAlong({ reads_as: 'x', notes: [{ paragraph: '2' }] }), ShapeError);
+  const task = readAlongTask([2, 5], 'An essay.', ['"x": y']);
+  assert.ok(task.includes('these paragraphs are new or changed: 2, 5') && task.includes("Notes the writer dismissed (don't raise them again)"));
 });
 
-test('a chapter is read with the journal so far, not the chapters themselves; the look back gets the whole journal', () => {
-  const task = journalTask(2, 3, 'Noon', 'The river rose.', 'Chapter 1: Morning (drifts)\nSlow.', []);
-  assert.ok(task.includes('Chapter 2 of 3, "Noon"') && task.includes('The river rose.') && task.includes('Chapter 1: Morning (drifts)'));
-  assert.ok(journalTask(1, 3, '', 'x', '', []).includes('(this is the first chapter)'));
-  assert.ok(bookTask('the journal', 3, ['"x": on purpose']).includes('Choices the writer has said are intentional'));
+test('an answer: a reply, what it points at, and a cut, move or words only when complete', () => {
+  const answer = checkAnswer({ reply: ' It lands later. ', show: ['now takes a weekend', ''], cut: '', move: 'a', after: 'b', replace: 'panacea', words: ['refuge'] });
+  assert.equal(answer.reply, 'It lands later.');
+  assert.deepEqual(answer.show, ['now takes a weekend']);
+  assert.equal(answer.move, 'a');
+  assert.throws(() => checkAnswer({ reply: 'x' }), ShapeError);
+  const task = askTask('Why flat?', 'the hope', 'So when AI showed up…', [{ who: 'writer', text: 'Earlier question' }, { who: 'editor', text: 'Earlier answer' }], 'An essay.', 'I drifted.');
+  assert.ok(task.includes('The writer asks: Why flat?') && task.includes('Writer: Earlier question') && task.includes('You: Earlier answer') && task.includes('Your note on it, which started this: I drifted.'));
+  assert.ok(task.includes('Never write new sentences for the piece.'));
+});
+
+test('a reply shows as it streams: the reply field read out of JSON still being written', () => {
+  assert.equal(partialField('{"re', 'reply'), '');
+  assert.equal(partialField('{"reply":"It lands la', 'reply'), 'It lands la');
+  assert.equal(partialField('{"reply":"Say \\"no\\" and\\nthen', 'reply'), 'Say "no" and\nthen');
+  assert.equal(partialField('{"reply":"caf\\u00e9","show":[]}', 'reply'), 'café');
+  assert.equal(partialField('{"reply":"done","show":["x"]}', 'reply'), 'done');
+});
+
+test('a streamed answer is put back together from its events, with each piece heard as it comes', async () => {
+  const events = [
+    { type: 'message_start' },
+    { type: 'content_block_delta', delta: { type: 'text_delta', text: '{"reply":"It ' } },
+    { type: 'content_block_delta', delta: { type: 'text_delta', text: 'lands."}' } },
+    { type: 'message_delta', delta: { stop_reason: 'end_turn' } },
+  ];
+  const sse = events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+  // Cut mid-event, as a network does.
+  const bytes = new TextEncoder().encode(sse);
+  const stream = new ReadableStream({
+    start(c) {
+      c.enqueue(bytes.slice(0, 50));
+      c.enqueue(bytes.slice(50));
+      c.close();
+    },
+  });
+  const heard: string[] = [];
+  const answer = await readStream(new Response(stream), (s) => heard.push(s));
+  assert.deepEqual(answerOf(answer), { reply: 'It lands.' });
+  assert.deepEqual(heard, ['{"reply":"It ', '{"reply":"It lands."}']);
+});
+
+test('reading along uses the fast model, without the fallback a fast model lacks; asking streams on the deep one', async () => {
+  const bodies: Record<string, unknown>[] = [];
+  const headers: Record<string, string>[] = [];
+  const fake = (async (_: string, init: RequestInit) => {
+    bodies.push(JSON.parse(init.body as string));
+    headers.push(init.headers as Record<string, string>);
+    return new Response(JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: '{}' }] }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const model = directModel('k', { fetch: fake });
+  await model.ask({ system: [], task: '', schema: {}, effort: 'low', model: FAST_MODEL });
+  assert.equal(bodies[0].model, 'claude-haiku-5-5');
+  assert.equal(bodies[0].fallbacks, undefined);
+  assert.equal(headers[0]['anthropic-beta'], undefined);
+  await model.ask({ system: [], task: '', schema: {}, effort: 'medium' });
+  assert.equal(bodies[1].model, 'claude-opus-5-5');
+  assert.equal(bodies[1].fallbacks, 'default');
+  assert.equal(bodies[1].stream, undefined);
+});
+
+test('a note is found again as the text changes, and fades when its words are gone', () => {
+  const text: ReaderText = { paragraphs: [para('One two three.'), para(`The act of building${O} is a protective panacea.`)], comments: [], selection: null };
+  const print = fingerprint(text.paragraphs[1].text);
+  assert.deepEqual(locateNote(text, 'protective panacea', print), { index: 1, from: text.paragraphs[1].text.indexOf('protective'), to: text.paragraphs[1].text.length - 1 });
+  // A paragraph added before it: still found.
+  const moved: ReaderText = { ...text, paragraphs: [para('A new opening.'), ...text.paragraphs] };
+  assert.equal(locateNote(moved, 'protective panacea', print)?.index, 2);
+  // The words rewritten: gone.
+  const rewritten: ReaderText = { ...text, paragraphs: [text.paragraphs[0], para('The act of building is a refuge.')] };
+  assert.equal(locateNote(rewritten, 'protective panacea', print), null);
+  // A note on a whole paragraph follows the paragraph, as long as it is the same.
+  assert.deepEqual(locateNote(moved, '', print), { index: 2, from: 0, to: text.paragraphs[1].text.length });
+  assert.equal(locateNote(rewritten, '', print), null);
+});
+
+test('a cut takes one space with it, so no double space is left', () => {
+  const raw = 'Keep this. Cut this. And this.';
+  const at = raw.indexOf('Cut this.');
+  assert.deepEqual(cutRange(raw, at, at + 'Cut this.'.length), [at, at + 'Cut this.'.length + 1]);
+  const end = 'Keep this, not that.';
+  const tail = end.indexOf(' not that');
+  assert.deepEqual(cutRange(end, tail + 1, end.length - 1), [tail, end.length - 1]);
 });

@@ -299,3 +299,34 @@ test.describe('Edit > Go To > Comment', () => {
     await expect(dialog.getByRole('status')).toHaveText('The document has no comments.');
   });
 });
+test.describe('comments panel scrolling', () => {
+  test('cards scroll with their text: threads scrolled past go off the top instead of piling up there', async ({ app, page }) => {
+    const LINES = 60;
+    await app.blank();
+    for (let n = 1; n <= LINES; n++) {
+      await app.type(`Line ${n}.`);
+      if (n < LINES) await app.press('Enter');
+    }
+    // A comment on a line: from the start of the document, down to it, the whole line selected.
+    const commentOn = async (n: number) => {
+      await app.focus();
+      await app.press(`${MOD}+Home`);
+      if (n > 1) await app.press('ArrowDown', n - 1);
+      await app.press('Shift+End');
+      await addComment(app, `Note on line ${n}`);
+    };
+    for (const n of [1, 2, 3, 58]) await commentOn(n);
+    await expect(commentsTitle(page)).toHaveText('Comments (4)');
+    const card = (n: number) => page.locator('.wm-comments .wm-comment').filter({ hasText: `Note on line ${n}` });
+    // At the end: the last card beside its text, below the bar; the first three gone off the top, not stacked under the bar.
+    await app.focus();
+    await app.press(`${MOD}+End`);
+    await expect(card(58)).toBeVisible();
+    for (const n of [1, 2, 3]) await expect(card(n)).toBeHidden();
+    const bar = await page.locator('.wm-comments-bar').boundingBox();
+    expect((await card(58).boundingBox())!.y).toBeGreaterThan(bar!.y + bar!.height);
+    // Back at the top, the first three are beside their lines again.
+    await app.press(`${MOD}+Home`);
+    for (const n of [1, 2, 3]) await expect(card(n)).toBeVisible();
+  });
+});

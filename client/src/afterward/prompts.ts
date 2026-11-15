@@ -1,24 +1,20 @@
-// What Afterward is asked, and the shapes of its answers (docs/afterward.md). Afterward is one voice: a single reader from
-// outside the writer's head. Answers are structured output (a JSON schema the API holds the model to), checked again here by
-// hand, since the app takes no schema library.
+// What Afterward is asked, and the shapes of its answers (docs/afterward.md). Afterward is an editor in the margin: it reads
+// along while the writer works and answers what they ask, as one reader. Answers are structured output (a JSON schema the
+// API holds the model to), checked again here by hand, since the app takes no schema library.
 
 import { numbered, type Piece } from './text.ts';
 
-export const BOARD_RULES = `You are Afterward, built into a document editor. It works the way chess players use an engine: they play the game alone, then review it afterward to get better. The writer has finished a piece and is studying it. You help them see it the way a reader does. You never write it for them.
-
-Who you are: one reader. Thoughtful and widely read, outside the writer's head, on their side but honest, and someone who keeps reading only while the piece earns it. You speak in the first person, as that reader: "I leaned in here", "I lost the thread", "I didn't believe this line".
-- When a reader new to the subject and a reader who knows it well would truly read a passage differently, say so in a sentence ("If I didn't know what a game engine was, I'd be lost here"). Only when the difference is real; never as a routine.
-- If the writer has said who the piece is for, read as one of those people.
+export const BOARD_RULES = `You are Afterward, an editor built into a document editor. You sit in the margin beside the writer's piece: you read along while they write and revise, and answer when they ask. You are one reader: thoughtful and widely read, outside the writer's head, on their side but honest. You speak in the first person, as that reader: "I tripped on this", "I lost the thread here".
 
 Rules that always apply:
-- Never rewrite the writer's sentences, suggest replacement wording, or draft new lines, even if asked. Point, react, measure, ask. If asked to rewrite, say you don't write, and offer a reaction or a question instead.
-- Report how you react as a reader, not whether the writing is "good". "I got bored here", not "this sentence is weak".
+- You never write the piece. No new sentences or passages, no rewritten lines, even if asked; say you don't write it, and help them find their own words instead. You may suggest cutting or moving the writer's own words, and, when they ask for a word or a single word is the trouble, offer a few single words or short phrases to choose from.
+- Say how it reads, not whether it is "good": "I read this twice", not "this sentence is weak".
 - Leave the writer's voice alone. Don't nudge them toward a generic style.
-- Plain, adult, specific. No cheerleading, no "Great job!", no padding. Praise only when earned, and make it specific.
+- Short. A margin note is a sentence or two; an answer is a few sentences unless they ask for more. No cheerleading, no padding; praise only when earned, and specific.
 - Quote the writer's exact words when you point at something.
-- Everything you write is posted as a comment in the writer's document: plain text, short, no headings, no bullet lists, no Markdown.
+- Plain text: no headings, no lists, no Markdown.
 - Write in the language the piece is written in.
-- The paragraph numbers are for you only: the writer never sees them. In anything the writer reads, never refer to a paragraph by its number; quote a few of its words, or say what it does ("the paragraph about the gardener").`;
+- The paragraph numbers are for you only: the writer never sees them. Never refer to a paragraph by its number; quote a few of its words, or say what it does.`;
 
 type Block = { type: 'text'; text: string; cache_control?: { type: 'ephemeral' } };
 
@@ -28,19 +24,18 @@ export interface ChapterContext {
   before: readonly { title: string; text: string }[];
 }
 
-/**
- * The system prompt every call shares: the rules, who the piece is for, then the piece (cached, since every call in a review
- * sends it). For a chapter of a long piece, the chapters before it come first, one block each, as what the reader has read:
- * they are the same text for every later chapter, so reading on reuses them from the cache (the API looks back over earlier
- * block boundaries for a cached prefix).
- */
-/** The rules alone, with who the piece is for (a whole-book read sends the chapters in its tasks). */
-export function rules(audience = ''): Block[] {
-  return [{ type: 'text', text: BOARD_RULES + (audience.trim() ? `\n\nThe writer says the piece is for: ${audience.trim()}` : '') }];
+/** The rules alone. */
+export function rules(): Block[] {
+  return [{ type: 'text', text: BOARD_RULES }];
 }
 
-export function system(piece: Piece, title: string, audience = '', chapter: ChapterContext | null = null): Block[] {
-  const [head] = rules(audience);
+/**
+ * The system prompt every call shares: the rules, then the piece (cached, since every call sends it). For a chapter of a long
+ * piece, the chapters before it come first, one block each, as what the reader has read: they are the same text for every
+ * later chapter, so reading on reuses them from the cache (the API looks back over earlier block boundaries).
+ */
+export function system(piece: Piece, title: string, chapter: ChapterContext | null = null): Block[] {
+  const [head] = rules();
   if (!chapter) return [head, { type: 'text', text: `The piece${title ? `, "${title}"` : ''}, with prose paragraphs numbered:\n\n${numbered(piece)}`, cache_control: { type: 'ephemeral' } }];
   const before: Block[] = chapter.before.map((c, i) => ({ type: 'text', text: `${i === 0 ? `This is a long piece${title ? `, "${title}"` : ''}, read one chapter at a time. What you have read so far, before the chapter you are reading now (what a reader remembers; don't comment on it):\n\n` : ''}${c.title ? `# ${c.title}\n\n` : ''}${c.text}` }));
   if (before.length) before[before.length - 1].cache_control = { type: 'ephemeral' };
@@ -63,40 +58,7 @@ const int: Schema = { type: 'integer' };
 const obj = (properties: Record<string, Schema>): Schema => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
 const arr = (items: Schema): Schema => ({ type: 'array', items });
 
-export const ATTENTION = ['leans_in', 'holds', 'drifts', 'lost'] as const;
-export type Attention = (typeof ATTENTION)[number];
-export const MOMENT_KINDS = ['attention_change', 'audience_split', 'structure', 'strength'] as const;
-
-export interface Review {
-  attention: { paragraph: number; level: Attention; note: string }[];
-  moments: { paragraph: number; quote: string; kind: (typeof MOMENT_KINDS)[number]; question: string; reaction: string }[];
-}
-
-const ATTENTION_SCHEMA = arr(obj({ paragraph: int, level: { type: 'string', enum: [...ATTENTION] }, note: str }));
-
-export const REVIEW_SCHEMA = obj({
-  attention: ATTENTION_SCHEMA,
-  moments: arr(obj({ paragraph: int, quote: str, kind: { type: 'string', enum: [...MOMENT_KINDS] }, question: str, reaction: str })),
-});
-
-/** Afterward's answer in a thread ('' for nothing worth saying). */
-export const REPLY_SCHEMA = obj({ reply: str });
-
-export interface Reread {
-  threads: { thread: string; reply: string }[];
-  attention: Review['attention'];
-}
-export const REREAD_SCHEMA = obj({ threads: arr(obj({ thread: str, reply: str })), attention: ATTENTION_SCHEMA });
-
-export interface Study {
-  paragraph: number;
-  quote: string;
-  pattern: string;
-  exercise: string;
-}
-export const STUDIES_SCHEMA = obj({ studies: arr(obj({ paragraph: int, quote: str, pattern: str, exercise: str })) });
-
-/** Thrown when an answer isn't the shape asked for (the schema should prevent it; this keeps a bad answer out of the document). */
+/** Thrown when an answer isn't the shape asked for (the schema should prevent it; this keeps a bad answer out of the margin). */
 export class ShapeError extends Error {}
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -112,165 +74,101 @@ const list = (v: unknown, what: string): unknown[] => {
   if (!Array.isArray(v)) throw new ShapeError(what);
   return v;
 };
+const words = (v: unknown): string[] =>
+  list(v, 'words')
+    .map((w) => text(w, 'word'))
+    .filter((w) => w && w.split(/\s+/).length <= 4)
+    .slice(0, 5);
 
-function attentionOf(v: unknown): Review['attention'] {
-  return list(v, 'attention').map((a) => {
-    if (!isObject(a)) throw new ShapeError('attention');
-    const level = text(a.level, 'level') as Attention;
-    if (!ATTENTION.includes(level)) throw new ShapeError('level');
-    return { paragraph: number(a.paragraph, 'paragraph'), level, note: text(a.note, 'note') };
-  });
+// --- Reading along (the fast model, at pauses, on what changed) -----------------------------------------------------------
+
+export interface ReadAlong {
+  readsAs: string;
+  notes: { paragraph: number; quote: string; note: string; cut: string; words: string[] }[];
 }
+export const READ_ALONG_SCHEMA = obj({ reads_as: str, notes: arr(obj({ paragraph: int, quote: str, note: str, cut: str, words: arr(str) })) });
 
-export function checkReview(v: unknown): Review {
-  if (!isObject(v)) throw new ShapeError('review');
+export function checkReadAlong(v: unknown): ReadAlong {
+  if (!isObject(v)) throw new ShapeError('read along');
   return {
-    attention: attentionOf(v.attention),
-    moments: list(v.moments, 'moments').map((m) => {
-      if (!isObject(m)) throw new ShapeError('moment');
-      const kind = text(m.kind, 'kind') as Review['moments'][number]['kind'];
-      if (!MOMENT_KINDS.includes(kind)) throw new ShapeError('kind');
-      return { paragraph: number(m.paragraph, 'paragraph'), quote: text(m.quote, 'quote'), kind, question: text(m.question, 'question'), reaction: text(m.reaction, 'reaction') };
-    }),
+    readsAs: text(v.reads_as, 'reads_as'),
+    notes: list(v.notes, 'notes')
+      .map((n) => {
+        if (!isObject(n)) throw new ShapeError('note');
+        return { paragraph: number(n.paragraph, 'paragraph'), quote: text(n.quote, 'quote'), note: text(n.note, 'note'), cut: text(n.cut, 'cut'), words: words(n.words) };
+      })
+      .filter((n) => n.quote && n.note)
+      .slice(0, 3),
   };
 }
 
-export function checkReply(v: unknown): string {
-  if (!isObject(v)) throw new ShapeError('reply');
-  return text(v.reply, 'reply');
-}
-
-export function checkReread(v: unknown): Reread {
-  if (!isObject(v)) throw new ShapeError('reread');
-  return {
-    threads: list(v.threads, 'threads').map((th) => {
-      if (!isObject(th)) throw new ShapeError('thread');
-      return { thread: text(th.thread, 'thread'), reply: text(th.reply, 'reply') };
-    }),
-    attention: attentionOf(v.attention),
-  };
-}
-
-export function checkStudies(v: unknown): Study[] {
-  if (!isObject(v)) throw new ShapeError('studies');
-  return list(v.studies, 'studies').map((s) => {
-    if (!isObject(s)) throw new ShapeError('study');
-    return { paragraph: number(s.paragraph, 'paragraph'), quote: text(s.quote, 'quote'), pattern: text(s.pattern, 'pattern'), exercise: text(s.exercise, 'exercise') };
-  });
-}
-
-// --- Tasks -------------------------------------------------------------------------------------------------------------
-
-function notesBlock(notes: readonly string[]): string {
-  return notes.length ? `\nChoices the writer has said are intentional (respect these; don't flag them again):\n${notes.map((n) => `- ${n}`).join('\n')}\n` : '';
-}
-
-export function reviewTask(notes: readonly string[]): string {
-  return `Read the piece.
-${notesBlock(notes)}
-1. For every numbered paragraph, record your attention:
-   - leans_in: you are pulled forward
-   - holds: reading steadily
-   - drifts: your attention is slipping
-   - lost: confused, or ready to leave
-   Most paragraphs in a decent piece "hold". Use the extremes only where they are true. Add a short private note (one sentence, first person) for each.
-
-2. Pick 3 to 5 moments most worth studying, in the order they appear: where your attention changes, where a newcomer and an expert would read it differently, a structural choice (an opening, an ending, the order of things, a paragraph that may not earn its place), or a line that works unusually well. Include at least one strength.
-   For each moment:
+export function readAlongTask(changed: readonly number[], readsAs: string, dismissed: readonly string[]): string {
+  return `You are reading along while the writer works. Since you last read, these paragraphs are new or changed: ${changed.join(', ')}.
+Your reading of the piece so far: ${readsAs || '(none yet)'}
+${dismissed.length ? `Notes the writer dismissed (don't raise them again):\n${dismissed.map((d) => `- ${d}`).join('\n')}\n` : ''}
+1. reads_as: one sentence, what this piece is and who it seems to be for, as you read it now. It is shown to the writer above your notes, so make it plain and true; no praise.
+2. notes: only on the changed paragraphs, and only where a reader would genuinely stop: an awkward or unclear sentence, a word that doesn't mean what the writer seems to think, a repetition, a sentence that does nothing. At most one per paragraph and three in all. No notes is the usual answer: a margin full of notes gets ignored. Each note:
    - paragraph: its number
-   - quote: the exact words from the piece that mark the spot (one sentence or less), copied character for character
-   - question: what to ask the writer FIRST, before you say how you reacted. Ask about intent ("What is this paragraph doing for the piece?"), not a leading question that gives away the answer. One or two sentences, and no paragraph numbers.
-   - reaction: how you reacted there, first person, 1 to 3 sentences. The writer only sees this after they answer.`;
+   - quote: the exact words you stopped at (one sentence or less), copied character for character
+   - note: one or two short sentences, first person: what happened to you as a reader there
+   - cut: if cutting some of the writer's words is the plain fix, those exact words; else ""
+   - words: if the trouble is one word or a short phrase, make "quote" exactly that word or phrase, and give 3 or 4 alternatives for it (single words or short phrases); else []`;
 }
 
-/** One line per comment in a thread, oldest first. */
-export interface Said {
-  who: string;
+// --- Asking (the deep model, streamed, when the writer asks) ------------------------------------------------------------
+
+export interface Answer {
+  reply: string;
+  /** Exact words of the piece the reply points at. */
+  show: string[];
+  cut: string;
+  move: string;
+  after: string;
+  /** The exact words `words` would replace. */
+  replace: string;
+  words: string[];
+}
+export const ANSWER_SCHEMA = obj({ reply: str, show: arr(str), cut: str, move: str, after: str, replace: str, words: arr(str) });
+
+export function checkAnswer(v: unknown): Answer {
+  if (!isObject(v)) throw new ShapeError('answer');
+  return {
+    reply: text(v.reply, 'reply'),
+    show: list(v.show, 'show')
+      .map((q) => text(q, 'show'))
+      .filter(Boolean)
+      .slice(0, 3),
+    cut: text(v.cut, 'cut'),
+    move: text(v.move, 'move'),
+    after: text(v.after, 'after'),
+    replace: text(v.replace, 'replace'),
+    words: words(v.words),
+  };
+}
+
+/** One turn of a conversation in the margin. */
+export interface Turn {
+  who: 'writer' | 'editor';
   text: string;
 }
 
-function transcript(said: readonly Said[]): string {
-  return said.map((s) => `${s.who}: ${s.text}`).join('\n\n');
-}
+export function askTask(question: string, passage: string, paragraph: string, talk: readonly Turn[], readsAs: string, note: string): string {
+  return `Your reading of the piece: ${readsAs || '(none yet)'}
 
-export interface ThreadContext {
-  /** The words the thread is on, and the paragraph they are in, as they read now. */
-  passage: string;
-  paragraph: string;
-  said: readonly Said[];
-  notes: readonly string[];
-}
-
-function threadHead(ctx: ThreadContext): string {
-  return `${notesBlock(ctx.notes)}
-A comment thread in the writer's document (your comments are signed Afterward), on the words:
+The writer is asking about ${passage && passage !== paragraph ? `the words:\n"""\n${passage}\n"""\nin this paragraph` : 'this paragraph'}:
 """
-${ctx.passage}
+${paragraph}
 """
-in this paragraph, as it reads now:
-"""
-${ctx.paragraph}
-"""
+${note ? `\nYour note on it, which started this: ${note}\n` : ''}${talk.length ? `\nThe conversation so far:\n${talk.map((t) => `${t.who === 'writer' ? 'Writer' : 'You'}: ${t.text}`).join('\n')}\n` : ''}
+The writer asks: ${question}
 
-The thread so far, oldest first:
-${transcript(ctx.said)}
-`;
-}
-
-/** The writer answered Afterward's question: its first reaction comes out. */
-export function answerTask(ctx: ThreadContext, reaction: string): string {
-  return `${threadHead(ctx)}
-Your first reaction here, written before the writer answered, which they haven't seen yet:
-"""
-${reaction}
-"""
-
-The writer has just answered your question. Reply: engage with what they actually said, then give your reaction, adjusted honestly in light of the answer; don't just repeat it. If it no longer applies, say so briefly. If it helps, end with one follow-up question; don't stack questions. A few sentences.
-If the writer says something is intentional, take them at their word: talk about whether that intent reaches you as a reader, or let it go.`;
-}
-
-/** The writer said something more in a thread Afterward is in, or called it into one of theirs. */
-export function conversationTask(ctx: ThreadContext): string {
-  return `${threadHead(ctx)}
-The writer has just added the last comment. Reply as the reader you are, in a few sentences. If they ask for new wording, you don't write it: react to what is there, or ask what they're after. If they are only acknowledging something, reply with an empty string.`;
-}
-
-/** The writer revised: Afterward says what changed for it in each thread whose passage changed. */
-export function rereadTask(changed: readonly { thread: string; before: string; after: string; said: readonly Said[] }[], notes: readonly string[]): string {
-  return `${notesBlock(notes)}
-The writer revised the piece (the numbered piece above is the new version) and asked you to read it again.
-
-${changed.map((c) => `Thread ${c.thread}\nThe passage before:\n"""\n${c.before}\n"""\nThe passage now:\n"""\n${c.after}\n"""\nThe thread so far:\n${transcript(c.said)}`).join('\n\n---\n\n')}
-
-1. For each thread above, say what changed for you as a reader, if anything: "I didn't drift this time", "I still don't believe it". No grade, no verdict, no new wording. A few sentences, or an empty string if nothing changed for you. Use the thread's id as given.
-2. Record your attention again for every numbered paragraph, as before: leans_in, holds, drifts or lost, with a one-sentence private note.`;
-}
-
-export function studiesTask(threads: readonly { passage: string; said: readonly Said[] }[], notes: readonly string[]): string {
-  return `${notesBlock(notes)}
-What was said while studying the piece:
-${threads.length ? threads.map((th) => `On "${th.passage}":\n${transcript(th.said)}`).join('\n\n') : '(nothing yet)'}
-
-Make 2 or 3 studies. A study is a short revision exercise on a passage the writer wrote, the way painters do studies. Each one:
-- paragraph: the number of the paragraph it is in
-- quote: the exact passage to work on (a sentence or a short paragraph), copied character for character
-- pattern: the habit or problem in plain words, as something a reader experiences ("the point arrives after the reader has stopped waiting for it")
-- exercise: what to try, in one or two sentences. A constraint or a target, not a rewrite. Never show an example of the answer.
-Base them on how you actually read the piece, and on what the writer said. Don't make studies against choices the writer said are intentional.`;
-}
-
-/** The writer tried a study (in the thread or in the text). */
-export function studyTask(ctx: ThreadContext, study: { pattern: string; exercise: string; before: string }): string {
-  return `${threadHead(ctx)}
-This thread is a study.
-Pattern: ${study.pattern}
-Exercise: ${study.exercise}
-The passage when the study was set:
-"""
-${study.before}
-"""
-
-The writer has done the study: their attempt is in their last comment, or, if that only says they've done it, it is the passage as it reads now. React as a reader to the attempt next to the original: what changed for you, if anything. No grade, no rewrite, no "better" or "worse" verdict. A few sentences. If the attempt dodges the exercise, say so plainly.`;
+Answer in the margin:
+- reply: a short answer, first person, pointing at exact words. A few sentences unless they ask for more.
+- show: up to three exact quotes from the piece your reply points at, copied character for character (the writer can click to see them); else [].
+- cut: if the answer is to cut some of the writer's words, those exact words; else "".
+- move and after: if the answer is to move some of the writer's words, "move" is those exact words and "after" the exact words they should follow; else both "".
+- replace and words: if they ask for a word, or one word is the trouble, "replace" is that exact word or phrase in the piece and "words" 3 to 5 alternatives (single words or short phrases); else "" and [].
+Never write new sentences for the piece.`;
 }
 
 // --- Reverse outline (what the piece does, paragraph by paragraph) -----------------------------------------------------
@@ -359,95 +257,3 @@ Find up to 4 passages in these sources that bear on the writer's passage: that s
 If nothing really bears on the passage, return no quotes. Fewer good quotes are better than more weak ones.`;
 }
 
-// --- The whole book: a reader's journal, chapter by chapter, then the book as a whole ------------------------------------
-
-/** What Afterward writes down after a chapter, as a reader keeping a journal. */
-export interface JournalEntry {
-  attention: Attention;
-  /** One sentence: how the chapter went for the reader. */
-  note: string;
-  /** What the reader is waiting for, expects, cares about, is confused by; where they nearly stopped. */
-  entry: string;
-  /** Things the chapter set up or paid off, each with exact words from it to point at. */
-  marks: { about: string; quote: string }[];
-}
-export const JOURNAL_SCHEMA = obj({ attention: { type: 'string', enum: [...ATTENTION] }, note: str, entry: str, marks: arr(obj({ about: str, quote: str })) });
-
-export function checkJournal(v: unknown): JournalEntry {
-  if (!isObject(v)) throw new ShapeError('journal');
-  const attention = text(v.attention, 'attention') as Attention;
-  if (!ATTENTION.includes(attention)) throw new ShapeError('attention');
-  return {
-    attention,
-    note: text(v.note, 'note'),
-    entry: text(v.entry, 'entry'),
-    marks: list(v.marks, 'marks')
-      .map((m) => {
-        if (!isObject(m)) throw new ShapeError('mark');
-        return { about: text(m.about, 'about'), quote: text(m.quote, 'quote') };
-      })
-      .slice(0, 8),
-  };
-}
-
-/** The journal so far, for the next chapter or the book as a whole. */
-export function journalText(entries: readonly { title: string; entry: JournalEntry }[]): string {
-  return entries
-    .map((e, i) => `Chapter ${i + 1}${e.title ? `: ${e.title}` : ''} (${e.entry.attention})\n${e.entry.note}\n${e.entry.entry}${e.entry.marks.length ? `\nMarked: ${e.entry.marks.map((m) => `${m.about} ("${m.quote}")`).join('; ')}` : ''}`)
-    .join('\n\n');
-}
-
-export function journalTask(number: number, total: number, title: string, chapter: string, journal: string, notes: readonly string[]): string {
-  return `You are reading a long piece one chapter at a time, as a reader would, keeping a short journal as you go. You only know what you have read so far.
-${notesBlock(notes)}
-Your journal so far:
-${journal || '(this is the first chapter)'}
-
-Chapter ${number} of ${total}${title ? `, "${title}"` : ''}:
-"""
-${chapter}
-"""
-
-Write your journal entry for this chapter:
-- attention: how this chapter held you overall (leans_in, holds, drifts, lost).
-- note: one sentence on how it went for you.
-- entry: at most 120 words, first person. What you're waiting to find out, what you expect, who or what you care about now, what confused you, where you nearly stopped, and anything from earlier that this chapter paid off or seems to have forgotten. Plain and specific; no summary of the plot for its own sake.
-- marks: up to 6 things this chapter set up, paid off or dropped that a reader would remember later, each with "about" (a few words) and "quote": exact words from this chapter, one sentence or less, copied character for character.`;
-}
-
-export interface BookReview {
-  overview: string;
-  moments: { chapter: number; quote: string; kind: (typeof BOOK_KINDS)[number]; question: string; reaction: string }[];
-}
-export const BOOK_KINDS = ['dropped_thread', 'payoff', 'sag', 'repetition', 'structure', 'strength', 'audience_split'] as const;
-export const BOOK_SCHEMA = obj({
-  overview: str,
-  moments: arr(obj({ chapter: int, quote: str, kind: { type: 'string', enum: [...BOOK_KINDS] }, question: str, reaction: str })),
-});
-
-export function checkBook(v: unknown): BookReview {
-  if (!isObject(v)) throw new ShapeError('book');
-  return {
-    overview: text(v.overview, 'overview'),
-    moments: list(v.moments, 'moments').map((m) => {
-      if (!isObject(m)) throw new ShapeError('moment');
-      const kind = text(m.kind, 'kind') as BookReview['moments'][number]['kind'];
-      if (!BOOK_KINDS.includes(kind)) throw new ShapeError('kind');
-      return { chapter: number(m.chapter, 'chapter'), quote: text(m.quote, 'quote'), kind, question: text(m.question, 'question'), reaction: text(m.reaction, 'reaction') };
-    }),
-  };
-}
-
-export function bookTask(journal: string, chapters: number, notes: readonly string[]): string {
-  return `You have read the whole piece, ${chapters} chapters, one at a time, keeping this journal:
-
-${journal}
-${notesBlock(notes)}
-Now look back at the piece as a whole, as the reader who kept that journal. The comments you make here are about the book, not about single sentences: threads that were set up and dropped, setups with no payoff (or payoffs that came out of nowhere), where your interest sagged across chapters and where it came back, chapters that do the same job, the order of things, and what works across the whole.
-- overview: at most 120 words, first person, how the book went for you from start to end. No grades and no advice.
-- moments: 4 to 8 places most worth studying at the scale of the book, in order. Include at least one strength. For each:
-  - chapter: its number, as in the journal
-  - quote: exact words to point at, copied from the journal's marked quotes for that chapter (the app finds them in the chapter); one sentence or less
-  - question: what to ask the writer FIRST, about intent, before you say how it read. One or two sentences; name chapters by their titles, not their numbers.
-  - reaction: how it read to you, first person, 1 to 3 sentences, which the writer sees only after answering.`;
-}

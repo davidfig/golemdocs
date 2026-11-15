@@ -1,34 +1,34 @@
-// Tools › Afterward › Show Reader Attention: a choice of view, so it follows the account (settingsSync.ts). Small and loaded
-// with the menus; the marks themselves are drawn by Afterward (afterward.ts) when it is loaded.
+// Tools › Afterward › Read Along: whether the editor reads along while the writer works. A choice of how the app behaves, so it
+// follows the account (settingsSync.ts); off until turned on, since reading along is paid for on the writer's key. Small and
+// loaded with the menus; the reading itself is Afterward's (afterward.ts), loaded when needed.
 
-const KEY = 'golem.afterward.marks';
+const KEY = 'golem.afterward.readAlong';
 const listeners = new Set<() => void>();
 
-/** Whether the readers' attention is shown beside the text (it is, unless turned off). */
-export function afterwardMarksShown(): boolean {
+export function readAlongOn(): boolean {
   try {
-    return localStorage.getItem(KEY) !== 'off';
+    return localStorage.getItem(KEY) === 'on';
   } catch {
-    return true;
+    return false;
   }
 }
 
-export function toggleAfterwardMarks(): void {
+export function toggleReadAlong(): void {
   try {
-    if (afterwardMarksShown()) localStorage.setItem(KEY, 'off');
-    else localStorage.removeItem(KEY);
+    if (readAlongOn()) localStorage.removeItem(KEY);
+    else localStorage.setItem(KEY, 'on');
   } catch {
     /* storage unavailable: nothing to change */
   }
-  afterwardMarksChanged();
+  readAlongChanged();
 }
 
 /** Runs `listener` whenever the choice changes (here, or from the account). */
-export function onAfterwardMarks(listener: () => void): void {
+export function onReadAlong(listener: () => void): void {
   listeners.add(listener);
 }
 
-/** The choice changed: what shows it, shows it. */
-export function afterwardMarksChanged(): void {
+/** The choice changed: what depends on it hears. */
+export function readAlongChanged(): void {
   for (const listener of listeners) listener();
 }

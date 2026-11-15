@@ -38,7 +38,7 @@ Add tests where reasonable. New logic, a bug fix or a changed behavior that can 
 
 No AI in the app writes or edits a document. People who want an AI to write or edit point an external agent (Claude Code, Codex, Cursor...) at their documents in the desktop or iOS vault folder, where every document is an ordinary file the app keeps in step with the account (see `docs/architecture/desktop.md`); making the vault's files easy for such agents to read and edit is the way to help them. Don't add an in-app assistant that writes, or tools for one.
 
-The one exception is Afterward (`docs/afterward.md`): one reader that reads a finished piece and talks it through in the comments. It only reads and comments; its prompts forbid new wording, and nothing it says goes in the text. Every model call is in `client/src/afterward/`, lazily loaded, on the writer's own Anthropic key (kept on the device, never synced). Anything else that would call a model needs the user's say first.
+The one exception is Afterward (`docs/afterward.md`): an editor in the margin that reads along and answers when asked. It never writes the piece: it may suggest cutting or moving the writer's own words, or offer a few words to choose from, and nothing in the document changes until the writer accepts. Every model call is in `client/src/afterward/`, lazily loaded, on the writer's own Anthropic key (kept on the device, never synced). Anything else that would call a model needs the user's say first.
 
 ## Multiplayer
 

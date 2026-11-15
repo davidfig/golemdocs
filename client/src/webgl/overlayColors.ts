@@ -5,8 +5,28 @@ import { packColor } from '@golemdocs/layout';
 
 export const SELECTION = packColor(0x3390ff, 0.28);
 export const CARET = packColor(0x000000);
-/** Squiggles under misspelled words (red) and grammar mistakes (green), by kind. */
-export const SQUIGGLE_COLORS = [packColor(0xe0271f), packColor(0x1c9c3c)];
+/**
+ * Marks under text, by kind: misspelled words (red) and grammar mistakes (green); then the editor's (Afterward,
+ * docs/afterward.md): a note on a sentence (amber dots), a cut it suggests (struck through, on a light red), a move it
+ * suggests (blue dashes, on a light blue), and a passage it points at (a light yellow).
+ */
+export const SQUIGGLE_COLORS = [packColor(0xe0271f), packColor(0x1c9c3c), packColor(0xb26a00), packColor(0xb42318), packColor(0x2c5bb8), packColor(0xffd84d, 0.45)];
+/** The light fill behind a cut or a move the editor suggests. */
+export const SUGGESTION_FILLS: Record<number, number> = { 3: packColor(0xf04438, 0.14), 4: packColor(0x2c5bb8, 0.12) };
+
+/** A dotted line under a box (the editor's note on a sentence). */
+export function dotRects(x: number, y: number, width: number, height: number): number[][] {
+  const out: number[][] = [];
+  const dot = 1.1;
+  const base = y + height - dot - 0.2;
+  for (let at = x; at < x + width; at += dot * 2.4) out.push([at, base, Math.min(dot, x + width - at), dot]);
+  return out;
+}
+
+/** A line through the middle of a box (a cut the editor suggests). */
+export function strikeRects(x: number, y: number, width: number, height: number): number[][] {
+  return [[x, y + height * 0.55, width, 0.9]];
+}
 
 /** A squiggle is a run of little steps up and down: width and height of a step, and the rise, in points. */
 const STEP = 1.6;

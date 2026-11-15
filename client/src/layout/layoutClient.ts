@@ -253,6 +253,11 @@ export class LayoutClient {
     });
   }
 
+  /** Draws the editor's marks on the open document's text (docs/afterward.md): none clears them. */
+  editorMarks(marks: { paragraph: number; from: number; to: number; kind: number }[]): void {
+    this.send({ type: 'editorMarks', doc: this.doc, marks });
+  }
+
   /** The open document as the readers read it (docs/afterward.md), or null when no text document is open. */
   readerText(): Promise<ReaderText | null> {
     const request = this.nextRequest++;

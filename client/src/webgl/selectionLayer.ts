@@ -2,7 +2,7 @@ import { packColor, RECT_INSTANCE_BYTES } from '@golemdocs/layout';
 import type { SelectionUpdate } from '../layout/protocol.ts';
 import { RectBatch } from './shapes/rectBatch.ts';
 import type { GpuPage } from './gpuPage.ts';
-import { CARET, CHANGED, changeAlpha, dashRects, REMOTE_ALPHA, REMOTE_FLAG as FLAG, REMOTE_WIDTH, SELECTION, SQUIGGLE_COLORS, squiggleRects } from './overlayColors.ts';
+import { CARET, CHANGED, changeAlpha, dashRects, dotRects, REMOTE_ALPHA, REMOTE_FLAG as FLAG, REMOTE_WIDTH, SELECTION, SQUIGGLE_COLORS, squiggleRects, strikeRects, SUGGESTION_FILLS } from './overlayColors.ts';
 
 /** Commented text, under the selection. */
 const COMMENTED = packColor(0xffc83d, 0.35);
@@ -127,9 +127,13 @@ export class SelectionLayer {
       let list = byPage.get(marks[i]);
       if (!list) byPage.set(marks[i], (list = []));
       const [x, y, width, height] = [marks[i + 1], marks[i + 2], marks[i + 3], marks[i + 4]];
-      const color = SQUIGGLE_COLORS[marks[i + 5]] ?? SQUIGGLE_COLORS[0];
+      const kind = marks[i + 5];
+      const color = SQUIGGLE_COLORS[kind] ?? SQUIGGLE_COLORS[0];
+      // The editor's suggestions sit on a light fill, so they read as a preview of a change, not a mistake.
+      if (SUGGESTION_FILLS[kind] !== undefined) list.push({ rect: [x, y, width, height], color: SUGGESTION_FILLS[kind] });
       // Grammar is dashed rather than wavy, so the two differ for someone who cannot tell red from green.
-      for (const rect of marks[i + 5] === 1 ? dashRects(x, y, width, height) : squiggleRects(x, y, width, height)) list.push({ rect, color });
+      const shape = kind === 1 || kind === 4 ? dashRects : kind === 2 ? dotRects : kind === 3 ? strikeRects : kind === 5 ? (bx: number, by: number, bw: number, bh: number) => [[bx, by, bw, bh]] : squiggleRects;
+      for (const rect of shape(x, y, width, height)) list.push({ rect, color });
     }
     for (const [page, list] of byPage) this.squiggles.set(page, coloredRects(list));
   }

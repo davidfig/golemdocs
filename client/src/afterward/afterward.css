@@ -77,3 +77,62 @@
 .wm-afterward-scope {
   margin: 8px 0;
 }
+
+/* The editor's notes in the margin (afterward.ts): comment cards, with what is particular to a conversation with the editor. */
+.wm-editor-note .wm-editor-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.wm-editor-note .wm-editor-writer {
+  margin: 8px 0 4px auto;
+  max-width: 85%;
+  width: fit-content;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--wm-checked);
+}
+
+.wm-editor-note .wm-editor-reply {
+  margin: 6px 0;
+}
+
+.wm-editor-note .wm-editor-streaming:only-of-type {
+  color: var(--wm-muted);
+}
+
+.wm-editor-suggestion {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--wm-note-border);
+}
+
+.wm-editor-suggestion p {
+  margin: 0 0 4px;
+}
+
+.wm-editor-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wm-editor-note .wm-editor-word {
+  border-radius: 999px;
+}
+
+.wm-editor-quote {
+  margin: 8px 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--wm-note-border);
+}
+
+.wm-editor-quote p {
+  margin: 2px 0;
+}
+
+.wm-editor-source {
+  color: var(--wm-muted);
+}

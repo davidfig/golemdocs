@@ -203,53 +203,11 @@ export function findQuote(text: string, quote: string): [number, number] | null 
   return [hay.at[start], hay.at[end - 1] + 1];
 }
 
-/**
- * Where to comment for a reader's quote in paragraph `n` of the piece: the quote if it is found there (or, failing that, in a
- * paragraph next to it), else the whole paragraph.
- */
-export function anchorFor(piece: Piece, text: ReaderText, n: number, quote: string): { paragraph: number; from: number; to: number } | null {
-  const at = piece.paragraphs.findIndex((p) => p.n === n);
-  const order = at < 0 ? piece.paragraphs.map((_, i) => i) : [at, at + 1, at - 1, ...piece.paragraphs.map((_, i) => i)];
-  for (const i of order) {
-    const para = piece.paragraphs[i];
-    if (!para) continue;
-    const found = findQuote(text.paragraphs[para.index].text, quote);
-    if (found) return { paragraph: para.index, from: found[0], to: found[1] };
-  }
-  const para = piece.paragraphs[at];
-  if (!para) return null;
-  const raw = text.paragraphs[para.index].text;
-  return { paragraph: para.index, from: 0, to: raw.length };
-}
-
-/** Whether a comment calls Afterward in (`@Afterward`, in any case). */
-export function callsAfterward(comment: string): boolean {
-  return /(^|\s)@afterward\b/i.test(comment);
-}
-
 /** A short, stable fingerprint of a text (to tell whether a passage changed). */
 export function fingerprint(text: string): string {
   let h = 0x811c9dc5;
   for (const ch of visible(text)) h = Math.imul(h ^ ch.codePointAt(0)!, 0x01000193);
   return (h >>> 0).toString(36);
-}
-
-/** The text a comment is on, as it reads now (objects dropped), or '' when its range is gone. */
-export function commentedText(text: ReaderText, id: string): string {
-  const c = text.comments.find((x) => x.id === id);
-  if (!c) return '';
-  const out: string[] = [];
-  for (let i = c.start[0]; i <= c.end[0]; i++) {
-    const raw = text.paragraphs[i]?.text ?? '';
-    out.push(raw.slice(i === c.start[0] ? c.start[1] : 0, i === c.end[0] ? c.end[1] : raw.length));
-  }
-  return visible(out.join('\n'));
-}
-
-/** The whole paragraph a comment starts in, as it reads now. */
-export function commentedParagraph(text: ReaderText, id: string): string {
-  const c = text.comments.find((x) => x.id === id);
-  return c ? visible(text.paragraphs[c.start[0]]?.text ?? '') : '';
 }
 
 /**
@@ -341,4 +299,28 @@ export function unnumber(text: string, piece: Piece): string {
     const capital = !the && /^[PT]/.test(word) ? 'The' : 'the';
     return `${the ? the.replace(/^t/i, (c) => c) : `${capital} `}paragraph${quoted.length > 1 ? 's' : ''} beginning ${list}`;
   });
+}
+
+/**
+ * Where a margin note is in the text as it reads now: its words, looked for first in the paragraph it was made on (by that
+ * paragraph's fingerprint, if it hasn't changed) and then anywhere; a note on a whole paragraph is found by the fingerprint
+ * alone. Null when its words are gone: the writer changed them, and the note fades with them.
+ */
+export function locateNote(text: ReaderText, quote: string, paragraph: string): { index: number; from: number; to: number } | null {
+  const same = text.paragraphs.findIndex((p) => !p.heading && fingerprint(p.text) === paragraph);
+  if (!quote) return same < 0 ? null : { index: same, from: 0, to: text.paragraphs[same].text.length };
+  const order = same < 0 ? text.paragraphs.map((_, i) => i) : [same, ...text.paragraphs.map((_, i) => i).filter((i) => i !== same)];
+  for (const i of order) {
+    if (text.paragraphs[i].heading) continue;
+    const at = findQuote(text.paragraphs[i].text, quote);
+    if (at) return { index: i, from: at[0], to: at[1] };
+  }
+  return null;
+}
+
+/** A cut of [from, to) in a paragraph's text, taking one space beside it too, so no double space is left behind. */
+export function cutRange(raw: string, from: number, to: number): [number, number] {
+  if (raw[to] === ' ' && (from === 0 || raw[from - 1] === ' ')) return [from, to + 1];
+  if (raw[from - 1] === ' ' && (to >= raw.length || /[\s.,;:!?)]/.test(raw[to]))) return [from - 1, to];
+  return [from, to];
 }

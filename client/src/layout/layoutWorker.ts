@@ -2114,8 +2114,34 @@ class OpenDocument {
   changes = 0;
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
 
-  /** The squiggles for the pages shown: red under misspelled words, green under grammar mistakes. */
+  /** The editor's marks (docs/afterward.md), on the paragraphs they were set on: they move with them as text is added before. */
+  private editorMarks: { paragraph: Paragraph; from: number; to: number; kind: number }[] = [];
+
+  setEditorMarks(marks: { paragraph: number; from: number; to: number; kind: number }[]): void {
+    const paragraphs = this.editor?.paragraphs() ?? [];
+    this.editorMarks = marks.flatMap((m) => (paragraphs[m.paragraph] ? [{ paragraph: paragraphs[m.paragraph], from: m.from, to: m.to, kind: m.kind }] : []));
+    this.sendSelection();
+  }
+
+  /** The squiggles for the pages shown (red under misspelled words, green under grammar mistakes), and the editor's marks. */
   private spellMarks(editor: Editor): Float64Array {
+    const spelling = this.spellingMarks(editor);
+    if (!this.editorMarks.length || !this.firstLayoutDone) return spelling;
+    const byParagraph = new Map<Paragraph, { start: number; end: number; kind: number }[]>();
+    for (const m of this.editorMarks) {
+      const list = byParagraph.get(m.paragraph) ?? [];
+      list.push({ start: m.from, end: m.to, kind: m.kind });
+      byParagraph.set(m.paragraph, list);
+    }
+    const marks = editor.marks((paragraph) => byParagraph.get(paragraph) ?? []);
+    const out = new Float64Array(spelling.length + marks.length * 6);
+    out.set(spelling);
+    marks.forEach((m, i) => out.set([m.page.id, m.x, m.y, m.width, m.height, m.kind], spelling.length + i * 6));
+    return out;
+  }
+
+  /** The squiggles for the pages shown: red under misspelled words, green under grammar mistakes. */
+  private spellingMarks(editor: Editor): Float64Array {
     // Nothing can be corrected in a document opened read-only, so nothing is underlined (and no dictionary is fetched).
     if ((!live.spelling && !live.grammar) || !this.firstLayoutDone || this.viewOnly || this.book) return new Float64Array(0);
     const [start, end] = editor.ordered();
@@ -3339,6 +3365,9 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'readerText':
       post({ type: 'readerText', request: message.request, text: current?.doc === message.doc ? current.readerText() : null });
+      break;
+    case 'editorMarks':
+      if (current?.doc === message.doc) current.setEditorMarks(message.marks);
       break;
     case 'linkAt':
       post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, text: '', checkbox: false }) });

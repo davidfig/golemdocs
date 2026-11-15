@@ -280,7 +280,8 @@
 }
 
 /* The marks' key, under the panel's title. */
-.wm-comments-bar:has(.wm-comments-key) {
+.wm-comments-bar:has(.wm-comments-key),
+.wm-comments-bar:has(.wm-comments-subtitle) {
   flex-wrap: wrap;
 }
 
@@ -308,4 +309,23 @@
   height: 12px;
   margin-left: -2px;
   border-width: 2px;
+}
+
+/* A line under the title: what a feature makes of the document (Afterward's reading). */
+.wm-comments-subtitle {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--wm-muted);
+}
+
+/* A feature's card (Afterward's notes), placed like a comment. */
+.wm-agent-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  pointer-events: auto;
 }

@@ -41,7 +41,8 @@ async function fakeApi(page: Page, answers: { read?: Answer[]; ask?: Answer[]; o
       ];
       return route.fulfill({ status: 200, headers: cors, contentType: 'text/event-stream', body: events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('') });
     }
-    await route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: json }] }) });
+    const usage = { input_tokens: 1200, cache_read_input_tokens: 3400, cache_creation_input_tokens: 0, output_tokens: 150 };
+    await route.fulfill({ status: 200, headers: cors, contentType: 'application/json', body: JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: json }], usage }) });
   });
   return { bodies };
 }
@@ -135,10 +136,23 @@ test.describe('Afterward, the editor in the margin', () => {
     expect(body.stream).toBe(true);
     expect(body.messages[0].content).toContain('The writer asks: Does this sentence run long?');
     await expect(card.getByRole('button', { name: /Show me “the whole town came out to watch it”/ })).toBeVisible();
-    await expect(card).toContainText('Cut “, and nobody went home for hours”?');
+    const cut = card.getByRole('button', { name: 'Cut “, and nobody went home for hours”', exact: true });
+    await expect(cut).toBeVisible();
     expect(await app.text()).toBe(`${OPENING}\n${MIDDLE}`);
-    await card.getByRole('button', { name: 'Cut', exact: true }).click();
+    await cut.click();
     await expect.poll(() => app.text()).toBe(`${OPENING}\nThen the river rose, and the whole town came out to watch it.`);
+  });
+
+  test('with Admin › Debug › Token use on, the margin shows what reading along used on the key', async ({ app, page }) => {
+    await readingAlong(page);
+    await page.addInitScript(() => localStorage.setItem('golem.debug', JSON.stringify({ afterwardTokens: true })));
+    await fakeApi(page, { read: [PANACEA] });
+    await writePiece(app);
+    await expect(note(page, 'A panacea cures')).toHaveCount(1);
+    const subtitle = page.locator('.wm-comments .wm-comments-subtitle');
+    await expect(subtitle).toContainText('Reads as: An essay on why building keeps you out of dark places.');
+    await expect(subtitle).toContainText('Tokens: 1 call · 4.6k in (3.4k cached, 0 written) · 150 out · ≈ $0.0002');
+    await expect(subtitle).toContainText('Last: read along, haiku-5-5: 4.6k in (3.4k cached), 150 out');
   });
 
   test('a note can be pinned as a comment; a later change is read again', async ({ app, page }) => {

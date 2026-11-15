@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ReaderText } from '../src/layout/protocol.ts';
 import { agentOf, BOARD, readerAuthor } from '../src/afterward/authors.ts';
-import { answerOf, directModel, errorOf, FAST_MODEL, ModelError, partialField, readStream, retryable, retryDelay } from '../src/afterward/model.ts';
+import { answerOf, costOf, directModel, errorOf, FAST_MODEL, ModelError, partialField, readStream, retryable, retryDelay } from '../src/afterward/model.ts';
 import { ANSWER_SCHEMA, askTask, checkAnswer, checkOutline, checkQueries, checkQuotes, checkReadAlong, OUTLINE_SCHEMA, QUERIES_SCHEMA, QUOTES_SCHEMA, READ_ALONG_SCHEMA, readAlongTask, ShapeError, system } from '../src/afterward/prompts.ts';
 import { KEY_SETTING } from '../src/afterward/record.ts';
 import { chaptersOf, cutRange, findQuote, fingerprint, LONG_WORDS, locateNote, numbered, PART_WORDS, scopeOf, pieceOf, selectedPassage, trimSources, verifyQuote } from '../src/afterward/text.ts';
@@ -337,10 +337,10 @@ test('a reply shows as it streams: the reply field read out of JSON still being 
 
 test('a streamed answer is put back together from its events, with each piece heard as it comes', async () => {
   const events = [
-    { type: 'message_start' },
+    { type: 'message_start', message: { usage: { input_tokens: 12, cache_read_input_tokens: 3000, cache_creation_input_tokens: 40, output_tokens: 1 } } },
     { type: 'content_block_delta', delta: { type: 'text_delta', text: '{"reply":"It ' } },
     { type: 'content_block_delta', delta: { type: 'text_delta', text: 'lands."}' } },
-    { type: 'message_delta', delta: { stop_reason: 'end_turn' } },
+    { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 9 } },
   ];
   const sse = events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
   // Cut mid-event, as a network does.
@@ -356,6 +356,16 @@ test('a streamed answer is put back together from its events, with each piece he
   const answer = await readStream(new Response(stream), (s) => heard.push(s));
   assert.deepEqual(answerOf(answer), { reply: 'It lands.' });
   assert.deepEqual(heard, ['{"reply":"It ', '{"reply":"It lands."}']);
+  // The usage comes in two parts: what was read at the start, what was written at the end.
+  assert.equal(answer.usage?.input_tokens, 12);
+  assert.equal(answer.usage?.cache_read_input_tokens, 3000);
+  assert.equal(answer.usage?.output_tokens, 9);
+});
+
+test('a call is costed by its model, with cached reads cheap and cache writes dear', () => {
+  const usage = { input: 1_000_000, output: 1_000_000, cacheRead: 1_000_000, cacheWrite: 1_000_000 };
+  assert.equal(costOf({ model: 'claude-opus-5-5', ...usage }).toFixed(2), '29.20');
+  assert.equal(costOf({ model: FAST_MODEL, ...usage }).toFixed(3), '0.735');
 });
 
 test('reading along uses the fast model, without the fallback a fast model lacks; asking streams on the deep one', async () => {

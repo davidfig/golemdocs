@@ -557,13 +557,15 @@ export class CommentsPanel {
     // Cards in the order their text is on the page; the new-comment card goes where the caret is. A card scrolls with its
     // text, off the top too: cards are only pushed down so they don't cover one another, never held under the bar (which
     // stacked every card whose text had scrolled away there and pushed the rest away from their text). A card whose text
-    // isn't on a page shown has nowhere to be, and isn't shown.
+    // isn't on a page shown has nowhere to be, and isn't shown. While its text is still in view, though, a card is kept below
+    // the bar (a tall one, with a subtitle, would hide the card of the first lines on the page).
     const placed = items.filter((item) => item.desired !== null || item.el.classList.contains('wm-comment-draft'));
     for (const item of items) if (!placed.includes(item)) item.top = NaN;
     const order = placed.map((item, i) => ({ item, i })).sort((a, b) => (a.item.desired ?? BAR) - (b.item.desired ?? BAR) || a.i - b.i).map((x) => x.item);
     let bottom = -Infinity;
     for (const item of order) {
-      item.top = Math.max(item.desired ?? BAR, bottom);
+      const desired = item.desired ?? BAR;
+      item.top = Math.max(desired >= 0 ? Math.max(desired, BAR) : desired, bottom);
       bottom = item.top + item.height + GAP;
     }
     // The open card stays beside its text: the ones above it move up out of its way.

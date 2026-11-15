@@ -43,8 +43,9 @@ How the design got here (2026-11-14 and 15), so the reasons aren't lost:
   least 6 words), with the rest of the piece (a long one: the chapter at the caret, §6) for context. It returns a one-line
   reading of the piece ("Reads as: …", under the comments panel's title) and up to three notes.
 - **A note** is a card in the margin beside its paragraph, with a dotted amber line under its words in the text. Clicking it
-  opens it: the note, any suggestion (a cut shown struck through in the text, a move shown dashed, words as chips), a box to
-  ask about it, Pin as Comment and Dismiss. A note fades when its words are edited away, unless the writer talked with it.
+  opens it (the whole note shows, open or closed): any suggestion as one button that does it (a cut shown struck through in
+  the text, a move shown dashed) beside a quiet Keep, words as chips, a box to ask about it with a send arrow, and Pin as
+  Comment and Dismiss as icons in its header. A note fades when its words are edited away, unless the writer talked with it.
   A dismissed note is remembered and not raised again.
 - **Tools › Afterward › Ask the Editor** (Mod+Alt+E): a card with a box opens in the margin beside the selection (or the
   paragraph at the caret). The answer streams in from the deep model: a few sentences, "Show me" buttons for the passages it
@@ -68,6 +69,11 @@ Accepting a suggestion is a selection and an `insertText` or `delete`, as if typ
   subscribers) is another implementation of it. The direct route uses the writer's own key, kept on the device and never
   synced, with retries on failures that may pass. No SDK: weighed on 2026-11-14 at 543 kB minified in the browser against
   about 27 kB for this whole chunk; it belongs on a server route.
+
+- **What it costs.** Admin › Debug › Token use shows, under the reading line, the calls since the page loaded, tokens in
+  (cached, written to the cache), tokens out and about what they cost at list price (`costOf` in `model.ts`; Haiku's
+  price above 100K-token prompts isn't counted), and the last call with its model and time. Every call is also logged to
+  the console as `[afterward]`. Use it to tune how often reading along speaks and how much of the piece it sends.
 
 ## 5. What is kept, and where
 

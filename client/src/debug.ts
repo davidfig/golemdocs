@@ -2,7 +2,7 @@
 // localStorage), not the document, and are all off until switched on in View > Debug.
 
 /** The overlay a flag belongs to. */
-export type DebugPanel = 'Document' | 'Render';
+export type DebugPanel = 'Document' | 'Render' | 'Afterward';
 
 export const DEBUG_FLAGS = [
   { key: 'status', panel: 'Document', label: 'Status', hint: 'Sync and collaboration status, and the room' },
@@ -12,6 +12,7 @@ export const DEBUG_FLAGS = [
   { key: 'cpu', panel: 'Render', label: 'CPU time', hint: 'How long the last frame took to submit to the GPU' },
   { key: 'fps', panel: 'Render', label: 'FPS and render light', hint: 'Frame rate of the last stretch of drawing (it holds there while the canvas is idle: it only draws on demand), beside a light that flashes whenever the canvas draws' },
   { key: 'frameTimes', panel: 'Render', label: 'Slowest and dropped frames', hint: 'Slowest frame, longest gap between frames while scrolling or animating, and frames missed. Click the overlay to reset' },
+  { key: 'afterwardTokens', panel: 'Afterward', label: 'Token use', hint: 'What the editor in the margin uses on your key, under its reading line: calls, tokens in (cached, written), tokens out and about what they cost, and the last call. Each call is also logged to the console' },
 ] as const satisfies readonly { key: string; panel: DebugPanel; label: string; hint: string }[];
 
 export type DebugFlag = (typeof DEBUG_FLAGS)[number]['key'];

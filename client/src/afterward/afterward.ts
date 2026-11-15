@@ -7,13 +7,14 @@
 import { t } from '../i18n/index.ts';
 import type { ReaderText, SelectionUpdate, WireCommand } from '../layout/protocol.ts';
 import { readerIcon, type AgentCard, type CommentAction, type CommentAgents } from '../ui/commentsPanel.ts';
-import { h } from '../ui/dom.ts';
+import { CLOSE_ICON, h, iconButton } from '../ui/dom.ts';
 import { showDialog } from '../ui/popup.ts';
 import { showProgress } from '../ui/progressToast.ts';
 import { agentColor, agentOf, BOARD } from './authors.ts';
 import { askForKey } from './dialog.ts';
 import { onReadAlong, readAlongOn } from './marks.ts';
-import { directModel, FAST_MODEL, ModelError, partialField, type ModelRequest, type ReaderModel } from './model.ts';
+import { costOf, directModel, FAST_MODEL, ModelError, partialField, type ModelRequest, type ReaderModel, type Usage } from './model.ts';
+import { debugFlags, onDebugFlagsChange } from '../debug.ts';
 import { showOutline } from './outline.ts';
 import {
   ANSWER_SCHEMA,
@@ -71,6 +72,13 @@ const PAUSE_MS = 3500;
 /** A paragraph shorter than this (in words) isn't worth reading along yet. */
 const MIN_WORDS = 6;
 
+/** Icons for the open card (12 × 12, stroked, as the app's others): a pin, and an arrow up to send. */
+const PIN_ICON = 'M4 1.5h4M5 1.5v3.5L3 7h6L7 5V1.5M6 7v3.5';
+const SEND_ICON = 'M6 10.5V2M2.5 5.5L6 2l3.5 3.5';
+
+/** A token count, short: 812, 4.3k, 1.2M. */
+const tokens = (n: number): string => (n < 1000 ? String(n) : n < 1_000_000 ? (n / 1000).toFixed(1) + 'k' : (n / 1_000_000).toFixed(1) + 'M');
+
 const newId = (): string => String(1 + Math.floor(Math.random() * 0x7ffffffe));
 
 export class Afterward implements CommentAgents {
@@ -96,9 +104,12 @@ export class Afterward implements CommentAgents {
   private readTimer = 0;
   private reading: AbortController | null = null;
   private paused = '';
+  /** What the editor has used on the writer's key since the page loaded (Admin › Debug › Token use). */
+  private readonly used = { calls: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, dollars: 0, last: '' };
 
   constructor(private readonly host: AfterwardHost) {
     onReadAlong(() => this.layoutChanged());
+    onDebugFlagsChange(() => this.changed());
   }
 
   // --- The document ---------------------------------------------------------------------------------------------------
@@ -211,7 +222,7 @@ export class Afterward implements CommentAgents {
     this.reading = new AbortController();
     try {
       const answer = checkReadAlong(
-        await this.ask({ system: sys, task: readAlongTask(changed.map((p) => p.n), record.readsAs, record.dismissed.slice(-30)), schema: READ_ALONG_SCHEMA, effort: 'low', maxTokens: 2000, model: FAST_MODEL }, this.reading.signal),
+        await this.ask({ system: sys, task: readAlongTask(changed.map((p) => p.n), record.readsAs, record.dismissed.slice(-30)), schema: READ_ALONG_SCHEMA, effort: 'low', maxTokens: 2000, model: FAST_MODEL }, this.reading.signal, 'read along'),
       );
       this.paused = '';
       const now = (await this.host.readerText()) ?? text;
@@ -306,6 +317,7 @@ export class Afterward implements CommentAgents {
             },
           },
           abort.signal,
+          'ask',
         ),
       );
       this.keep((rec) => {
@@ -425,14 +437,7 @@ export class Afterward implements CommentAgents {
     void this.locate();
   }
 
-  private clearSuggestion(id: string): void {
-    this.keep((rec) => {
-      const n = rec.notes.find((x) => x.id === id);
-      if (n) n.cut = n.move = n.after = n.replace = n.words = undefined;
-    });
-    this.drawMarks();
-    this.changed();
-  }
+
 
   // --- Commands that work on the piece ------------------------------------------------------------------------------------
 
@@ -449,7 +454,7 @@ export class Afterward implements CommentAgents {
     if (!(await this.haveKey())) return;
     const progress = showProgress(t('afterward.outlining'), true);
     try {
-      const outline = checkOutline(await this.ask({ system: sys, task: OUTLINE_TASK, schema: OUTLINE_SCHEMA, effort: 'medium', maxTokens: 32000 }, progress.signal));
+      const outline = checkOutline(await this.ask({ system: sys, task: OUTLINE_TASK, schema: OUTLINE_SCHEMA, effort: 'medium', maxTokens: 32000 }, progress.signal, 'outline'));
       this.keep((rec) => {
         const outlines = (rec.outlines ??= {});
         outlines[key] = outline;
@@ -478,14 +483,14 @@ export class Afterward implements CommentAgents {
     const progress = showProgress(t('afterward.quotes.finding'), true);
     try {
       progress.update(0, 3, t('afterward.quotes.searching'));
-      const queries = checkQueries(await this.ask({ system: sys, task: queriesTask(at.passage), schema: QUERIES_SCHEMA, effort: 'low', maxTokens: 2000 }, progress.signal));
+      const queries = checkQueries(await this.ask({ system: sys, task: queriesTask(at.passage), schema: QUERIES_SCHEMA, effort: 'low', maxTokens: 2000 }, progress.signal, 'quotes: search'));
       const sources = trimSources(await this.host.findSources(queries));
       if (!sources.length) {
         progress.close();
         return this.complain(t('afterward.quotes.noSources'));
       }
       progress.update(1, 3, t('afterward.quotes.reading', { count: sources.length }));
-      const found = checkQuotes(await this.ask({ system: sys, task: quotesTask(at.passage, at.around, sources), schema: QUOTES_SCHEMA, effort: 'medium' }, progress.signal));
+      const found = checkQuotes(await this.ask({ system: sys, task: quotesTask(at.passage, at.around, sources), schema: QUOTES_SCHEMA, effort: 'medium' }, progress.signal, 'quotes'));
       const quotes: { text: string; source: string; why: string }[] = [];
       for (const q of found) {
         const verified = verifyQuote(sources, q.source - 1, q.quote);
@@ -546,9 +551,10 @@ export class Afterward implements CommentAgents {
 
   subtitle(): string {
     const record = this.record;
-    if (this.paused && readAlongOn()) return t('afterward.paused', { reason: this.paused });
-    if (!record?.readsAs || (!readAlongOn() && !record.notes.length)) return '';
-    return t('afterward.readsAs', { text: record.readsAs });
+    let line = '';
+    if (this.paused && readAlongOn()) line = t('afterward.paused', { reason: this.paused });
+    else if (record?.readsAs && (readAlongOn() || record.notes.length)) line = t('afterward.readsAs', { text: record.readsAs });
+    return [line, this.usageLine()].filter(Boolean).join('\n');
   }
 
   cards(): AgentCard[] {
@@ -570,17 +576,33 @@ export class Afterward implements CommentAgents {
     document.querySelector<HTMLTextAreaElement>(`.wm-editor-note[data-note="${CSS.escape(id)}"] textarea`)?.focus();
   }
 
-  /** One note's card: what the editor noticed, its suggestion, the conversation, and (open) a box to ask in. */
+  /**
+   * One note's card. Closed: what the editor noticed, whole, and nothing else. Open (a click): the conversation, the change it
+   * suggests as one button that says what it does, a box to ask in (with a send arrow), and Pin and Dismiss as icons above.
+   */
   private card(note: EditorNote): HTMLElement {
     const open = note.id === this.active;
-    const card = h('article', { class: `wm-comment wm-editor-note${open ? ' wm-comment-active' : ''}`, attrs: { tabindex: '0', 'data-note': note.id, 'aria-label': t('afterward.title') } });
+    const card = h('article', { class: `wm-comment wm-editor-note${open ? ' wm-comment-active' : ''}`, attrs: { tabindex: '0', 'data-note': note.id, 'aria-label': t('afterward.title'), 'aria-expanded': String(open) } });
     const avatar = h('span', { class: 'wm-comment-avatar wm-comment-agent', attrs: { 'aria-hidden': 'true' } }, readerIcon());
     avatar.style.background = agentColor(BOARD, true);
-    card.append(h('header', {}, avatar, h('strong', { text: BOARD, title: t('afterward.boardAbout') })));
-    if (note.note) card.append(h('p', { class: open ? '' : 'wm-editor-clamp', text: note.note }));
-    if (!open && !note.note && note.talk.length) card.append(h('p', { class: 'wm-editor-clamp', text: note.talk[note.talk.length - 1].text }));
+    const header = h('header', {}, avatar, h('strong', { text: BOARD, title: t('afterward.boardAbout') }));
+    if (open) {
+      const icons = h('span', { class: 'wm-editor-icons' });
+      if (note.note || note.talk.length || note.quotes) {
+        const pin = iconButton('wm-editor-icon', PIN_ICON, t('afterward.pin'));
+        pin.addEventListener('click', () => this.pin(note));
+        icons.append(pin);
+      }
+      const dismiss = iconButton('wm-editor-icon', CLOSE_ICON, t('afterward.dismiss'));
+      dismiss.addEventListener('click', () => this.dismiss(note));
+      icons.append(dismiss);
+      header.append(icons);
+    }
+    card.append(header);
+    if (note.note) card.append(h('p', { text: note.note }));
+    // A question the writer started has no note: closed, it shows the last thing the editor said.
+    if (!open && !note.note && note.talk.length) card.append(h('p', { text: note.talk[note.talk.length - 1].text }));
     if (open) this.fill(card, note);
-    // A click opens the note with the keyboard in its box, so what is typed next is a question, not text in the piece.
     card.addEventListener('click', (e) => {
       if (this.active === note.id || (e.target instanceof Element && e.target.closest('button, textarea'))) return;
       this.open(note.id, true);
@@ -595,8 +617,8 @@ export class Afterward implements CommentAgents {
   }
 
   private fill(card: HTMLElement, note: EditorNote): void {
-    const button = (label: string, run: () => void, primary = false) => {
-      const b = h('button', { text: label, class: primary ? 'wm-comment-primary' : '', attrs: { type: 'button' } });
+    const button = (label: string, run: () => void, kind: 'primary' | 'quiet' | 'link' = 'quiet') => {
+      const b = h('button', { text: label, class: kind === 'primary' ? 'wm-comment-primary' : kind === 'link' ? 'wm-editor-link' : 'wm-editor-quiet', attrs: { type: 'button' } });
       b.addEventListener('click', run);
       return b;
     };
@@ -605,33 +627,40 @@ export class Afterward implements CommentAgents {
     const turns = this.expanded.has(note.id) ? note.talk : note.talk.slice(-2);
     if (turns.length < note.talk.length)
       card.append(
-        button(t('afterward.showAll', { count: note.talk.length }), () => {
-          this.expanded.add(note.id);
-          this.changed();
-        }),
+        button(
+          t('afterward.showAll', { count: note.talk.length }),
+          () => {
+            this.expanded.add(note.id);
+            this.changed();
+          },
+          'link',
+        ),
       );
     for (const turn of turns) card.append(h('p', { class: turn.who === 'writer' ? 'wm-editor-writer' : 'wm-editor-reply', text: turn.text }));
     const streaming = this.streaming.get(note.id);
     if (streaming) {
-      card.append(streaming.el, h('div', { class: 'wm-comment-buttons' }, button(t('afterward.stop'), () => streaming.abort.abort())));
+      card.append(streaming.el, h('div', { class: 'wm-editor-row' }, button(t('afterward.stop'), () => streaming.abort.abort())));
       return;
     }
     const error = this.errors.get(note.id);
     if (error) card.append(h('p', { class: 'wm-comment-note wm-comment-note-error', attrs: { role: 'alert' }, text: error }));
-    for (const words of note.show ?? []) card.append(button(t('afterward.showMe', { text: words.length > 48 ? `${words.slice(0, 47)}…` : words }), () => this.show(words)));
+    for (const words of note.show ?? []) card.append(h('div', {}, button(t('afterward.showMe', { text: words.length > 48 ? `${words.slice(0, 47)}…` : words }), () => this.show(words), 'link')));
     // What it suggests doing to the writer's own words: shown in the text while the card is open, done only on a click.
-    if (note.cut) card.append(h('div', { class: 'wm-editor-suggestion' }, h('p', { text: t('afterward.cutPrompt', { text: note.cut }) }), h('div', { class: 'wm-comment-buttons' }, button(t('afterward.cut'), () => this.acceptCut(note), true), button(t('afterward.keep'), () => this.clearSuggestion(note.id)))));
-    if (note.move && note.after) card.append(h('div', { class: 'wm-editor-suggestion' }, h('p', { text: t('afterward.movePrompt', { text: note.move, after: note.after }) }), h('div', { class: 'wm-comment-buttons' }, button(t('afterward.move'), () => this.acceptMove(note), true), button(t('afterward.leave'), () => this.clearSuggestion(note.id)))));
+    if (note.cut) card.append(h('div', { class: 'wm-editor-row' }, button(t('afterward.cutPrompt', { text: note.cut }), () => this.acceptCut(note), 'primary'), button(t('afterward.keep'), () => this.clearSuggestion(note.id))));
+    if (note.move && note.after) card.append(h('div', { class: 'wm-editor-row' }, button(t('afterward.movePrompt', { text: note.move, after: note.after }), () => this.acceptMove(note), 'primary'), button(t('afterward.leave'), () => this.clearSuggestion(note.id))));
     if (note.words?.length && note.replace) {
       const chips = note.words.map((w) => {
         const b = h('button', { class: 'wm-editor-word', text: w, attrs: { type: 'button' } });
         b.addEventListener('click', () => this.swap(note, w));
         return b;
       });
-      card.append(h('div', { class: 'wm-editor-suggestion' }, h('p', { text: t('afterward.wordsPrompt', { text: note.replace }) }), h('div', { class: 'wm-editor-words' }, ...chips)));
+      card.append(h('div', { class: 'wm-editor-row' }, h('span', { class: 'wm-editor-label', text: t('afterward.wordsPrompt', { text: note.replace }) }), ...chips));
     }
+    // Asking: the box, with its send arrow inside it.
     const box = h('textarea', { class: 'wm-comment-box', attrs: { rows: '1', 'aria-label': t('afterward.askPlaceholder'), placeholder: t('afterward.askPlaceholder') } });
     box.value = this.drafts.get(note.id) ?? '';
+    const send = iconButton('wm-editor-icon wm-editor-send', SEND_ICON, t('afterward.ask'));
+    send.addEventListener('click', () => void this.send(note.id));
     box.addEventListener('input', () => {
       this.drafts.set(note.id, box.value);
       box.style.height = 'auto';
@@ -649,11 +678,16 @@ export class Afterward implements CommentAgents {
         this.open(null);
       }
     });
-    card.append(box);
-    const tools = [button(t('afterward.ask'), () => void this.send(note.id), true)];
-    if (note.note || note.talk.length || note.quotes) tools.push(button(t('afterward.pin'), () => this.pin(note)));
-    tools.push(button(t('afterward.dismiss'), () => this.dismiss(note)));
-    card.append(h('div', { class: 'wm-comment-buttons wm-comment-buttons-wrap' }, ...tools));
+    card.append(h('div', { class: 'wm-editor-ask' }, box, send));
+  }
+
+  private clearSuggestion(id: string): void {
+    this.keep((rec) => {
+      const n = rec.notes.find((x) => x.id === id);
+      if (n) n.cut = n.move = n.after = n.replace = n.words = undefined;
+    });
+    this.drawMarks();
+    this.changed();
   }
 
   // --- Helpers ------------------------------------------------------------------------------------------------------------
@@ -687,10 +721,38 @@ export class Afterward implements CommentAgents {
     return !!key;
   }
 
-  private ask(request: ModelRequest, signal?: AbortSignal): Promise<unknown> {
+  private ask(request: ModelRequest, signal: AbortSignal | undefined, label: string): Promise<unknown> {
     const model = this.host.model?.() ?? directModel(getSetting(KEY_SETTING));
     if (!this.host.model && !getSetting(KEY_SETTING)) return Promise.reject(new ModelError('key', 'no key'));
-    return model.ask(request, signal);
+    const started = performance.now();
+    return model.ask({ ...request, onUsage: (usage) => this.tally(label, usage, performance.now() - started) }, signal);
+  }
+
+  /** Counts what a call used; logged to the console, and shown in the margin with Admin › Debug › Token use. */
+  private tally(label: string, usage: Usage, ms: number): void {
+    const u = this.used;
+    const dollars = costOf(usage);
+    u.calls++;
+    u.input += usage.input;
+    u.output += usage.output;
+    u.cacheRead += usage.cacheRead;
+    u.cacheWrite += usage.cacheWrite;
+    u.dollars += dollars;
+    const model = usage.model.replace(/^claude-/, '');
+    const read = usage.input + usage.cacheRead + usage.cacheWrite;
+    u.last = label + ', ' + model + ': ' + tokens(read) + ' in (' + tokens(usage.cacheRead) + ' cached), ' + tokens(usage.output) + ' out, ' + (ms / 1000).toFixed(1) + ' s';
+    console.debug('[afterward]', label, { ...usage, dollars: Number(dollars.toFixed(4)), seconds: Number((ms / 1000).toFixed(2)) });
+    if (debugFlags().afterwardTokens) this.changed();
+  }
+
+  /** The token lines under the reading line (Admin › Debug › Token use), or '' when the flag is off. Developers' English, as the other debug readouts. */
+  private usageLine(): string {
+    if (!debugFlags().afterwardTokens) return '';
+    const u = this.used;
+    if (!u.calls) return 'Tokens: no calls yet';
+    const total = u.input + u.cacheRead + u.cacheWrite;
+    const cost = '$' + u.dollars.toFixed(u.dollars < 0.01 ? 4 : u.dollars < 1 ? 3 : 2);
+    return 'Tokens: ' + u.calls + (u.calls === 1 ? ' call' : ' calls') + ' · ' + tokens(total) + ' in (' + tokens(u.cacheRead) + ' cached, ' + tokens(u.cacheWrite) + ' written) · ' + tokens(u.output) + ' out · ≈ ' + cost + '\nLast: ' + u.last;
   }
 
   private changed(): void {

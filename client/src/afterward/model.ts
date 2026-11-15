@@ -21,6 +21,30 @@ export interface ModelRequest {
   model?: string;
   /** Streams the answer: called with the JSON text so far as it arrives. */
   onText?: (soFar: string) => void;
+  /** Hears what the request used, once it is answered (Admin › Debug › Token use). */
+  onUsage?: (usage: Usage) => void;
+}
+
+/** What one request used, in tokens. */
+export interface Usage {
+  model: string;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+/** List prices, dollars per million tokens (input, output, cache read, cache write for five minutes). */
+const PRICES: Record<string, { input: number; output: number; read: number; write: number }> = {
+  'claude-opus-5-5': { input: 4, output: 20, read: 0.2, write: 5 },
+  'claude-haiku-5-5': { input: 0.1, output: 0.5, read: 0.01, write: 0.125 },
+};
+
+/** About what a request cost on the writer's key, at list price (0 for a model without a price here). */
+export function costOf(usage: Usage): number {
+  const price = PRICES[usage.model];
+  if (!price) return 0;
+  return (usage.input * price.input + usage.output * price.output + usage.cacheRead * price.read + usage.cacheWrite * price.write) / 1_000_000;
 }
 
 export interface ReaderModel {
@@ -144,17 +168,30 @@ export function directModel(key: string, options: DirectOptions = {}): ReaderMod
           continue;
         }
         if (!response.ok) throw errorOf(response.status, (await response.json().catch(() => null)) as AnthropicResponse | null);
-        if (request.onText) return answerOf(await readStream(response, request.onText, signal));
-        return answerOf((await response.json().catch(() => null)) as AnthropicResponse | null);
+        const answer = request.onText ? await readStream(response, request.onText, signal) : ((await response.json().catch(() => null)) as AnthropicResponse | null);
+        if (answer?.usage) request.onUsage?.(usageOf(model, answer.usage));
+        return answerOf(answer);
       }
     },
   };
+}
+
+interface ApiUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
 }
 
 interface AnthropicResponse {
   stop_reason?: string;
   content?: { type: string; text?: string }[];
   error?: { type?: string; message?: string };
+  usage?: ApiUsage;
+}
+
+function usageOf(model: string, u: ApiUsage): Usage {
+  return { model, input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, cacheRead: u.cache_read_input_tokens ?? 0, cacheWrite: u.cache_creation_input_tokens ?? 0 };
 }
 
 /** The answer's JSON, from a response that succeeded. */
@@ -196,8 +233,10 @@ export async function readStream(response: Response, onText: (soFar: string) => 
   let buffer = '';
   let text = '';
   let stop: string | undefined;
+  // The usage comes in two parts: what was read, when the message starts; what was written, as it ends.
+  const usage: ApiUsage = {};
   const handle = (data: string) => {
-    let event: { type?: string; delta?: { type?: string; text?: string; stop_reason?: string }; error?: { type?: string; message?: string } };
+    let event: { type?: string; delta?: { type?: string; text?: string; stop_reason?: string }; error?: { type?: string; message?: string }; message?: { usage?: ApiUsage }; usage?: ApiUsage };
     try {
       event = JSON.parse(data);
     } catch {
@@ -206,7 +245,11 @@ export async function readStream(response: Response, onText: (soFar: string) => 
     if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {
       text += event.delta.text;
       onText(text);
-    } else if (event.type === 'message_delta' && event.delta?.stop_reason) stop = event.delta.stop_reason;
+    } else if (event.type === 'message_start' && event.message?.usage) Object.assign(usage, event.message.usage);
+    else if (event.type === 'message_delta') {
+      if (event.delta?.stop_reason) stop = event.delta.stop_reason;
+      if (event.usage) Object.assign(usage, event.usage);
+    }
     else if (event.type === 'error') throw event.error?.type === 'overloaded_error' ? new ModelError('overloaded', event.error.message) : new ModelError('other', event.error?.message ?? 'stream error');
   };
   try {
@@ -230,7 +273,7 @@ export async function readStream(response: Response, onText: (soFar: string) => 
     if (signal?.aborted || (e as Error).name === 'AbortError') throw new ModelError('stopped');
     throw e;
   }
-  return { stop_reason: stop, content: [{ type: 'text', text }] };
+  return { stop_reason: stop, content: [{ type: 'text', text }], ...(Object.keys(usage).length && { usage }) };
 }
 
 /** A string field of a JSON object still being written (`{"reply":"So far…`): what has arrived of it, decoded; '' before it starts. */

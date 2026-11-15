@@ -103,15 +103,7 @@
   color: var(--wm-muted);
 }
 
-.wm-editor-suggestion {
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--wm-note-border);
-}
 
-.wm-editor-suggestion p {
-  margin: 0 0 4px;
-}
 
 .wm-editor-words {
   display: flex;
@@ -135,4 +127,96 @@
 
 .wm-editor-source {
   color: var(--wm-muted);
+}
+
+/* The open card, kept quiet: Pin and Dismiss as icons in the header, a suggestion as one button that says what it does, and
+   the send arrow inside the box. */
+.wm-editor-note header .wm-editor-icons {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.wm-editor-note .wm-editor-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--wm-muted);
+}
+
+.wm-editor-note .wm-editor-icon:hover,
+.wm-editor-note .wm-editor-icon:focus-visible {
+  background: var(--wm-checked);
+  color: var(--wm-text);
+}
+
+.wm-editor-icon svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wm-editor-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.wm-editor-label {
+  flex-basis: 100%;
+  color: var(--wm-muted);
+}
+
+.wm-editor-note .wm-editor-quiet {
+  border: 0;
+  background: none;
+  color: var(--wm-muted);
+}
+
+.wm-editor-note .wm-editor-quiet:hover {
+  color: var(--wm-text);
+  text-decoration: underline;
+}
+
+.wm-editor-note .wm-editor-link {
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--wm-link);
+  text-align: left;
+}
+
+.wm-editor-note .wm-editor-link:hover {
+  text-decoration: underline;
+}
+
+.wm-editor-ask {
+  position: relative;
+  margin-top: 8px;
+}
+
+.wm-editor-ask .wm-comment-box {
+  padding-right: 30px;
+}
+
+.wm-editor-note .wm-editor-send {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+}
+
+/* The subtitle can carry a second line (Afterward's token use, with Admin › Debug › Token use). */
+.wm-comments-subtitle {
+  white-space: pre-line;
 }

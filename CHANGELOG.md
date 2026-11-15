@@ -9,6 +9,7 @@
 - Tools › Afterward › Reverse Outline lists what each paragraph of your piece does for the reader, as written, and where the main point arrives; click a line to go to its paragraph.
 - Tools › Afterward › Find Quotes in My Notes searches your own documents for passages that bear on the selected text and shows them in the margin, quoted word for word with their source. A quote is only shown if those exact words are in your document.
 - Afterward reads long pieces, such as a book in one document, a chapter at a time, remembering the chapters before and knowing nothing of what comes after.
+- Admin › Debug › Token use (for developers): what Afterward has used on your key since the page loaded, under its reading line: calls, tokens in (cached and written to the cache), tokens out, about what they cost, and the last call. Each call is also logged to the console.
 
 ### Changed
 

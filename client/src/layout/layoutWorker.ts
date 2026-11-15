@@ -36,7 +36,8 @@ import { isWdoc, readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../f
 import type { FormField } from '@golemdocs/pdf';
 import type { PdfAnnotator } from './pdfAnnotator.ts';
 import { getLocale, loadLocale, t } from '../i18n/index.ts';
-import { caretContext, CONTEXT_RADIUS, headings, HeadingReader, jumpTarget, pageNodes, type A11yPage, type CaretContext } from './a11y.ts';
+import { caretContext, CONTEXT_RADIUS, headings, HeadingReader, jumpTarget, pageNodes, readableText, type A11yPage, type CaretContext } from './a11y.ts';
+import { headingAt, placeIndex } from '../desktop/vaultLink.ts';
 
 /** The welcome text in the current language (`welcome/<locale>.md`), else English. Each is its own small chunk. */
 const WELCOMES = import.meta.glob<string>('./welcome/*.md', { query: '?raw', import: 'default' });
@@ -734,9 +735,13 @@ class OpenDocument {
       documentInfo: this.documentInfo,
       ...(screenReader && { context: this.caretContext(editor), mistake: this.caretMistake(editor) }),
       ...(this.jumpMissed && { jumpMissed: this.jumpMissed }),
+      ...(this.placeMissed && { placeMissed: true as const }),
+      ...(this.heading !== undefined && { heading: this.heading }),
     };
     this.search = null;
     this.jumpMissed = undefined;
+    this.placeMissed = false;
+    this.heading = undefined;
     this.spell = null;
     this.stats = undefined;
     this.footerStats = undefined;
@@ -773,6 +778,36 @@ class OpenDocument {
 
   private headingReader: HeadingReader | null = null;
   private jumpMissed: SelectionUpdate['jumpMissed'];
+  private placeMissed = false;
+  private heading: string | null | undefined = undefined;
+
+  /** The document's headings (none in tables), with the reader kept for the next time. */
+  private headingList(): ReturnType<typeof headings> {
+    const { editor, document } = this;
+    if (!editor || !document) return [];
+    if (this.headingReader?.doc !== document) this.headingReader = new HeadingReader(document);
+    return headings(editor.paragraphs(), this.headingReader, (p) => editor.paragraphInTable(p));
+  }
+
+  /** A link into the note: the caret goes to the start of the paragraph it names, or the page hears none was found. */
+  private goToPlace(text: string | undefined, wanted: readonly string[] | undefined): void | Promise<void> {
+    const { editor } = this;
+    if (!editor || !this.document || this.closed || this.annotator) return;
+    const shown = text ? editor.paragraphs().map((p) => readableText(p).text) : [];
+    const target = placeIndex(shown, wanted?.length ? this.headingList() : [], { text, headings: wanted });
+    if (target < 0) {
+      this.placeMissed = true;
+      return this.sendSelection();
+    }
+    return this.runCommand({ kind: 'select', paragraph: target, from: 0, to: 0 });
+  }
+
+  /** The heading the caret is under, for Copy Link to Note. */
+  private readHeading(): string | null {
+    const at = this.editor?.selectionIndex();
+    if (!at || this.annotator) return null;
+    return headingAt(this.headingList(), Math.min(at.anchor[0], at.focus[0]));
+  }
 
   /** Next / Previous Heading or Table: the caret goes to the start of it, or the page hears there is none. */
   private jump(to: 'heading' | 'table', backward: boolean): void | Promise<void> {
@@ -892,7 +927,9 @@ class OpenDocument {
       pdfObject: this.wireObject(annotator),
       ...(fontNotice.length > 0 && { pdfFontNotice: fontNotice }),
       ...(annotator.partialNotice() && { pdfNotice: 'partialRedaction' as const }),
+      ...(this.heading !== undefined && { heading: this.heading }),
     };
+    this.heading = undefined;
     this.reveal = false;
     this.commandAt = 0;
     return update;
@@ -2351,6 +2388,11 @@ class OpenDocument {
       this.documentInfo = this.readDocumentInfo(wire.builtIn);
       return this.sendSelection();
     }
+    if (wire.kind === 'getHeading') {
+      this.heading = this.readHeading();
+      return this.sendSelection();
+    }
+    if (wire.kind === 'goToPlace') return this.goToPlace(wire.text, wire.headings);
     if (wire.kind === 'spellWords') return acceptSpelling(wire.words ?? []).then(() => this.sendSelection());
     if (wire.kind === 'spellIgnored') {
       ignoreSpelling(wire.words, wire.rules);

@@ -241,3 +241,41 @@ export function macPrinter(): { open(name: string, bytes: Uint8Array): Promise<v
 
 /** True inside the desktop app. */
 export const isDesktopApp = (): boolean => tauriCore() !== null;
+
+/**
+ * `golemdocs://` links and vault files the desktop app was opened with (desktop/src-tauri/src/link.rs), taken once each.
+ * Null in a browser or on a phone; in a shell too old to have them, `pending` gives none.
+ */
+export function linkBridge(): { pending(): Promise<string[]> } | null {
+  const core = tauriCore();
+  if (!core) return null;
+  let missing = false;
+  return {
+    async pending() {
+      if (missing) return [];
+      try {
+        return await core.invoke<string[]>('link_pending');
+      } catch (error) {
+        if (!isMissingCommand(error)) throw error;
+        missing = true;
+        return [];
+      }
+    },
+  };
+}
+
+/**
+ * Puts text on the clipboard. In the Mac app a command from the menu bar is no click in the page, so the web view refuses the
+ * page's own clipboard: the shell copies it (`clipboard_write_text`). Anywhere else, or in an older shell, the page's own.
+ */
+export async function copyText(text: string): Promise<void> {
+  const core = tauriCore();
+  if (core) {
+    try {
+      return await core.invoke<void>('clipboard_write_text', { text });
+    } catch (error) {
+      if (!isMissingCommand(error)) throw error;
+    }
+  }
+  return navigator.clipboard.writeText(text);
+}

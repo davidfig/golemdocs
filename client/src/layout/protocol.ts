@@ -118,6 +118,10 @@ export type WireCommand =
   | { kind: 'spellNext'; from: 'documentStart' | 'selectionStart' | 'selectionEnd'; grammar: boolean }
   /** Edit › Next / Previous Heading or Table: the caret goes to its start (see `SelectionUpdate.jump` when there is none). */
   | { kind: 'jump'; to: 'heading' | 'table'; backward: boolean }
+  /** A link into the note (desktop/vaultLink.ts): the caret goes to the paragraph that shows `text`, else to the first of `headings` found (see `SelectionUpdate.placeMissed`). */
+  | { kind: 'goToPlace'; text?: string; headings?: string[] }
+  /** The answer is `SelectionUpdate.heading`: the heading the caret is under, for a link to it. */
+  | { kind: 'getHeading' }
   /** Words to accept as spelled correctly in every document (the user's dictionary). */
   | { kind: 'spellWords'; words?: string[] }
   /** What is ignored in the open document: the words and grammar rules, replacing what was ignored before. */
@@ -463,6 +467,10 @@ export interface SelectionUpdate {
   mistake?: { kind: 'spelling' | 'grammar'; text: string; paragraph: number; start: number } | null;
   /** After a `jump` that found nothing that way: what was looked for. */
   jumpMissed?: 'heading' | 'table';
+  /** After a `goToPlace` that found nothing: the caret stays where it was. */
+  placeMissed?: true;
+  /** Set once after `getHeading`: the heading the caret is under, or null (none, or not a document with headings). */
+  heading?: string | null;
 }
 
 export type FromWorker =

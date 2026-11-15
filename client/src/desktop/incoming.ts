@@ -3,6 +3,8 @@
 // keeps a list; the page asks for it when it starts, when the app comes to the front and when the shell says there is more, reads
 // each file, tells the shell it has it, and opens them the way dropped files open.
 
+import { isMissingCommand, isTouchDevice } from './bridge.ts';
+
 export interface IncomingFile {
   id: string;
   name: string;
@@ -64,6 +66,22 @@ export function incomingBridge(): IncomingBridge | null {
   if (core && typeof core.invoke === 'function' && /iPhone|iPad|iPod/.test(navigator.userAgent)) {
     return {
       pending: () => core.invoke<IncomingFile[]>('incoming_pending'),
+      read: async (id) => bytesOf(await core.invoke<unknown>('incoming_read', { id })),
+      done: (id) => core.invoke<void>('incoming_done', { id }),
+    };
+  }
+  // The Mac app: a Markdown file from outside the vault opened with it (desktop/src-tauri/src/link.rs). An older shell has no list.
+  if (core && typeof core.invoke === 'function' && !isTouchDevice()) {
+    let missing = false;
+    return {
+      pending: () =>
+        missing
+          ? Promise.resolve([])
+          : core.invoke<IncomingFile[]>('incoming_pending').catch((error: unknown) => {
+              if (!isMissingCommand(error)) throw error;
+              missing = true;
+              return [];
+            }),
       read: async (id) => bytesOf(await core.invoke<unknown>('incoming_read', { id })),
       done: (id) => core.invoke<void>('incoming_done', { id }),
     };

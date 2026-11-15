@@ -362,6 +362,7 @@ export class Chrome {
       dialog('file.versionHistory', t('history.menu'), 'versionHistory', { tooltip: t('history.menu.tip') }),
       dialog('file.trash', t('history.trashMenu'), 'trash', { tooltip: t('history.trashMenu.tip') }),
       dialog('file.vault', t('vault.menu'), 'vault', { tooltip: t('vault.menu.tip'), visible: () => desktopBridge() !== null }),
+      { id: 'file.copyNoteLink', label: t('vault.link.menu'), tooltip: t('vault.link.menu.tip'), run: () => this.options.host.copyNoteLink?.(), visible: () => desktopBridge() !== null, enabled: (s) => !s.nothingOpen },
       a('file.clearLocalData', t('chrome.file.clearLocalData'), { kind: 'clearLocalData' }, { tooltip: t('chrome.file.clearLocalData.tip') }),
       // Signed out, Subscribe signs in first. Once subscribed, the same place manages it. Neither is in the phone apps.
       a('file.subscribe', t('chrome.file.subscribe'), { kind: 'subscribe' }, { tooltip: t('chrome.file.subscribe.tip'), visible: (s) => s.subscription !== 'active' && sellsSubscriptions() }),
@@ -730,6 +731,7 @@ export class Chrome {
       cmd('file.close'),
       cmd('file.rename'),
       cmd('file.share'),
+      cmd('file.copyNoteLink'),
       this.convertToItem(),
       cmd('file.download'),
       cmd('file.livePdf'),
@@ -817,6 +819,7 @@ export class Chrome {
           cmd('file.close'),
           sep,
           cmd('file.share'),
+          cmd('file.copyNoteLink'),
           this.convertToItem(),
           cmd('file.download'),
           cmd('file.livePdf'),

@@ -128,6 +128,22 @@ The iOS app (Android is not started) is the same crate and the same launcher pag
 - **No buying in the phone apps**: the App Store and Google Play require their own in-app purchase for a digital subscription and forbid pointing to another way to pay. So `sellsSubscriptions()` (`subscription.ts`) is false in the phone shell: Subscribe and Manage Subscription are hidden (the File menu, the account panel, the assistant's gate), `subscribe()` and `manageSubscription()` do nothing, and the messages that would say to subscribe say instead that the account doesn't include it. A plan bought on the website works in the app as it does anywhere.
 - **Not done**: the phone layout is the website's `mobile` profile as it is (menus and toolbars are the desktop's), no document or share extensions, no in-app account deletion (both stores require it), sign-in through the system browser (Google refuses to sign in inside an embedded web view), and the store builds are not made by CI.
 
+## Links into the vault
+
+Other apps (a chat, a terminal, another notes app, a browser) open a note in the Mac app with a link:
+
+```
+golemdocs://open?vault=<vault folder name or path>&file=<path in the vault>[&heading=<heading>][&line=<n>]
+```
+
+Every value is percent-encoded (`encodeURIComponent`, plus `'()!*`, so the link survives shells and Markdown). `vault` may be left out (the app's own vault), given as the folder's name (any case) or its full path (`~/` allowed); a link for another folder is refused with a message naming the one the app keeps. `file` is a path inside the vault, or a full path under it; a path that leaves it is refused. `heading` is matched loosely (`headingKey`: letters and digits, lower case), so the heading's text and a `#github-style-anchor` both work, and `…file=Note.md#Heading` is read as a heading too. `line` (from 1) goes to the paragraph that shows that line of the file (`shownText`, read from the file itself, since a note opens as a document whose paragraphs are not its lines), else to the nearest heading above it; a text file in the text editor goes to the line.
+
+- **The shell** (`src/link.rs`): `Info.plist` (merged into the Mac bundle) registers `golemdocs` in `CFBundleURLTypes`, and `tauri.macos.conf.json` declares the app an editor of `.md` files (rank `Alternate`, so it is offered in Open With but takes no file type over). macOS gives both to the one running app, starting it first if needed, as `RunEvent::Opened`: no second instance and no single-instance plugin. Links, and `file://` addresses of files inside the vault, are kept until the page takes them (`link_pending`); the window is shown, unminimized and focused, and a page already showing gets a `golem-link` event. A file from outside the vault is copied in like a phone's (`incoming.rs`, `golem-incoming`) and opens as a new document.
+- **The page** (`desktop/vaultLink.ts`, pure and tested; `openVaultLink` in `main.ts`): takes the links once the page has connected, when told, and when the window is shown again, and opens the last. It finds the file in the vault's memory (`VaultMemory`, path to document id; loosely by case or a left-off `.md`), and if it is not there yet runs one sync first (a note written a moment ago). The document opens through `libraryHost.open` with a pending jump; once laid out, `goToPlace` (layout worker) selects the paragraph, or `placeMissed` says the place wasn't found. A missing file, an unknown vault and no vault at all are each said in the status bar and a toast.
+- **Copy Link to Note** (File menu, desktop only): the open document's path from the vault's memory, and the heading the caret is under (`getHeading`, answered in `SelectionUpdate.heading`), copied as a link.
+- **Older shells**: `linkBridge().pending()` gives nothing when `link_pending` is missing, and the desktop `incomingBridge` treats a missing `incoming_pending` the same way. Windows and Linux would hand a link to a second process as an argument; they need the single-instance plugin before links work there.
+- **Trying it**: links reach only a bundled app, not `cargo tauri dev`. Build one with its own identifier so it doesn't share the installed app's vault setting or storage, pointed at a client on another port, e.g. `cargo tauri build --debug --bundles app --no-sign --config '{"identifier":"com.golemdocs.desktop.linktest","build":{"frontendDist":"http://localhost:5290"},"app":{"security":{"capabilities":[…default.json with that origin…]}}}'`, put `{"root": "<test vault>"}` in `~/Library/Application Support/com.golemdocs.desktop.linktest/vault.json`, run the `.app` once (LaunchServices registers its scheme), then `open 'golemdocs://open?file=…'`.
+
 ## Not built yet
 
 - A bundled client that works offline: it needs token auth on the API, because the page would no longer be same-origin with it. The phone apps show the website too, so they need a connection until this exists.
@@ -166,4 +182,6 @@ pnpm desktop:dev
 | `client/src/desktop/vaultService.ts` | the running sync: looks every few seconds, syncs on change |
 | `client/src/ui/vaultDialog.ts` | File › Vault Folder |
 | `client/src/desktop/nativeMenu.ts` | the menus as a snapshot for the Mac menu bar; `NativeMenuSync` |
+| `desktop/src-tauri/src/link.rs`, `Info.plist`, `tauri.macos.conf.json` | `golemdocs://` links and `.md` files opened with the Mac app |
+| `client/src/desktop/vaultLink.ts` | reading and making links, finding the file and the place they name |
 | `desktop/src-tauri/src/menu.rs` | builds the native menu bar from the snapshot; sends clicks back |

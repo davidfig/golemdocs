@@ -2,7 +2,8 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { desktopBridge, fromBase64, isMissingCommand, macPrinter, ShellTooOldError, toBase64 } from '../src/desktop/bridge.ts';
+import { copyText, desktopBridge, fromBase64, isMissingCommand, linkBridge, macPrinter, ShellTooOldError, toBase64 } from '../src/desktop/bridge.ts';
+import { incomingBridge } from '../src/desktop/incoming.ts';
 
 /** A shell with only the commands in `have`; any other call rejects the way Tauri does. */
 function shell(have: Record<string, unknown>, rejection = (command: string) => `Command ${command} not found`) {
@@ -147,4 +148,41 @@ test('printing in the Mac app sends the PDF as base64, and a shell without the c
 
 test('there is no Mac printer in a browser', () => {
   assert.equal(macPrinter(), null);
+});
+
+test('links the app was opened with are taken from the shell, and a shell too old to keep them gives none', async () => {
+  shell({ link_pending: ['golemdocs://open?file=a.md'] });
+  assert.deepEqual(await linkBridge()!.pending(), ['golemdocs://open?file=a.md']);
+  shell({});
+  const old = linkBridge()!;
+  assert.deepEqual(await old.pending(), []);
+  assert.deepEqual(await old.pending(), [], 'and it stops asking');
+  shell({ link_pending: Promise.reject('boom') });
+  await assert.rejects(linkBridge()!.pending(), /boom/);
+});
+
+test('the Mac app takes in files opened with it, and a shell too old to have the list gives none', async () => {
+  shell({ incoming_pending: [{ id: '1', name: 'a.md', type: '', size: 3 }] });
+  assert.deepEqual((await incomingBridge()!.pending()).map((f) => f.name), ['a.md']);
+  shell({});
+  assert.deepEqual(await incomingBridge()!.pending(), []);
+});
+
+test('the Mac app copies through the shell, and an older shell through the page', async () => {
+  const copied: string[] = [];
+  const g = globalThis as Record<string, unknown>;
+  const clip = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => void copied.push(`page:${text}`) } });
+  try {
+    g.__TAURI__ = { core: { invoke: async (command: string, args: { text: string }) => void copied.push(`${command}:${args.text}`) } };
+    await copyText('a');
+    shell({});
+    await copyText('b');
+    shell({ clipboard_write_text: Promise.reject('pbcopy failed') });
+    await assert.rejects(copyText('c'), /pbcopy failed/);
+    assert.deepEqual(copied, ['clipboard_write_text:a', 'page:b']);
+  } finally {
+    if (clip) Object.defineProperty(navigator, 'clipboard', clip);
+    else delete (navigator as unknown as Record<string, unknown>).clipboard;
+  }
 });

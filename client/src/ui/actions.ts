@@ -634,6 +634,8 @@ export interface ChromeHost {
   renameDocument(name: string): string | null;
   /** The vault folder (desktop app), or null in a browser: where it is (null while none is chosen) and a way to show it in the file manager. */
   vaultFolder?(): { path: string | null; problem?: string | null; reveal(): void; retry(): void } | null;
+  /** File › Copy Link to Note (desktop app): copy a `golemdocs://` link to the open document, at the heading the caret is under. */
+  copyNoteLink?(): void;
   /** Samples for Help ▸ Open Sample, read each time the menu opens. */
   samples?(): Sample[];
   /** The user's documents, for File ▸ Open Recent. */

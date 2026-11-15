@@ -1,5 +1,12 @@
 # What’s New in Golem Docs
 
+## 0.39.0 - Unreleased
+
+### Added
+
+- Desktop app (Mac): `golemdocs://` links open a note of your vault folder from other apps, such as a chat, a terminal, another notes app or a browser, at a heading or line if the link names one. The app comes to the front, or starts first if it isn't running. File › Copy Link to Note copies such a link to the open note, at the heading the cursor is under.
+- Desktop app (Mac): GolemDocs is offered in Open With for Markdown files. A file in your vault folder opens as its document; any other opens as a new one.
+
 ## 0.38.1 - 2026-11-15
 
 ### Changed

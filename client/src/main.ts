@@ -125,7 +125,9 @@ import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { TrashDialog } from './ui/trashDialog.ts';
 import { VaultDialog } from './ui/vaultDialog.ts';
-import { desktopUpdater, isDesktopApp, isTouchDevice, macPrinter, ShellTooOldError } from './desktop/bridge.ts';
+import { copyText, desktopBridge, desktopUpdater, isDesktopApp, isTouchDevice, linkBridge, macPrinter, ShellTooOldError } from './desktop/bridge.ts';
+import { vaultMemory } from './desktop/vaultMemory.ts';
+import { findInManifest, folderName, headingsAbove, makeLink, parseLink, pathInVault, shownText, vaultMatches } from './desktop/vaultLink.ts';
 import { saveFile } from './ui/saveFile.ts';
 import { VaultService } from './desktop/vaultService.ts';
 import { UpdateService } from './desktop/updateService.ts';
@@ -1763,7 +1765,9 @@ async function sweepJournals(): Promise<void> {
 /** Shown when the current document finishes loading, which would otherwise replace it. */
 let pendingNotice: string | null = null;
 /** Where to go in the document being opened, once it is: the paragraph a search found it by (see openSearchHit). */
-let pendingJump: { source: string; paragraph?: number; find: string } | null = null;
+/** Where to go once a document opens: a search hit's paragraph, or a place a link names (see `openVaultLink`). */
+type Jump = { source: string; paragraph?: number; find: string; place?: { text?: string; headings?: string[]; line?: number } };
+let pendingJump: Jump | null = null;
 
 /** Who is signed in; null signed out. Offline, whoever was last time (see auth.ts). */
 let signedIn: User | null = null;
@@ -4677,6 +4681,8 @@ function applySelection(update: SelectionUpdate): void {
     propertiesDialog.reportStats(update.stats);
   }
   if (update.docProperties) propertiesDialog.reportProperties(update.docProperties);
+  if (update.heading !== undefined) for (const answer of headingWaiting.splice(0)) answer(update.heading);
+  if (update.placeMissed) say(t('vault.link.placeMissing'));
   if (update.documentInfo) {
     defaultTabStop = update.documentInfo.defaultTabStop;
     for (const answer of documentInfoWaiting.splice(0)) answer(update.documentInfo);
@@ -4774,7 +4780,7 @@ function reveal(caret: NonNullable<SelectionUpdate['focus']>): void {
 const ANNOTATION_EDITS = new Set<WireCommand['kind']>(['annotate', 'delete', 'undo', 'redo', 'setFields', 'pdfText', 'pdfStyle', 'pdfMoveText', 'pdfMove', 'pdfShape', 'pdfAddShape', 'pdfAddImage', 'pdfAddText', 'pdfPageOp']);
 
 /** Commands the app sends by itself as a document opens (spelling, word counts): they say nothing about the user having touched it. */
-const BACKGROUND_COMMANDS = new Set<WireCommand['kind']>(['spellCheck', 'spellIgnored', 'spellWords', 'countWords', 'getProperties', 'getDocumentInfo', 'autoFormat', 'autoCorrect', 'liveOwner']);
+const BACKGROUND_COMMANDS = new Set<WireCommand['kind']>(['spellCheck', 'spellIgnored', 'spellWords', 'countWords', 'getProperties', 'getDocumentInfo', 'getHeading', 'autoFormat', 'autoCorrect', 'liveOwner']);
 
 onAutoFormat((on) => worker.command({ kind: 'autoFormat', on }));
 onAutoCorrect(() => worker.command({ kind: 'autoCorrect', options: autoCorrectOptions(), replacements: autoCorrectReplacements() }));
@@ -6126,6 +6132,7 @@ const chromeHost = createChromeHost({
   },
   showTrash: () => trashDialog.open(),
   showVault: () => vaultDialog.open(),
+  copyNoteLink: () => void copyNoteLink(),
   vaultFolder: () => {
     const service = vaultService;
     if (!service) return null;
@@ -6875,7 +6882,18 @@ library.subscribe(() => {
 });
 
 /** Selects the start of `jump.paragraph` in the open document and finds `jump.find` from there. */
-function goToHit(jump: { paragraph?: number; find: string }): void {
+function goToHit(jump: Omit<Jump, 'source'>): void {
+  if (jump.place) {
+    const { line, text, headings } = jump.place;
+    // A text file's lines are its own; a note shown as a document is looked for by what the line shows, or by its heading.
+    if (textView.active) {
+      if (line) textView.editor?.goToLine(line);
+      else if (headings?.length) send({ kind: 'find', text: headings[0], matchCase: false });
+      return;
+    }
+    if (text || headings?.length) send({ kind: 'goToPlace', ...(text && { text }), ...(headings?.length && { headings }) });
+    return;
+  }
   if (jump.paragraph === undefined) return;
   // A text file's paragraphs are its lines.
   if (textView.active) return textView.editor?.goToLine(jump.paragraph + 1);
@@ -6898,6 +6916,121 @@ function listedDocuments(): ListedDocument[] {
     ...library.entries.map((e) => ({ name: e.name, folder: place(e), open: opening(sourceOf(e), e.name, !!e.local && e.local.id === current.localId) })),
     ...(signedIn ? library.shared : []).filter((d) => !own.has(d.id)).map((d) => ({ name: d.name, folder: '', open: opening(`shared:${d.id}`, d.name, false) })),
   ];
+}
+
+// --- Links into the vault --------------------------------------------------------------------
+// golemdocs://open?vault=…&file=…&heading=…&line=… (desktop/vaultLink.ts): the shell keeps each link it is opened with
+// (desktop/src-tauri/src/link.rs) and the page takes them here, finds the document the file is in the vault's memory, and
+// opens it at the place the link names.
+
+/** The vault's memory of which document each file is (`ManifestEntry`), read without starting a sync. */
+async function vaultEntries(root: string): Promise<{ id: string; path: string }[]> {
+  const text = await vaultMemory(root).load().catch(() => null);
+  try {
+    const state = text ? (JSON.parse(text) as { entries?: { id: string; path: string }[] }) : null;
+    return Array.isArray(state?.entries) ? state.entries : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The library entry for a document the vault's memory names (an account id signed in, this browser's id signed out). */
+const entryForVaultId = (id: string): LibraryEntry | undefined => library.entries.find((e) => e.cloud?.id === id || e.local?.id === id);
+
+/** Opens what a `golemdocs://` link (or a file in the vault opened with the app) names, or says why it can't. */
+async function openVaultLink(text: string): Promise<void> {
+  const link = parseLink(text);
+  if (!link) return say(t('vault.link.bad'));
+  const service = vaultService;
+  // Started with the app: the folder is known a moment after the page connects.
+  for (let i = 0; i < 20 && service && !service.current.root; i++) await new Promise((r) => setTimeout(r, 100));
+  const root = service?.current.root;
+  if (!service || !root) return say(t('vault.link.noVault'));
+  if (!vaultMatches(link.vault, root)) return say(t('vault.link.otherVault', { vault: link.vault ?? '', name: folderName(root) }));
+  const path = pathInVault(link.file, root);
+  if (!path) return say(t('vault.link.outside', { file: link.file, name: folderName(root) }));
+  const find = async () => {
+    const found = findInManifest(await vaultEntries(root), path);
+    return found ? entryForVaultId(found.id) : undefined;
+  };
+  let entry = await find();
+  // A file made a moment ago is in the folder but not yet a document: one sync makes it one.
+  if (!entry && (service.current.state === 'idle' || service.current.state === 'waiting' || service.current.state === 'syncing')) {
+    await service.syncNow().catch(() => {});
+    entry = await find();
+  }
+  if (!entry) return say(t('vault.link.missing', { file: path }));
+  let place: Jump['place'];
+  if (link.heading) place = { headings: [link.heading] };
+  if (link.line) {
+    // What the line shows, read from the file itself: a note is a document here, and its paragraphs are not its lines.
+    const source = await desktopBridge()
+      ?.read(path)
+      .then((bytes) => new TextDecoder().decode(bytes))
+      .catch(() => null);
+    const shown = source?.split(/\r?\n/)[link.line - 1];
+    place = { line: link.line, ...(shown && shownText(shown) && { text: shownText(shown) }), headings: [...(link.heading ? [link.heading] : []), ...(source ? headingsAbove(source, link.line) : [])] };
+  }
+  const source = sourceOf(entry);
+  const jump: Jump = { source, find: '', ...(place && { place }) };
+  if (source === (wantedDocKey ?? viewDocKey) && loaded) {
+    goToHit(jump);
+    focusInput();
+    return;
+  }
+  pendingJump = place ? jump : null;
+  libraryHost.open(entry);
+}
+
+/** Takes the links the shell is holding, now, when it says there are more, and when the window comes back; opens the last one (each replaces the one before). */
+function watchLinks(bridge: { pending(): Promise<string[]> }): void {
+  let looking = false;
+  const look = async (): Promise<void> => {
+    if (looking) return;
+    looking = true;
+    try {
+      const links = await bridge.pending().catch(() => []);
+      const last = links.at(-1);
+      if (last) await openVaultLink(last);
+    } finally {
+      looking = false;
+    }
+  };
+  addEventListener('golem-link', () => void look());
+  addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void look();
+  });
+  void look();
+}
+
+/** File › Copy Link to Note: a `golemdocs://` link to the open document, at the heading the caret is under, if any. */
+async function copyNoteLink(): Promise<void> {
+  const root = vaultService?.current.root;
+  const open = openDocumentIds();
+  const ids = [open.localId, open.cloudId].filter((id): id is string => !!id);
+  const found = root && ids.length ? (await vaultEntries(root)).find((e) => ids.includes(e.id)) : undefined;
+  if (!root || !found) return say(t('vault.link.notInVault'));
+  const heading = textView.active || !loaded ? null : await askHeading();
+  const link = makeLink({ vault: folderName(root), file: found.path, ...(heading && { heading }) });
+  try {
+    await copyText(link);
+    say(t(heading ? 'vault.link.copiedHeading' : 'vault.link.copied', { heading: heading ?? '' }));
+  } catch {
+    say(t('vault.link.copyFailed'));
+  }
+}
+
+const headingWaiting: ((heading: string | null) => void)[] = [];
+/** The heading the caret is under (null: none), from the layout worker; given up on after a second. */
+function askHeading(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 1000);
+    headingWaiting.push((heading) => {
+      clearTimeout(timer);
+      resolve(heading);
+    });
+    send({ kind: 'getHeading' });
+  });
 }
 
 /** Opens the document a search result is for, at the paragraph that matched. */
@@ -7716,6 +7849,9 @@ window.addEventListener('popstate', () => {
   // The phone apps: files opened in or shared to the app arrive here (desktop/incoming.ts), once the library is ready.
   const incoming = incomingBridge();
   if (incoming) void Promise.resolve(firstConnect).catch(() => {}).then(() => watchIncoming(incoming, (files) => dropFile(droppedFromFiles(files), null)));
+  // The desktop app: golemdocs:// links and vault files it was opened with (desktop/vaultLink.ts).
+  const links = linkBridge();
+  if (links) void Promise.resolve(firstConnect).catch(() => {}).then(() => watchLinks(links));
   // Back from signing in to subscribe, or from paying at Polar.
   const subscribing = params.get('subscribe') === '1';
   const subscribed = params.get('subscribed') === '1';

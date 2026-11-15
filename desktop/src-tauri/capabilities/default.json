@@ -31,6 +31,8 @@
     "allow-incoming-pending",
     "allow-incoming-read",
     "allow-incoming-done",
+    "allow-link-pending",
+    "allow-clipboard-write-text",
     "core:window:allow-start-dragging",
     "core:window:allow-internal-toggle-maximize",
     "core:event:allow-listen",

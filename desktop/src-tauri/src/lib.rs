@@ -1,6 +1,8 @@
 // The menu bar and the self-updater are desktop only (the phone apps are updated through the App Store and Play). The
 // vault is on desktop (a folder the person chooses) and on iOS (the app's iCloud Drive folder, see icloud.rs).
 #[cfg(desktop)]
+mod link;
+#[cfg(desktop)]
 mod menu;
 #[cfg(desktop)]
 mod print;
@@ -45,6 +47,9 @@ fn builder() -> tauri::Builder<tauri::Wry> {
         // Reopen the window where and at the size the person last left it.
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(vault::Vault::default())
+        // golemdocs:// links and Markdown files opened with the app (link.rs); a file from outside the vault comes in as on a phone.
+        .manage(link::Links::default())
+        .manage(incoming::Incoming::default())
         // A click in the native menu bar goes to the page, which knows what each item does.
         .on_menu_event(|app, event| {
             let _ = app.emit("native-menu", event.id().0.clone());
@@ -78,6 +83,11 @@ fn builder() -> tauri::Builder<tauri::Wry> {
             print::print_open_pdf,
             update::update_check,
             update::update_install,
+            link::link_pending,
+            link::clipboard_write_text,
+            incoming::incoming_pending,
+            incoming::incoming_read,
+            incoming::incoming_done,
         ])
 }
 
@@ -124,6 +134,11 @@ pub fn run() {
         #[cfg(target_os = "ios")]
         if let tauri::RunEvent::Opened { urls } = _event {
             incoming::opened(_app, urls);
+        }
+        // golemdocs:// links and files opened with the Mac app (see link.rs).
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Opened { urls } = _event {
+            link::opened(_app, urls);
         }
     });
 }

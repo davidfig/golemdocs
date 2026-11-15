@@ -24,6 +24,8 @@ export interface CommentsHost {
   place(page: number, y: number): number | null;
   /** The same for the caret, where a new comment goes. */
   placeCaret(): number | null;
+  /** Where the right edge of the pages is, in CSS px from the panel's parent's left; null when there are none. */
+  pagesRight?(): number | null;
   /** Gives the keyboard back to the document. */
   focusEditor(): void;
 }
@@ -42,6 +44,9 @@ interface Item {
   active: boolean;
   top: number;
 }
+
+/** Space between the pages and the panel, when it sits beside them. */
+const BESIDE = 16;
 
 /** Space above the first card, for the bar. */
 const BAR = 34;
@@ -326,6 +331,15 @@ export class CommentsPanel {
   /** Puts each card beside its text, pushing them apart so none overlaps, keeping the open one on its text. */
   position(): void {
     if (this.el.hidden || !this.items.length) return;
+    // Beside the pages, as a margin of their own, when the window has room; else against the window's right edge.
+    const right = this.host.pagesRight?.() ?? null;
+    const room = this.el.parentElement?.clientWidth ?? 0;
+    const beside = right !== null && right + BESIDE + this.el.offsetWidth + 8 <= room;
+    const left = beside ? `${Math.round(right + BESIDE)}px` : '';
+    if (this.el.style.left !== left) {
+      this.el.style.left = left;
+      this.el.style.right = beside ? 'auto' : '';
+    }
     const items = this.items;
     // Refresh where each card's text is (the view moved).
     const threads = this.threads();
@@ -336,11 +350,16 @@ export class CommentsPanel {
       if (root) item.desired = root.page === null ? null : this.host.place(root.page, root.y);
       else if (item.el.classList.contains('wm-comment-draft')) item.desired = this.host.placeCaret();
     }
-    // Cards in the order their text is on the page; the new-comment card goes where the caret is.
-    const order = items.map((item, i) => ({ item, i })).sort((a, b) => (a.item.desired ?? Infinity) - (b.item.desired ?? Infinity) || a.i - b.i).map((x) => x.item);
-    let bottom = BAR;
+    // Cards in the order their text is on the page; the new-comment card goes where the caret is. A card scrolls with its
+    // text, off the top too: cards are only pushed down so they don't cover one another, never held under the bar (which
+    // stacked every card whose text had scrolled away there and pushed the rest away from their text). A card whose text
+    // isn't on a page shown has nowhere to be, and isn't shown.
+    const placed = items.filter((item) => item.desired !== null || item.el.classList.contains('wm-comment-draft'));
+    for (const item of items) if (!placed.includes(item)) item.top = NaN;
+    const order = placed.map((item, i) => ({ item, i })).sort((a, b) => (a.item.desired ?? BAR) - (b.item.desired ?? BAR) || a.i - b.i).map((x) => x.item);
+    let bottom = -Infinity;
     for (const item of order) {
-      item.top = Math.max(item.desired ?? bottom, bottom);
+      item.top = Math.max(item.desired ?? BAR, bottom);
       bottom = item.top + item.height + GAP;
     }
     // The open card stays beside its text: the ones above it move up out of its way.
@@ -355,7 +374,11 @@ export class CommentsPanel {
       for (let i = at + 1; i < order.length; i++) order[i].top = Math.max(order[i].top, order[i - 1].top + order[i - 1].height + GAP);
     }
     const viewport = this.el.clientHeight || Infinity;
-    for (const item of order) {
+    for (const item of items) {
+      if (Number.isNaN(item.top)) {
+        item.el.style.visibility = 'hidden';
+        continue;
+      }
       const y = `translateY(${Math.round(item.top)}px)`;
       if (item.el.style.transform !== y) item.el.style.transform = y;
       const off = item.top + item.height < BAR || item.top > viewport;

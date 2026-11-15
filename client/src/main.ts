@@ -7580,6 +7580,12 @@ const commentsPanel = new CommentsPanel(document.getElementById('viewport')!, {
     const page = caret && pagesById.get(caret.page);
     return caret && page ? (page.y + caret.y - camera.y) * camera.zoom * CSS_PX_PER_POINT : null;
   },
+  pagesRight: () => {
+    if (!pages.length) return null;
+    // Page points are the canvas's, which runs under the side panels; the comments panel is placed in the viewport.
+    const offset = canvas.getBoundingClientRect().left - document.getElementById('viewport')!.getBoundingClientRect().left;
+    return offset + (Math.max(...pages.map((p) => p.x + p.width)) - camera.x) * camera.zoom * CSS_PX_PER_POINT;
+  },
   focusEditor: focusInput,
 });
 

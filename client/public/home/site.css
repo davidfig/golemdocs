@@ -114,6 +114,9 @@ a { color: var(--brand); }
 .btn.primary { background: var(--brand); border-color: var(--brand); color: var(--page); }
 .btn.primary:hover { filter: brightness(1.08); }
 .btn.big { padding: 9px 18px; font-size: 15px; }
+/* A third choice beside the main two: a button only when pointed at. */
+.btn.quiet { border-color: transparent; background: transparent; color: var(--brand); }
+.btn.quiet:hover { background: var(--hot); border-color: var(--hot-border); }
 .cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 
 .desk { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; padding-block: 28px 64px; }
@@ -153,9 +156,17 @@ code { padding: 1px 4px; border-radius: 3px; background: var(--chrome); font: 0.
 ins.tc { text-decoration: underline; text-decoration-color: var(--agent); color: var(--agent); }
 .wl { color: var(--brand); text-decoration: underline; text-underline-offset: 2px; }
 
+/* The home page's four promises, under the hero, each a link to its section. */
+.glance { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 22px; margin: 30px 0 0; padding: 0; list-style: none; }
+.glance a { display: block; height: 100%; padding: 12px 0 4px; border-top: 2px solid var(--rule); color: var(--muted); font-size: 0.95rem; line-height: 1.35; text-decoration: none; }
+.glance a:hover, .glance a:focus-visible { border-top-color: var(--brand); }
+.glance b { display: block; margin-bottom: 4px; font: 400 1.2rem/1.2 var(--display); color: var(--brand); }
+h2[id] { scroll-margin-top: 56px; }
+
 /* Pictures with a one-line caption. */
 .points { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 34px 30px; margin-top: 46px; }
 .point { margin: 0; min-width: 0; }
+.points + p { margin-top: 22px; }
 .point.lead { margin-top: 40px; }
 .point figcaption { margin-top: 10px; font-size: 1rem; color: var(--muted); }
 .point figcaption b { display: block; margin-bottom: 2px; font: 400 1.25rem/1.2 var(--display); color: var(--brand); }
@@ -466,6 +477,7 @@ pre.code { margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--ch
 @media (max-width: 54rem) {
   .doc-title { display: none; }
   .row, .points, .byline, .shelves, .guides { grid-template-columns: minmax(0, 1fr); }
+  .glance { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 22px; }
   .points.split.wide { grid-template-columns: minmax(0, 1fr); }
   .balloon::before { display: none; }
   .balloon { justify-self: start; max-width: 26rem; margin-top: 0 !important; }

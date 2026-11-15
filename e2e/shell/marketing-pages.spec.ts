@@ -27,6 +27,7 @@ const noHorizontalScroll = (page: Page) => page.evaluate(() => document.document
 const PAGES = [
   { path: '/home', menu: 'Home', heading: 'One editor for every kind of document.' },
   { path: '/home/ai', menu: 'Your ai', heading: 'Ask your ai to help with your documents.' },
+  { path: '/home/ai-philosophy', menu: 'Our ai philosophy', heading: 'Keep your mind in files. Let any ai work on them.' },
   { path: '/home/formats', menu: 'Formats', heading: 'If you can name it, you can probably open it.' },
   { path: '/home/pricing', menu: 'Pricing', heading: 'Free to use. Paying covers my server bills.' },
   { path: '/home/journal', menu: 'Changelog', heading: 'What changed lately.' },
@@ -52,7 +53,7 @@ test('every page has its heading, marks itself in the menu, and loads without er
 
 test('the menu bar drops down menus that go from page to page', async ({ page }) => {
   await page.goto('/home/ai');
-  await expect(nav(page).getByRole('button', { name: 'Features' })).toHaveClass(/marked/);
+  await expect(nav(page).getByRole('button', { name: 'Your ai' })).toHaveClass(/marked/);
   await nav(page).getByRole('button', { name: 'About' }).click();
   await nav(page).getByRole('menuitem', { name: 'Changelog' }).click();
   await expect(page).toHaveURL(/\/home\/journal$/);
@@ -86,6 +87,9 @@ test('the menus work from the keyboard, as the app\'s do', async ({ page }) => {
   await page.keyboard.press('Alt+KeyF');
   await page.keyboard.press('l');
   await expect(page).toHaveURL(/\/home\/live-blocks$/);
+  await page.keyboard.press('Alt+KeyY');
+  await page.keyboard.press('p');
+  await expect(page).toHaveURL(/\/home\/ai-philosophy$/);
 });
 
 test('the demo shows the chat app, and the pane\'s Terminal tab shows it in a terminal', async ({ page }) => {

@@ -7,6 +7,11 @@
 - Desktop app (Mac): `golemdocs://` links open a note of your vault folder from other apps, such as a chat, a terminal, another notes app or a browser, at a heading or line if the link names one. The app comes to the front, or starts first if it isn't running. File › Copy Link to Note copies such a link to the open note, at the heading the cursor is under.
 - Desktop app (Mac): GolemDocs is offered in Open With for Markdown files. A file in your vault folder opens as its document; any other opens as a new one.
 - Desktop app: ai apps that work in your vault folder (Claude, ChatGPT, Codex, Cursor) can learn how Golem Docs keeps it: how it syncs, what happens to each kind of file, and how to show you a note. File › Vault Folder adds a line to your AGENTS.md or CLAUDE.md that points them to it, or creates an AGENTS.md if the folder has none.
+- Website: a new page, Our ai philosophy (Your ai › Our ai philosophy), on why Golem Docs keeps your notes and your ai's memory in plain files on your computer, so any ai can work on them and you are never locked into one.
+
+### Changed
+
+- Website: the home page is reorganized so you can tell what Golem Docs is at a glance: four short promises under the title (it opens everything, plain files you own, works with any ai, free and open source), each leading to its own section. Your ai is a menu of its own again, next to Features.
 
 ### Fixed
 

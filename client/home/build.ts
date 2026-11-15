@@ -20,7 +20,7 @@ export const SOURCE = 'en';
 export const ASSET_BASE = '/home';
 
 /** The pages. */
-export const PAGES = ['home', 'ai', 'live-blocks', 'formats', 'pricing', 'journal', 'about', 'open-source', 'developers', 'download', 'self-host'] as const;
+export const PAGES = ['home', 'ai', 'ai-philosophy', 'live-blocks', 'formats', 'pricing', 'journal', 'about', 'open-source', 'developers', 'download', 'self-host'] as const;
 export type PageName = (typeof PAGES)[number];
 
 /**
@@ -28,7 +28,8 @@ export type PageName = (typeof PAGES)[number];
  * page is in one menu, which the bar marks while it is open. Two pages are not in a menu: Home is the app's icon at the start of the bar, and Download the button beside Open Golem Docs.
  */
 export const MENUS: readonly { id: string; title: string; pages: readonly PageName[] }[] = [
-  { id: 'features', title: 'nav.menu.features', pages: ['ai', 'live-blocks', 'formats'] },
+  { id: 'features', title: 'nav.menu.features', pages: ['live-blocks', 'formats'] },
+  { id: 'ai', title: 'nav.ai', pages: ['ai', 'ai-philosophy'] },
   { id: 'pricing', title: 'nav.pricing', pages: ['pricing', 'self-host'] },
   { id: 'open-source', title: 'nav.open-source', pages: ['open-source', 'developers'] },
   { id: 'about', title: 'nav.about', pages: ['about', 'journal'] },

@@ -1099,8 +1099,9 @@ export class SheetRenderer {
     gl.disable(gl.SCISSOR_TEST);
     const batch = new RectBatch(rects.buffer, rects.count, 0, 0);
     this.frameGarbage.rects.push(batch);
-    this.rects.darkPages = false;
-    this.text.darkPages = false;
+    // With dark pages the headings turn dark too, as the cells and the desk do (their lightness flips, the selection's blue stays).
+    this.rects.darkPages = frame.darkPages;
+    this.text.darkPages = frame.darkPages;
     this.rects.render(screen, [batch]);
     const text = [...lists].map(([face, list]) => new TextBatch(face, { skew: 0, embolden: 0 }, list.buffer, list.count, 0, 0));
     this.frameGarbage.text.push(...text);

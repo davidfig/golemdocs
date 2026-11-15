@@ -12,9 +12,11 @@
 ### Changed
 
 - Website: the home page is reorganized so you can tell what Golem Docs is at a glance: four short promises under the title (it opens everything, plain files you own, works with any ai, free and open source), each leading to its own section. Your ai is a menu of its own again, next to Features.
+- Website: the spreadsheet clip on the home page zooms out around one spot, out to the workbook's full width and back, instead of from the top-left corner.
 
 ### Fixed
 
+- Spreadsheets: with Dark Pages, the column letters and row numbers turn dark along with the cells, instead of staying light grey.
 - Large text files: Escape closes the find bar when the keyboard is on one of its buttons (after clicking Replace all, say), not only in its boxes.
 
 ## 0.38.1 - 2026-11-15

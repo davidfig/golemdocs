@@ -8,6 +8,8 @@ import { resolve } from 'node:path';
 import { MOD, expect, test } from '../files/fixtures';
 import { dropFile, readZip, waitForOpen } from '../files/helpers';
 import { PdfDocument, extractText } from '../../pdf/src/index.ts';
+import { pngPixels } from '../layout/helpers';
+import { choose } from '../shell/helpers';
 
 interface SheetState {
   fromImage: boolean;
@@ -127,6 +129,28 @@ test('double-clicking a column header’s edge fits the column to its text', asy
   const box = (await page.locator('#canvas').boundingBox())!;
   await page.mouse.dblclick(box.x + before.x, box.y + before.y);
   await expect.poll(async () => (await edge()).width).toBeGreaterThan(before.width * 2);
+});
+
+test('with Dark Pages the column letters and row numbers turn dark too', async ({ app, page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await open(app, page);
+  // The share of light pixels (> 128) along the middle of the column letters, across the first few columns.
+  const lightHeadings = async () => {
+    const at = await page.evaluate(() => (window as unknown as { sheetEditor: { columnEdge(c: number): { x: number; y: number } } }).sheetEditor.columnEdge(3));
+    const img = pngPixels(await page.locator('#canvas').screenshot());
+    const scale = img.width / (await page.locator('#canvas').boundingBox())!.width;
+    const y = Math.round(at.y * scale);
+    let light = 0;
+    let total = 0;
+    for (let x = Math.round(img.width * 0.05); x < at.x * scale; x++, total++) {
+      const i = (y * img.width + x) * 4;
+      if ((img.data[i] + img.data[i + 1] + img.data[i + 2]) / 3 > 128) light++;
+    }
+    return light / total;
+  };
+  await expect.poll(lightHeadings).toBeGreaterThan(0.8);
+  await choose(app, 'View', 'Color Scheme', 'Dark Pages');
+  await expect.poll(lightHeadings).toBeLessThan(0.2);
 });
 
 test('Sort and Replace from the menus', async ({ app, page }) => {

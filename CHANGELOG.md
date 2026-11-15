@@ -8,6 +8,10 @@
 - Desktop app (Mac): GolemDocs is offered in Open With for Markdown files. A file in your vault folder opens as its document; any other opens as a new one.
 - Desktop app: ai apps that work in your vault folder (Claude, ChatGPT, Codex, Cursor) can learn how Golem Docs keeps it: how it syncs, what happens to each kind of file, and how to show you a note. File › Vault Folder adds a line to your AGENTS.md or CLAUDE.md that points them to it, or creates an AGENTS.md if the folder has none.
 
+### Fixed
+
+- Large text files: Escape closes the find bar when the keyboard is on one of its buttons (after clicking Replace all, say), not only in its boxes.
+
 ## 0.38.1 - 2026-11-15
 
 ### Changed

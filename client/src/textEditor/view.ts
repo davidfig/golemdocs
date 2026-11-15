@@ -194,6 +194,13 @@ export class TextEditorView {
       e.preventDefault();
     });
     for (const input of [this.findInput, this.lineInput, this.replaceInput]) input.addEventListener('keydown', (e) => e.stopPropagation());
+    // Escape from anywhere else in the bar too (its buttons: Replace all, the toggles, Close), where the keyboard is after a click.
+    this.bar.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.closeBar();
+    });
     previous.addEventListener('click', () => this.step(true));
     next.addEventListener('click', () => this.step(false));
     close.addEventListener('click', () => this.closeBar());

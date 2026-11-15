@@ -147,7 +147,10 @@ test('Replace All changes every match as one step that can be undone', { tag: '@
   await viewer(page).getByRole('button', { name: 'Replace all' }).click();
   await expect(viewer(page).locator('.wm-large-message')).toContainText(`Replaced ${MARKED} matches`, { timeout: 30_000 });
   await expectLine(page, 0, /^Line 1 the changed fox/);
+  // The keyboard is on the Replace all button: Escape closes the bar from there too.
+  await expect(viewer(page).getByRole('button', { name: 'Replace all' })).toBeFocused();
   await page.keyboard.press('Escape');
+  await expect(viewer(page).getByRole('textbox', { name: 'Find' })).toBeHidden();
   await clickAt(page, 0, 0);
   // Replace All is the only step to undo, so pressing again is harmless: the first press can land before the editor has the focus.
   await expect

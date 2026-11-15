@@ -231,7 +231,7 @@ async function sandboxed(context: BrowserContext) {
   }
 }
 
-test('Chromium: the sandboxed viewer starts its worker, draws with WebGL and loads its fonts under a strict CSP', async ({ context }) => {
+test('Chromium: the sandboxed viewer starts its worker, draws with WebGL and loads its fonts under a strict CSP', { tag: '@heavy' }, async ({ context }) => {
   await sandboxed(context);
 });
 

@@ -416,7 +416,7 @@
   "dev.folder.1": "<code>.docx</code>、<code>.md</code>、<code>.txt</code>、<code>.csv</code>、<code>.svg</code>、<code>.epub</code> 和 <code>.mhtml</code> 檔案保持原樣。",
   "dev.folder.2": "PDF 寫入時會帶上其中的註解、表單欄位和編輯內容，圖片則把圖層繪製進去。",
   "dev.folder.3": "Golem Docs 裡的資料夾就是磁碟上的資料夾。移動或重新命名檔案，文件會跟著走，記錄也一樣。",
-  "dev.folder.4": "以點開頭的名稱會被略過，所以 <code>.git</code> 不會被動。<code>.golemdocs/</code> 存放同步狀態；請不要編輯它。",
+  "dev.folder.4": "以點開頭的名稱會被略過，所以 <code>.git</code> 不會被動。<code>.golemdocs/</code> 存放同步狀態；請不要編輯它。<code>.golemdocs/AGENTS.md</code> 是應用程式寫給代理的指南：資料夾如何同步、每種格式會變成什麼、如何在應用程式中打開一篇筆記。在「檔案 › 保管庫資料夾」中，可以在你自己的 AGENTS.md 或 CLAUDE.md 裡加上一行指向它。",
   "dev.sync.h": "同步規則",
   "dev.sync.1h": "檔案在這裡被修改",
   "dev.sync.1": "以檔案為準。如果帳戶中的副本也被修改了，會先把它存成一個版本。",

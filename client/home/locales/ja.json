@@ -416,7 +416,7 @@
   "dev.folder.1": "<code>.docx</code>、<code>.md</code>、<code>.txt</code>、<code>.csv</code>、<code>.svg</code>、<code>.epub</code>、<code>.mhtml</code> ファイルは、そのままの形式で残ります。",
   "dev.folder.2": "PDF は注釈、フォームフィールド、編集内容を書き込んだ状態で、画像はレイヤーを描き込んだ状態で書き出されます。",
   "dev.folder.3": "Golem Docs のフォルダーは、ディスク上のフォルダーです。ファイルを移動または名前変更すると、履歴ごとドキュメントも追従します。",
-  "dev.folder.4": "ドットで始まる名前は無視されるので、<code>.git</code> には触れません。<code>.golemdocs/</code> は同期の状態を保持しています。編集しないでください。",
+  "dev.folder.4": "ドットで始まる名前は無視されるので、<code>.git</code> には触れません。<code>.golemdocs/</code> は同期の状態を保持しています。編集しないでください。 <code>.golemdocs/AGENTS.md</code> はエージェント向けのアプリのガイドです。フォルダーの同期のしかた、各形式がどうなるか、アプリでノートを表示する方法が書かれています。ファイル › 保管フォルダから、自分の AGENTS.md や CLAUDE.md にこのガイドを指す行を追加できます。",
   "dev.sync.h": "同期のルール",
   "dev.sync.1h": "ここでファイルが変更された",
   "dev.sync.1": "ファイルが優先されます。アカウント側も変更されていた場合は、そちらのコピーが先にバージョンとして保存されます。",

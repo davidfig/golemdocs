@@ -416,7 +416,7 @@
   "dev.folder.1": "Dateien vom Typ <code>.docx</code>, <code>.md</code>, <code>.txt</code>, <code>.csv</code>, <code>.svg</code>, <code>.epub</code> und <code>.mhtml</code> bleiben, was sie sind.",
   "dev.folder.2": "PDFs werden mit ihren Anmerkungen, Formularfeldern und Änderungen geschrieben, Bilder mit eingezeichneten Ebenen.",
   "dev.folder.3": "Ordner in Golem Docs sind Ordner auf der Festplatte. Verschieben oder benennen Sie eine Datei um, und das Dokument folgt, samt Verlauf.",
-  "dev.folder.4": "Namen, die mit einem Punkt beginnen, werden übersprungen, <code>.git</code> bleibt also unberührt. <code>.golemdocs/</code> enthält den Synchronisierungsstatus; bearbeiten Sie ihn nicht.",
+  "dev.folder.4": "Namen, die mit einem Punkt beginnen, werden übersprungen, <code>.git</code> bleibt also unberührt. <code>.golemdocs/</code> enthält den Synchronisierungsstatus; bearbeiten Sie ihn nicht. <code>.golemdocs/AGENTS.md</code> ist die Anleitung der App für Agenten: wie der Ordner synchronisiert wird, was aus jedem Format wird und wie man eine Notiz in der App aufruft. Unter Datei › Tresorordner können Sie Ihrer eigenen AGENTS.md oder CLAUDE.md eine Zeile hinzufügen, die darauf verweist.",
   "dev.sync.h": "Die Synchronisierungsregeln",
   "dev.sync.1h": "Eine Datei wurde hier geändert",
   "dev.sync.1": "Die Datei gewinnt. Wurde auch das Konto geändert, bleibt dessen Kopie zuerst als Version erhalten.",

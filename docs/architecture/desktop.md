@@ -144,7 +144,14 @@ Every value is percent-encoded (`encodeURIComponent`, plus `'()!*`, so the link 
 - **Older shells**: `linkBridge().pending()` gives nothing when `link_pending` is missing, and the desktop `incomingBridge` treats a missing `incoming_pending` the same way. Windows and Linux would hand a link to a second process as an argument; they need the single-instance plugin before links work there.
 - **Trying it**: links reach only a bundled app, not `cargo tauri dev`. Build one with its own identifier so it doesn't share the installed app's vault setting or storage, pointed at a client on another port, e.g. `cargo tauri build --debug --bundles app --no-sign --config '{"identifier":"com.golemdocs.desktop.linktest","build":{"frontendDist":"http://localhost:5290"},"app":{"security":{"capabilities":[…default.json with that origin…]}}}'`, put `{"root": "<test vault>"}` in `~/Library/Application Support/com.golemdocs.desktop.linktest/vault.json`, run the `.app` once (LaunchServices registers its scheme), then `open 'golemdocs://open?file=…'`.
 
-## Not built yet
+## Instructions for ai apps
+
+An agent pointed at the vault sees ordinary files. To know how the folder behaves (the file wins, what each format becomes, the trash, the mass-delete hold, `golemdocs://` links), it reads the app's guide (`desktop/agentGuide.ts`).
+
+- **The guide** is `.golemdocs/AGENTS.md`, in English for agents and never shown in the app. `VaultService.syncNow` writes it once per folder per session, after a sync that found the folder to be this account's (`writeGuide`). It starts with `<!-- golemdocs-guide N -->`: a file that is missing, older or not as written is replaced, and one from a newer app (a folder shared by two computers through a cloud drive) is left alone. Raise `GUIDE_VERSION` whenever `guideText` changes. Dot-names are not documents, so the guide never reaches the account. Not on a phone: its `.golemdocs/` is outside the shared folder.
+- **The pointer.** Agents read the instruction file at the top of a folder, not files in a dot-folder. Most read `AGENTS.md`; Claude Code reads `CLAUDE.md` instead when both are there, and Gemini CLI reads `GEMINI.md`. Those files are the person's, so the app only changes them when asked: File › Vault Folder says which of them don't point to the guide yet (`pointerState`, which looks for the guide's path, so the line may be in any language) and adds the line (`vault.agents.line`, which must contain `.golemdocs/AGENTS.md` in every language) to each, or makes an `AGENTS.md` when there is none (`VaultService.pointAgents`, held like a sync, then a sync so the files reach the account).
+
+
 
 - A bundled client that works offline: it needs token auth on the API, because the page would no longer be same-origin with it. The phone apps show the website too, so they need a connection until this exists.
 - An end-to-end test: Playwright drives Chromium, which has no native shell. The driver and codec are covered by `vaultSync.test.ts` and `vaultCodec.test.ts`, the folder rules by the Rust tests.

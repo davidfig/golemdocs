@@ -416,7 +416,7 @@
   "dev.folder.1": "Les fichiers <code>.docx</code>, <code>.md</code>, <code>.txt</code>, <code>.csv</code>, <code>.svg</code>, <code>.epub</code> et <code>.mhtml</code> restent ce qu’ils sont.",
   "dev.folder.2": "Les PDF sont écrits avec leurs annotations, champs de formulaire et modifications, et les images avec leurs calques dessinés.",
   "dev.folder.3": "Les dossiers de Golem Docs sont des dossiers sur le disque. Déplacez ou renommez un fichier et le document suit, historique compris.",
-  "dev.folder.4": "Les noms commençant par un point sont ignorés, donc <code>.git</code> est laissé tranquille. <code>.golemdocs/</code> contient l’état de synchronisation ; ne le modifiez pas.",
+  "dev.folder.4": "Les noms commençant par un point sont ignorés, donc <code>.git</code> est laissé tranquille. <code>.golemdocs/</code> contient l’état de synchronisation ; ne le modifiez pas. <code>.golemdocs/AGENTS.md</code> est le guide de l’app pour les agents : comment le dossier se synchronise, ce que devient chaque format et comment afficher une note dans l’app. Fichier › Dossier coffre peut ajouter à votre AGENTS.md ou CLAUDE.md une ligne qui y renvoie.",
   "dev.sync.h": "Les règles de synchronisation",
   "dev.sync.1h": "Un fichier modifié ici",
   "dev.sync.1": "Le fichier l’emporte. Si le compte a aussi changé, sa copie est d’abord gardée comme version.",

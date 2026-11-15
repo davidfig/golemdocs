@@ -1,4 +1,5 @@
 import './style.css';
+import { installAutomation } from './automation.ts';
 import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import { replacementFor } from '@golemdocs/editor/pattern';
 import { deskColor, onThemeChange, pagesDark, rereadTheme } from './ui/theme.ts';
@@ -673,7 +674,11 @@ function openTicket(): () => boolean {
 type OpenOptions = { delimited?: 'csv' | 'tsv'; sheetLayout?: SheetLayout; wdocChecked?: boolean; detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean; none?: boolean };
 
 /** Everything that starts a new document, before whatever shows it is asked for it: the old one is put away, the page's state is reset, and `current` is the new one. */
+/** How many documents have begun opening (the automation API's `doc.open` waits for the next). */
+let opensBegun = 0;
+
 function beginOpen(source: DocumentSource, options: OpenOptions): { name: string; opening: OpenDocument } {
+  opensBegun++;
   keepCamera = !!options.pictureEdit && source.kind === 'svg';
   // Going anywhere but back to the document leaves the picture that was taken from it.
   if (!options.detour && pictureDetour) {
@@ -7804,7 +7809,29 @@ window.addEventListener('drop', (e) => {
   if (drop) void dropped(drop, e.clientX, e.clientY);
 });
 
-// Debug/automation hooks.
+// The automation API (`window.golem`, see automation.ts): how agents and tests drive the app and read what it shows.
+installAutomation({
+  registry: chrome.registry,
+  loaded: () => loaded,
+  status: () => status,
+  selection: () => ({ text: selection.text, caret: selection.caret }),
+  outline: () => (textView.active || sheetView.active ? Promise.resolve(null) : worker.outline()),
+  text: async () => {
+    if (textView.active) return new TextDecoder().decode(textView.editor?.flatten() ?? new Uint8Array(0));
+    if (sheetView.active) throw new Error('golem.doc.text: a workbook has no text; read its cells with sheetEditor.cell(row, col)');
+    return new TextDecoder().decode(await worker.convert('txt'));
+  },
+  markdown: async () => {
+    if (textView.active || sheetView.active) throw new Error(`golem.doc.markdown: a ${current.kind} file can't be written as Markdown`);
+    return new TextDecoder().decode(await worker.convert('md'));
+  },
+  select: (paragraph, from, to) => send({ kind: 'select', paragraph, from, to }),
+  open: (source) => openSource(source),
+  opensBegun: () => opensBegun,
+  ping: () => worker.ping(),
+});
+
+// Lower-level hooks the end-to-end tests read (camera, pages, editors' state); agents should prefer `window.golem`.
 Object.assign(window, { camera, requestRender, render, openSource, refreshWith, send, pageAt, library });
 Object.defineProperties(window, {
   pages: { get: () => pages },

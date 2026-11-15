@@ -416,7 +416,7 @@
   "dev.folder.1": "<code>.docx</code>, <code>.md</code>, <code>.txt</code>, <code>.csv</code>, <code>.svg</code>, <code>.epub</code>, <code>.mhtml</code> 파일은 그대로 유지됩니다.",
   "dev.folder.2": "PDF는 주석, 양식 필드, 편집 내용이 들어간 채로 저장되고, 그림은 레이어가 그려 넣어진 채로 저장됩니다.",
   "dev.folder.3": "Golem Docs의 폴더는 디스크의 폴더입니다. 파일을 옮기거나 이름을 바꾸면 문서가 기록까지 그대로 따라갑니다.",
-  "dev.folder.4": "점으로 시작하는 이름은 건너뛰므로 <code>.git</code>은 건드리지 않습니다. <code>.golemdocs/</code>에는 동기화 상태가 들어 있으니 편집하지 마세요.",
+  "dev.folder.4": "점으로 시작하는 이름은 건너뛰므로 <code>.git</code>은 건드리지 않습니다. <code>.golemdocs/</code>에는 동기화 상태가 들어 있으니 편집하지 마세요. <code>.golemdocs/AGENTS.md</code>는 에이전트를 위한 앱의 안내서입니다. 폴더가 동기화되는 방식, 각 형식이 어떻게 되는지, 앱에서 노트를 여는 방법이 들어 있습니다. 파일 › 보관 폴더에서 내 AGENTS.md나 CLAUDE.md에 이 안내서를 가리키는 줄을 추가할 수 있습니다.",
   "dev.sync.h": "동기화 규칙",
   "dev.sync.1h": "여기서 파일이 바뀐 경우",
   "dev.sync.1": "파일이 우선합니다. 계정에서도 바뀌었다면 그쪽 사본을 먼저 버전으로 보관합니다.",

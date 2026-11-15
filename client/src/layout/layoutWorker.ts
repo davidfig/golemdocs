@@ -36,7 +36,7 @@ import { isWdoc, readWdoc, WDOC_VERSION, writeWdoc, type Extensions } from '../f
 import type { FormField } from '@golemdocs/pdf';
 import type { PdfAnnotator } from './pdfAnnotator.ts';
 import { getLocale, loadLocale, t } from '../i18n/index.ts';
-import { caretContext, CONTEXT_RADIUS, headings, HeadingReader, jumpTarget, pageNodes, readableText, type A11yPage, type CaretContext } from './a11y.ts';
+import { caretContext, CONTEXT_RADIUS, headings, HeadingReader, jumpTarget, outlineNodes, pageNodes, readableText, type A11yPage, type CaretContext, type OutlineNode } from './a11y.ts';
 import { headingAt, placeIndex } from '../desktop/vaultLink.ts';
 
 /** The welcome text in the current language (`welcome/<locale>.md`), else English. Each is its own small chunk. */
@@ -831,6 +831,14 @@ class OpenDocument {
       return this.sendSelection();
     }
     return this.runCommand({ kind: 'select', paragraph: target, from: 0, to: 0 });
+  }
+
+  /** The body's paragraphs in order, for the automation API (null: no document of paragraphs is open). */
+  outline(): OutlineNode[] | null {
+    const { editor, document, annotator } = this;
+    if (annotator || !editor || !document || this.closed) return null;
+    if (this.headingReader?.doc !== document) this.headingReader = new HeadingReader(document);
+    return outlineNodes(editor, this.headingReader);
   }
 
   /** The reading layer's pages (those of `ids` still shown), and the document's headings when asked for (Screen Reader Mode). */
@@ -3360,6 +3368,12 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'livePart':
       post({ type: 'livePart', request: message.request, part: current?.doc === message.doc ? current.partAtCaret() : null });
+      break;
+    case 'outline':
+      post({ type: 'outline', request: message.request, nodes: current?.doc === message.doc ? current.outline() : null });
+      break;
+    case 'ping':
+      post({ type: 'pong', request: message.request });
       break;
     case 'linkAt':
       post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, text: '', checkbox: false }) });

@@ -52,6 +52,20 @@ export interface A11yHeading {
   paragraph: number;
 }
 
+/**
+ * One paragraph of the whole document, for the automation API's `doc.outline()` (automation.ts). `paragraph` is its index among
+ * the body's paragraphs, as the `select` command takes it; tables are numbered from 1 across the document.
+ */
+export interface OutlineNode {
+  paragraph: number;
+  kind: 'heading' | 'paragraph' | 'item';
+  /** Heading level 1–6, or a list item's level 1–9. */
+  level?: number;
+  ordered?: boolean;
+  text: string;
+  cell?: { table: number; row: number; column: number; header: boolean };
+}
+
 /** A paragraph's text for reading aloud, and the model offset of each character in it (hidden field codes and deleted text left out). */
 export function readableText(paragraph: Paragraph): { text: string; offsets: number[] } {
   const out: string[] = [];
@@ -313,13 +327,7 @@ export function pageNodes(page: PageLayout, editor: Editor, reader: HeadingReade
       node.ordered = list.ordered;
     }
     const located = editor.replica.engine.index.locate(paragraph);
-    if (located) {
-      if (!tables.has(located.table)) tables.set(located.table, tables.size + 1);
-      const rows = located.table.rows.filter((r) => r.kind === 'row');
-      const row = rows.indexOf(located.row);
-      const column = located.row.cells.filter((c) => c.kind === 'cell').indexOf(located.cell);
-      node.cell = { table: tables.get(located.table)!, row, column, header: !!located.row.properties.header };
-    }
+    if (located) node.cell = cellOf(located, tables);
     if (parts.length || located) nodes.push(node);
   }
   for (const image of page.images) {
@@ -327,4 +335,33 @@ export function pageNodes(page: PageLayout, editor: Editor, reader: HeadingReade
     nodes.push({ kind: 'picture', parts: description ? [{ text: description }] : [], x: image.x, y: image.y, width: image.width, height: image.height, paragraph: -1, offset: 0 });
   }
   return nodes;
+}
+
+/** Every paragraph of the body in order, with its kind and text (pictures read as U+FFFC), for the automation API. */
+export function outlineNodes(editor: Editor, reader: HeadingReader): OutlineNode[] {
+  const tables = new Map<unknown, number>();
+  return editor.paragraphs().map((p, i) => {
+    const level = reader.level(p);
+    const list = level ? null : reader.list(p);
+    const node: OutlineNode = { paragraph: i, kind: level ? 'heading' : list ? 'item' : 'paragraph', text: readableText(p).text };
+    if (level) node.level = level;
+    if (list) {
+      node.level = list.level;
+      node.ordered = list.ordered;
+    }
+    const located = editor.replica.engine.index.locate(p);
+    if (located) node.cell = cellOf(located, tables);
+    return node;
+  });
+}
+
+type Located = NonNullable<ReturnType<Editor['replica']['engine']['index']['locate']>>;
+
+/** Where a table's paragraph is: its table (numbered in the order first met), row, column, and whether the row is a header row. */
+function cellOf(located: Located, tables: Map<unknown, number>): { table: number; row: number; column: number; header: boolean } {
+  if (!tables.has(located.table)) tables.set(located.table, tables.size + 1);
+  const rows = located.table.rows.filter((r) => r.kind === 'row');
+  const row = rows.indexOf(located.row);
+  const column = located.row.cells.filter((c) => c.kind === 'cell').indexOf(located.cell);
+  return { table: tables.get(located.table)!, row, column, header: !!located.row.properties.header };
 }

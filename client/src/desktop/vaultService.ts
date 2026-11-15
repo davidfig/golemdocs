@@ -4,6 +4,7 @@
 // the account; signed out, it is the documents saved in this browser (vaultGuest.ts), so the folder works without an account.
 
 import { CloudError } from '../cloud.ts';
+import { addPointers, pointerState, writeGuide, type PointerState } from './agentGuide.ts';
 import { desktopBridge, type DesktopBridge } from './bridge.ts';
 import { ConvertWorker, startConvertWorker } from './convertClient.ts';
 import { realHost } from './vaultHost.ts';
@@ -57,6 +58,8 @@ export class VaultService {
   private signature = '';
   private lastAccountLook = 0;
   private lastLook = 0;
+  /** The folder the agent guide was last written to this session (agentGuide.ts): it is written once per folder. */
+  private guideRoot: string | null = null;
 
   /** `account` is the signed-in account (null: none, so the vault keeps the documents saved in this browser). */
   constructor(
@@ -178,6 +181,32 @@ export class VaultService {
     this.set({ root: null, state: 'off', report: null, message: undefined });
   }
 
+  /** Which instruction files at the top of the folder agents read, and which of them don't point to the app's guide yet. Null with no folder, or on a phone. */
+  async agentFiles(): Promise<PointerState | null> {
+    if (!this.status.root || this.bridge.fixed) return null;
+    return pointerState(this.bridge);
+  }
+
+  /**
+   * Adds `line` (it names the guide) to the instruction files that lack it, or makes an AGENTS.md with `heading` and the line;
+   * the person asked for it in File › Vault Folder. Waits for a running sync, then syncs, so the files reach the account.
+   */
+  async pointAgents(line: string, heading: string): Promise<string[]> {
+    if (!this.status.root || this.bridge.fixed) return [];
+    while (this.running) await new Promise((resolve) => setTimeout(resolve, 100));
+    // Held like a sync, so none starts halfway through.
+    this.running = true;
+    let written: string[];
+    try {
+      await writeGuide(this.bridge);
+      written = await addPointers(this.bridge, line, heading);
+    } finally {
+      this.running = false;
+    }
+    void this.syncNow();
+    return written;
+  }
+
   /** Moves the running sync to a step. The time only restarts when the step changes, so the dialog can tell a long step from progress. */
   private progress(progress: SyncProgress): void {
     const previous = this.status.progress;
@@ -237,6 +266,11 @@ export class VaultService {
       const report = await syncVault(realHost(root, this.bridge, this.codec, account, () => this.hooks.openLocalId?.() ?? null), { ...options, progress: (p) => this.progress(p) });
       // What the sync itself wrote is not a change to sync again.
       this.signature = await this.fingerprint();
+      // The guide for ai apps, once the folder is known to be this account's. A phone keeps `.golemdocs/` outside the shared folder, where no agent would see it.
+      if (!report.wrongAccount && !this.bridge.fixed && this.guideRoot !== root) {
+        this.guideRoot = root;
+        await writeGuide(this.bridge).catch(() => (this.guideRoot = null));
+      }
       this.lastAccountLook = Date.now();
       // Signed out, a folder that belongs to an account waits for that account to sign in.
       const state: VaultState = report.wrongAccount ? (account ? 'wrongAccount' : 'signedOut') : report.blocked ? 'blocked' : report.errors.length ? 'error' : 'idle';

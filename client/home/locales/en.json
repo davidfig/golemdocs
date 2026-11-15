@@ -416,7 +416,7 @@
   "dev.folder.1": "<code>.docx</code>, <code>.md</code>, <code>.txt</code>, <code>.csv</code>, <code>.svg</code>, <code>.epub</code> and <code>.mhtml</code> files stay what they are.",
   "dev.folder.2": "PDFs are written with their annotations, form fields and edits in them, and pictures with their layers drawn in.",
   "dev.folder.3": "Folders in Golem Docs are folders on disk. Move or rename a file and the document follows, history and all.",
-  "dev.folder.4": "Names starting with a dot are skipped, so <code>.git</code> is left alone. <code>.golemdocs/</code> holds the sync state; don’t edit it.",
+  "dev.folder.4": "Names starting with a dot are skipped, so <code>.git</code> is left alone. <code>.golemdocs/</code> holds the sync state; don’t edit it. <code>.golemdocs/AGENTS.md</code> is the app’s guide for agents: how the folder syncs, what each format becomes, and how to bring a note up in the app. File › Vault Folder can add a line to your own AGENTS.md or CLAUDE.md that points to it.",
   "dev.sync.h": "The sync rules",
   "dev.sync.1h": "A file changed here",
   "dev.sync.1": "The file wins. If the account changed too, its copy is kept as a version first.",

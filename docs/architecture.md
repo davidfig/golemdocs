@@ -78,6 +78,7 @@ Details: [Document model](architecture/document-model.md), [Layout](architecture
 | Change live editing | [Collaboration](architecture/collaboration.md) |
 | Add a menu item, dialog or language | [UI](architecture/ui.md), [localization.md](localization.md) |
 | Build, test, release | [Build and testing](architecture/build-and-testing.md) |
+| Drive the running app from an agent or a test | [Automation API](architecture/automation.md) |
 
 ## Cross-cutting rules
 

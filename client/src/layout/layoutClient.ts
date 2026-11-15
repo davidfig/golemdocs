@@ -6,7 +6,7 @@ import type { Pointer } from '@golemdocs/ops';
 import type { Format } from '../formats/convert.ts';
 import { t } from '../i18n/index.ts';
 import type { LookUp } from '../spelling/thesaurus.ts';
-import type { A11yHeading, A11yPage } from './a11y.ts';
+import type { A11yHeading, A11yPage, OutlineNode } from './a11y.ts';
 import { layoutWorkerName, type DocumentSource, type FromWorker, type LayoutTimings, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireCommand } from './protocol.ts';
 
 /** Callbacks for one document. None fire after another document is opened. */
@@ -67,6 +67,8 @@ export class LayoutClient {
   private readonly linkRequests = new Map<number, (found: { url: string | null; text: string; checkbox: boolean }) => void>();
   private readonly textRequests = new Map<number, (place: [number, number] | null) => void>();
   private readonly partRequests = new Map<number, (part: string | null) => void>();
+  private readonly outlineRequests = new Map<number, (nodes: OutlineNode[] | null) => void>();
+  private readonly pongs = new Map<number, () => void>();
   private readonly spellRequests = new Map<number, (answer: { marks: TextMark[][]; issue: SpellIssue | null; loading: boolean }) => void>();
   private readonly refreshRequests = new Map<number, (done: boolean | 'typed') => void>();
 
@@ -252,6 +254,24 @@ export class LayoutClient {
     });
   }
 
+  /** The open document's paragraphs in order (the automation API's `doc.outline()`), or null when the worker has no document of paragraphs. */
+  outline(): Promise<OutlineNode[] | null> {
+    const request = this.nextRequest++;
+    return new Promise((resolve) => {
+      this.outlineRequests.set(request, resolve);
+      this.send({ type: 'outline', doc: this.doc, request });
+    });
+  }
+
+  /** Resolves once the worker has handled every message sent before this one (the automation API's `waitIdle`). */
+  ping(): Promise<void> {
+    const request = this.nextRequest++;
+    return new Promise((resolve) => {
+      this.pongs.set(request, resolve);
+      this.send({ type: 'ping', request });
+    });
+  }
+
   /** Brings a place in the text (`textAt`'s) to the top of the view, through the layout updates' `keep`, as the pages up to it are laid out. */
   goTo(place: [number, number]): void {
     this.send({ type: 'goTo', doc: this.doc, place });
@@ -399,6 +419,16 @@ export class LayoutClient {
     if (message.type === 'livePart') {
       this.partRequests.get(message.request)?.(message.part);
       this.partRequests.delete(message.request);
+      return;
+    }
+    if (message.type === 'outline') {
+      this.outlineRequests.get(message.request)?.(message.nodes);
+      this.outlineRequests.delete(message.request);
+      return;
+    }
+    if (message.type === 'pong') {
+      this.pongs.get(message.request)?.();
+      this.pongs.delete(message.request);
       return;
     }
     if (message.type === 'linkAt') {

@@ -416,7 +416,7 @@
   "dev.folder.1": "Los archivos <code>.docx</code>, <code>.md</code>, <code>.txt</code>, <code>.csv</code>, <code>.svg</code>, <code>.epub</code> y <code>.mhtml</code> siguen siendo lo que son.",
   "dev.folder.2": "Los PDF se escriben con sus anotaciones, campos de formulario y ediciones dentro, y las imágenes con sus capas dibujadas.",
   "dev.folder.3": "Las carpetas de Golem Docs son carpetas en el disco. Mueve o renombra un archivo y el documento lo sigue, con su historial y todo.",
-  "dev.folder.4": "Los nombres que empiezan por un punto se omiten, así que <code>.git</code> se deja en paz. <code>.golemdocs/</code> guarda el estado de la sincronización; no lo edites.",
+  "dev.folder.4": "Los nombres que empiezan por un punto se omiten, así que <code>.git</code> se deja en paz. <code>.golemdocs/</code> guarda el estado de la sincronización; no lo edites. <code>.golemdocs/AGENTS.md</code> es la guía de la app para agentes: cómo se sincroniza la carpeta, en qué se convierte cada formato y cómo abrir una nota en la app. Archivo › Carpeta de la bóveda puede añadir a tu propio AGENTS.md o CLAUDE.md una línea que apunte a ella.",
   "dev.sync.h": "Las reglas de la sincronización",
   "dev.sync.1h": "Un archivo cambiado aquí",
   "dev.sync.1": "Gana el archivo. Si la cuenta también cambió, su copia se conserva antes como versión.",

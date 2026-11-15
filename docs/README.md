@@ -19,6 +19,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [Accessibility](architecture/accessibility.md) | Screen readers and the canvas: the textarea mirror, the reading layer, contrast and motion |
 | [UI](architecture/ui.md) | App shell, actions and commands, shared components, spelling, the home site |
 | [Build and testing](architecture/build-and-testing.md) | Workspace, lazy chunks, unit and e2e tests, CI, deploy, release |
+| [Automation API](architecture/automation.md) | `window.golem`: how agents and tests run commands and read the document, selection and dialogs |
 | [Embeddable viewer](architecture/viewer.md) | The read-only viewer: in other apps (satchel.email) and for documents shared view-only; its API and messages, build, font set, running it sandboxed |
 
 ## Feature and subsystem docs

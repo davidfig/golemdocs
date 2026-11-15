@@ -36,7 +36,35 @@ export class VaultDialog {
     const syncNow = h('button', { class: 'wm-button', text: t('vault.syncNow'), attrs: { type: 'button' } });
     const confirm = h('button', { class: 'wm-button wm-danger', attrs: { type: 'button' } });
     const close = h('button', { class: 'wm-button', text: t('vault.close'), attrs: { type: 'button' } });
-    const body = h('div', { class: 'wm-dialog-body wm-history-body' }, intro, folder, status, detail, skipped, problems);
+    // Ai apps: whether the instruction files at the top of the folder point to the app's guide (desktop/agentGuide.ts), and a button to add the line.
+    const agents = h('p', { class: 'wm-history-note' });
+    const agentsButton = h('button', { class: 'wm-button', attrs: { type: 'button' } });
+    const agentsRow = h('div', { class: 'wm-vault-agents' }, agents, agentsButton);
+    agentsRow.hidden = true;
+    const list = (names: string[]): string => new Intl.ListFormat(getLocale(), { type: 'conjunction' }).format(names);
+    let agentsRoot: string | null = null;
+    const showAgents = async (root: string | null): Promise<void> => {
+      agentsRoot = root;
+      const state = root ? await service.agentFiles().catch(() => null) : null;
+      if (agentsRoot !== root) return; // the folder changed meanwhile
+      agentsRow.hidden = !state;
+      if (!state) return;
+      agentsButton.hidden = state.present.length > 0 && state.missing.length === 0;
+      agents.textContent = !state.present.length ? t('vault.agents.none') : state.missing.length ? t('vault.agents.missing', { files: list(state.missing) }) : t('vault.agents.done');
+      agentsButton.textContent = t(state.present.length ? 'vault.agents.add' : 'vault.agents.create');
+    };
+    agentsButton.addEventListener('click', () => {
+      agentsButton.disabled = true;
+      void service
+        .pointAgents(t('vault.agents.line'), t('vault.agents.heading'))
+        .then((written) => written.length && this.host.tell(t('vault.agents.added', { files: list(written) })))
+        .catch((error: unknown) => this.host.tell(t('vault.agents.failed', { message: error instanceof Error ? error.message : String(error) })))
+        .finally(() => {
+          agentsButton.disabled = false;
+          void showAgents(service.current.root);
+        });
+    });
+    const body = h('div', { class: 'wm-dialog-body wm-history-body' }, intro, folder, status, detail, skipped, problems, agentsRow);
     const dialog = h(
       'dialog',
       { class: 'wm-dialog wm-history', attrs: { 'aria-label': t('vault.title') } },
@@ -83,6 +111,7 @@ export class VaultDialog {
     };
 
     const render = (s: VaultStatus) => {
+      if (s.root !== agentsRoot || (s.state === 'idle' && agentsRow.hidden)) void showAgents(s.root);
       intro.textContent = service.fixed ? t('vault.icloud') : t(service.signedIn ? 'vault.intro' : 'vault.introLocal');
       folder.textContent = service.fixed ? (s.root ? '' : t('vault.icloud.off')) : s.root ? t('vault.folder', { path: s.root }) : t('vault.noFolder');
       status.textContent = describe(s);

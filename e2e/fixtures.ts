@@ -7,6 +7,15 @@
 
 import { expect, test as base, type Browser, type Download, type Locator, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import type { GolemAutomation } from '../client/src/automation.ts';
+import type { OutlineNode } from '../client/src/layout/a11y.ts';
+
+declare global {
+  interface Window {
+    /** The automation API (client/src/automation.ts). */
+    golem: GolemAutomation;
+  }
+}
 
 export const MOD = 'ControlOrMeta';
 
@@ -115,6 +124,21 @@ export class App {
   /** Waits for the layout worker to settle after an edit (a selection update arrives with every layout). */
   async settle(): Promise<void> {
     await this.page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  }
+
+  /** Waits until the document is loaded, the layout worker has caught up and a frame is drawn (`golem.waitIdle`). */
+  async idle(): Promise<void> {
+    await this.page.evaluate(() => window.golem.waitIdle());
+  }
+
+  /** The document's paragraphs in order, with kind, level and table cell (`golem.doc.outline`). Null for a PDF, text file or workbook. */
+  async outline(): Promise<OutlineNode[] | null> {
+    return this.page.evaluate(() => window.golem.doc.outline());
+  }
+
+  /** Runs a command by id as its menu item would (`golem.commands.run`); false when it is disabled. Use it to set up, not to test a control. */
+  async run(id: string): Promise<boolean> {
+    return this.page.evaluate((command) => window.golem.commands.run(command), id);
   }
 
   /** The whole document's text (selects all, reads what the selection holds, then leaves the caret at the end of the document). */

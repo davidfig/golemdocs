@@ -416,7 +416,7 @@
   "dev.folder.1": "I file <code>.docx</code>, <code>.md</code>, <code>.txt</code>, <code>.csv</code>, <code>.svg</code>, <code>.epub</code> e <code>.mhtml</code> restano quello che sono.",
   "dev.folder.2": "I PDF vengono scritti con annotazioni, campi dei moduli e modifiche al loro interno, e le immagini con i livelli disegnati dentro.",
   "dev.folder.3": "Le cartelle in Golem Docs sono cartelle sul disco. Sposta o rinomina un file e il documento lo segue, cronologia compresa.",
-  "dev.folder.4": "I nomi che iniziano con un punto vengono saltati, quindi <code>.git</code> resta in pace. <code>.golemdocs/</code> contiene lo stato della sincronizzazione; non modificarla.",
+  "dev.folder.4": "I nomi che iniziano con un punto vengono saltati, quindi <code>.git</code> resta in pace. <code>.golemdocs/</code> contiene lo stato della sincronizzazione; non modificarla. <code>.golemdocs/AGENTS.md</code> è la guida dell’app per gli agenti: come si sincronizza la cartella, cosa diventa ogni formato e come mostrare una nota nell’app. File › Cartella del caveau può aggiungere al tuo AGENTS.md o CLAUDE.md una riga che vi rimanda.",
   "dev.sync.h": "Le regole della sincronizzazione",
   "dev.sync.1h": "Un file cambiato qui",
   "dev.sync.1": "Vince il file. Se è cambiato anche l’account, la sua copia viene prima conservata come versione.",

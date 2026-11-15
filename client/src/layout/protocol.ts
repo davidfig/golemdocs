@@ -18,7 +18,7 @@ import type { AutoCorrectOptions } from './autocorrect.ts';
 import type { PickedStyle } from './pdfAnnotator.ts';
 import type { LookUp } from '../spelling/thesaurus.ts';
 import type { SiteLinks } from '../site.ts';
-import type { A11yHeading, A11yPage, CaretContext } from './a11y.ts';
+import type { A11yHeading, A11yPage, CaretContext, OutlineNode } from './a11y.ts';
 
 export type DocumentSource =
   /** A .docx file's bytes (transferred to the worker). */
@@ -311,6 +311,10 @@ export type ToWorker =
   | { type: 'linkAt'; doc: number; request: number; page: number; x: number; y: number }
   /** Copy as Live Link: the part of the document at the caret, as an address's part after `#` (live/partAddress.ts). */
   | { type: 'livePart'; doc: number; request: number }
+  /** The automation API (`window.golem`, automation.ts): the open document's paragraphs in order, with what kind each is. */
+  | { type: 'outline'; doc: number; request: number }
+  /** The automation API's `waitIdle`: answered once every message sent before it has been handled. */
+  | { type: 'ping'; request: number }
   /** The text at a page point (the top of the view, where a book is being read): answered with `textAt`. */
   | { type: 'textAt'; doc: number; request: number; page: number; x: number; y: number }
   /** Brings a place in the text (paragraph index, offset) to the top of the view, through the layout updates' `keep`, while the pages up to it are laid out. */
@@ -517,6 +521,9 @@ export type FromWorker =
   | { type: 'embed'; request: number; title: string }
   | { type: 'linkAt'; request: number; url: string | null; text: string; checkbox: boolean }
   | { type: 'livePart'; request: number; part: string | null }
+  /** The answer to `outline`: null when no document is open in the worker (a PDF, a plain text file, a workbook). */
+  | { type: 'outline'; request: number; nodes: OutlineNode[] | null }
+  | { type: 'pong'; request: number }
   /** The text at the point a `textAt` asked about: paragraph index and offset, or null (no text there, or no document). */
   | { type: 'textAt'; request: number; place: [number, number] | null }
   /** `seq`: the last edit (see `journal`) the bytes hold. */

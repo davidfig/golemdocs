@@ -416,7 +416,7 @@
   "dev.folder.1": "Os arquivos <code>.docx</code>, <code>.md</code>, <code>.txt</code>, <code>.csv</code>, <code>.svg</code>, <code>.epub</code> e <code>.mhtml</code> continuam sendo o que são.",
   "dev.folder.2": "Os PDFs são gravados com as anotações, os campos de formulário e as edições dentro, e as imagens com as camadas desenhadas.",
   "dev.folder.3": "As pastas do Golem Docs são pastas no disco. Mova ou renomeie um arquivo e o documento o acompanha, com o histórico e tudo.",
-  "dev.folder.4": "Nomes que começam com ponto são ignorados, então o <code>.git</code> fica em paz. O <code>.golemdocs/</code> guarda o estado da sincronização; não o edite.",
+  "dev.folder.4": "Nomes que começam com ponto são ignorados, então o <code>.git</code> fica em paz. O <code>.golemdocs/</code> guarda o estado da sincronização; não o edite. O <code>.golemdocs/AGENTS.md</code> é o guia do app para agentes: como a pasta é sincronizada, o que cada formato vira e como abrir uma nota no app. Arquivo › Pasta do cofre pode adicionar ao seu AGENTS.md ou CLAUDE.md uma linha que aponta para ele.",
   "dev.sync.h": "As regras da sincronização",
   "dev.sync.1h": "Um arquivo alterado aqui",
   "dev.sync.1": "O arquivo vence. Se a conta também mudou, a cópia dela é guardada antes como uma versão.",

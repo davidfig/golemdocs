@@ -21,4 +21,12 @@ export const viewer: Partial<Messages> = {
   'viewer.toolbar': 'Visualizador',
   'viewer.zoomButton': 'Tamanho real (agora {zoom})',
   'viewer.foundOnPage': 'Encontrado na página {page} de {pages}',
+  'viewer.files': 'Arquivos',
+  'viewer.notShared': 'Esse link leva a um documento fora desta pasta compartilhada.',
+  'viewer.folderGone': 'Esta pasta não está mais compartilhada com você.',
+  'viewer.folderLinkGone': 'Este link não funciona mais: a pasta não está mais compartilhada publicamente.',
+  'viewer.signInToViewFolder': 'Entre para ver esta pasta.',
+  'viewer.folderEmpty': 'Esta pasta está vazia.',
+  'viewer.fileGone': 'Esse arquivo não está mais na pasta.',
+  'viewer.folderTruncated': 'Apenas os primeiros {count} arquivos são listados.',
 };

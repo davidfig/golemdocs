@@ -231,4 +231,8 @@ export const panels: Catalog = {
   'panels.ruler.left': 'Отступ слева',
   'panels.ruler.right': 'Отступ справа',
   'panels.ruler.margin': 'Перетащите, чтобы изменить поле',
+  'panels.dashboard.shareFolder': 'Поделиться папкой…',
+  'panels.dashboard.sharedFolderEmpty': 'Эта папка пуста.',
+  'panels.dashboard.sharedFolderGone': 'Эта папка больше вам не доступна ({reason}).',
+  'panels.dashboard.addedByYou': 'Добавлено вами',
 };

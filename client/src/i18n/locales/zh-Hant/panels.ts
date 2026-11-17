@@ -211,4 +211,8 @@ export const panels: Partial<Messages> = {
   'panels.ruler.left': '左縮排',
   'panels.ruler.right': '右縮排',
   'panels.ruler.margin': '拖曳以變更邊界',
+  'panels.dashboard.shareFolder': '共用資料夾…',
+  'panels.dashboard.sharedFolderEmpty': '此資料夾是空的。',
+  'panels.dashboard.sharedFolderGone': '該資料夾已不再與你共用（{reason}）。',
+  'panels.dashboard.addedByYou': '由你新增',
 };

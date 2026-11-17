@@ -21,4 +21,12 @@ export const viewer: Partial<Messages> = {
   'viewer.toolbar': 'Просмотр',
   'viewer.zoomButton': 'Реальный размер (сейчас {zoom})',
   'viewer.foundOnPage': 'Найдено на странице {page} из {pages}',
+  'viewer.files': 'Файлы',
+  'viewer.notShared': 'Эта ссылка ведёт на документ вне этой общей папки.',
+  'viewer.folderGone': 'Эта папка больше вам не доступна.',
+  'viewer.folderLinkGone': 'Эта ссылка больше не работает: папка больше не опубликована.',
+  'viewer.signInToViewFolder': 'Войдите, чтобы увидеть эту папку.',
+  'viewer.folderEmpty': 'Эта папка пуста.',
+  'viewer.fileGone': 'Этого файла больше нет в папке.',
+  'viewer.folderTruncated': 'Показаны только первые {count} файлов.',
 };

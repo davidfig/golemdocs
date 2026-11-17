@@ -21,4 +21,12 @@ export const viewer: Partial<Messages> = {
   'viewer.toolbar': '뷰어',
   'viewer.zoomButton': '실제 크기 (현재 {zoom})',
   'viewer.foundOnPage': '{pages}페이지 중 {page}페이지에서 찾음',
+  'viewer.files': '파일',
+  'viewer.notShared': '이 링크는 이 공유 폴더 밖의 문서로 연결됩니다.',
+  'viewer.folderGone': '이 폴더는 더 이상 나와 공유되지 않습니다.',
+  'viewer.folderLinkGone': '이 링크는 더 이상 작동하지 않습니다. 폴더가 더 이상 공개적으로 공유되지 않습니다.',
+  'viewer.signInToViewFolder': '이 폴더를 보려면 로그인하세요.',
+  'viewer.folderEmpty': '이 폴더는 비어 있습니다.',
+  'viewer.fileGone': '이 파일은 더 이상 폴더에 없습니다.',
+  'viewer.folderTruncated': '처음 {count}개 파일만 표시됩니다.',
 };

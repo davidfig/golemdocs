@@ -47,6 +47,15 @@ A document may also have one **public link** (File › Share, *Public link*): `/
 - **Cost.** Every visitor loads the viewer and the fonts the document uses (static files, cached), and the file once. A public page checks for a newer save every 2 minutes instead of 30 s, and only while it is in view; the server lets browsers keep its answers for a minute, which is also how long a link turned off can still show to someone who already had it open.
 - **Live blocks.** The viewer shows a live block's last result, as stored; it computes nothing. The block is brought up to date by the owner's apps (`LiveKeeper`), and the change reaches visitors with the next upload and their page's next check. The Share dialog says so when the document has live blocks from spreadsheets or CSV files (`liveSources` in `ShareTarget`, from `LiveKeeper.tableSources`).
 
+## Shared folders
+
+A folder shared view-only, or by its public link ([Folder sharing](../folder-sharing.md)), opens on the same page: `/view?f=<token>` for a person (`folder_shares.view_token`, read with their session) and `/view?pf=<token>` for anyone (`folder_links.token`). `share.ts` hands both to `folderPage.ts`, which reads `/api/folder-view|folder-public/<token>` for the folder's name and its files as paths inside it (never an id) and `…/file?path=<path>` for a file.
+
+- **One file at a time, each with its own address.** `&path=` names the file shown and `#` a heading in it (`heading` in `mount`, sent to the layout worker as `goToPlace` once the file is laid out). With no path the page shows a README or index at the top, else the first file, and writes the path into the address. A file opened from the tree or a link pushes a history entry, so Back goes back; Ctrl- or Cmd-click opens it in a new tab as any link does.
+- **The tree** is a `nav` named Files of nested lists: `<details>` for folders, links for files, the one shown `aria-current`. It is beside the document, or laid over it on a phone (the Files button in the bar opens and closes it, with `aria-expanded`). F6 moves between it and the document.
+- **Links stay inside the folder.** `mount`'s `onDocLink` gets every `doc:` link; the page resolves it against the folder's files alone (`resolveFolderLink` in `folderLinks.ts`, tested in `client/test/folderView.test.ts`), so a link to anything outside it goes nowhere and the bar's status line says so.
+- **Checks and the end of access** work as for a document, with the tree read again at each check. A file that left the folder clears on its own; a folder no longer shared clears the whole page.
+
 ## API
 
 `mount(el, options) → { destroy() }` (`client/src/viewer/viewer.ts`). It sets the colour scheme on the root element, so it is meant to own its document: the viewer page, or a frame of its own.
@@ -148,7 +157,8 @@ Not checked: the real WKWebView inside Tauri (Playwright's WebKit is the same en
 | File | |
 | --- | --- |
 | `client/viewer.html`, `client/src/viewer/main.ts` | The viewer page and its messages |
-| `client/view/index.html`, `client/src/viewer/share.ts` | The site's page for a document shared view-only (`/view?s=<token>`) |
+| `client/view/index.html`, `client/src/viewer/share.ts` | The site's page for a document shared view-only (`/view?s=<token>`) or by its public link (`?p=`) |
+| `client/src/viewer/folderPage.ts`, `folderLinks.ts`, `page.ts` | A shared folder on that page (`?f=`, `?pf=`): its tree, links between its files (pure; `client/test/folderView.test.ts`), and what the two pages share |
 | `client/src/viewer/viewer.ts` | `mount`: rendering, input, the bar, `startLayoutWorker` |
 | `client/src/viewer/protocol.ts` | Message types, `linkForHost`, zoom steps, page numbers (pure; `client/test/viewer.test.ts`) |
 | `client/src/viewer/fonts.ts` | The font set the build bundles (pure; tested there too) |
@@ -157,6 +167,7 @@ Not checked: the real WKWebView inside Tauri (Playwright's WebKit is the same en
 | `client/src/layout/layoutClient.ts` | `openReadOnly`, `terminate`, the `fontBase` and `startWorker` options |
 | `e2e/accessibility/viewer.spec.ts` | Landmarks, names and keys, Find's announcement, Screen Reader Mode and its caret, forced colours |
 | `e2e/viewer/viewer.spec.ts`, `e2e/viewer/sandbox.spec.ts` | The viewer page in the dev server; the built viewer sandboxed, in Chromium and WebKit |
+| `e2e/collab/share-folder.spec.ts`, `e2e/accessibility/folder-viewer.spec.ts` | A shared folder's public link and a person's share: the tree, links in and out of the folder, Back, the end of access; the tree from the keyboard and F6 |
 | `e2e/collab/share-view-only.spec.ts` | Sharing as Can view, opening it in the viewer under its token (no response names the document), catching up with a save, refused writes, a dead token |
 
 ## Related docs

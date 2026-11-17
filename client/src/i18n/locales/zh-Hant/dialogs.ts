@@ -188,4 +188,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.replacementsRemove': '移除',
   'dialogs.find.wholeWord': '全字比對',
   'dialogs.find.regex': '規則運算式',
+  'dialogs.share.folderNote': '他們能看到此資料夾及其子資料夾中的所有內容，包括你之後新增的。編輯者可以修改任何檔案並新增檔案，但只能重新命名或刪除自己新增的內容。',
+  'dialogs.share.folderPublicNote': '任何擁有連結的人無需登入即可閱讀此資料夾中的所有檔案。檔案之間的連結可用，指向資料夾以外內容的連結無法使用。會要求搜尋引擎不要收錄。',
 };

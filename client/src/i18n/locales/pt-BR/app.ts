@@ -195,4 +195,5 @@ export const app: Partial<Messages> = {
   'room.watchingNoEdit': '{name} está editando isto. Assuma para fazer alterações.',
   'room.watchingMineNoEdit': 'Você está editando isto em outro dispositivo. Assuma para fazer alterações aqui.',
   'room.keptAsCopy': 'As alterações feitas aqui foram mantidas como “{name}”, porque outra pessoa está editando isto.',
+  'app.sharedFolderAddFailed': 'Não foi possível adicionar à pasta compartilhada: {message}',
 };

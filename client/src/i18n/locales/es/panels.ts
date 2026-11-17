@@ -211,4 +211,8 @@ export const panels: Partial<Messages> = {
   'panels.ruler.left': 'Sangría izquierda',
   'panels.ruler.right': 'Sangría derecha',
   'panels.ruler.margin': 'Arrastre para cambiar el margen',
+  'panels.dashboard.shareFolder': 'Compartir carpeta…',
+  'panels.dashboard.sharedFolderEmpty': 'Esta carpeta está vacía.',
+  'panels.dashboard.sharedFolderGone': 'Esa carpeta ya no está compartida contigo ({reason}).',
+  'panels.dashboard.addedByYou': 'Añadido por ti',
 };

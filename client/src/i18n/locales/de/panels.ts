@@ -211,4 +211,8 @@ export const panels: Partial<Messages> = {
   'panels.ruler.left': 'Linker Einzug',
   'panels.ruler.right': 'Rechter Einzug',
   'panels.ruler.margin': 'Ziehen, um den Seitenrand zu ändern',
+  'panels.dashboard.shareFolder': 'Ordner freigeben…',
+  'panels.dashboard.sharedFolderEmpty': 'Dieser Ordner ist leer.',
+  'panels.dashboard.sharedFolderGone': 'Dieser Ordner ist nicht mehr für dich freigegeben ({reason}).',
+  'panels.dashboard.addedByYou': 'Von dir hinzugefügt',
 };

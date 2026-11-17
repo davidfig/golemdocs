@@ -212,4 +212,8 @@ export const panels = {
   'panels.ruler.left': 'Left indent',
   'panels.ruler.right': 'Right indent',
   'panels.ruler.margin': 'Drag to change the margin',
+  'panels.dashboard.shareFolder': 'Share folder…',
+  'panels.dashboard.sharedFolderEmpty': 'This folder is empty.',
+  'panels.dashboard.sharedFolderGone': 'That folder isn’t shared with you any more ({reason}).',
+  'panels.dashboard.addedByYou': 'Added by you',
 } as const;

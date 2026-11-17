@@ -50,14 +50,14 @@ The folder id is the owner's (folders live in the owner's database); `owner_id` 
 
 ## Viewer (Can view and public links)
 
-The same page as today (`client/view/index.html`, `src/viewer/share.ts`) with a folder mode: `/view?f=<token>&path=Notes/Plan.md#Goals` for a person, `/view?F=<token>&path=…` for the public link. Paths are relative to the shared folder: readable, they match how wikilinks name files, and they show nothing above the shared folder. (A rename breaks a bookmark; the tree still finds the file.)
+Built: the same page (`client/view/index.html`, `src/viewer/share.ts`), which hands `/view?f=<token>` (a person) and `/view?pf=<token>` (the public link) to `src/viewer/folderPage.ts`, with `&path=Notes/Plan.md#Goals` for the file and heading shown. Paths are relative to the shared folder: readable, they match how wikilinks name files, and they show nothing above the shared folder. (A rename breaks a bookmark; the tree still finds the file.) See [Embeddable viewer](architecture/viewer.md#shared-folders).
 
-- **The tree:** a collapsible panel on the left, built from the tree answer. It is a listbox/tree with the ARIA tree pattern, reachable with F6 and the keyboard. See whether `ui/filesPanel.ts` can be shared without pulling much of the app into the viewer chunk; if not, a small tree in the viewer, and move both onto one later.
-- **Links:** `onLink` resolves `doc:` addresses against the tree with the app's own resolver (`splitLink` / `findByTitle` in `formats/wikiLinks.ts`), the shared folder as the top level and the open file's folders as `from`. A hit opens in the same tab (history entry, path in the address); a miss is announced and shown as "This file isn't shared". Other links open in a new tab, as now.
-- **Headings:** `#Section` scrolls to the heading. The viewer can't do this yet; it needs a `goTo(heading)` from the layout worker (the app already resolves headings for `golemdocs://` links).
-- **Embeds:** an embed of a file in the tree is fetched through the folder routes; one outside it shows as not shared.
-- **Refresh and ending:** the open file checks for a newer save as the document viewer does (30 s for a person, 2 min for the public link), and the tree is fetched again with it. A 404 or 403 on the tree destroys the viewer and says the folder is no longer shared.
-- **Download** on the public link, per file, as today.
+- **The tree:** a `nav` landmark named Files beside the document, of nested lists of ordinary links and `<details>` folders, so it works from the keyboard and with a screen reader as any page does (no custom tree pattern to get wrong). The file shown is `aria-current`; the bar's Files button opens and closes the panel (laid over the document on a phone); F6 moves between the tree and the document. `ui/filesPanel.ts` was not reused: it would bring much of the app into the viewer's page.
+- **Links:** the viewer hands `doc:` links to the page (`onDocLink`), which resolves them against the tree with the app's own resolver (`resolveFolderLink` in `viewer/folderLinks.ts`, over `findByTitle`), the shared folder as the top level and the open file's folders as `from`. A link from the top of the owner's vault (`/Projects/Shared/Notes/Plan`) is read from the shared folder's name on. A hit opens in the same tab (a history entry, the path in the address); a miss is said in the bar's status line ("That link goes to a document outside this shared folder"). Other links open in a new tab, as before.
+- **Headings:** `#Section` goes to the heading once the file is laid out (`heading` in `mount`, the layout worker's `goToPlace`).
+- **Embeds:** not yet: an embed is drawn from what the file stores.
+- **Refresh and ending:** the tree and the open file are checked as the document viewer does (30 s for a person, 2 min for the public link, and when the tab is looked at again). A 404 or 403 on the tree destroys the viewer and the tree and says the folder is no longer shared; a 401 shows the sign-in buttons; a file gone from a folder that is still shared says just that.
+- **Download** on the public link, per file, as for a document.
 
 ## App (Can edit)
 

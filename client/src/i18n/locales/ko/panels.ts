@@ -211,4 +211,8 @@ export const panels: Partial<Messages> = {
   'panels.ruler.left': '왼쪽 들여쓰기',
   'panels.ruler.right': '오른쪽 들여쓰기',
   'panels.ruler.margin': '끌어서 여백 변경',
+  'panels.dashboard.shareFolder': '폴더 공유…',
+  'panels.dashboard.sharedFolderEmpty': '이 폴더는 비어 있습니다.',
+  'panels.dashboard.sharedFolderGone': '이 폴더는 더 이상 나와 공유되지 않습니다({reason}).',
+  'panels.dashboard.addedByYou': '내가 추가함',
 };

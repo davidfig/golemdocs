@@ -186,4 +186,6 @@ export const dialogs = {
   'dialogs.options.replacementsRemove': 'Remove',
   'dialogs.find.wholeWord': 'Whole word',
   'dialogs.find.regex': 'Regular expression',
+  'dialogs.share.folderNote': 'They see everything in this folder and its subfolders, including what you add later. Editors can change every file and add new ones, and can rename or delete only what they added.',
+  'dialogs.share.folderPublicNote': 'Anyone with the link can read every file in this folder without signing in. Links between its files work; links to anything outside it don’t. Search engines are asked not to list it.',
 } as const;

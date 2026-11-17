@@ -211,4 +211,8 @@ export const panels: Partial<Messages> = {
   'panels.ruler.left': 'Retrait à gauche',
   'panels.ruler.right': 'Retrait à droite',
   'panels.ruler.margin': 'Faites glisser pour changer la marge',
+  'panels.dashboard.shareFolder': 'Partager le dossier…',
+  'panels.dashboard.sharedFolderEmpty': 'Ce dossier est vide.',
+  'panels.dashboard.sharedFolderGone': 'Ce dossier n’est plus partagé avec vous ({reason}).',
+  'panels.dashboard.addedByYou': 'Ajouté par vous',
 };

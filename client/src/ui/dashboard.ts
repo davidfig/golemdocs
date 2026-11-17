@@ -7,7 +7,7 @@
 // rest of the account's documents once the catalogue arrives, and each thumbnail is fetched only
 // when its card scrolls into view.
 
-import { removeShare, type CloudDocument } from '../cloud.ts';
+import { deleteSharedDocument, deleteSharedSubfolder, leaveSharedFolder, putSharedSubfolder, removeShare, renameCloudDocument, sharedFolderTree, type CloudDocument, type SharedFolder, type SharedFolderDocument, type SharedFolderTree } from '../cloud.ts';
 import { canDrop, createFolder, moveEntries, removeFolderTree, updateFolders, withMoved, withoutDeleted, type Dragged } from '../folderOps.ts';
 import { childFolders, deletionList, folderContents, folderOf, folderPath, isInside, itemsIn, outermost, type Folder } from '../folders.ts';
 import { setDocumentDrag } from './documentDrag.ts';
@@ -67,6 +67,14 @@ export interface DashboardHost {
   rename(entry: LibraryEntry, name: string): Promise<void>;
   /** Opens a document someone else shared with the user. */
   openShared(doc: CloudDocument): void;
+  /** Opens a document in a folder someone shared with the user: in the editor for an editor, in the viewer for a viewer. */
+  openInSharedFolder(share: SharedFolder, doc: SharedFolderDocument): void;
+  /** Starts a blank document in a folder shared with the user as an editor (`folderId`: the shared folder or one inside it). */
+  newInSharedFolder(share: SharedFolder, folderId: string, docKind?: DocumentKind): void;
+  /** Asks for files on this computer and adds them to a folder shared with the user as an editor. Resolves once they are in. */
+  importIntoSharedFolder(share: SharedFolder, folderId: string): Promise<void>;
+  /** Opens the sharing dialog for one of the user's own folders. */
+  shareFolder?(folder: Folder): void;
   /** Opens the trash (the account's deleted documents), which has its own dialog. */
   showTrash(): void;
   /** The dashboard was closed without opening anything: give the editor back the keyboard. */
@@ -121,6 +129,13 @@ export class Dashboard {
   /** While the cards are being replaced: the rename field losing its place isn't the user leaving it. */
   private rebuilding = false;
   private readonly crumbs: HTMLElement;
+  /** Inside a folder someone shared with the user (docs/folder-sharing.md): the share, and the folder in it being looked at. */
+  private sharedAt: { share: SharedFolder; folderId: string } | null = null;
+  /** What is in the shared folder being looked at, once listed (for `sharedAt`'s share). */
+  private sharedTree: SharedFolderTree | null = null;
+  private readonly importButton: HTMLButtonElement;
+  private readonly importFolderButton: HTMLButtonElement;
+  private readonly newSplit: HTMLElement;
   /** Cards showing a "click again to confirm" button, and the timer that resets them. */
   private confirming: { button: HTMLButtonElement; label: string; icon?: string; iconOnly: boolean; timer: number } | null = null;
 
@@ -152,6 +167,18 @@ export class Dashboard {
       e.preventDefault();
       const folderId = this.folderId;
       const before = document.activeElement;
+      if (this.sharedAt) {
+        const at = this.sharedAt;
+        if (at.share.role !== 'editor') return;
+        showPopupMenu(
+          [...newMenuItems((kind) => this.newShared(at, kind)), 'separator', { label: t('panels.dashboard.import'), run: () => void this.importShared(at) }],
+          e.clientX,
+          e.clientY,
+          t('panels.dashboard.newBlank'),
+          () => giveBack(before),
+        );
+        return;
+      }
       showPopupMenu(
         [
           ...newMenuItems((kind) => {
@@ -175,6 +202,7 @@ export class Dashboard {
       return button;
     };
     const blank = action('new', t('panels.dashboard.newBlank'), t('panels.dashboard.newBlankLabel'), () => {
+      if (this.sharedAt) return this.newShared(this.sharedAt);
       const folderId = this.folderId;
       this.hide();
       this.host.newDocument(folderId);
@@ -182,9 +210,12 @@ export class Dashboard {
     this.newButton = blank;
     this.showNewKind();
     // Stays up behind the file picker: hiding it would show the last open document.
-    const importButton = action('import', t('panels.dashboard.import'), t('panels.dashboard.importLabel'), () => this.host.importFile(this.folderId));
+    const importButton = action('import', t('panels.dashboard.import'), t('panels.dashboard.importLabel'), () => (this.sharedAt ? void this.importShared(this.sharedAt) : this.host.importFile(this.folderId)));
     const importFolderButton = action('import', t('panels.dashboard.importFolder'), t('panels.dashboard.importFolderLabel'), () => this.host.importFolder(this.folderId));
+    this.importButton = importButton;
+    this.importFolderButton = importFolderButton;
     this.newFolderButton = action('newFolder', t('panels.dashboard.newFolder'), t('panels.dashboard.newFolderLabel'), () => {
+      if (this.sharedAt) return void this.newSharedFolder(this.sharedAt);
       // Not listed again afterwards: that would rebuild the name being typed.
       void this.run(async () => {
         const folder = await createFolder(this.host.account() !== null, t('panels.dashboard.newFolderName'), this.folderId);
@@ -206,8 +237,10 @@ export class Dashboard {
     typeButton.addEventListener('click', () => {
       const box = typeButton.getBoundingClientRect();
       const folderId = this.folderId;
+      const at = this.sharedAt;
       showPopupMenu(
         newKindItems((kind) => {
+          if (at) return this.newShared(at, kind);
           this.hide();
           this.host.newDocument(folderId, kind);
         }),
@@ -218,6 +251,7 @@ export class Dashboard {
       );
     });
     const newSplit = h('span', { class: 'wm-dash-split' }, blank, typeButton);
+    this.newSplit = newSplit;
     const actions = h('div', { class: 'wm-dash-actions' }, newSplit, importButton, importFolderButton, this.newFolderButton, this.trashButton, this.selectionBar);
     const size = this.sizeSlider();
     this.root = h(
@@ -294,6 +328,7 @@ export class Dashboard {
     this.root.hidden = false;
     this.search.value = '';
     this.folderId = null;
+    this.sharedAt = null;
     this.renaming = null;
     this.selected.clear();
     // What the library has shows at once; the listing brings it up to date.
@@ -395,6 +430,8 @@ export class Dashboard {
     this.thumbnails.pause();
     // The cards are redrawn, so a pending "confirm" goes, and so must its timer (it would reset the next one early).
     this.resetConfirm();
+    this.showActions();
+    if (this.sharedAt) return this.renderSharedFolder();
     // Searching looks in every folder at once; otherwise this folder's own folders and documents.
     const searching = this.search.value.trim() !== '';
     if (this.folderId !== null && !this.folders.some((f) => f.id === this.folderId)) this.folderId = null;
@@ -424,10 +461,231 @@ export class Dashboard {
     }
 
     const sharedShown = this.shared.filter((d) => matchesSearch(d, this.search.value) || inContent(d.id));
-    this.sharedTitle.hidden = this.sharedGrid.hidden = sharedShown.length === 0;
-    this.sharedGrid.replaceChildren(...sharedShown.map((d) => this.sharedCard(d)));
+    const foldersShown = this.library.sharedFolders.filter((f) => matchesSearch(f, this.search.value));
+    this.sharedTitle.hidden = this.sharedGrid.hidden = sharedShown.length + foldersShown.length === 0;
+    this.sharedGrid.replaceChildren(...foldersShown.map((f) => this.sharedFolderCard(f)), ...sharedShown.map((d) => this.sharedCard(d)));
 
     this.thumbnails.watch();
+  }
+
+  // --- Folders shared with the user (docs/folder-sharing.md) ------------------------------------
+
+  /** Which action buttons show: everything for the user's own documents; inside a shared folder, what its role allows. */
+  private showActions(): void {
+    const at = this.sharedAt;
+    const editor = !at || at.share.role === 'editor';
+    this.newSplit.hidden = this.importButton.hidden = !editor;
+    this.importFolderButton.hidden = this.trashButton.hidden = !!at;
+    this.newFolderButton.hidden = !editor || this.search.value.trim() !== '';
+  }
+
+  /** A folder someone shared with the user: open it, or leave it. */
+  private sharedFolderCard(share: SharedFolder): HTMLElement {
+    const art = h('div', { class: 'wm-thumb wm-folder-art' }, h('div', { class: 'wm-folder-shape', attrs: { 'aria-hidden': 'true' } }));
+    const by = share.owner.name ?? share.owner.email;
+    const open = h(
+      'button',
+      { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.openFolder', { name: share.name }) } },
+      art,
+      h('span', { class: 'wm-card-name', title: share.name }, h('span', { class: 'wm-card-title', text: share.name })),
+      h('span', { class: 'wm-card-meta', text: by ? t('panels.dashboard.from', { name: by }) : '' }),
+    );
+    open.addEventListener('click', () => this.enterShared({ share, folderId: share.folderId }));
+    const badges = h('div', { class: 'wm-badges' }, h('span', { class: 'wm-badge', text: share.role === 'viewer' ? t('panels.dashboard.viewOnly') : t('panels.dashboard.canEdit') }));
+    const leave = this.confirmButton(
+      t('panels.dashboard.leave'),
+      async () => {
+        await leaveSharedFolder(share);
+        this.library.update({ sharedFolders: this.library.sharedFolders.filter((f) => f !== share) });
+      },
+      'leave',
+      undefined,
+      true,
+    );
+    return h('article', { class: 'wm-card wm-folder' }, open, badges, h('div', { class: 'wm-card-actions' }, leave));
+  }
+
+  /** Looks inside a shared folder (or a folder in it), listing what is there if it isn't yet. */
+  private enterShared(at: { share: SharedFolder; folderId: string }): void {
+    const same = this.sharedAt?.share === at.share;
+    this.sharedAt = at;
+    this.search.value = '';
+    this.selected.clear();
+    this.renaming = null;
+    if (!same) this.sharedTree = null;
+    this.render();
+    this.scroller.scrollTop = 0;
+    if (!same) void this.loadSharedTree();
+  }
+
+  /** Lists the shared folder being looked at again (after a change, or on entering it). */
+  private async loadSharedTree(): Promise<void> {
+    const at = this.sharedAt;
+    if (!at) return;
+    try {
+      const tree = await sharedFolderTree(at.share);
+      if (this.sharedAt?.share !== at.share) return;
+      this.sharedTree = tree;
+      // The folder looked at inside it may be gone: back to the top of the share.
+      if (!tree.folders.some((f) => f.id === this.sharedAt!.folderId)) this.sharedAt = { share: at.share, folderId: at.share.folderId };
+      this.notice.textContent = '';
+    } catch (error) {
+      if (this.sharedAt?.share !== at.share) return;
+      // Gone (unshared, or the folder deleted): back to the user's own documents, saying why.
+      this.sharedAt = null;
+      this.notice.textContent = t('panels.dashboard.sharedFolderGone', { reason: (error as Error).message });
+      void this.refresh();
+    }
+    if (this.visible) this.render();
+  }
+
+  /** "Documents › Projects › Notes" inside a shared folder: the first goes back to the user's own documents. */
+  private renderSharedCrumbs(): void {
+    const at = this.sharedAt!;
+    this.crumbs.hidden = false;
+    const folders = new Map((this.sharedTree?.folders ?? []).map((f) => [f.id, f]));
+    const path: { id: string | null; name: string }[] = [];
+    for (let id: string | null = at.folderId, depth = 0; id !== null && depth < 64; depth++) {
+      const f = folders.get(id);
+      path.unshift({ id, name: f?.name ?? at.share.name });
+      id = f?.parentId ?? null;
+    }
+    const stops = [{ id: null as string | null, name: t('panels.dashboard.title') }, ...path];
+    const parts: HTMLElement[] = [];
+    stops.forEach((stop, i) => {
+      if (i) parts.push(h('span', { class: 'wm-crumb-sep', text: '›', attrs: { 'aria-hidden': 'true' } }));
+      const last = i === stops.length - 1;
+      const crumb = h('button', { class: 'wm-crumb', text: stop.name, attrs: { type: 'button', ...(last ? { 'aria-current': 'page' } : {}) } });
+      crumb.disabled = last;
+      crumb.addEventListener('click', () => {
+        if (stop.id === null) {
+          this.sharedAt = null;
+          this.sharedTree = null;
+          this.folderId = null;
+          this.render();
+        } else this.enterShared({ share: at.share, folderId: stop.id });
+      });
+      parts.push(crumb);
+    });
+    this.crumbs.replaceChildren(...parts);
+  }
+
+  /** The cards inside a shared folder: its folders, then its documents. Nothing is dragged, selected or moved here. */
+  private renderSharedFolder(): void {
+    const at = this.sharedAt!;
+    const tree = this.sharedTree;
+    const searching = this.search.value.trim() !== '';
+    this.renderSharedCrumbs();
+    const children: HTMLElement[] = [];
+    if (tree) {
+      const folders = tree.folders.filter((f) => (searching ? f.parentId !== null && matchesSearch(f, this.search.value) : f.parentId === at.folderId));
+      const docs = tree.documents.filter((d) => (searching ? matchesSearch(d, this.search.value) : d.folderId === at.folderId));
+      children.push(...folders.map((f) => this.sharedSubfolderCard(at.share, f, tree)), ...docs.map((d) => this.sharedFolderDocCard(at.share, d)));
+      if (!children.length) children.push(h('p', { class: 'wm-dash-empty', text: searching ? t('panels.dashboard.noMatches') : t('panels.dashboard.sharedFolderEmpty') }));
+    }
+    this.rebuilding = true;
+    this.grid.replaceChildren(...children);
+    this.rebuilding = false;
+    const renameField = this.grid.querySelector<HTMLInputElement>('.wm-card-name-input');
+    if (renameField) {
+      renameField.focus();
+      renameField.select();
+    }
+    this.sharedTitle.hidden = this.sharedGrid.hidden = true;
+    this.thumbnails.watch();
+  }
+
+  /** A folder inside a shared folder: open it; rename or delete it if this user made it. */
+  private sharedSubfolderCard(share: SharedFolder, folder: SharedFolderTree['folders'][number], tree: SharedFolderTree): HTMLElement {
+    const art = h('div', { class: 'wm-thumb wm-folder-art' }, h('div', { class: 'wm-folder-shape', attrs: { 'aria-hidden': 'true' } }));
+    const count = tree.documents.filter((d) => d.folderId === folder.id).length + tree.folders.filter((f) => f.parentId === folder.id).length;
+    let open: HTMLElement;
+    if (this.renaming === folder.id) {
+      const input = this.nameField(folder.id, folder.name, t('panels.dashboard.folderName'), 255, (typed) => {
+        const name = typed.trim();
+        return name && name !== folder.name ? () => this.sharedChange(async () => void (await putSharedSubfolder(share, folder.id, name))) : null;
+      });
+      open = h('div', { class: 'wm-card-open' }, art, input);
+    } else {
+      open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.openFolder', { name: folder.name }) } }, art, h('span', { class: 'wm-card-name', title: folder.name }, h('span', { class: 'wm-card-title', text: folder.name })), h('span', { class: 'wm-card-meta', text: t('panels.dashboard.items', { count }) }));
+      open.addEventListener('click', () => this.enterShared({ share, folderId: folder.id }));
+    }
+    const actions = h('div', { class: 'wm-card-actions' });
+    if (folder.createdByYou && share.role === 'editor') {
+      const rename = this.iconButton('rename', t('panels.dashboard.rename'));
+      rename.addEventListener('click', () => {
+        this.renaming = folder.id;
+        this.render();
+      });
+      actions.append(rename, this.confirmButton(t('panels.dashboard.deleteFolder'), () => this.sharedChange(() => deleteSharedSubfolder(share, folder.id)), 'trash', undefined, true));
+    }
+    return h('article', { class: 'wm-card wm-folder' }, open, actions);
+  }
+
+  /** A document in a shared folder: open it; rename or delete it if this user added it. */
+  private sharedFolderDocCard(share: SharedFolder, doc: SharedFolderDocument): HTMLElement {
+    const thumb = this.thumbnails.forShared(doc);
+    const meta = [relativeTime(doc.updatedAt), formatSize(doc.size)].join(' · ');
+    const id = `doc:${doc.id}`;
+    let open: HTMLElement;
+    if (this.renaming === id) {
+      const input = this.nameField(id, splitExtension(doc.name)[0], t('chrome.title.label'), 120, (typed) => {
+        const name = renamedFileName(doc.name, typed);
+        return name ? () => this.sharedChange(async () => void (await renameCloudDocument(doc.id, name))) : null;
+      });
+      open = h('div', { class: 'wm-card-open' }, thumb, h('span', { class: 'wm-card-name' }, fileIcon(doc.name), input), h('span', { class: 'wm-card-meta', text: meta }));
+    } else {
+      open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: doc.name }) } }, thumb, h('span', { class: 'wm-card-name', title: doc.name }, fileIcon(doc.name), setFileName(h('span', { class: 'wm-card-title' }), doc.name)), h('span', { class: 'wm-card-meta', text: meta }));
+      open.addEventListener('click', () => {
+        this.hide();
+        this.host.openInSharedFolder(share, doc);
+      });
+    }
+    const badges = h('div', { class: 'wm-badges' });
+    if (doc.createdByYou) badges.append(h('span', { class: 'wm-badge', text: t('panels.dashboard.addedByYou') }));
+    const actions = h('div', { class: 'wm-card-actions' });
+    if (doc.createdByYou && share.role === 'editor') {
+      const rename = this.iconButton('rename', t('panels.dashboard.rename'));
+      rename.addEventListener('click', () => {
+        this.renaming = id;
+        this.render();
+      });
+      actions.append(rename, this.confirmButton(t('panels.dashboard.delete'), () => this.sharedChange(() => deleteSharedDocument(doc.id)), 'trash', undefined, true));
+    }
+    return h('article', { class: 'wm-card' }, open, badges, actions);
+  }
+
+  /** Runs a change inside a shared folder, then lists it again (saying why, if it failed). */
+  private async sharedChange(change: () => Promise<void>): Promise<void> {
+    try {
+      await change();
+      this.notice.textContent = '';
+    } catch (error) {
+      this.notice.textContent = t('panels.dashboard.failed', { reason: error instanceof Error ? error.message : String(error) });
+    }
+    await this.loadSharedTree();
+  }
+
+  /** New, inside a shared folder: a blank document there. */
+  private newShared(at: { share: SharedFolder; folderId: string }, kind?: DocumentKind): void {
+    this.hide();
+    this.host.newInSharedFolder(at.share, at.folderId, kind);
+  }
+
+  /** Import, inside a shared folder: files from this computer, added there. */
+  private async importShared(at: { share: SharedFolder; folderId: string }): Promise<void> {
+    await this.host.importIntoSharedFolder(at.share, at.folderId);
+    if (this.sharedAt?.share === at.share) await this.loadSharedTree();
+  }
+
+  /** New Folder, inside a shared folder: made there at once and named in place. */
+  private async newSharedFolder(at: { share: SharedFolder; folderId: string }): Promise<void> {
+    const id = crypto.randomUUID();
+    await this.sharedChange(async () => void (await putSharedSubfolder(at.share, id, t('panels.dashboard.newFolderName'), at.folderId)));
+    if (this.sharedTree?.folders.some((f) => f.id === id)) {
+      this.renaming = id;
+      this.render();
+    }
   }
 
   /** A document someone else shared: open it, or leave it. */
@@ -544,6 +802,12 @@ export class Dashboard {
       this.pickFolder(t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => this.relocate({ kind: 'folder', folder }, to)),
     );
     const actions = h('div', { class: 'wm-card-actions' }, rename, move, this.deleteButton(() => ({ docs: [], folders: [folder] }), (before) => this.deleteFolderTrees(before, [folder]), 'trash', true, t('panels.dashboard.deleteFolder')));
+    // A folder in the account can be shared, with what is in it (docs/folder-sharing.md).
+    if (this.host.shareFolder && this.host.account()) {
+      const share = this.iconButton('share', t('panels.dashboard.shareFolder'));
+      share.addEventListener('click', () => this.host.shareFolder!(folder));
+      actions.prepend(share);
+    }
     const card = h('article', { class: 'wm-card wm-folder' }, open, actions);
     this.makeDraggable(card, { kind: 'folder', folder });
     this.makeDropTarget(card, folder.id);
@@ -729,6 +993,7 @@ export class Dashboard {
 
   /** "Documents › A › B": where this is, and a way back up (a place to drop things, too). */
   private renderCrumbs(searching: boolean): void {
+    if (this.sharedAt) return this.renderSharedCrumbs();
     this.crumbs.hidden = searching || this.folderId === null;
     if (this.crumbs.hidden) return;
     const path = folderPath(this.folders, this.folderId);

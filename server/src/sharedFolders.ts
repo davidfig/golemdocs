@@ -197,11 +197,13 @@ export async function handleSharedFolders(request: Request, env: Env, userId: st
     if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
     const { folders, documents } = await contents(env, ownerId, db, folderId, found.folders);
     const listed = documents.slice(0, MAX_TREE_DOCUMENTS);
+    // Each document's path inside the shared folder, as the viewer's address names it (a viewer opens documents there).
+    const paths = new Map([...pathsOf(folderId, folders as FolderRow[], listed).byPath].map(([path, id]) => [id, path]));
     return json({
       ...(await describeShare(env, share, found.folders.get(folderId)!)),
       role,
       folders: folders.map((f) => ({ id: f.id, name: f.name, parentId: f.id === folderId ? null : f.parent_id, createdByYou: f.created_by === userId })),
-      documents: listed.map((row) => ({ ...describe(row, role), folderId: row.folder_id, createdByYou: row.created_by === userId })),
+      documents: listed.map((row) => ({ ...describe(row, role), folderId: row.folder_id, path: paths.get(row.id), createdByYou: row.created_by === userId })),
       truncated: documents.length > listed.length,
     });
   }

@@ -211,4 +211,8 @@ export const panels: Partial<Messages> = {
   'panels.ruler.left': '左インデント',
   'panels.ruler.right': '右インデント',
   'panels.ruler.margin': 'ドラッグして余白を変更',
+  'panels.dashboard.shareFolder': 'フォルダーを共有…',
+  'panels.dashboard.sharedFolderEmpty': 'このフォルダーは空です。',
+  'panels.dashboard.sharedFolderGone': 'そのフォルダーはもう共有されていません（{reason}）。',
+  'panels.dashboard.addedByYou': '自分が追加',
 };

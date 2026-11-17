@@ -188,4 +188,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.replacementsRemove': 'Entfernen',
   'dialogs.find.wholeWord': 'Ganzes Wort',
   'dialogs.find.regex': 'Regulärer Ausdruck',
+  'dialogs.share.folderNote': 'Sie sehen alles in diesem Ordner und seinen Unterordnern, auch was du später hinzufügst. Bearbeiter können jede Datei ändern und neue hinzufügen, aber nur umbenennen oder löschen, was sie selbst hinzugefügt haben.',
+  'dialogs.share.folderPublicNote': 'Jeder mit dem Link kann jede Datei in diesem Ordner lesen, ohne sich anzumelden. Links zwischen seinen Dateien funktionieren, Links zu allem außerhalb nicht. Suchmaschinen werden gebeten, ihn nicht aufzunehmen.',
 };

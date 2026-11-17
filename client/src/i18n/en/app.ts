@@ -195,5 +195,6 @@ export const app = {
   'room.watchingNoEdit': '{name} is editing this. Take over to make changes.',
   'room.watchingMineNoEdit': 'You’re editing this on another device. Take over to make changes here.',
   'room.keptAsCopy': 'Changes made here were kept as “{name}”, since someone else is editing this.',
+  'app.sharedFolderAddFailed': 'Couldn’t add it to the shared folder: {message}',
 } as const;
 

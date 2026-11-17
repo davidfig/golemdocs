@@ -211,4 +211,8 @@ export const panels: Partial<Messages> = {
   'panels.ruler.left': 'Recuo à esquerda',
   'panels.ruler.right': 'Recuo à direita',
   'panels.ruler.margin': 'Arraste para alterar a margem',
+  'panels.dashboard.shareFolder': 'Compartilhar pasta…',
+  'panels.dashboard.sharedFolderEmpty': 'Esta pasta está vazia.',
+  'panels.dashboard.sharedFolderGone': 'Essa pasta não está mais compartilhada com você ({reason}).',
+  'panels.dashboard.addedByYou': 'Adicionado por você',
 };

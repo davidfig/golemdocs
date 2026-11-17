@@ -192,4 +192,5 @@ export const app: Partial<Messages> = {
   'room.watchingNoEdit': '{name} 正在编辑。接管后才能更改。',
   'room.watchingMineNoEdit': '你正在另一台设备上编辑。接管后才能在这里更改。',
   'room.keptAsCopy': '由于其他人正在编辑，这里所做的更改已保存为“{name}”。',
+  'app.sharedFolderAddFailed': '无法添加到共享文件夹：{message}',
 };

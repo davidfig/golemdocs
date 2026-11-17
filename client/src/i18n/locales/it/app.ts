@@ -195,4 +195,5 @@ export const app: Partial<Messages> = {
   'room.watchingNoEdit': '{name} sta modificando questo documento. Prendi il controllo per apportare modifiche.',
   'room.watchingMineNoEdit': 'Stai modificando questo documento su un altro dispositivo. Prendi il controllo per apportare modifiche qui.',
   'room.keptAsCopy': 'Le modifiche fatte qui sono state conservate come «{name}», perché qualcun altro sta modificando questo documento.',
+  'app.sharedFolderAddFailed': 'Impossibile aggiungerlo alla cartella condivisa: {message}',
 };

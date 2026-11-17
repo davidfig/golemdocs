@@ -188,4 +188,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.replacementsRemove': '削除',
   'dialogs.find.wholeWord': '単語単位',
   'dialogs.find.regex': '正規表現',
+  'dialogs.share.folderNote': 'このフォルダーとサブフォルダーの中身すべて（後から追加したものも含む）が表示されます。編集者はすべてのファイルを変更したり新しいファイルを追加したりできますが、名前の変更や削除は自分が追加したものだけです。',
+  'dialogs.share.folderPublicNote': 'リンクを知っている人は誰でも、サインインせずにこのフォルダー内のすべてのファイルを読めます。フォルダー内のファイル同士のリンクは機能しますが、外部へのリンクは機能しません。検索エンジンには掲載しないよう求めます。',
 };

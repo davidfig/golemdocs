@@ -21,4 +21,12 @@ export const viewer = {
   'viewer.toolbar': 'Viewer',
   'viewer.zoomButton': 'Actual Size (now {zoom})',
   'viewer.foundOnPage': 'Found on page {page} of {pages}',
+  'viewer.files': 'Files',
+  'viewer.notShared': 'That link goes to a document outside this shared folder.',
+  'viewer.folderGone': 'This folder isn’t shared with you any more.',
+  'viewer.folderLinkGone': 'This link no longer works: the folder isn’t shared publicly any more.',
+  'viewer.signInToViewFolder': 'Sign in to see this folder.',
+  'viewer.folderEmpty': 'This folder is empty.',
+  'viewer.fileGone': 'That file isn’t in the folder any more.',
+  'viewer.folderTruncated': 'Only the first {count} files are listed.',
 } as const;

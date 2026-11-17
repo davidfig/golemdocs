@@ -188,4 +188,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.replacementsRemove': '删除',
   'dialogs.find.wholeWord': '全字匹配',
   'dialogs.find.regex': '正则表达式',
+  'dialogs.share.folderNote': '他们能看到此文件夹及其子文件夹中的所有内容，包括你之后添加的。编辑者可以修改任何文件并添加新文件，但只能重命名或删除自己添加的内容。',
+  'dialogs.share.folderPublicNote': '任何拥有链接的人无需登录即可阅读此文件夹中的所有文件。文件之间的链接可用，指向文件夹以外内容的链接不可用。会请求搜索引擎不要收录。',
 };

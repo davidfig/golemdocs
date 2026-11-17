@@ -211,4 +211,8 @@ export const panels: Partial<Messages> = {
   'panels.ruler.left': 'Rientro sinistro',
   'panels.ruler.right': 'Rientro destro',
   'panels.ruler.margin': 'Trascina per cambiare il margine',
+  'panels.dashboard.shareFolder': 'Condividi cartella…',
+  'panels.dashboard.sharedFolderEmpty': 'Questa cartella è vuota.',
+  'panels.dashboard.sharedFolderGone': 'Quella cartella non è più condivisa con te ({reason}).',
+  'panels.dashboard.addedByYou': 'Aggiunto da te',
 };

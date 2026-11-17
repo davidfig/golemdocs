@@ -211,4 +211,8 @@ export const panels: Partial<Messages> = {
   'panels.ruler.left': '左缩进',
   'panels.ruler.right': '右缩进',
   'panels.ruler.margin': '拖动以更改页边距',
+  'panels.dashboard.shareFolder': '共享文件夹…',
+  'panels.dashboard.sharedFolderEmpty': '此文件夹为空。',
+  'panels.dashboard.sharedFolderGone': '该文件夹已不再与你共享（{reason}）。',
+  'panels.dashboard.addedByYou': '由你添加',
 };

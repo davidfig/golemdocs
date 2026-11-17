@@ -32,6 +32,9 @@ import { SelectionLayer } from '../webgl/selectionLayer.ts';
 import { ImageRenderer } from '../webgl/shapes/imageRenderer.ts';
 import { AtlasLibrary } from '../webgl/text/gpuFace.ts';
 import layoutWorkerUrl from '../layout/layoutWorkerEntry.ts?worker&url';
+
+/** A link to another stored document (`doc:Title#Section`), as `@golemdocs/docx` writes it; kept here so the viewer page doesn't load that package. */
+const DOC_SCHEME = 'doc:';
 import { canScrollSideways, FIT_MARGIN, fitWidthZoom, hostKey, SIDE_PADDING, SIDE_PADDING_X, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, stepZoom, viewerKey, type HostKey } from './protocol.ts';
 
 export interface ViewerOptions {
@@ -56,6 +59,13 @@ export interface ViewerOptions {
   onDownload?(): void;
   /** A link in the document was clicked (only web, mail, phone and FTP addresses are passed on). */
   onLink?(url: string): void;
+  /**
+   * A link to another stored document (`doc:Title#Section`, a wiki link) was clicked: the host resolves it against what it has (a
+   * shared folder's files, docs/folder-sharing.md). Without this such links do nothing.
+   */
+  onDocLink?(address: string): void;
+  /** Once laid out, go to the first heading with this text (the `#Section` of a link that opened it). */
+  heading?: string;
   /** A key the viewer has no use for was pressed while it had the focus (see `viewerKey` in protocol.ts): the host's to act on. */
   onKey?(key: HostKey): void;
   /** The document is open and laid out. */
@@ -313,7 +323,10 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     },
     done(count) {
       options.onOpened?.({ name: options.name, format, pages: count });
-      caretToView();
+      // The section a link named, once: a reload of the same file keeps the reader's place instead.
+      if (heading) send({ kind: 'goToPlace', headings: [heading] });
+      else caretToView();
+      heading = undefined;
     },
     selection: applySelection,
     selectionHtml(text, html) {
@@ -351,6 +364,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   }
 
   const send = (command: Parameters<LayoutClient['command']>[0]): void => worker?.command(command);
+  let heading = options.heading;
 
   function onPointerDown(e: PointerEvent): void {
     canvas.setPointerCapture(e.pointerId);
@@ -408,8 +422,11 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       const hit = pageAt(e.offsetX, e.offsetY);
       if (hit)
         void worker.linkAt(hit.page.id, hit.x, hit.y).then((found) => {
+          if (destroyed) return;
+          const address = found.url?.trim();
+          if (address && options.onDocLink && address.toLowerCase().startsWith(DOC_SCHEME)) return options.onDocLink(address);
           const url = linkForHost(found.url);
-          if (url && !destroyed) options.onLink?.(url);
+          if (url) options.onLink?.(url);
         });
     }
   }

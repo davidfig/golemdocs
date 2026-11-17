@@ -188,4 +188,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.replacementsRemove': 'Remover',
   'dialogs.find.wholeWord': 'Palavra inteira',
   'dialogs.find.regex': 'Expressão regular',
+  'dialogs.share.folderNote': 'Eles veem tudo nesta pasta e em suas subpastas, inclusive o que você adicionar depois. Editores podem alterar qualquer arquivo e adicionar novos, e só podem renomear ou excluir o que eles mesmos adicionaram.',
+  'dialogs.share.folderPublicNote': 'Qualquer pessoa com o link pode ler todos os arquivos desta pasta sem entrar. Links entre os arquivos dela funcionam; links para qualquer coisa fora dela, não. Os mecanismos de busca são solicitados a não listá-la.',
 };

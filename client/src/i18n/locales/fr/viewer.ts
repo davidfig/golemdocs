@@ -21,4 +21,12 @@ export const viewer: Partial<Messages> = {
   'viewer.toolbar': 'Visionneuse',
   'viewer.zoomButton': 'Taille réelle (actuellement {zoom})',
   'viewer.foundOnPage': 'Trouvé page {page} sur {pages}',
+  'viewer.files': 'Fichiers',
+  'viewer.notShared': 'Ce lien mène à un document en dehors de ce dossier partagé.',
+  'viewer.folderGone': 'Ce dossier n’est plus partagé avec vous.',
+  'viewer.folderLinkGone': 'Ce lien ne fonctionne plus : le dossier n’est plus partagé publiquement.',
+  'viewer.signInToViewFolder': 'Connectez-vous pour voir ce dossier.',
+  'viewer.folderEmpty': 'Ce dossier est vide.',
+  'viewer.fileGone': 'Ce fichier n’est plus dans le dossier.',
+  'viewer.folderTruncated': 'Seuls les {count} premiers fichiers sont listés.',
 };

@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.42.0 - Unreleased
+
+### Added
+
+- Share a whole folder: the Share button on a folder in File › Open shares everything in it, and everything added later, by email (to view or edit) or by a public link anyone can read. Links between its files work; links to anything outside it don’t. People you share it with find it under Shared with me. Editors change every file and add new files and folders, and can rename or delete only what they added. Someone who can view browses the folder’s files beside the document, and each file has its own address.
+
 ## 0.41.0 - 2026-11-18
 
 ### Changed

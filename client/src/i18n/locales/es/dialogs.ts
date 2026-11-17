@@ -188,4 +188,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.replacementsRemove': 'Quitar',
   'dialogs.find.wholeWord': 'Palabra completa',
   'dialogs.find.regex': 'Expresión regular',
+  'dialogs.share.folderNote': 'Verán todo lo que hay en esta carpeta y sus subcarpetas, incluido lo que añadas después. Los editores pueden cambiar cualquier archivo y añadir otros nuevos, y solo pueden cambiar el nombre o eliminar lo que ellos añadieron.',
+  'dialogs.share.folderPublicNote': 'Cualquiera con el enlace puede leer todos los archivos de esta carpeta sin iniciar sesión. Los enlaces entre sus archivos funcionan; los enlaces a cualquier cosa fuera de ella, no. Se pide a los buscadores que no la incluyan.',
 };

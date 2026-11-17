@@ -6,7 +6,7 @@ import { deskColor, onThemeChange, pagesDark, rereadTheme } from './ui/theme.ts'
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, forgetLapsedAccount, lapsedAccount, remembered, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
-import { CloudError, deleteDocuments, documentUrl, downloadDocument, downloadIndex, listDocuments, listFolders, listShared, listTrash, purgeTrash, renameCloudDocument, restoreFromTrash, saveChunked, saveDocument, type CloudDocument } from './cloud.ts';
+import { CloudError, createInSharedFolder, deleteDocuments, documentUrl, downloadDocument, downloadIndex, folderViewUrl, listDocuments, listFolders, listShared, listSharedFolders, listTrash, purgeTrash, renameCloudDocument, restoreFromTrash, saveChunked, saveDocument, sharedFolderTree, type CloudDocument, type SharedFolder, type SharedFolderDocument } from './cloud.ts';
 import { CHUNK_MIN_FILE, chunkBytes } from './storage/chunker.ts';
 import { archiveFiles, zipDocuments } from './storage/archive.ts';
 import { ConvertWorker, startConvertWorker } from './desktop/convertClient.ts';
@@ -15,7 +15,7 @@ import { droppedFromFiles, pickedFolder, takeDropped, type Dropped } from './sto
 import { incomingBridge, watchIncoming } from './desktop/incoming.ts';
 import { importFiles, readZipFiles, sameBytes, type ZipContents } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
-import { rememberNewKind } from './ui/newKinds.ts';
+import { blankSource, lastNewKind, rememberNewKind } from './ui/newKinds.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
 import { adoptGuestFolders, createFolder, renameEntry, setLinkKeeper } from './folderOps.ts';
 import { conflictCopyName, keepAsConflictCopy, openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud, type MergeHost } from './library.ts';
@@ -68,7 +68,7 @@ import { PictureFrame } from './ui/pictureFrame.ts';
 import { showPopupMenu, type PopupItem } from './ui/popupMenu.ts';
 import { inCaseOf, synonymsOf } from './spelling/thesaurus.ts';
 import { PictureDetourBar } from './ui/pictureDetourBar.ts';
-import { showShareDialog } from './ui/shareDialog.ts';
+import { showFolderShareDialog, showShareDialog } from './ui/shareDialog.ts';
 import { showSignInDialog } from './ui/signIn.ts';
 import { loadSite, site, siteUnknown } from './site.ts';
 import { checkoutUrl, fetchSubscription, portalUrl, sellsSubscriptions, SubscriptionError, waitForSubscription, type Subscription } from './subscription.ts';
@@ -1651,7 +1651,8 @@ function sharedEdited(): void {
 async function uploadShared(): Promise<void> {
   const doc = current;
   const shared = doc.shared;
-  if (!shared || !shared.dirty || shared.uploading) return;
+  // A new document in a shared folder has no id until it is made there (`newInSharedFolder`): its edits wait for that.
+  if (!shared || !shared.dirty || shared.uploading || !shared.id) return;
   // Someone else holds it: never sent over theirs (it can't be changed here meanwhile).
   if (doc.room?.watching || doc.room?.catchingUp) return;
   clearTimeout(sharedTimer);
@@ -3475,7 +3476,7 @@ async function openShared(id: string): Promise<void> {
     let doc = sharedDocs.get(id);
     if (!doc) {
       for (const d of await listShared()) sharedDocs.set(d.id, d);
-      doc = sharedDocs.get(id);
+      doc = sharedDocs.get(id) ?? (await findInSharedFolders(id));
     }
     if (!latest()) return;
     if (!doc) {
@@ -3493,6 +3494,81 @@ async function openShared(id: string): Promise<void> {
     if (e instanceof CloudError && e.status === 401) showSignInDialog(returnTo({ doc: `shared:${id}` }));
     else void reportOpenFailure((e as Error).message, (message) => t('app.openSharedFailed', { message }));
   }
+}
+
+/** A document in a folder shared with this user (docs/folder-sharing.md), found by looking in each: a page reloaded at `shared:<id>`. */
+async function findInSharedFolders(id: string): Promise<CloudDocument | undefined> {
+  for (const share of await listSharedFolders().catch(() => [])) {
+    const found = (await sharedFolderTree(share).catch(() => null))?.documents.find((d) => d.id === id);
+    if (found) return sharedFolderDoc(share, found);
+  }
+  return undefined;
+}
+
+/** A document in a shared folder as the editor opens it: someone else's, with the folder's role; a viewer's opens in the viewer at its path. */
+function sharedFolderDoc(share: SharedFolder, doc: SharedFolderDocument): CloudDocument {
+  return { ...doc, role: share.role, owner: share.owner };
+}
+
+/** Opens a document in a folder shared with this user: in the editor for an editor, in the viewer (at its path in the folder) for a viewer. */
+function openInSharedFolder(share: SharedFolder, doc: SharedFolderDocument): void {
+  if (share.role === 'viewer' && share.viewToken) return location.assign(folderViewUrl(share.viewToken, false, doc.path));
+  const opened = sharedFolderDoc(share, doc);
+  sharedDocs.set(doc.id, opened);
+  openSource(`shared:${doc.id}`);
+}
+
+/**
+ * New, inside a folder shared with this user as an editor: a blank document, made in the folder (the owner's, in their account) and
+ * then edited as any document shared with them is. It never has a copy in this browser; edits made before it is made there wait for it.
+ */
+async function newInSharedFolder(share: SharedFolder, folderId: string, docKind?: DocumentKind): Promise<void> {
+  const { source, converted } = blankSource(docKind ?? lastNewKind(), t('app.newDocumentName'));
+  const ready = nextDocumentReady();
+  open(source, { shared: { id: '', name: t('app.newDocumentName'), size: 0, createdAt: 0, updatedAt: 0, thumbAt: null, role: 'editor', owner: share.owner } });
+  const doc = current;
+  try {
+    await ready;
+    if (converted) await convertTo(docKind ?? lastNewKind());
+    if (current !== doc || !doc.shared) return;
+    const sheetSave = sheetView.save();
+    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).stored : null) ?? (await worker.save());
+    const made = await createInSharedFolder(share.ownerId, folderId, fileName(), bytes);
+    sharedDocs.set(made.id, sharedFolderDoc(share, made));
+    if (current !== doc || !doc.shared) return;
+    doc.shared.id = made.id;
+    rememberInUrl(`shared:${made.id}`);
+    joinRoomOf(doc, made.id);
+    if (doc.shared.dirty) void uploadShared();
+    library.refreshSoon();
+  } catch (e) {
+    if (current === doc && doc.shared) doc.shared.error = (e as Error).message;
+    void reportOpenFailure((e as Error).message, (message) => t('app.sharedFolderAddFailed', { message }));
+  }
+  if (current === doc) showSync();
+}
+
+/** Import, inside a folder shared with this user as an editor: files from this computer, each added there as it is. */
+function importIntoSharedFolder(share: SharedFolder, folderId: string): Promise<void> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.addEventListener('change', async () => {
+      const failed: string[] = [];
+      for (const file of [...(input.files ?? [])]) {
+        try {
+          await createInSharedFolder(share.ownerId, folderId, file.name, new Uint8Array(await file.arrayBuffer()));
+        } catch (e) {
+          failed.push(`${file.name}: ${(e as Error).message}`);
+        }
+      }
+      if (failed.length) setStatus(t('app.sharedFolderAddFailed', { message: failed.join('; ') }));
+      resolve();
+    });
+    input.addEventListener('cancel', () => resolve());
+    input.click();
+  });
 }
 
 /** How long File ▸ Share waits for the open document's first upload before opening anyway. */
@@ -6843,6 +6919,10 @@ const dashboard = new Dashboard(document.body, {
     sharedDocs.set(doc.id, doc);
     openSource(`shared:${doc.id}`);
   },
+  openInSharedFolder,
+  newInSharedFolder: (share, folderId, docKind) => void newInSharedFolder(share, folderId, docKind).then(focusInput),
+  importIntoSharedFolder,
+  shareFolder: (folder) => showFolderShareDialog({ id: folder.id, name: folder.name }),
   closed: focusInput,
   showTrash: () => trashDialog.open(),
   contentMatches: async (query) => {

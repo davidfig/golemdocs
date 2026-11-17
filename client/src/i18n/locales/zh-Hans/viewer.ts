@@ -21,4 +21,12 @@ export const viewer: Partial<Messages> = {
   'viewer.toolbar': '查看器',
   'viewer.zoomButton': '实际大小（当前 {zoom}）',
   'viewer.foundOnPage': '在第 {page} 页找到，共 {pages} 页',
+  'viewer.files': '文件',
+  'viewer.notShared': '该链接指向此共享文件夹以外的文档。',
+  'viewer.folderGone': '此文件夹已不再与你共享。',
+  'viewer.folderLinkGone': '此链接已失效：该文件夹已不再公开共享。',
+  'viewer.signInToViewFolder': '登录以查看此文件夹。',
+  'viewer.folderEmpty': '此文件夹为空。',
+  'viewer.fileGone': '该文件已不在文件夹中。',
+  'viewer.folderTruncated': '仅列出前 {count} 个文件。',
 };

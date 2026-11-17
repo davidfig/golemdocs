@@ -215,4 +215,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.sharedFolderEmpty': 'Ce dossier est vide.',
   'panels.dashboard.sharedFolderGone': 'Ce dossier n’est plus partagé avec vous ({reason}).',
   'panels.dashboard.addedByYou': 'Ajouté par vous',
+  'panels.dashboard.keepCopy': 'Dans mon coffre',
+  'panels.dashboard.keepCopyOf': 'Garder une copie de {name} dans mon coffre',
+  'panels.dashboard.keepCopyNote': 'Garder une copie des fichiers de ce dossier dans votre dossier coffre, sous Shared. Désactiver supprime la copie et conserve le partage.',
 };

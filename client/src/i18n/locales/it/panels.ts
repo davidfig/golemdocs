@@ -215,4 +215,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.sharedFolderEmpty': 'Questa cartella è vuota.',
   'panels.dashboard.sharedFolderGone': 'Quella cartella non è più condivisa con te ({reason}).',
   'panels.dashboard.addedByYou': 'Aggiunto da te',
+  'panels.dashboard.keepCopy': 'Nel mio caveau',
+  'panels.dashboard.keepCopyOf': 'Tieni una copia di {name} nel mio caveau',
+  'panels.dashboard.keepCopyNote': 'Tieni una copia dei file di questa cartella nella cartella del caveau, sotto Shared. Disattivandolo la copia viene rimossa e la condivisione resta.',
 };

@@ -215,4 +215,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.sharedFolderEmpty': '이 폴더는 비어 있습니다.',
   'panels.dashboard.sharedFolderGone': '이 폴더는 더 이상 나와 공유되지 않습니다({reason}).',
   'panels.dashboard.addedByYou': '내가 추가함',
+  'panels.dashboard.keepCopy': '내 보관함에',
+  'panels.dashboard.keepCopyOf': '{name}의 사본을 내 보관함에 보관',
+  'panels.dashboard.keepCopyNote': '이 폴더의 파일 사본을 보관함 폴더의 Shared 아래에 보관합니다. 끄면 사본은 삭제되고 공유는 유지됩니다.',
 };

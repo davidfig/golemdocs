@@ -46,6 +46,7 @@ const KEYS = [
   'vector.nudgeSize', // the Nudge brush (its options strip)
   'vector.nudgeStrength',
   'golem.liveBackgroundLimit', // Tools › Options: the largest live block update done in the background (a phone's is its own)
+  'golem.sharedVaultOff', // the folders shared with this person that the vault keeps no copy of (vaultShared.ts)
 ] as const;
 
 export type SyncedKey = (typeof KEYS)[number];

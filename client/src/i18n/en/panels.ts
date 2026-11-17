@@ -216,4 +216,7 @@ export const panels = {
   'panels.dashboard.sharedFolderEmpty': 'This folder is empty.',
   'panels.dashboard.sharedFolderGone': 'That folder isn’t shared with you any more ({reason}).',
   'panels.dashboard.addedByYou': 'Added by you',
+  'panels.dashboard.keepCopy': 'In my vault',
+  'panels.dashboard.keepCopyOf': 'Keep a copy of {name} in my vault',
+  'panels.dashboard.keepCopyNote': 'Keep a copy of this folder’s files in your vault folder, under Shared. Turning it off removes the copy and keeps the share.',
 } as const;

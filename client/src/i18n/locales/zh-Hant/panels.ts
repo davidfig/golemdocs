@@ -215,4 +215,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.sharedFolderEmpty': '此資料夾是空的。',
   'panels.dashboard.sharedFolderGone': '該資料夾已不再與你共用（{reason}）。',
   'panels.dashboard.addedByYou': '由你新增',
+  'panels.dashboard.keepCopy': '存入我的保管庫',
+  'panels.dashboard.keepCopyOf': '在我的保管庫中保留 {name} 的副本',
+  'panels.dashboard.keepCopyNote': '在保管庫資料夾的 Shared 下保留此資料夾檔案的副本。關閉後會刪除副本，共用仍保留。',
 };

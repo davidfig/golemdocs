@@ -215,4 +215,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.sharedFolderEmpty': 'このフォルダーは空です。',
   'panels.dashboard.sharedFolderGone': 'そのフォルダーはもう共有されていません（{reason}）。',
   'panels.dashboard.addedByYou': '自分が追加',
+  'panels.dashboard.keepCopy': '保管フォルダに保存',
+  'panels.dashboard.keepCopyOf': '{name} のコピーを保管フォルダに保存',
+  'panels.dashboard.keepCopyNote': 'このフォルダーのファイルのコピーを保管フォルダの Shared に保存します。オフにするとコピーは削除され、共有はそのまま残ります。',
 };

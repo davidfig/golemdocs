@@ -215,4 +215,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.sharedFolderEmpty': 'Esta pasta está vazia.',
   'panels.dashboard.sharedFolderGone': 'Essa pasta não está mais compartilhada com você ({reason}).',
   'panels.dashboard.addedByYou': 'Adicionado por você',
+  'panels.dashboard.keepCopy': 'No meu cofre',
+  'panels.dashboard.keepCopyOf': 'Manter uma cópia de {name} no meu cofre',
+  'panels.dashboard.keepCopyNote': 'Mantém uma cópia dos arquivos desta pasta na sua pasta do cofre, em Shared. Desativar remove a cópia e mantém o compartilhamento.',
 };

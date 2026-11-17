@@ -215,4 +215,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.sharedFolderEmpty': 'Dieser Ordner ist leer.',
   'panels.dashboard.sharedFolderGone': 'Dieser Ordner ist nicht mehr für dich freigegeben ({reason}).',
   'panels.dashboard.addedByYou': 'Von dir hinzugefügt',
+  'panels.dashboard.keepCopy': 'In meinem Tresor',
+  'panels.dashboard.keepCopyOf': 'Eine Kopie von {name} in meinem Tresor behalten',
+  'panels.dashboard.keepCopyNote': 'Eine Kopie der Dateien dieses Ordners in deinem Tresorordner unter „Shared“ behalten. Ausschalten entfernt die Kopie, die Freigabe bleibt.',
 };

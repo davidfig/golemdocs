@@ -69,7 +69,7 @@ Built: the same page (`client/view/index.html`, `src/viewer/share.ts`), which ha
 
 ## Vault copies for the people it is shared with
 
-A folder shared with someone is copied into their vault, under `Shared/<owner name>/<folder name>/`. Two owners with the same name get " (2)", as two documents with the same name already do.
+Built (`client/src/desktop/vaultShared.ts`, see [Desktop app](architecture/desktop.md#folders-shared-with-the-account)), except where noted below. A folder shared with someone is copied into their vault, under `Shared/<owner name>/<folder name>/`. Two owners with the same name get " (2)", as two documents with the same name already do.
 
 - **The path is a label, chosen once.** The owner's name comes from their latest sign-in (`person()` in `sharing.ts`), so it can change with nothing done (Google one day, Apple the next). It is read only to choose the label the first time any of the recipient's computers copies the folder. From then on the label is fixed: it is kept in the account on the share row (`folder_shares.local_name`, the recipient's own), and each computer's sync memory maps the share (owner id, folder id) to it. Neither a new owner name nor the owner renaming the folder renames it on disk, which would rewrite every file under it (the shell has no rename) while agents work in them.
 - **Finding it again.** In this order: the sync memory; else the label in the account (a new computer, or a lost memory); the current name only for a first copy. Inside the folder, files are followed by cloud id as everywhere in the vault.
@@ -81,7 +81,8 @@ A folder shared with someone is copied into their vault, under `Shared/<owner na
 - **Files added on disk.** An editor's new file or folder inside the shared folder is uploaded as if made with New File: the owner's document, in that folder, added by the editor (so they may later rename or delete it on disk). It is checked against the owner's sync and storage, not the editor's (the existing routes refuse a caller without sync, so the shared-folder path checks the owner); when the owner's storage is full the upload is refused, reported in the sync, and tried again later. A viewer's new file, and anything put in `Shared/` or `Shared/<owner>/` outside a shared folder, is never uploaded and never deleted: the sync leaves it and says once why it was not added.
 - **Keep a copy in my vault** is a per-folder switch, on by default on the desktop. Turning it off removes the local copy only and keeps the share.
 - **Leaving or losing the share removes the copy,** on every computer at its next sync, including local changes that were not yet synced: the documents are the owner's. Files that never reached the account (a viewer's additions, an editor's not yet uploaded, strays) are the person's own and are kept where they are; the sync says how many it kept.
-- **Viewers** get a read-only copy (files marked read-only on disk where the platform allows); local changes are put back by the next sync.
+- **Viewers** get a copy whose local changes are put back by the next sync. Not yet: marking the files read-only on disk (it needs a new shell command).
+- **Not yet:** saying once that an unclaimed folder under `Shared/` is no longer linked (it is left alone, never uploaded), and reporting kept files in the Vault Folder dialog (the sync counts them, `SharedSyncReport.kept`).
 - **Desktop shell:** this needs no new shell command if the existing vault commands can write under `Shared/`; check against the older-shell rule before adding any.
 
 This is the largest piece and comes last.

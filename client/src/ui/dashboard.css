@@ -514,3 +514,12 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
+
+/* A shared folder's "In my vault" switch (desktop app), sharing the row with its Leave button. */
+.wm-card-keep {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 28px;
+  overflow: hidden;
+  white-space: nowrap;
+}

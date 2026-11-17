@@ -66,6 +66,16 @@ Files are followed by their cloud id in the manifest, never by path. Folders are
 - **Progress.** `syncVault` reports each step (`SyncProgress`: access, uploads, account, folder, compare, then `done`/`total` and the path of each action) and the counts it found (`accountDocs`, `folderFiles`); the service keeps the step in `VaultStatus.progress` with the time it began, and the dialog words it and warns when one step has gone on for 20 seconds. Nothing can wait for ever: the page's uploads are waited for at most 20 seconds, and `ConvertWorker` fails a conversion after 60 seconds.
 - **`ui/vaultDialog.ts`** (File › Vault Folder, desktop only): choose or change the folder, stop, sync now, status, and the confirmation for a held-back mass delete.
 
+## Folders shared with the account
+
+A folder someone shared with the account is copied into the vault under `Shared/<owner>/<folder>/` (`vaultShared.ts`, [Folder sharing](../folder-sharing.md)). `VaultService.syncNow` runs the vault's own sync on a disk that leaves that folder out (`outsideDisk`), so its files are never uploaded as the person's own, and then `syncShared`, which keeps each copy with its own run of `syncVault`: a disk that is only the copy's folder (`scopedDisk`, which has no `state.json`), the shared folder as the account (`sharedCloud`, over `/api/shared-folders/…/tree` and the document routes) and a memory of its own (`vaultMemory` under the vault's path and the share).
+
+- **The role is kept on the account side.** `sharedCloud` sends only what the person may do: an editor's edits, new files and folders (made as the owner's, added by the editor), and renames and deletes of what they added. Anything else (a viewer's edit, any move, a rename or delete of the owner's file or folder) is not sent and is counted as refused; the memory is left as if it had been, so the plan's own rules put it back (a document still in the account comes down again, one still elsewhere is moved back, an edit is overwritten because its remembered time is one the account never had), and a second run does it in the same sync. A viewer's own new files are not shown to the plan at all, so they are never sent and never deleted; they are counted (`kept`).
+- **Where a copy is, is a label** (`Alice/Project`): chosen once (`newLabel`, " (2)" for a second owner of a name or a second folder of a name), written to the account (`localName`) so another computer uses it, and remembered here in the list of copies (`shared` in the memory, with the folder the copies are in). Neither the owner's name changing nor the folder being renamed moves it. A copy renamed on disk is found by its files (`relocated`) and its new name becomes the label; a copy deleted from disk is written again (nothing is sent).
+- **No memory, the account wins:** an editor's file that differs from the account's is kept as a version of the document, and the account's copy is written.
+- **A copy whose share ended** (left, removed, or the owner's sync over) or that is no longer wanted (the "In my vault" switch on the folder's card, `golem.sharedVaultOff`, which follows the account) is removed: its remembered files go, edits not sent included, and files that never reached the account stay.
+- **The folder is `Shared`**, or `Shared with me` if the account has a folder of its own called Shared, chosen when the first copy is made and kept.
+
 ## What a file is on disk
 
 `vaultCodec.ts`. **The file on disk is the result; the account keeps how you got there.** The account stores each document as a `.wdoc` (see [Formats](formats.md)): the model, the original PDF, a picture's layers, a drawing's objects, a PDF's annotations, fields and edits. The vault holds the file any other program opens, in the format its name asks for (`vaultFormat`, `vaultFormats.ts`), so an agent or another app can work on the documents in the folder:
@@ -178,6 +188,7 @@ pnpm desktop:dev
 | `client/src/desktop/bridge.ts` | typed `desktopBridge()` over `window.__TAURI__`; null in a browser |
 | `client/src/desktop/vaultPlan.ts` | `needsHash`, `planVault`, `cloudPaths`, `safeName` |
 | `client/src/desktop/vaultSync.ts` | `syncVault`: runs one sync against a `VaultHost`, keeps the manifest |
+| `client/src/desktop/vaultShared.ts` | Copies of folders shared with the account under `Shared/` (`syncShared`; `client/test/vaultShared.test.ts`, `e2e/shell/shared-vault.spec.ts`) |
 | `client/src/desktop/vaultMemory.ts` | the manifest of each vault folder, kept per computer in IndexedDB |
 | `client/src/desktop/vaultHost.ts` | the real host (bridge, `cloud.ts`, folders) |
 | `client/src/desktop/vaultCodec.ts` | stored document bytes to and from the vault's file formats (runs in the worker) |

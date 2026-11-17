@@ -215,4 +215,7 @@ export const panels: Partial<Messages> = {
   'panels.dashboard.sharedFolderEmpty': 'Esta carpeta está vacía.',
   'panels.dashboard.sharedFolderGone': 'Esa carpeta ya no está compartida contigo ({reason}).',
   'panels.dashboard.addedByYou': 'Añadido por ti',
+  'panels.dashboard.keepCopy': 'En mi bóveda',
+  'panels.dashboard.keepCopyOf': 'Guardar una copia de {name} en mi bóveda',
+  'panels.dashboard.keepCopyNote': 'Guarda una copia de los archivos de esta carpeta en tu carpeta de bóveda, en Shared. Desactivarlo elimina la copia y mantiene el uso compartido.',
 };

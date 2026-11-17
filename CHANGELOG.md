@@ -5,6 +5,7 @@
 ### Added
 
 - Share a whole folder: the Share button on a folder in File › Open shares everything in it, and everything added later, by email (to view or edit) or by a public link anyone can read. Links between its files work; links to anything outside it don’t. People you share it with find it under Shared with me. Editors change every file and add new files and folders, and can rename or delete only what they added. Someone who can view browses the folder’s files beside the document, and each file has its own address.
+- Desktop app: folders shared with you are kept in your vault folder too, under Shared, by the owner’s name, so ai apps and other programs can work on them. As an editor, changes you make there reach the owner; as a viewer, they are put back. Turn off In my vault on the folder’s card in File › Open to remove the copy and keep the share.
 
 ## 0.41.0 - 2026-11-18
 

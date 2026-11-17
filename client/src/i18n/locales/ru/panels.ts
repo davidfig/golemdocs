@@ -235,4 +235,7 @@ export const panels: Catalog = {
   'panels.dashboard.sharedFolderEmpty': 'Эта папка пуста.',
   'panels.dashboard.sharedFolderGone': 'Эта папка больше вам не доступна ({reason}).',
   'panels.dashboard.addedByYou': 'Добавлено вами',
+  'panels.dashboard.keepCopy': 'В моём хранилище',
+  'panels.dashboard.keepCopyOf': 'Хранить копию «{name}» в моём хранилище',
+  'panels.dashboard.keepCopyNote': 'Хранить копию файлов этой папки в папке хранилища, в Shared. Если отключить, копия удаляется, а общий доступ сохраняется.',
 };

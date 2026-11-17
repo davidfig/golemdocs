@@ -4,6 +4,8 @@
 import { pictureOf } from './accounts.ts';
 import { randomToken } from './crypto.ts';
 import type { Env } from './cf.ts';
+import { bestFolderShare, folderSharesFrom, listFolders, type FolderLink, type FolderShare } from './folderShares.ts';
+import { existingUserDb } from './userDb.ts';
 
 export type Role = 'owner' | 'editor' | 'viewer';
 export type ShareRole = 'editor' | 'viewer';
@@ -11,6 +13,8 @@ export type ShareRole = 'editor' | 'viewer';
 export interface Access {
   role: Role;
   ownerId: string;
+  /** Set when the role comes from a folder shared with the person (docs/folder-sharing.md) rather than the document's own share: that share. */
+  folder?: FolderShare;
 }
 
 export const canWrite = (role: Role): boolean => role === 'owner' || role === 'editor';
@@ -23,7 +27,29 @@ export async function accessFor(env: Env, userId: string, docId: string): Promis
   const share = await env.DIRECTORY.prepare('SELECT role FROM shares WHERE doc_id = ? AND grantee_id = ?')
     .bind(docId, userId)
     .first<{ role: ShareRole }>();
-  return share ? { role: share.role, ownerId: owner.owner_id } : null;
+  const direct: Access | null = share ? { role: share.role, ownerId: owner.owner_id } : null;
+  if (direct?.role === 'editor') return direct;
+  // A folder shared with them that the document is in may give them as much or more.
+  const folder = await folderShareAbove(env, userId, owner.owner_id, docId);
+  if (folder && (!direct || folder.role === 'editor')) return { role: folder.role, ownerId: owner.owner_id, folder };
+  return direct;
+}
+
+/**
+ * The folder share that lets the person open one of the owner's documents: the best one at or above the folder the document is in.
+ * Costs one directory query for everyone, and the owner's catalogue (from its cache, usually) only for someone the owner has shared
+ * a folder with.
+ */
+async function folderShareAbove(env: Env, userId: string, ownerId: string, docId: string): Promise<FolderShare | null> {
+  const shares = await folderSharesFrom(env, ownerId, userId);
+  if (!shares.length) return null;
+  const db = await existingUserDb(env, ownerId);
+  if (!db) return null;
+  const cached = (await db.peekList<{ id: string; folder_id: string | null }>('documents'))?.find((r) => r.id === docId);
+  const row = cached ?? (await db.first<{ folder_id: string | null }>('SELECT folder_id FROM documents WHERE id = ?', [docId]));
+  if (!row?.folder_id) return null;
+  const folders = new Map((await listFolders<FolderLink>(db)).map((f) => [f.id, f]));
+  return bestFolderShare(shares, folders, row.folder_id);
 }
 
 /** Records who owns a document. Idempotent, so it also backfills documents from before sharing. */

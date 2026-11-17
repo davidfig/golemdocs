@@ -11,6 +11,7 @@ import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, 
 import { checkFolder, type FolderRow } from './folders.ts';
 import { describeTrashed, purge, purgeExpired, trashStatements, type TrashRow } from './trash.ts';
 import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, retainedChunks, storedSize, versionsOf, type VersionRow } from './versions.ts';
+import { editableFolder, forgetFolders } from './folderShares.ts';
 import { accessFor, canWrite, dropPublicLink, forgetDocuments, makePublicLink, person, publicLinkOf, publicShare, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
 import { endRooms, kickFromRoom, rejoinRoom, roomAllowsSave, roomSaved } from './roomGate.ts';
 import { requireRoom } from './storage.ts';
@@ -32,10 +33,12 @@ interface DocumentRow {
   thumb_at: number | null;
   /** The folder it is in; null at the top level. */
   folder_id: string | null;
+  /** Who added it, when that was not the owner: someone editing a folder shared with them (docs/folder-sharing.md). */
+  created_by?: string | null;
 }
 
 /** What the client sees of a document (the R2 key stays server-side). */
-function describe(row: DocumentRow, role: Role = 'owner') {
+export function describe(row: DocumentRow, role: Role = 'owner') {
   return {
     role,
     id: row.id,
@@ -50,7 +53,7 @@ function describe(row: DocumentRow, role: Role = 'owner') {
 }
 
 /** An owner's documents, newest first, from the catalogue cache when it is current. */
-function listDocuments(env: Env, ownerId: string, db: UserDb): Promise<DocumentRow[]> {
+export function listDocuments(env: Env, ownerId: string, db: UserDb): Promise<DocumentRow[]> {
   return db.cachedList('documents', async () => {
     const rows = await db.all<DocumentRow>('SELECT * FROM documents ORDER BY updated_at DESC');
     // Documents from before sharing existed are claimed here, so rooms and shares can find them.
@@ -88,7 +91,7 @@ async function moveDocument(db: UserDb, row: DocumentRow, folderId: unknown): Pr
  * the rest is cleanup: with `defer` it is handed over to carry on after the response (it cannot fail the request), otherwise it is done
  * before returning. `also` goes in the same transaction as the rows (a folder delete's folders, so either both go or neither).
  */
-async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: DocumentRow[], defer?: (work: Promise<unknown>) => void, also: { sql: string; params: unknown[] }[] = []): Promise<void> {
+export async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: DocumentRow[], defer?: (work: Promise<unknown>) => void, also: { sql: string; params: unknown[] }[] = []): Promise<void> {
   const ids = rows.map((r) => r.id);
   // Many to a statement and all in one request to Cloudflare, which limits how many it takes.
   await db.runAll([...trashStatements(ids, Date.now()), ...perChunk(ids, (marks) => `DELETE FROM documents WHERE id IN (${marks})`), ...also]);
@@ -111,7 +114,7 @@ async function deleteDocuments(env: Env, ownerId: string, db: UserDb, rows: Docu
   else await cleanup();
 }
 
-async function readBody(request: Request, limit: number, what: string, allowEmpty = false): Promise<ArrayBuffer> {
+export async function readBody(request: Request, limit: number, what: string, allowEmpty = false): Promise<ArrayBuffer> {
   const declared = Number(request.headers.get('content-length') ?? 0);
   if (declared > limit) throw new HttpError(413, `${what} too large`);
   const bytes = await request.arrayBuffer();
@@ -420,22 +423,36 @@ export async function handleDocuments(request: Request, env: Env, userId: string
   }
 
   // POST /api/documents?name=…: a new document from the request body (.docx bytes).
+  // With `owner` (someone else's id) the document goes in a folder of theirs shared with this user as an editor (docs/folder-sharing.md):
+  // it is the owner's, in the owner's storage, recorded as added by this user. That needs the owner's sync, not this user's.
   if (!id && request.method === 'POST') {
-    if (!ownDb || !syncing) throw subscriptionRequired();
+    const folderId = url.searchParams.get('folder');
+    const ownerParam = url.searchParams.get('owner');
+    const owner = ownerParam ?? userId;
+    let db: UserDb;
+    if (owner !== userId) {
+      if (folderId === null) throw new HttpError(400, 'expected a folder');
+      db = (await editableFolder(env, userId, owner, folderId)).db;
+    } else {
+      if (!ownDb || !syncing) throw subscriptionRequired();
+      db = ownDb;
+      if (folderId !== null && !(await ownDb.first('SELECT 1 FROM folders WHERE id = ?', [folderId]))) throw new HttpError(400, 'no such folder');
+    }
     const delta = isDelta(request);
     const bytes = delta ? await readBody(request, MAX_DELTA_BYTES, 'document') : await readDocx(request);
     const docId = crypto.randomUUID();
     const name = cleanName(url.searchParams.get('name')) ?? 'Untitled.docx';
-    const folderId = url.searchParams.get('folder');
-    if (folderId !== null && !(await ownDb.first('SELECT 1 FROM folders WHERE id = ?', [folderId]))) throw new HttpError(400, 'no such folder');
-    await requireRoom(env, userId, ownDb, delta ? deltaSize(bytes, MAX_DELTA_BYTES) : bytes.byteLength);
+    await requireRoom(env, owner, db, delta ? deltaSize(bytes, MAX_DELTA_BYTES) : bytes.byteLength, { own: owner === userId });
     const now = Date.now();
+    const createdBy = owner === userId ? null : userId;
     // Bytes first: a failure leaves an unreferenced object, never a row pointing at nothing.
     let size = bytes.byteLength;
-    if (delta) size = (await applyDelta(env, userId, docId, docxKey(userId, docId), bytes, null, { maxBytes: MAX_BYTES })).manifest.size;
-    else await env.FILES.put(docxKey(userId, docId), bytes, { httpMetadata: { contentType: DOCX } });
-    await ownDb.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?)', [docId, name, size, docxKey(userId, docId), now, now, folderId]);
-    await registerOwner(env, docId, userId);
+    if (delta) size = (await applyDelta(env, owner, docId, docxKey(owner, docId), bytes, null, { maxBytes: MAX_BYTES })).manifest.size;
+    else await env.FILES.put(docxKey(owner, docId), bytes, { httpMetadata: { contentType: DOCX } });
+    if (createdBy) await db.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [docId, name, size, docxKey(owner, docId), now, now, folderId, createdBy]);
+    else await db.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?)', [docId, name, size, docxKey(owner, docId), now, now, folderId]);
+    await registerOwner(env, docId, owner);
+    if (createdBy) return json({ role: 'editor', id: docId, name, size, createdAt: now, updatedAt: now, thumbAt: null, folderId, createdByYou: true }, 201);
     return json({ role: 'owner', id: docId, name, size, createdAt: now, updatedAt: now, thumbAt: null, folderId }, 201);
   }
 
@@ -515,6 +532,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
         // The folders go in the same transaction as the documents: a failure leaves both, never documents gone from folders that stay.
         const folderDeletes = perChunk([...doomedFolders], (marks) => `DELETE FROM folders WHERE id IN (${marks})`);
         await deleteDocuments(env, userId, ownDb, doomed, defer, folderDeletes);
+        await forgetFolders(env, userId, [...doomedFolders]);
         ok.push(...doomed.map((row) => row.id).filter((docId) => ids.includes(docId)), ...asked);
       } catch (error) {
         failed.push(...[...ids.filter((docId) => doomed.some((d) => d.id === docId)), ...asked].map((x) => failure(x, error)));
@@ -736,6 +754,9 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     }
     const base = url.searchParams.get('base');
     if (base !== null && Number(base) !== row.updated_at) throw new HttpError(409, 'changed elsewhere');
+    // Someone editing a shared folder renames only what they added (docs/folder-sharing.md); their saves keep the name.
+    const renaming = cleanName(url.searchParams.get('name'));
+    if (renaming !== null && renaming !== row.name && access.folder && row.created_by !== userId) throw new HttpError(403, 'only the owner can rename this document');
     const delta = isDelta(request);
     const body = delta ? await readBody(request, MAX_DELTA_BYTES, 'document') : await readDocx(request);
     const name = cleanName(url.searchParams.get('name')) ?? row.name;
@@ -805,9 +826,11 @@ export async function handleDocuments(request: Request, env: Env, userId: string
   // (so a save based on the version before still goes through). A rename this way works while
   // several people are editing it too, when the file itself can't be uploaded.
   if (request.method === 'PATCH') {
-    if (role !== 'owner') throw new HttpError(403, 'only the owner can move this document');
-    requireStorage();
     const body = (await request.json().catch(() => null)) as { folderId?: unknown; name?: unknown } | null;
+    // Someone editing a shared folder may rename what they added there, and move nothing (docs/folder-sharing.md).
+    const ownAddition = !!access.folder && role === 'editor' && row.created_by === userId;
+    if (role !== 'owner' && !(ownAddition && body?.name !== undefined && body.folderId === undefined)) throw new HttpError(403, 'only the owner can move this document');
+    requireStorage();
     let next = row;
     if (body?.name !== undefined) {
       const name = typeof body.name === 'string' ? cleanName(body.name) : null;
@@ -821,7 +844,8 @@ export async function handleDocuments(request: Request, env: Env, userId: string
 
   // DELETE /api/documents/:id
   if (request.method === 'DELETE') {
-    if (role !== 'owner') throw new HttpError(403, 'only the owner can delete this document');
+    // Someone editing a shared folder may delete what they added there; it goes to the owner's trash.
+    if (role !== 'owner' && !(access.folder && role === 'editor' && row.created_by === userId)) throw new HttpError(403, 'only the owner can delete this document');
     await deleteDocuments(env, ownerId, db, [row]);
     return new Response(null, { status: 204 });
   }

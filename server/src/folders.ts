@@ -11,6 +11,8 @@ export interface FolderRow {
   parent_id: string | null;
   created_at: number;
   updated_at: number;
+  /** Who added it, when that was not the owner (docs/folder-sharing.md). */
+  created_by?: string | null;
 }
 
 export function describeFolder(row: FolderRow) {
@@ -23,7 +25,7 @@ export const MAX_FOLDER_DEPTH = 32;
  * /api/folders[/:id]: the user's folders. Clients make the ids, so a folder made offline can be
  * sent as it is (PUT is create-or-update).
  */
-export async function handleFolders(request: Request, id: string | undefined, db: UserDb | null, syncing: boolean): Promise<Response> {
+export async function handleFolders(request: Request, id: string | undefined, db: UserDb | null, syncing: boolean, forget: (ids: string[]) => Promise<void> = async () => {}): Promise<Response> {
   if (id === undefined) {
     // GET /api/folders
     if (request.method === 'GET') return json(db ? (await db.cachedList('folders', () => db.all<FolderRow>('SELECT * FROM folders ORDER BY name'))).map(describeFolder) : []);
@@ -43,6 +45,8 @@ export async function handleFolders(request: Request, id: string | undefined, db
     if (request.method === 'DELETE') {
       if (!db) throw new HttpError(404, 'not found');
       const { ok, failed } = await removeFolders(db, idList(await request.json().catch(() => null)));
+      // What was shared from them is not under them any more.
+      await forget(ok);
       return json({ ok, failed: failed.map((f) => failure(f.id, f.cause)) });
     }
     throw new HttpError(405, 'method not allowed');
@@ -62,6 +66,7 @@ export async function handleFolders(request: Request, id: string | undefined, db
     if (!db) throw new HttpError(404, 'not found');
     const { failed } = await removeFolders(db, [id]);
     if (failed[0]) throw failed[0].cause;
+    await forget([id]);
     return new Response(null, { status: 204 });
   }
 

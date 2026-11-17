@@ -82,4 +82,10 @@ export const vault: Catalog = {
   'vault.link.outside': '「{file}」不在保管庫資料夾「{name}」中。',
   'vault.link.missing': '「{file}」不在保管庫資料夾中。',
   'vault.link.placeMissing': '筆記已打開，但找不到連結指向的位置。',
+  'vault.shared.index.file': '{name}（不在保管庫中）',
+  'vault.shared.index.title': '{name}（不在此保管庫中）',
+  'vault.shared.index.intro': '共享資料夾「{share}」中的資料夾「{folder}」沒有複製到此保管庫，因此其檔案不在這裡。它們仍在 Golem Docs 中。其中的檔案如下：',
+  'vault.shared.index.empty': '其中還沒有檔案。',
+  'vault.shared.index.more': '……以及另外 {count} 個',
+  'vault.shared.index.how': '要將此資料夾也保留在保管庫中，請在 Golem Docs 中開啟 檔案 › 開啟，然後在「{share}」的卡片上選擇「在我的保管庫…」。Golem Docs 會自動更新此清單，因此對此檔案的變更不會保留。',
 };

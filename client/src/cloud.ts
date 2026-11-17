@@ -422,8 +422,6 @@ export interface SharedFolderDocument extends CloudDocument {
 export interface SharedFolderTree extends SharedFolder {
   folders: SharedFolderFolder[];
   documents: SharedFolderDocument[];
-  /** It has more documents than were listed. */
-  truncated: boolean;
 }
 
 const sharedFolderPath = (f: Pick<SharedFolder, 'ownerId' | 'folderId'>): string => `/api/shared-folders/${encodeURIComponent(f.ownerId)}/${f.folderId}`;

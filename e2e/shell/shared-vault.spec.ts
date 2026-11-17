@@ -1,6 +1,6 @@
 // Copies of folders shared with this account in the desktop vault (client/src/desktop/vaultShared.ts, docs/folder-sharing.md): a
-// folder shared to edit is copied under Shared/<owner>/<folder>/, an edit made there reaches the owner's document, and turning off
-// "In my vault" on its card removes the copy. A stand-in shell holds the vault in memory.
+// folder shared to edit is copied under Shared/<owner>/<folder>/, an edit made there reaches the owner's document, and
+// "In my vault…" on its card leaves a folder out (an index of it takes its place) or removes the copy. A stand-in shell holds the vault in memory.
 
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
@@ -36,13 +36,32 @@ test('a folder shared to edit is kept in the vault under Shared, edits there rea
   const mine = (await (await page.request.get('/api/documents')).json()) as { name: string }[];
   expect(mine.map((d) => d.name)).toEqual(['Mine.md']);
 
-  // "In my vault" off on the folder's card: the copy goes, the share stays.
+  // "In my vault…" on the folder's card: Notes left out. Its files go, an index of them takes its place, and the account keeps them.
   await app.menu('File', 'Open…');
   const card = page.locator('.wm-dashboard article.wm-folder').filter({ hasText: 'Project' });
-  const keep = card.getByRole('checkbox', { name: 'Keep a copy of Project in my vault' });
-  await card.hover();
+  const choose = async () => {
+    await card.hover();
+    await card.getByRole('button', { name: 'Choose what your vault keeps of Project' }).click();
+    return page.getByRole('dialog', { name: 'In My Vault' });
+  };
+  let dialog = await choose();
+  const keep = dialog.getByRole('checkbox', { name: 'Keep a copy of Project in my vault' });
+  const notes = dialog.getByRole('list', { name: 'Folders to keep' }).getByRole('checkbox', { name: 'Notes' });
   await expect(keep).toBeChecked();
+  await expect(notes).toBeChecked();
+  await notes.uncheck();
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  const index = `${copy}/Notes (not in vault).md`;
+  await expect.poll(() => vaultPaths(page), { timeout: 30_000 }).toEqual(['Mine.md', index, `${copy}/README.md`]);
+  expect(await fileText(page, index)).toContain('- `Ideas.md`');
+  expect((await (await owner.page.request.get('/api/documents')).json()).map((d: { name: string }) => d.name)).toContain('Ideas.md');
+
+  // The copy turned off: it goes, the share stays. With it off, no folder can be picked.
+  dialog = await choose();
+  await expect(notes).not.toBeChecked();
   await keep.uncheck();
+  await expect(notes).toBeDisabled();
+  await dialog.getByRole('button', { name: 'Save' }).click();
   await expect.poll(() => vaultPaths(page), { timeout: 30_000 }).toEqual(['Mine.md']);
   expect(await fileText(page, 'Mine.md')).toBe('# Mine\n');
   expect(((await (await page.request.get('/api/shared-folders')).json()) as unknown[]).length).toBe(1);

@@ -13,7 +13,8 @@
 // person no longer wants is removed: its files go, including edits not sent yet (the documents are the owner's), and what never
 // reached the account stays.
 
-import { cloudPaths, safeName, type CloudDoc, type CloudFolder, type LocalFile } from './vaultPlan.ts';
+import { t } from '../i18n/index.ts';
+import { cloudPaths, folderPaths, safeName, type CloudDoc, type CloudFolder, type LocalFile } from './vaultPlan.ts';
 import { STATE_PATH, syncVault, type SyncReport, type VaultCodec, type VaultDisk, type VaultHost, type VaultMemory } from './vaultSync.ts';
 
 /** Where shared folders are kept in the vault, unless the account has a folder of its own by that name (then `SHARED_ROOTS[1]`). */
@@ -32,8 +33,7 @@ export interface VaultShare {
 /** A folder or document in a shared folder (`sharedFolderTree`); the shared folder itself is the folder with no parent. */
 export interface ShareTree {
   folders: { id: string; name: string; parentId: string | null; createdByYou: boolean }[];
-  documents: { id: string; name: string; folderId: string; createdAt: number; updatedAt: number; createdByYou: boolean }[];
-  truncated: boolean;
+  documents: { id: string; name: string; folderId: string; createdAt: number; updatedAt: number; createdByYou: boolean; size?: number }[];
 }
 
 /** What the shared copies need from the account (cloud.ts), so they run in tests in memory. */
@@ -56,11 +56,14 @@ export interface SharedApi {
 const under = (prefix: string) => `${prefix}/`;
 
 /** The part of the disk inside `prefix`, with paths relative to it. It has no `.golemdocs/state.json`: the vault's own says whose it is. */
-export function scopedDisk(disk: VaultDisk, prefix: string, keep: (file: LocalFile) => boolean = () => true): VaultDisk {
+export function scopedDisk(disk: VaultDisk, prefix: string, keep: (file: LocalFile) => boolean = () => true, hidden: (path: string) => boolean = () => false): VaultDisk {
   const inside = (path: string) => `${prefix}/${path}`;
   return {
     async scan() {
-      return (await disk.scan()).filter((f) => f.path.startsWith(under(prefix))).map((f) => ({ ...f, path: f.path.slice(prefix.length + 1) })).filter(keep);
+      return (await disk.scan())
+        .filter((f) => f.path.startsWith(under(prefix)))
+        .map((f) => ({ ...f, path: f.path.slice(prefix.length + 1) }))
+        .filter((f) => !hidden(f.path) && keep(f));
     },
     async read(path) {
       if (path === STATE_PATH) throw new Error('none');
@@ -74,7 +77,7 @@ export function scopedDisk(disk: VaultDisk, prefix: string, keep: (file: LocalFi
       ? {
           async folders() {
             const all = await disk.folders!();
-            return all && all.filter((p) => p.startsWith(under(prefix))).map((p) => p.slice(prefix.length + 1));
+            return all && all.filter((p) => p.startsWith(under(prefix))).map((p) => p.slice(prefix.length + 1)).filter((p) => !hidden(p));
           },
           makeFolder: (path: string) => disk.makeFolder!(inside(path)),
           removeFolder: (path: string) => disk.removeFolder!(inside(path)),
@@ -110,7 +113,7 @@ export interface Refusals {
  * The shared folder as the sync's account. `accountWins` is for a copy with no memory: an editor's file that differs from the
  * account's is kept as a version of the document rather than replacing it, and the account's copy is written to disk.
  */
-export function sharedCloud(api: SharedApi, share: VaultShare, tree: ShareTree, refused: Refusals, accountWins: boolean): VaultHost['cloud'] {
+export function sharedCloud(api: SharedApi, share: VaultShare, tree: ShareTree, refused: Refusals, accountWins: boolean, leftOut: ReadonlySet<string> = new Set()): VaultHost['cloud'] {
   const editor = share.role === 'editor';
   let current = tree;
   const root = () => current.folders.find((f) => f.parentId === null)?.id ?? share.folderId;
@@ -137,11 +140,10 @@ export function sharedCloud(api: SharedApi, share: VaultShare, tree: ShareTree, 
   return {
     async list() {
       current = await api.tree(share);
-      // A listing that leaves documents out would read as their deletion.
-      if (current.truncated) throw new Error('This shared folder has too many files to keep a copy of.');
       const top = root();
-      const folders: CloudFolder[] = current.folders.filter((f) => f.id !== top).map((f) => ({ id: f.id, name: f.name, parentId: f.parentId === top ? null : f.parentId }));
-      const documents: CloudDoc[] = current.documents.map((d) => ({ id: d.id, name: d.name, folderId: d.folderId === top ? null : d.folderId, createdAt: d.createdAt, updatedAt: d.updatedAt }));
+      // Folders left out of the vault, and what is in them, are not the vault's to keep: as if the account had none of them.
+      const folders: CloudFolder[] = current.folders.filter((f) => f.id !== top && !leftOut.has(f.id)).map((f) => ({ id: f.id, name: f.name, parentId: f.parentId === top ? null : f.parentId }));
+      const documents: CloudDoc[] = current.documents.filter((d) => !leftOut.has(d.folderId)).map((d) => ({ id: d.id, name: d.name, folderId: d.folderId === top ? null : d.folderId, createdAt: d.createdAt, updatedAt: d.updatedAt }));
       return { docs: documents, folders };
     },
     download: (id) => api.download(id),
@@ -195,7 +197,7 @@ export function sharedCloud(api: SharedApi, share: VaultShare, tree: ShareTree, 
 interface Registry {
   version: 1;
   root?: string;
-  shares: { ownerId: string; folderId: string; label: string }[];
+  shares: { ownerId: string; folderId: string; label: string; indexes?: string[] }[];
 }
 
 const keyOf = (share: { ownerId: string; folderId: string }) => `${share.ownerId}/${share.folderId}`;
@@ -236,6 +238,10 @@ export interface SharedOptions {
   account: string;
   /** Whether this person wants a copy of this share in this vault ("Keep a copy in my vault"). */
   wanted(share: VaultShare): boolean;
+  /** The folders of this share (ids) this person leaves out of the vault, or null before they (or the default) chose. */
+  excluded?(share: VaultShare): string[] | null;
+  /** Keeps the choice, made by the default for a share seen the first time (`defaultExcluded`). */
+  setExcluded?(share: VaultShare, ids: string[]): void;
 }
 
 /** Where the shared copies are, once known (null before the first copy): the vault's own sync leaves it out. */
@@ -291,7 +297,7 @@ export async function syncShared(options: SharedOptions): Promise<SharedSyncRepo
   for (const entry of registry.shares.filter((e) => !keep.has(keyOf(e)))) {
     const copy = memory(`shared:${keyOf(entry)}`);
     const prefix = `${root}/${entry.label}`;
-    for (const { path } of await entriesOf(copy)) await disk.remove(`${prefix}/${path}`).catch(() => {});
+    for (const path of [...(await entriesOf(copy)).map((e) => e.path), ...(entry.indexes ?? [])]) await disk.remove(`${prefix}/${path}`).catch(() => {});
     report.kept += (await disk.scan()).filter((f) => f.path.startsWith(under(prefix))).length;
     if (disk.folders && disk.removeFolder) {
       const left = ((await disk.folders()) ?? []).filter((p) => p === prefix || p.startsWith(under(prefix))).sort((a, b) => b.length - a.length);
@@ -322,16 +328,30 @@ export async function syncShared(options: SharedOptions): Promise<SharedSyncRepo
         else await copy.save('');
       }
     }
-    if (known) known.label = label;
-    else registry.shares.push({ ownerId: share.ownerId, folderId: share.folderId, label });
+    const entry = known ?? { ownerId: share.ownerId, folderId: share.folderId, label };
+    entry.label = label;
+    if (!known) registry.shares.push(entry);
     if (share.localName !== label) await api.setLabel(share, label).catch(() => {});
 
     const prefix = `${root}/${label}`;
     try {
       const tree = await api.tree(share);
+      // The folders left out of this vault: the person's choice, or, the first time, the default (all of it, or only the top of a large one).
+      let chosen = options.excluded?.(share) ?? null;
+      if (chosen === null) {
+        chosen = defaultExcluded(tree);
+        options.setExcluded?.(share, chosen);
+      }
+      const out = leftOut(tree, chosen);
+      const isOut = (path: string) => out.tops.some((top) => path === top.path || path.startsWith(under(top.path)));
+      report.kept += await dropLeftOut(disk, prefix, copy, isOut, options.hash);
+      const indexes = await writeIndexes(disk, prefix, share, tree, out, entry.indexes ?? []);
+      entry.indexes = indexes.length ? indexes : undefined;
+      const hidden = (path: string) => isOut(path) || indexes.includes(path);
+
       const noMemory = !(await entriesOf(copy)).length;
       // A viewer's own files (not the account's, not remembered) are left alone, and counted.
-      const ours = new Set([...cloudPaths(tree.documents.map((d) => ({ ...d, folderId: d.folderId === share.folderId ? null : d.folderId })), tree.folders.filter((f) => f.parentId !== null).map((f) => ({ ...f, parentId: f.parentId === share.folderId ? null : f.parentId }))).map((c) => c.path), ...(await entriesOf(copy)).map((e) => e.path)]);
+      const ours = new Set([...relativePaths(tree).map((c) => c.path), ...(await entriesOf(copy)).map((e) => e.path)]);
       // One that may be a remembered file moved (the size of one that is missing) is let through, so the move is seen and put back.
       const remembered = await entriesOf(copy);
       const present = new Set((await disk.scan()).filter((f) => f.path.startsWith(under(prefix))).map((f) => f.path.slice(prefix.length + 1)));
@@ -342,7 +362,7 @@ export async function syncShared(options: SharedOptions): Promise<SharedSyncRepo
       for (let pass = 0; pass < 2; pass++) {
         const refused: Refusals = { count: 0 };
         strays = 0;
-        const host: VaultHost = { disk: scopedDisk(disk, prefix, keepFile), memory: copy, cloud: sharedCloud(api, share, tree, refused, noMemory && pass === 0), codec: options.codec, hash: options.hash, account: options.account };
+        const host: VaultHost = { disk: scopedDisk(disk, prefix, keepFile, hidden), memory: copy, cloud: sharedCloud(api, share, tree, refused, noMemory && pass === 0, out.folders), codec: options.codec, hash: options.hash, account: options.account };
         result = await syncVault(host);
         if (!refused.count) break;
       }
@@ -355,6 +375,140 @@ export async function syncShared(options: SharedOptions): Promise<SharedSyncRepo
 
   await memory('shared').save(JSON.stringify(registry));
   return report;
+}
+
+/** A shared folder with more documents than this, or more bytes, keeps only its top level in the vault until the person chooses more. */
+export const LARGE_SHARE = { documents: 2000, bytes: 1024 ** 3 };
+
+/** The shared folder's own folder in its tree (the one with no parent). */
+const topOf = (tree: ShareTree) => tree.folders.find((f) => f.parentId === null)?.id ?? '';
+
+/** The folders and documents of a shared folder as the vault lays them out, relative to it. */
+function relativeTree(tree: ShareTree): { docs: CloudDoc[]; folders: CloudFolder[] } {
+  const top = topOf(tree);
+  return {
+    docs: tree.documents.map((d) => ({ id: d.id, name: d.name, folderId: d.folderId === top ? null : d.folderId, createdAt: d.createdAt, updatedAt: d.updatedAt })),
+    folders: tree.folders.filter((f) => f.id !== top).map((f) => ({ id: f.id, name: f.name, parentId: f.parentId === top ? null : f.parentId })),
+  };
+}
+
+const relativePaths = (tree: ShareTree) => {
+  const { docs, folders } = relativeTree(tree);
+  return cloudPaths(docs, folders);
+};
+
+/** The folders a share seen for the first time leaves out: none, or for a large one, every folder below its top level. */
+export function defaultExcluded(tree: ShareTree): string[] {
+  const bytes = tree.documents.reduce((sum, d) => sum + (d.size ?? 0), 0);
+  if (tree.documents.length <= LARGE_SHARE.documents && bytes <= LARGE_SHARE.bytes) return [];
+  const top = topOf(tree);
+  return tree.folders.filter((f) => f.parentId === top && f.id !== top).map((f) => f.id);
+}
+
+/** What is left out of the vault: every folder under a chosen one (by id), and the topmost of them with their vault paths. */
+export function leftOut(tree: ShareTree, chosen: readonly string[]): { folders: Set<string>; tops: { id: string; name: string; path: string }[] } {
+  const top = topOf(tree);
+  const parentOf = new Map(tree.folders.map((f) => [f.id, f.parentId]));
+  const picked = new Set(chosen.filter((id) => id !== top && parentOf.has(id)));
+  const folders = new Set<string>();
+  const tops: { id: string; name: string; path: string }[] = [];
+  const paths = folderPaths(relativeTree(tree).folders);
+  for (const f of tree.folders) {
+    let topmost: string | null = null;
+    for (let id: string | null | undefined = f.id, seen = 0; id && seen <= tree.folders.length; id = parentOf.get(id), seen++) if (picked.has(id)) topmost = id;
+    if (!topmost) continue;
+    folders.add(f.id);
+    if (topmost === f.id) tops.push({ id: f.id, name: f.name, path: paths.get(f.id)! });
+  }
+  tops.sort((a, b) => a.path.localeCompare(b.path));
+  return { folders, tops };
+}
+
+/**
+ * Forgets the files of the copy that are now in a folder left out: those as the sync left them are removed (they are in the
+ * account), and those changed since stay, unsent, as do files the person put there. Returns how many files stay there.
+ */
+async function dropLeftOut(disk: VaultDisk, prefix: string, copy: VaultMemory, isOut: (path: string) => boolean, hash: (bytes: Uint8Array) => Promise<string>): Promise<number> {
+  let state: { entries?: { path: string; hash: string }[]; folders?: string[] } | null = null;
+  try {
+    const text = await copy.load();
+    state = text ? JSON.parse(text) : null;
+  } catch {
+    state = null;
+  }
+  const entries = Array.isArray(state?.entries) ? state.entries : [];
+  const going = entries.filter((e) => isOut(e.path));
+  if (state && (going.length || (state.folders ?? []).some(isOut))) {
+    for (const entry of going) {
+      const path = `${prefix}/${entry.path}`;
+      try {
+        if ((await hash(await disk.read(path))) === entry.hash) await disk.remove(path);
+      } catch {
+        /* gone already */
+      }
+    }
+    state.entries = entries.filter((e) => !isOut(e.path));
+    if (state.folders) state.folders = state.folders.filter((p) => !isOut(p));
+    await copy.save(JSON.stringify(state));
+    if (disk.folders && disk.removeFolder) {
+      const empty = ((await disk.folders()) ?? [])
+        .filter((p) => p.startsWith(under(prefix)) && isOut(p.slice(prefix.length + 1)))
+        .sort((a, b) => b.length - a.length);
+      for (const path of empty) await disk.removeFolder(path).catch(() => false);
+    }
+  }
+  return (await disk.scan()).filter((f) => f.path.startsWith(under(prefix)) && isOut(f.path.slice(prefix.length + 1))).length;
+}
+
+/** How many files an index lists before it says how many more there are. */
+export const INDEX_FILES = 1000;
+
+/** The text of the index of a folder left out of the vault: the files in it, so people and AI apps can see what is there. */
+export function indexText(share: VaultShare, folder: { name: string }, files: readonly string[]): string {
+  const code = (path: string) => '`' + path.replace(/`/g, "'") + '`';
+  const lines = [
+    `# ${t('vault.shared.index.title', { name: folder.name })}`,
+    '',
+    t('vault.shared.index.intro', { folder: folder.name, share: share.name }),
+    '',
+    ...(files.length ? files.slice(0, INDEX_FILES).map((path) => `- ${code(path)}`) : [t('vault.shared.index.empty')]),
+    ...(files.length > INDEX_FILES ? [`- ${t('vault.shared.index.more', { count: files.length - INDEX_FILES })}`] : []),
+    '',
+    t('vault.shared.index.how', { share: share.name }),
+    '',
+  ];
+  return lines.join('\n');
+}
+
+/**
+ * Writes an index beside each topmost folder left out (`Archive (not in vault).md`), only when its text changed, and removes the
+ * ones no longer wanted. A file of the person's own, or a shared document, at that path is left alone (and gets no index). Returns
+ * the index paths, relative to the copy.
+ */
+async function writeIndexes(disk: VaultDisk, prefix: string, share: VaultShare, tree: ShareTree, out: ReturnType<typeof leftOut>, before: readonly string[]): Promise<string[]> {
+  const all = relativePaths(tree).map((c) => c.path);
+  const visible = new Set(all.map((p) => p.toLowerCase()));
+  const onDisk = new Set((await disk.scan()).filter((f) => f.path.startsWith(under(prefix))).map((f) => f.path.slice(prefix.length + 1)));
+  const written: string[] = [];
+  const encoder = new TextEncoder();
+  for (const top of out.tops) {
+    const parent = top.path.includes('/') ? top.path.slice(0, top.path.lastIndexOf('/') + 1) : '';
+    const path = `${parent}${safeName(t('vault.shared.index.file', { name: safeName(top.name) }))}.md`;
+    if (visible.has(path.toLowerCase()) || (onDisk.has(path) && !before.includes(path))) continue;
+    const files = all.filter((p) => p.startsWith(under(top.path))).map((p) => p.slice(top.path.length + 1)).sort((a, b) => a.localeCompare(b));
+    const bytes = encoder.encode(indexText(share, top, files));
+    let same = false;
+    try {
+      const had = await disk.read(`${prefix}/${path}`);
+      same = had.length === bytes.length && had.every((b, i) => b === bytes[i]);
+    } catch {
+      /* not there yet */
+    }
+    if (!same) await disk.write(`${prefix}/${path}`, bytes);
+    written.push(path);
+  }
+  for (const path of before) if (!written.includes(path)) await disk.remove(`${prefix}/${path}`).catch(() => {});
+  return written;
 }
 
 /** A copy's run that failed before it began (the shared folder could not be listed). */
@@ -407,5 +561,36 @@ export function setKeepsCopy(share: { ownerId: string; folderId: string }, on: b
     else localStorage.setItem(SHARED_OFF_KEY, JSON.stringify(on ? rest : [...rest, keyOf(share)]));
   } catch {
     /* storage blocked: the copy stays as it was */
+  }
+}
+
+/** The folders of each shared folder this person leaves out of the vault, as `{ "<owner>/<folder>": [folder ids] }`; follows the account. */
+export const SHARED_FOLDERS_KEY = 'golem.sharedVaultFolders';
+
+function folderChoices(): Record<string, string[]> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SHARED_FOLDERS_KEY) ?? '{}') as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: Record<string, string[]> = {};
+    for (const [key, ids] of Object.entries(parsed)) if (Array.isArray(ids)) out[key] = ids.filter((id): id is string => typeof id === 'string');
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** The folders of a shared folder left out of this person's vault, or null before anything was chosen (the default then decides). */
+export function excludedFolders(share: { ownerId: string; folderId: string }): string[] | null {
+  return folderChoices()[keyOf(share)] ?? null;
+}
+
+/** Keeps which folders of a shared folder are left out of the vault. */
+export function setExcludedFolders(share: { ownerId: string; folderId: string }, ids: readonly string[]): void {
+  const choices = folderChoices();
+  choices[keyOf(share)] = [...ids];
+  try {
+    localStorage.setItem(SHARED_FOLDERS_KEY, JSON.stringify(choices));
+  } catch {
+    /* storage blocked: the default stays */
   }
 }

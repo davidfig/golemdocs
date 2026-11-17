@@ -28,5 +28,4 @@ export const viewer: Partial<Messages> = {
   'viewer.signInToViewFolder': 'Melde dich an, um diesen Ordner zu sehen.',
   'viewer.folderEmpty': 'Dieser Ordner ist leer.',
   'viewer.fileGone': 'Diese Datei ist nicht mehr im Ordner.',
-  'viewer.folderTruncated': 'Nur die ersten {count} Dateien werden aufgeführt.',
 };

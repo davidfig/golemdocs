@@ -87,4 +87,10 @@ export const vault = {
   'vault.link.outside': '“{file}” isn’t in the vault folder “{name}”.',
   'vault.link.missing': '“{file}” isn’t in the vault folder.',
   'vault.link.placeMissing': 'The note is open, but the place the link points to wasn’t found.',
+  'vault.shared.index.file': '{name} (not in vault)',
+  'vault.shared.index.title': '{name} (not in this vault)',
+  'vault.shared.index.intro': 'The folder “{folder}” of the shared folder “{share}” is not copied to this vault, so its files are not here. They are still in Golem Docs. These are the files in it:',
+  'vault.shared.index.empty': 'It has no files yet.',
+  'vault.shared.index.more': '…and {count} more',
+  'vault.shared.index.how': 'To keep this folder in your vault too, open File › Open in Golem Docs and choose In my vault… on the card of “{share}”. Golem Docs keeps this list up to date, so changes made to this file are not kept.',
 };

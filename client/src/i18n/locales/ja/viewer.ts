@@ -28,5 +28,4 @@ export const viewer: Partial<Messages> = {
   'viewer.signInToViewFolder': 'このフォルダーを見るにはサインインしてください。',
   'viewer.folderEmpty': 'このフォルダーは空です。',
   'viewer.fileGone': 'そのファイルはもうフォルダーにありません。',
-  'viewer.folderTruncated': '最初の {count} 個のファイルのみ表示しています。',
 };

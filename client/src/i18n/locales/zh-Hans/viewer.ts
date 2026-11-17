@@ -28,5 +28,4 @@ export const viewer: Partial<Messages> = {
   'viewer.signInToViewFolder': '登录以查看此文件夹。',
   'viewer.folderEmpty': '此文件夹为空。',
   'viewer.fileGone': '该文件已不在文件夹中。',
-  'viewer.folderTruncated': '仅列出前 {count} 个文件。',
 };

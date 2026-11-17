@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
-import { newLabel, outsideDisk, relocated, syncShared, type MemoryFor, type SharedApi, type ShareTree, type VaultShare } from '../src/desktop/vaultShared.ts';
+import { defaultExcluded, indexText, LARGE_SHARE, leftOut, newLabel, outsideDisk, relocated, syncShared, type MemoryFor, type SharedApi, type ShareTree, type VaultShare } from '../src/desktop/vaultShared.ts';
 import type { LocalFile } from '../src/desktop/vaultPlan.ts';
 import type { VaultCodec, VaultDisk, VaultMemory } from '../src/desktop/vaultSync.ts';
 
@@ -89,7 +89,7 @@ function fakeAccount(role: 'editor' | 'viewer' = 'viewer') {
   const api: SharedApi = {
     shares: async () => shares.map((s) => ({ ...s })),
     async tree() {
-      return { folders: [...folders.values()], documents: [...docs.values()].map(({ bytes: _, ...d }) => d), truncated: false };
+      return { folders: [...folders.values()], documents: [...docs.values()].map(({ bytes: _, ...d }) => d) };
     },
     download: async (id) => docs.get(id)!.bytes,
     async save(id, bytes) {
@@ -151,8 +151,10 @@ function setup(role: 'editor' | 'viewer' = 'viewer') {
   const account = fakeAccount(role);
   const memory = fakeMemory();
   const wantedOff = new Set<string>();
-  const sync = () => syncShared({ disk: disk.disk, memory, api: account.api, codec, hash, account: 'me', wanted: (s) => !wantedOff.has(s.folderId) });
-  return { ...disk, ...account, memory, sync, wantedOff };
+  const choices = new Map<string, string[]>();
+  const sync = () =>
+    syncShared({ disk: disk.disk, memory, api: account.api, codec, hash, account: 'me', wanted: (s) => !wantedOff.has(s.folderId), excluded: (s) => choices.get(s.folderId) ?? null, setExcluded: (s, ids) => void choices.set(s.folderId, ids) });
+  return { ...disk, ...account, memory, sync, wantedOff, choices };
 }
 
 test('a shared folder is copied under Shared/<owner>/<folder>, and its label is kept in the account', async () => {
@@ -308,4 +310,85 @@ test('a moved copy is found by its files', () => {
   const files = [{ path: 'Shared/A/New/x.md', size: 1, mtimeMs: 1 }, { path: 'Shared/A/New/n/y.md', size: 1, mtimeMs: 1 }, { path: 'Shared/B/Other/z.md', size: 1, mtimeMs: 1 }];
   assert.equal(relocated(files, [{ path: 'x.md' }, { path: 'n/y.md' }], 'Shared', () => true), 'A/New');
   assert.equal(relocated(files, [{ path: 'q.md' }], 'Shared', () => true), null);
+});
+
+test('a folder left out of the vault is removed from the copy, an index of its files takes its place, and nothing is sent', async () => {
+  const t = setup('editor');
+  await t.sync();
+  assert.deepEqual(t.choices.get('project'), []);
+  t.calls.length = 0;
+  t.choices.set('project', ['notes']);
+  await t.sync();
+  const index = 'Shared/Alice/Project/Notes (not in vault).md';
+  assert.deepEqual(t.paths(), [index, 'Shared/Alice/Project/Plan.md']);
+  assert.match(t.content(index)!, /^# Notes \(not in this vault\)/);
+  assert.match(t.content(index)!, /^- `Idea\.md`$/m);
+  assert.ok(!t.dirs.has('Shared/Alice/Project/Notes'));
+  // The account keeps the folder and its documents: nothing was trashed, deleted or made.
+  assert.deepEqual(t.calls, []);
+  assert.ok(t.docs.has(t.idea) && t.folders.has('notes'));
+
+  // The index follows the account, and is written only when it changes; an edit to it is not kept.
+  t.add('Later.md', 'notes', 'later');
+  await t.sync();
+  assert.match(t.content(index)!, /^- `Later\.md`$/m);
+  t.put(index, 'scribbled');
+  await t.sync();
+  assert.match(t.content(index)!, /^- `Idea\.md`$/m);
+  assert.deepEqual(t.calls, []);
+
+  // Taken back in: the files come back and the index goes.
+  t.choices.set('project', []);
+  await t.sync();
+  assert.deepEqual(t.paths(), ['Shared/Alice/Project/Notes/Idea.md', 'Shared/Alice/Project/Notes/Later.md', 'Shared/Alice/Project/Plan.md']);
+});
+
+test('a changed file in a folder left out stays and is never sent, nor is a file put there; a removed copy takes its index along', async () => {
+  const t = setup('editor');
+  await t.sync();
+  t.put('Shared/Alice/Project/Notes/Idea.md', 'an edit not sent yet');
+  t.choices.set('project', ['notes']);
+  t.calls.length = 0;
+  let report = await t.sync();
+  assert.equal(t.content('Shared/Alice/Project/Notes/Idea.md'), 'an edit not sent yet');
+  assert.equal(report.kept, 1);
+  t.put('Shared/Alice/Project/Notes/New.md', 'mine');
+  report = await t.sync();
+  assert.equal(report.kept, 2);
+  assert.deepEqual(t.calls, []);
+  assert.equal(read(t.docs.get(t.idea)!.bytes), 'an idea');
+
+  t.wantedOff.add('project');
+  await t.sync();
+  assert.deepEqual(t.paths(), ['Shared/Alice/Project/Notes/Idea.md', 'Shared/Alice/Project/Notes/New.md']);
+});
+
+test('a large shared folder keeps only its top level to start with, and the choice is kept', async () => {
+  const t = setup('viewer');
+  const tree = t.api.tree.bind(t.api);
+  t.api.tree = async (share) => {
+    const listed = await tree(share);
+    return { ...listed, documents: listed.documents.map((d) => ({ ...d, size: d.name === 'Plan.md' ? LARGE_SHARE.bytes : 10 })) };
+  };
+  await t.sync();
+  assert.deepEqual(t.choices.get('project'), ['notes']);
+  assert.deepEqual(t.paths(), ['Shared/Alice/Project/Notes (not in vault).md', 'Shared/Alice/Project/Plan.md']);
+});
+
+test('what is left out: the folders under a chosen one, and the topmost of them; the default for a large folder', () => {
+  const folder = (id: string, parentId: string | null, name = id) => ({ id, name, parentId, createdByYou: false });
+  const doc = (id: string, folderId: string, size = 1) => ({ id, name: `${id}.md`, folderId, createdAt: 1, updatedAt: 1, createdByYou: false, size });
+  const tree: ShareTree = { folders: [folder('top', null), folder('a', 'top', 'A'), folder('b', 'a', 'B'), folder('c', 'top', 'C')], documents: [doc('x', 'b')] };
+  const out = leftOut(tree, ['a', 'b', 'top', 'gone']);
+  assert.deepEqual([...out.folders].sort(), ['a', 'b']);
+  assert.deepEqual(out.tops, [{ id: 'a', name: 'A', path: 'A' }]);
+  assert.deepEqual(defaultExcluded(tree), []);
+  assert.deepEqual(defaultExcluded({ ...tree, documents: Array.from({ length: LARGE_SHARE.documents + 1 }, (_, i) => doc(`d${i}`, 'top')) }), ['a', 'c']);
+
+  const share = { name: 'Project' } as VaultShare;
+  const many = Array.from({ length: 1002 }, (_, i) => `f${i}.md`);
+  const text = indexText(share, { name: 'A' }, many);
+  assert.equal(text.match(/^- `/gm)!.length, 1000);
+  assert.match(text, /^- …and 2 more$/m);
+  assert.match(indexText(share, { name: 'A' }, []), /It has no files yet\./);
 });

@@ -41,9 +41,6 @@ import { person, userByEmail } from './sharing.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
 import { existingUserDb, type UserDb } from './userDb.ts';
 
-/** Most documents a shared folder lists; beyond this the tree says it was cut short. */
-export const MAX_TREE_DOCUMENTS = 5000;
-
 type DocumentRow = Parameters<typeof describe>[0] & { created_by?: string | null };
 
 /** The documents in the owner's folders under `root`, and those folders (the root included). */
@@ -196,15 +193,14 @@ export async function handleSharedFolders(request: Request, env: Env, userId: st
   if (sub === 'tree') {
     if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
     const { folders, documents } = await contents(env, ownerId, db, folderId, found.folders);
-    const listed = documents.slice(0, MAX_TREE_DOCUMENTS);
+    // Every document, however many: a copy in a vault takes one left out for one deleted. (The owner's whole list is read anyway.)
     // Each document's path inside the shared folder, as the viewer's address names it (a viewer opens documents there).
-    const paths = new Map([...pathsOf(folderId, folders as FolderRow[], listed).byPath].map(([path, id]) => [id, path]));
+    const paths = new Map([...pathsOf(folderId, folders as FolderRow[], documents).byPath].map(([path, id]) => [id, path]));
     return json({
       ...(await describeShare(env, share, found.folders.get(folderId)!)),
       role,
       folders: folders.map((f) => ({ id: f.id, name: f.name, parentId: f.id === folderId ? null : f.parent_id, createdByYou: f.created_by === userId })),
-      documents: listed.map((row) => ({ ...describe(row, role), folderId: row.folder_id, path: paths.get(row.id), createdByYou: row.created_by === userId })),
-      truncated: documents.length > listed.length,
+      documents: documents.map((row) => ({ ...describe(row, role), folderId: row.folder_id, path: paths.get(row.id), createdByYou: row.created_by === userId })),
     });
   }
 
@@ -306,7 +302,7 @@ export function pathsOf(root: string, folders: readonly (FolderLink & { created_
 
 /**
  * GET /api/folder-view/:token (a person's view-only share, `userId` set) and /api/folder-public/:token (its public link, for anyone):
- * the folder's name and tree (`{ name, folders: [path], files: [{ path, updatedAt, size }], truncated }`). With /file?path=…, that
+ * the folder's name and tree (`{ name, folders: [path], files: [{ path, updatedAt, size }] }`, every file). With /file?path=…, that
  * file (304 for `If-None-Match` while unchanged). Paths are inside the shared folder; nothing answered names an id. An unknown, dropped
  * or someone else's token, a folder that is gone, an owner without sync and a path that is not in the tree all answer 404. Public
  * answers may be kept a minute and are never indexed.
@@ -325,12 +321,11 @@ export async function handleFolderView(request: Request, env: Env, url: URL, use
   const root = all.get(target.folderId);
   if (!root) throw new HttpError(404, 'not found');
   const { folders, documents } = await contents(env, target.ownerId, db, target.folderId, all);
-  const listed = documents.slice(0, MAX_TREE_DOCUMENTS);
-  const tree = pathsOf(target.folderId, folders as FolderRow[], listed);
+  const tree = pathsOf(target.folderId, folders as FolderRow[], documents);
   const headers: Record<string, string> = { 'x-robots-tag': 'noindex, nofollow', ...(userId === null ? { 'cache-control': 'public, max-age=60' } : {}) };
-  if (!file) return json({ name: root.name, folders: tree.folders, files: tree.files, truncated: documents.length > listed.length }, 200, headers);
+  if (!file) return json({ name: root.name, folders: tree.folders, files: tree.files }, 200, headers);
   const docId = tree.byPath.get(url.searchParams.get('path') ?? '');
-  const row = docId && listed.find((d) => d.id === docId);
+  const row = docId && documents.find((d) => d.id === docId);
   if (!row) throw new HttpError(404, 'not found');
   const response = await documentResponse(env, row.r2_key, target.ownerId, row.id, DOCX, request.headers.get('if-none-match'));
   if (!response) throw new HttpError(404, 'not found');

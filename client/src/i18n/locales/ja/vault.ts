@@ -82,4 +82,10 @@ export const vault: Catalog = {
   'vault.link.outside': '「{file}」は保管フォルダ「{name}」にありません。',
   'vault.link.missing': '「{file}」は保管フォルダにありません。',
   'vault.link.placeMissing': 'ノートは開きましたが、リンク先の位置が見つかりませんでした。',
+  'vault.shared.index.file': '{name}（保管フォルダにない）',
+  'vault.shared.index.title': '{name}（この保管フォルダにはありません）',
+  'vault.shared.index.intro': '共有フォルダ「{share}」のフォルダ「{folder}」はこの保管フォルダにコピーされないため、そのファイルはここにありません。ファイルは Golem Docs に残っています。中にあるファイルは次のとおりです。',
+  'vault.shared.index.empty': 'まだファイルはありません。',
+  'vault.shared.index.more': '…ほか {count} 件',
+  'vault.shared.index.how': 'このフォルダも保管フォルダに置くには、Golem Docs で ファイル › 開く を開き、「{share}」のカードで「保管フォルダ…」を選びます。この一覧は Golem Docs が最新に保つため、このファイルへの変更は残りません。',
 };

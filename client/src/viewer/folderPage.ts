@@ -29,7 +29,6 @@ interface FolderTreeResponse {
   name: string;
   folders: string[];
   files: TreeFile[];
-  truncated: boolean;
 }
 
 /** A panel beside the page: the icon of the Files button. */
@@ -146,10 +145,7 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
     };
     const top = folderTree(tree.folders, tree.files);
     const empty = !tree.files.length && !tree.folders.length;
-    nav.replaceChildren(
-      empty ? h('p', { class: 'wm-hint', text: t('viewer.folderEmpty') }) : list(top),
-      ...(tree.truncated ? [h('p', { class: 'wm-hint', text: t('viewer.folderTruncated', { count: String(tree.files.length) }) })] : []),
-    );
+    nav.replaceChildren(empty ? h('p', { class: 'wm-hint', text: t('viewer.folderEmpty') }) : list(top));
     markCurrent();
   }
   const focusTree = (): void => {

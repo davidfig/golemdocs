@@ -28,5 +28,4 @@ export const viewer: Partial<Messages> = {
   'viewer.signInToViewFolder': 'Entre para ver esta pasta.',
   'viewer.folderEmpty': 'Esta pasta está vazia.',
   'viewer.fileGone': 'Esse arquivo não está mais na pasta.',
-  'viewer.folderTruncated': 'Apenas os primeiros {count} arquivos são listados.',
 };

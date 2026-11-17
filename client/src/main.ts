@@ -131,7 +131,7 @@ import { vaultMemory } from './desktop/vaultMemory.ts';
 import { findInManifest, folderName, headingsAbove, makeLink, parseLink, pathInVault, shownText, vaultMatches } from './desktop/vaultLink.ts';
 import { saveFile } from './ui/saveFile.ts';
 import { VaultService } from './desktop/vaultService.ts';
-import { keepsCopy, setKeepsCopy } from './desktop/vaultShared.ts';
+import { excludedFolders, keepsCopy, setExcludedFolders, setKeepsCopy } from './desktop/vaultShared.ts';
 import { UpdateService } from './desktop/updateService.ts';
 import { UpdateDialog } from './ui/updateDialog.ts';
 import { VersionHistoryDialog } from './ui/versionHistoryDialog.ts';
@@ -1888,6 +1888,7 @@ const SETTING_APPLIED: Record<SyncedKey, (() => void) | null> = {
   'golem.newVersion.off': () => newVersionNotice.rereadOff(),
   'golem.liveBackgroundLimit': null, // read each time a background update starts
   'golem.sharedVaultOff': null, // read by the vault's next sync
+  'golem.sharedVaultFolders': null, // read by the vault's next sync
   'word.viewMode': rereadViewMode,
   'word.formattingMarks': rereadViewOptions,
   'word.ruler': rereadViewOptions,
@@ -6928,9 +6929,10 @@ const dashboard = new Dashboard(document.body, {
   // In the desktop app: whether the vault keeps a copy of a shared folder (vaultShared.ts); the next sync makes or removes it.
   vaultCopy: desktopBridge()
     ? {
-        get: keepsCopy,
-        set: (share, on) => {
-          setKeepsCopy(share, on);
+        get: (share) => ({ keep: keepsCopy(share), excluded: excludedFolders(share) }),
+        set: (share, choice) => {
+          setKeepsCopy(share, choice.keep);
+          if (choice.excluded) setExcludedFolders(share, choice.excluded);
           void vaultService?.syncNow();
         },
       }

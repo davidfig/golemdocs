@@ -82,4 +82,10 @@ export const vault: Catalog = {
   'vault.link.outside': '“{file}”이(가) 보관 폴더 “{name}”에 없습니다.',
   'vault.link.missing': '“{file}”이(가) 보관 폴더에 없습니다.',
   'vault.link.placeMissing': '노트는 열렸지만 링크가 가리키는 위치를 찾지 못했습니다.',
+  'vault.shared.index.file': '{name} (보관 폴더에 없음)',
+  'vault.shared.index.title': '{name} (이 보관 폴더에 없음)',
+  'vault.shared.index.intro': '공유 폴더 “{share}”의 폴더 “{folder}”는 이 보관 폴더에 복사되지 않으므로 그 파일은 여기에 없습니다. 파일은 Golem Docs에 그대로 있습니다. 안에 있는 파일은 다음과 같습니다.',
+  'vault.shared.index.empty': '아직 파일이 없습니다.',
+  'vault.shared.index.more': '…외 {count}개',
+  'vault.shared.index.how': '이 폴더도 보관 폴더에 두려면 Golem Docs에서 파일 › 열기를 열고 “{share}” 카드에서 “내 보관 폴더…”를 선택하세요. 이 목록은 Golem Docs가 최신으로 유지하므로 이 파일에 한 변경은 남지 않습니다.',
 };

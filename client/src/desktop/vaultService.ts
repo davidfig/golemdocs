@@ -9,7 +9,7 @@ import { desktopBridge, type DesktopBridge } from './bridge.ts';
 import { ConvertWorker, startConvertWorker } from './convertClient.ts';
 import { realHost, sharedApi } from './vaultHost.ts';
 import { vaultMemory } from './vaultMemory.ts';
-import { keepsCopy, outsideDisk, sharedRoot, syncShared, type MemoryFor, type SharedSyncReport } from './vaultShared.ts';
+import { excludedFolders, keepsCopy, outsideDisk, setExcludedFolders, sharedRoot, syncShared, type MemoryFor, type SharedSyncReport } from './vaultShared.ts';
 import { syncVault, type SyncProgress, type SyncReport, type VaultCodec } from './vaultSync.ts';
 
 export type VaultState = 'off' | 'signedOut' | 'waiting' | 'syncing' | 'idle' | 'offline' | 'error' | 'access' | 'blocked' | 'wrongAccount';
@@ -276,7 +276,7 @@ export class VaultService {
       let shared: SharedSyncReport | null = null;
       if (account && !report.wrongAccount && !report.blocked) {
         try {
-          shared = await syncShared({ disk: this.bridge, memory: memoryFor, api: sharedApi(), codec: this.codec, hash: host.hash, account, wanted: keepsCopy });
+          shared = await syncShared({ disk: this.bridge, memory: memoryFor, api: sharedApi(), codec: this.codec, hash: host.hash, account, wanted: keepsCopy, excluded: excludedFolders, setExcluded: setExcludedFolders });
           for (const { label, report: copy } of shared.copies) {
             report.errors.push(...copy.errors.map((e) => ({ ...e, message: `${shared!.root}/${label}: ${e.message}` })));
             for (const key of ['downloaded', 'uploaded', 'created', 'renamed', 'movedHere', 'deletedHere', 'trashed', 'foldersRemoved', 'foldersMade'] as const) report[key] += copy[key];

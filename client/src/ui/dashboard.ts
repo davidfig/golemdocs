@@ -27,6 +27,7 @@ import { pickFolder } from './folderPicker.ts';
 import { ICONS, iconElement } from './icons.ts';
 import { showPopupMenu } from './popupMenu.ts';
 import { narrow } from './popup.ts';
+import { chooseVaultFolders, type VaultChoice } from './vaultFoldersDialog.ts';
 import { isTouchDevice } from '../desktop/bridge.ts';
 import { lastNewKind, newKindIconElement, newKindItems, newKindLabel, newMenuItems } from './newKinds.ts';
 import type { DocumentKind } from './actions.ts';
@@ -76,7 +77,7 @@ export interface DashboardHost {
   /** Opens the sharing dialog for one of the user's own folders. */
   shareFolder?(folder: Folder): void;
   /** In the desktop app: whether the vault keeps a copy of a folder shared with the user, and turning that on or off. */
-  vaultCopy?: { get(share: SharedFolder): boolean; set(share: SharedFolder, on: boolean): void };
+  vaultCopy?: { get(share: SharedFolder): VaultChoice; set(share: SharedFolder, choice: VaultChoice): void };
   /** Opens the trash (the account's deleted documents), which has its own dialog. */
   showTrash(): void;
   /** The dashboard was closed without opening anything: give the editor back the keyboard. */
@@ -507,11 +508,18 @@ export class Dashboard {
     const actions = h('div', { class: 'wm-card-actions' }, leave);
     const copy = this.host.vaultCopy;
     if (copy) {
-      // Whether the vault folder keeps its files (under Shared/), with a label of its own so a screen reader names which folder.
-      const box = h('input', { attrs: { type: 'checkbox', 'aria-label': t('panels.dashboard.keepCopyOf', { name: share.name }) } });
-      box.checked = copy.get(share);
-      box.addEventListener('change', () => copy.set(share, box.checked));
-      actions.prepend(h('label', { class: 'wm-find-case wm-card-keep', title: t('panels.dashboard.keepCopyNote') }, box, t('panels.dashboard.keepCopy')));
+      // What the vault folder keeps of it (under Shared/): a copy at all, and which of its folders. Named for the folder, for a screen reader.
+      const vault = h('button', { class: 'wm-button', title: t('panels.dashboard.vaultNote'), attrs: { type: 'button', 'aria-label': t('panels.dashboard.vaultButtonOf', { name: share.name }) }, text: t('panels.dashboard.vaultButton') });
+      vault.addEventListener('click', async () => {
+        try {
+          const tree = await sharedFolderTree(share);
+          const choice = await chooseVaultFolders(share, tree, copy.get(share));
+          if (choice) copy.set(share, choice);
+        } catch (error) {
+          this.notice.textContent = t('panels.dashboard.failed', { reason: error instanceof Error ? error.message : String(error) });
+        }
+      });
+      actions.prepend(vault);
     }
     return h('article', { class: 'wm-card wm-folder' }, open, badges, actions);
   }

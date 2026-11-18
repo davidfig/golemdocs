@@ -217,7 +217,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
       await expect(folderCard(page, 'Inner')).toHaveCount(1);
     });
 
-    test('Open screen: a drag from inside a folder onto the path above it takes the document out', async ({ browser, baseURL }) => {
+    test('Open screen: a drag from inside a folder onto the path above it takes the document out', { tag: '@heavy' }, async ({ browser, baseURL }) => {
       const { page, app } = await start(engine, browser, baseURL, ['alpha.txt']);
       await app.menu('File', 'Open…');
       await newScreenFolder(page, 'Target');

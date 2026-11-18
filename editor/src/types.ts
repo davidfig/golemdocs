@@ -45,7 +45,13 @@ export type Command =
    * anywhere else the change applies to what's typed next there. `define` are operations to
    * apply first in the same step (a style the formatting uses, say).
    */
-  | { kind: 'formatText'; format: RunFormat | ((run: RunProperties, paragraph: Paragraph) => RunFormat | null); define?: Operation[] }
+  | {
+      kind: 'formatText';
+      format: RunFormat | ((run: RunProperties, paragraph: Paragraph) => RunFormat | null);
+      define?: Operation[];
+      /** Also changes each paragraph the selection touches, in the same step (null: leave it as is). */
+      paragraphs?: (paragraph: Paragraph) => ParagraphFormat | null;
+    }
   /** Changes the properties of each paragraph the selection touches (null: leave it as is). */
   | { kind: 'formatParagraphs'; change: (paragraph: Paragraph, index: number) => ParagraphFormat | null; define?: Operation[]; /** Asks about every paragraph in the document, not just the selected ones. */ all?: boolean }
   /** Changes the case of the selected text (or the word at the caret), keeping its formatting. */

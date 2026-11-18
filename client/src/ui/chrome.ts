@@ -492,7 +492,8 @@ export class Chrome {
       mark('code', t('chrome.format.code')),
       a('format.growFont', t('chrome.format.growFont'), { kind: 'growFont' }, { icon: 'growFont', shortcut: 'Mod+]' }),
       a('format.shrinkFont', t('chrome.format.shrinkFont'), { kind: 'shrinkFont' }, { icon: 'shrinkFont', shortcut: 'Mod+[' }),
-      a('format.clear', t('chrome.format.clear'), { kind: 'clearFormatting' }, { icon: 'clearFormatting', shortcut: 'Mod+Space' }),
+      // ⌘Space is Spotlight on a Mac, which a web page never sees: the web uses ⌘\\ / Ctrl+\\, as other online editors do.
+      a('format.clear', t('chrome.format.clear'), { kind: 'clearFormatting' }, { icon: 'clearFormatting', shortcut: isDesktopApp() ? 'Mod+Space' : 'Mod+\\' }),
       a('format.painter', t('chrome.format.painter'), { kind: 'formatPainter' }, { icon: 'formatPainter', tooltip: t('chrome.format.painter.tip'), checked: (s) => s.painting }),
       dialog('format.font', t('chrome.format.font'), 'font', { shortcut: 'Mod+D' }),
     );

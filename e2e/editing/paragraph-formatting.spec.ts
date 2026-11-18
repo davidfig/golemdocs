@@ -217,7 +217,7 @@ test.describe('Format Painter', () => {
     await clickAt(app, { x: (gaps[6].x + gaps[11].x) / 2, y: gaps[0].y }, { clickCount: 2 });
     await expect(tool(app, 'Format Painter')).toHaveAttribute('aria-pressed', 'false');
     // Clear the painted word, then select it again: nothing is painted any more.
-    await app.press(`${MOD}+Space`);
+    await app.press(`${MOD}+Backslash`);
     await clickAt(app, gaps[1]); // a click elsewhere, so the next double click is not counted with the last
     await clickAt(app, { x: (gaps[6].x + gaps[11].x) / 2, y: gaps[0].y }, { clickCount: 2 });
     await expect.poll(async () => (await app.selectedText()).trim()).toBe('plain');

@@ -171,6 +171,19 @@ test('lists: a bullet list is toggled on and off, and numbering is reported', as
   assert.equal(await md(doc), 'item\n');
 });
 
+test('lists: a list typed after a heading is spaced like one read from the file', async () => {
+  const doc = await openMarkdown('# One\n\n- read1\n- read2\n\n# Two\n');
+  await run(doc, { kind: 'move', to: 'documentEnd' });
+  await run(doc, { kind: 'insertParagraph' });
+  for (const text of ['-', ' ', 'a']) await run(doc, { kind: 'insertText', text });
+  await run(doc, { kind: 'insertParagraph' });
+  await run(doc, { kind: 'insertText', text: 'b' });
+  const y = async (paragraph: number) => (await run(doc, { kind: 'select', paragraph, from: 0, to: 0 })).caret!.y;
+  const typed = await run(doc, { kind: 'select', paragraph: 4, from: 0, to: 0 });
+  assert.equal(typed.format.style, 'List Paragraph', 'not Normal, the paragraph Enter after a heading gives');
+  assert.ok(Math.abs((await y(5)) - (await y(4)) - ((await y(2)) - (await y(1)))) < 0.01, 'typed items sit as close together as read ones');
+});
+
 test('lists: Enter on an empty item ends the list, and Enter on one with text adds an item', async () => {
   const doc = await openMarkdown('- one\n');
   await run(doc, { kind: 'move', to: 'documentEnd' });
@@ -180,6 +193,24 @@ test('lists: Enter on an empty item ends the list, and Enter on one with text ad
   assert.equal(ended.format.list, null, 'Enter on the empty item takes the bullet off it');
   await run(doc, { kind: 'insertText', text: 'after' });
   assert.equal(await md(doc), '- one\n\nafter\n');
+});
+
+test('Clear Formatting takes off marks, headings, quotes and lists, and keeps links', async () => {
+  const doc = await openMarkdown('# Head\n\n**bold** *it* `code` ~~s~~ [link](http://x.com)\n\n- item **b**\n\n> quote *i*\n\n---\n\n\n');
+  await run(doc, { kind: 'selectAll' });
+  await run(doc, { kind: 'format', action: { kind: 'clearFormatting' } });
+  assert.equal(await md(doc), 'Head\n\nbold it code s [link](http://x.com)\n\nitem b\n\nquote i\n\n---\n');
+  await run(doc, { kind: 'undo' });
+  assert.match(await md(doc), /^# Head\n\n\*\*bold\*\*/, 'one undo brings it all back');
+});
+
+test('Clear Formatting at the caret turns its heading into a paragraph and types plain text', async () => {
+  const doc = await openMarkdown('# **Head**\n');
+  await run(doc, { kind: 'move', to: 'documentEnd' });
+  const s = await run(doc, { kind: 'format', action: { kind: 'clearFormatting' } });
+  assert.equal(s.format.style, 'Normal');
+  await run(doc, { kind: 'insertText', text: ' x' });
+  assert.equal(await md(doc), '**Head** x\n');
 });
 
 test('the Format Painter picks up formatting and paints the next selection', async () => {

@@ -258,12 +258,12 @@ test.describe('Clear Formatting', () => {
     await expect.poll(() => app.text()).toBe('styled');
   });
 
-  test('the shortcut and Format ▸ Clear Formatting do the same', async ({ app }) => {
+  test('the shortcut (Mod+\\ on the web, as Mod+Space is the system\'s) and Format ▸ Clear Formatting do the same', async ({ app }) => {
     await app.blank();
     await typeAndSelect(app, 'styled');
     await app.press(`${MOD}+b`);
     await expect(tool(app, 'Bold')).toHaveAttribute('aria-pressed', 'true');
-    await app.press(`${MOD}+Space`);
+    await app.press(`${MOD}+Backslash`);
     await expect(tool(app, 'Bold')).toHaveAttribute('aria-pressed', 'false');
     await app.press(`${MOD}+b`);
     await expect(tool(app, 'Bold')).toHaveAttribute('aria-pressed', 'true');
@@ -271,14 +271,18 @@ test.describe('Clear Formatting', () => {
     await expect(tool(app, 'Bold')).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('leaves the paragraph style alone', async ({ app }) => {
+  test('returns the paragraph to Normal and takes off its bullet', async ({ app }) => {
     await showStyleBox(app.page);
     await app.blank();
     await typeAndSelect(app, 'Heading text');
     await setCombo(app.page, 'Style', 'Heading 1');
     await expect(combo(app.page, 'Style')).toHaveValue('Heading 1');
+    await tool(app, 'Bullets').click();
+    await expect(tool(app, 'Bullets')).toHaveAttribute('aria-pressed', 'true');
     await tool(app, 'Clear Formatting').click();
-    await expect(combo(app.page, 'Style')).toHaveValue('Heading 1');
+    await expect(combo(app.page, 'Style')).toHaveValue('Normal');
+    await expect(tool(app, 'Bullets')).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(() => app.text()).toBe('Heading text');
   });
 });
 

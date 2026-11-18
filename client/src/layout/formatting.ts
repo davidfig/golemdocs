@@ -386,12 +386,17 @@ export function formatCommand(action: FormatAction, editor: Editor, format: Form
       return { kind: 'changeCase', change: (text) => changeCase(text, to) };
     }
     case 'clearFormatting':
-      // Character formatting goes; links keep their look.
+      // Character formatting goes (links keep their look), and each paragraph goes back to Normal: headings, quotes, code
+      // blocks and lists become plain text, with no indent or alignment of their own. A rule keeps its line.
       return {
         kind: 'formatText',
         format: (run) => {
           const keys = Object.keys(run).filter((k) => !(k === 'style' && run.style === 'Hyperlink'));
           return keys.length ? Object.fromEntries(keys.map((k) => [k, null])) : null;
+        },
+        paragraphs: (p) => {
+          const keys = (['style', 'numbering', 'indent', 'justification'] as const).filter((k) => p.properties[k] !== undefined);
+          return keys.length ? Object.fromEntries(keys.map((k) => [k, undefined])) : null;
         },
       };
     case 'insertTable':
@@ -609,12 +614,15 @@ function listCommand(bullet: boolean, off: boolean, editor: Editor, styles: Styl
     define.push({ type: 'setList', id, list: { instance: { id, abstractId: id, overrides: [], attrs: {} }, abstract } });
   }
   define.push(...defineStyle(doc, 'ListParagraph'));
+  // A plain paragraph becomes a List Paragraph, whose items sit close together. Normal named outright counts as plain: Enter
+  // after a heading gives one (it is the heading's next style), and it would leave the item spaced apart from the others.
+  const normal = styles.chain(undefined, 'paragraph')[0]?.id;
   return {
     kind: 'formatParagraphs',
     define,
     change: (p) => ({
       numbering: { id, level: p.properties.numbering?.id ? (p.properties.numbering.level ?? 0) : 0 },
-      ...(!p.properties.style && { style: 'ListParagraph' }),
+      ...((!p.properties.style || p.properties.style === normal) && { style: 'ListParagraph' }),
     }),
   };
 }

@@ -44,6 +44,14 @@ export abstract class EditorFormatting extends EditorSearch {
   protected formatText(command: Extract<Command, { kind: 'formatText' }>): CommandResult {
     const { format } = command;
     const ops = [...(command.define ?? [])];
+    if (command.paragraphs) {
+      // An empty paragraph's change goes in with its mark's (formatMark), as each replaces all of its properties.
+      for (const p of this.selectedParagraphs()) {
+        if (paragraphLength(p) === 0) continue;
+        const change = command.paragraphs(p);
+        if (change && Object.keys(change).length) ops.push(this.setProperties(p, change));
+      }
+    }
     const formatRange = (p: Paragraph, from: number, to: number) => {
       const id = this.replica.id(p);
       if (typeof format !== 'function') {
@@ -62,7 +70,8 @@ export abstract class EditorFormatting extends EditorSearch {
     const formatMark = (p: Paragraph) => {
       const current = p.properties.runProperties ?? {};
       const change = typeof format === 'function' ? format(current, p) : format;
-      if (change) ops.push(this.setProperties(p, { runProperties: withFormat(current, change) }));
+      const paragraph = command.paragraphs?.(p) ?? {};
+      if (change || Object.keys(paragraph).length) ops.push(this.setProperties(p, { ...paragraph, ...(change && { runProperties: withFormat(current, change) }) }));
     };
 
     if (this.collapsed) {

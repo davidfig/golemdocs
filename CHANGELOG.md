@@ -1,5 +1,16 @@
 # What’s New in Golem Docs
 
+## 0.41.0 - Unreleased
+
+### Changed
+
+- Clear Formatting now also turns headings, quotes, code blocks and lists back into plain paragraphs, so it works in Markdown notes too. Links keep their look, and horizontal rules stay.
+- On the website, Clear Formatting's shortcut is ⌘\ (Ctrl+\ on Windows and Linux), because ⌘Space opens Spotlight before the page sees it. The desktop app keeps ⌘Space.
+
+### Fixed
+
+- A bulleted or numbered list started right after a heading has its items as close together as any other list, rather than spaced apart like separate paragraphs.
+
 ## 0.40.0 - 2026-11-15
 
 ### Changed

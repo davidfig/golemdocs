@@ -125,6 +125,9 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-15 | `e2e/editing/navigation.spec.ts` › caret movement › PageDown and PageUp scroll the view | Timed out at 30.6 s in pass one of the same run, in the same minute; alone, passed |
 | 2026-11-18 | `e2e/files/moving.spec.ts` › webkit › Open screen: a drag from inside a folder onto the path above it takes the document out | Failed at 15 s in the 0.41.0 release run, passed its retry; alone, passed ten times (both engines) |
 | 2026-11-18 | `e2e/collab/room-picture.spec.ts` › a device that comes back with changes the account does not have, while another holds the picture, keeps them as a conflicted copy | Already `@heavy`: failed at 11 s in the heavy pass of the 0.41.0 release run, passed its retry; alone, passed four times |
+| 2026-11-20 | `e2e/files/moving.spec.ts` › chromium › sidebar: a document and a folder dragged onto a folder go in it, stay after a reload, and a drag to the empty part takes one back to the top level | Failed at 15.8 s in the 0.42.0 release run, passed its retry; alone, passed twelve times (both engines) |
+| 2026-11-20 | `e2e/files/built-in-documents.spec.ts` › ?doc=changelog opens What’s New, at its own address | Failed at 3.9 s in the 0.42.0 release run, passed its retry; alone, passed three times |
+| 2026-11-20 | `e2e/viewer/sandbox.spec.ts` › Chromium: the sandboxed viewer starts its worker, draws with WebGL and loads its fonts under a strict CSP | Already `@heavy`, second time here: timed out at 3.0 min in the heavy pass of the 0.42.0 release run, passed its retry; alone, passed in 6.5 s. Both times the time went to building the viewer under load, not to the page |
 
 ## Performance traces (`golem:*`)
 

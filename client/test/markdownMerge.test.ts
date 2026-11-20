@@ -139,6 +139,55 @@ test('comments stay while their text does, and go when their markup is removed',
   assert.equal(texts(doc)[0], 'Some marked text.');
 });
 
+test('a comment thread changed in the file (a reply added, edited or removed, the thread resolved) comes out as the file has it', async () => {
+  const one = 'Hello {==world==}{>>@Ann (2024-05-01T10:00:00Z): note<<} here.\n';
+  const two = 'Hello {==world==}{>>@Ann (2024-05-01T10:00:00Z): note<<}{>>↳ @Bob (2024-05-02T10:00:00Z): reply<<} here.\n';
+  const edits: [string, (m: string) => string][] = [
+    [one, (m) => m.replace('note<<}', 'note<<}{>>↳ @Bob (2024-05-02T10:00:00Z): reply<<}')],
+    [two, (m) => m.replace('reply', 'reply, changed')],
+    [two, (m) => m.replace('note', 'note, changed')],
+    [two, (m) => m.replace(/\{>>↳[^<]*<<\}/, '')],
+    [one, (m) => m.replace('{>>@Ann', '{>>✓ @Ann')],
+  ];
+  for (const [md, edit] of edits) {
+    const { doc, source } = await dressed(md, () => {});
+    const want = edit(source);
+    await mergeMarkdown(doc, want);
+    assert.equal(documentToMarkdown(doc), want);
+    const ids = doc.comments.map((c) => c.id);
+    assert.equal(new Set(ids).size, ids.length, `no two comments share an id: ${ids}`);
+    for (const c of doc.comments) if (c.parentId !== undefined) assert.ok(ids.includes(c.parentId), 'a reply\'s parent is there');
+  }
+});
+
+test('a new comment just like a kept one is a comment of its own', async () => {
+  const md = 'Kept {==here==}{>>@Ann (2024-05-01T10:00:00Z): same<<} text.\n';
+  const { doc, source } = await dressed(md, () => {});
+  const want = `New {==there==}{>>@Ann (2024-05-01T10:00:00Z): same<<} line.\n\n${source}`;
+  await mergeMarkdown(doc, want);
+  assert.equal(documentToMarkdown(doc), want);
+  assert.equal(doc.comments.length, 2);
+  assert.notEqual(doc.comments[0].id, doc.comments[1].id);
+});
+
+test('letters a new word happens to share with an old one do not take its formatting', async () => {
+  const { doc, source } = await dressed('The quick **brown** fox jumps over the lazy dog.\n', (d) => colour(paragraphs(d)[0], 'brown', 'FF0000'));
+  await mergeMarkdown(doc, source.replace('quick **brown**', 'quiet bowl or'));
+  const p = paragraphs(doc)[0];
+  assert.equal(paragraphText(p), 'The quiet bowl or fox jumps over the lazy dog.');
+  for (const r of runs(p.children)) assert.equal(r.properties.color, undefined, `"${runText(r)}" is not red`);
+});
+
+test('what Markdown cannot show stays in a paragraph that was edited', async () => {
+  const { doc, source } = await dressed('Some text to edit.\n', (d) => {
+    paragraphs(d)[0].children.unshift({ kind: 'raw', xml: { name: 'w:bookmarkStart', attrs: { 'w:id': '7', 'w:name': 'mark' }, children: [] } } as unknown as Inline);
+  });
+  await mergeMarkdown(doc, source.replace('to edit', 'that was edited'));
+  const p = paragraphs(doc)[0];
+  assert.equal(paragraphText(p).replace('\uFFFC', ''), 'Some text that was edited.');
+  assert.ok(p.children.some((c) => c.kind === 'raw' && (c as { xml: { name: string } }).xml.name === 'w:bookmarkStart'), 'the bookmark is kept');
+});
+
 test('a table with the same rows and columns keeps its look when a cell is edited', async () => {
   const { doc, source } = await dressed('| A | B |\n| --- | --- |\n| one | two |\n', (d) => {
     const table = d.body.find((b): b is Table => b.kind === 'table')!;

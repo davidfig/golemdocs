@@ -2622,11 +2622,12 @@ export async function mergeMarkdown(previous: WordDocument, source: string): Pro
 /**
  * The app's container for a Markdown document (`previous`) with an edited Markdown `file` merged into its document: the vault's
  * `.md` file changed on disk, or the Markdown Source view's text. Everything else the container holds stays, and the front matter
- * is the file's. Null when it has no document to merge into.
+ * is the file's. Null when it has no document to merge into, or is not a Markdown document.
  */
 export async function mergeMarkdownWdoc(previous: Uint8Array, file: Uint8Array | string): Promise<Uint8Array | null> {
   const wdoc = await readWdoc(previous);
-  if (!wdoc.document || wdoc.delimited) return null;
+  // Only into a Markdown document: a file renamed to .md from another format starts afresh, without the old one's extras.
+  if (!wdoc.document || wdoc.delimited || wdoc.manifest.lens !== 'md') return null;
   const { frontMatter, body } = splitFrontMatter(typeof file === 'string' ? file : new TextDecoder('utf-8').decode(file));
   const document = await mergeMarkdown(await WordDocument.read(wdoc.document), body);
   const { md: _md, ...rest } = wdoc.extensions;

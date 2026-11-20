@@ -133,6 +133,7 @@ export const app: Partial<Messages> = {
   'app.outdatedPages': '원본 PDF의 페이지입니다. 텍스트 편집 내용은 반영되어 있지 않습니다. 편집 내용을 보려면 Word로 전환하십시오. 다운로드한 PDF에는 편집된 텍스트가 들어 있습니다.',
   'app.switching': '{label}(으)로 전환하는 중…',
   'app.sourceWhileShared': '다른 사람이 이 문서를 편집하거나 보고 있는 동안에는 Markdown 원본을 사용할 수 없습니다.',
+  'app.sourceNotMerged': '다른 사람이 이 문서를 편집하는 동안에는 Markdown 변경 내용을 반영할 수 없습니다. 필요한 내용을 복사하세요. 다시 전환하면 변경 내용이 버려집니다.',
   'app.sourceShown': 'Markdown 원본을 표시하는 중',
   'app.sourceHidden': '서식이 적용된 문서를 표시하는 중',
   'app.switchedPdf': '이제 PDF로 표시되며, 편집할 수 없습니다. 편집하려면 다시 전환하십시오. 손실된 내용은 없습니다.',

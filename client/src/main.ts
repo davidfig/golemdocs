@@ -1124,6 +1124,8 @@ function roomStateChanged(state: RoomState): void {
   const was = doc.room;
   doc.room = state;
   if (state.mode === 'shared') doc.journal?.clear(); // the room holds the edits now
+  // Someone joined while the Markdown source shows: it goes back to the document now, before their edits arrive under it.
+  if (state.mode === 'shared' && markdownSource?.doc === doc) void leaveMarkdownSource();
   screenReader.room(state.people.filter((p) => !p.me).map((p) => p.name));
   const text = describeRoom(state);
   if (text !== lastRoomText) notify(text || t('app.editingAlone'));
@@ -4092,8 +4094,12 @@ async function openLarge(name: string, bytes: Uint8Array, options: { localId?: s
 // pictures) stays wherever the edit didn't reach, and puts the change in as one step that Undo takes back. While the source shows,
 // a save stores the document with the text merged in; the bare text is never saved over it.
 
-/** The source being shown: of which document, that document as it was then (what the text is merged into), the text then, and where the view was. */
-let markdownSource: { doc: OpenDocument; base: Uint8Array; text: string; view: { x: number; y: number; zoom: number } } | null = null;
+/**
+ * The source being shown: of which document, that document as it was then (what the text is merged into) and how many changes
+ * the layout worker had had then, the text then, where the view was, and whether putting the text in was refused once
+ * (edited together, with a change operations can't make: a second ask goes back without it).
+ */
+let markdownSource: { doc: OpenDocument; base: Uint8Array; changes: number; text: string; view: { x: number; y: number; zoom: number }; refused?: boolean } | null = null;
 /** Showing or leaving the source, which takes a moment: a second ask meanwhile is let go. */
 let sourceSwitching = false;
 
@@ -4110,10 +4116,10 @@ async function showMarkdownSource(): Promise<void> {
   if (doc.shared || doc.room?.mode === 'shared' || doc.room?.watching) return reportError(t('app.sourceWhileShared'));
   sourceSwitching = true;
   try {
-    const [, base, file] = await Promise.all([textView.load(), worker.save(), worker.convert('md')]);
-    if (current !== doc || textView.active) return;
+    const [, snapshot, file] = await Promise.all([textView.load(), worker.snapshot(), worker.convert('md')]);
+    if (current !== doc || textView.active || sharedLive()) return; // someone joined meanwhile
     const name = fileName();
-    markdownSource = { doc, base, text: new TextDecoder().decode(file), view: { x: camera.x, y: camera.y, zoom: camera.zoom } };
+    markdownSource = { doc, base: snapshot.bytes, changes: snapshot.changes, text: new TextDecoder().decode(file), view: { x: camera.x, y: camera.y, zoom: camera.zoom } };
     textView.open(name, file, { encoding: 'utf-8', bom: false, original: null });
     if (screenReaderOn()) announce(t('app.sourceShown'));
   } catch (e) {
@@ -4132,10 +4138,37 @@ async function leaveMarkdownSource(): Promise<void> {
   sourceSwitching = true;
   try {
     const doc = source.doc;
-    const bytes = textView.snapshot() ?? new Uint8Array(0);
-    const text = new TextDecoder().decode(bytes);
-    const merged = text === source.text ? null : await sourceMerged(source, bytes);
-    if (current !== doc || markdownSource !== source) return;
+    // The merge takes a moment, and the text can still be typed in meanwhile: merged again until it has stopped changing.
+    let text = source.text;
+    let merged: Uint8Array | null = null;
+    for (;;) {
+      const bytes = textView.snapshot() ?? new Uint8Array(0);
+      const now = new TextDecoder().decode(bytes);
+      if (now === text) break;
+      text = now;
+      merged = now === source.text ? null : await sourceMerged(source, bytes);
+      if (current !== doc || markdownSource !== source) return;
+    }
+    // Put in as edits where it can be (one step for Undo, the view kept), from the document as it was when the source opened.
+    // Something else changed it since (another person's edit, a change from outside): merged into it as it is now instead.
+    let opened = merged && sourceFromFile(fileName(), merged.slice().buffer);
+    let done: boolean | 'typed' = !opened || source.refused === true;
+    for (let tries = 0; opened && done !== true && !source.refused && tries < 3; tries++) {
+      const base = tries === 0 ? source : { ...source, ...(await worker.snapshot().then((s) => ({ base: s.bytes, changes: s.changes }))) };
+      if (tries > 0) {
+        merged = await sourceMerged(base, new TextEncoder().encode(text));
+        opened = sourceFromFile(fileName(), merged.slice().buffer);
+        if (!opened) break;
+      }
+      done = await worker.refresh(opened, null, base.changes, true).catch(() => false);
+      if (current !== doc || markdownSource !== source) return;
+      if (done === false) break;
+    }
+    // Edited together, the document can't be opened again in its place: the text stays, and a second ask goes back without it.
+    if (done !== true && opened && sharedLive()) {
+      source.refused = true;
+      return reportError(t('app.sourceNotMerged'));
+    }
     markdownSource = null;
     textView.close();
     camera.x = source.view.x;
@@ -4143,17 +4176,15 @@ async function leaveMarkdownSource(): Promise<void> {
     camera.zoom = source.view.zoom;
     arrange();
     if (screenReaderOn()) announce(t('app.sourceHidden'));
-    if (!merged) return;
-    // Put in as edits where it can be (one step for Undo, the view kept); otherwise the merged document is opened in its place.
-    const opened = sourceFromFile(fileName(), merged.slice().buffer);
-    if (!opened) return;
-    const done = await worker.refresh(opened, null, undefined, true).catch(() => false);
-    if (current !== doc) return;
     if (done === true) {
-      documentEdited();
+      if (merged) documentEdited();
       return;
     }
+    if (!opened) return;
+    // A change operations can't make (a picture added, say): the merged document is opened in its place, with nothing saved
+    // first, since what the worker has is the document without the text.
     const cloudId = doc.localId ? library.local.find((d) => d.id === doc.localId)?.cloudId : undefined;
+    doc.unsavedSince = 0;
     open(opened, { localId: doc.localId ?? undefined, cloudId });
     documentEdited();
   } catch (e) {

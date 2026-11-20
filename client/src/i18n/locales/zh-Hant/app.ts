@@ -133,6 +133,7 @@ export const app: Partial<Messages> = {
   'app.outdatedPages': '這些是原始 PDF 的頁面：其中不包含你對文字所做的編輯。請切換至 Word 以查看編輯內容；下載的 PDF 則會包含編輯後的文字。',
   'app.switching': '正在切換為 {label}…',
   'app.sourceWhileShared': '其他人正在編輯或檢視此文件時，無法使用 Markdown 原始碼。',
+  'app.sourceNotMerged': '其他人正在編輯此文件時，無法套用你對 Markdown 的變更。請複製需要的內容：再次切換回去將捨棄這些變更。',
   'app.sourceShown': '正在顯示 Markdown 原始碼',
   'app.sourceHidden': '正在顯示格式化的文件',
   'app.switchedPdf': '目前以 PDF 顯示，無法編輯。請切換回來以進行編輯；沒有任何內容遺失。',

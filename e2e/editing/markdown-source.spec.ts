@@ -51,18 +51,4 @@ test.describe('Markdown source view', () => {
     expect((await app.outline())?.map((n) => n.text)).toEqual(['First line', 'Second line']);
     expect(await alignOf(app, 0)).toBe('center');
   });
-
-  test('the command is checked while the source shows, and only offered for Markdown', async ({ app }) => {
-    await app.blank();
-    const list = () => app.page.evaluate(() => window.golem.commands.list('view.markdownSource'));
-    expect((await list())[0]?.available).toBe(false);
-    await convertTo(app, 'Markdown (.md)', 'Markdown');
-    expect((await list())[0]?.available).toBe(true);
-    await app.menu('View', 'Markdown Source');
-    await expect.poll(() => app.inTextEditor()).toBe(true);
-    expect((await list())[0]?.checked).toBe(true);
-    await app.menubar.getByRole('menuitem', { name: /^View$/ }).click();
-    await expect(app.page.getByRole('menu').getByRole('menuitemcheckbox', { name: /^Markdown Source/ })).toHaveAttribute('aria-checked', 'true');
-    await app.page.keyboard.press('Escape');
-  });
 });

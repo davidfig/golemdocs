@@ -57,6 +57,15 @@ test("a Markdown file edited on disk is merged into the document: what Markdown 
   assert.equal(read(await toVaultFile(await fromVaultFile(text(file), 'Trip.md', dressed), 'Trip.md')), file);
 });
 
+test('a document renamed to .md on disk is read afresh, not merged into what it was as another format', async () => {
+  const stored = await fromVaultFile(text('<p style="text-align:center">Hello</p>'), 'Note.html');
+  assert.equal((await readWdoc(stored)).manifest.lens, 'html');
+  const back = await readWdoc(await fromVaultFile(text('Hello there.\n'), 'Note.md', stored));
+  assert.equal(back.manifest.lens, 'md');
+  const p = (await WordDocument.read(back.document!)).body[0];
+  assert.ok(p.kind === 'paragraph' && p.properties.justification === undefined, 'nothing kept from the HTML document');
+});
+
 test('a plain text file keeps its lines', async () => {
   const source = 'first line\nsecond line\n\nthird after a blank\n';
   const stored = await fromVaultFile(text(source), 'todo.txt');

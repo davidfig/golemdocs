@@ -139,6 +139,7 @@ export const app: Partial<Messages> = {
   'app.outdatedPages': 'Queste sono le pagine del PDF originale: le tue modifiche al testo non vi compaiono. Passa a Word per vedere le modifiche; un PDF scaricato contiene il testo modificato.',
   'app.switching': 'Passaggio a {label}…',
   'app.sourceWhileShared': 'La sorgente Markdown non è disponibile mentre altre persone modificano o guardano questo documento.',
+  'app.sourceNotMerged': 'Le modifiche al Markdown non possono essere applicate mentre altre persone modificano questo documento. Copia ciò che ti serve: tornando indietro di nuovo verranno scartate.',
   'app.sourceShown': 'Sorgente Markdown visualizzata',
   'app.sourceHidden': 'Documento formattato visualizzato',
   'app.switchedPdf': 'Ora mostrato come PDF, che non può essere modificato. Torna indietro per modificarlo; non è andato perso nulla.',

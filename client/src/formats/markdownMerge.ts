@@ -24,6 +24,9 @@ import { placeholderBody } from './embedMarks.ts';
 const MAX_CELLS = 4_000_000;
 /** How alike (0 to 1) two paragraphs must be to count as one edited. */
 const ALIKE = 0.4;
+/** The shortest stretch of matched text kept with its old formatting when it is only part of a word ("bow" of "bowl" from "brown"). */
+const MIN_RUN = 4;
+const WORD = /[\p{L}\p{N}]/u;
 
 /** How the Markdown writer sees a document (`markdownReader` in markdown.ts, passed in so this module doesn't load the writer itself). */
 export interface MarkdownReader {
@@ -131,8 +134,8 @@ function pairBlocks(olds: readonly Block[], news: readonly Block[]): Map<number,
   const m = news.length;
   if (!n || !m) return pairs;
   if (n * m > 10_000) {
-    // Too big to weigh every pair: in order, as far as the kinds agree.
-    for (let k = 0; k < Math.min(n, m); k++) if (olds[k].kind === news[k].kind && olds[k].kind !== 'wrapper') pairs.set(k, k);
+    // Too big to weigh every pair: in order, where the two are alike.
+    for (let k = 0; k < Math.min(n, m); k++) if (olds[k].kind === news[k].kind && olds[k].kind !== 'wrapper' && alike(blockText(olds[k]), blockText(news[k])) >= ALIKE) pairs.set(k, k);
     return pairs;
   }
   const oldText = olds.map(blockText);
@@ -191,6 +194,8 @@ export function alike(a: string, b: string): number {
 /** A piece of a paragraph as Markdown sees it (a character with its marks and link, a picture, an equation...) and the positions it covers. */
 interface Piece {
   key: string;
+  /** The character, for a piece of text. */
+  ch?: string;
   from: number;
   to: number;
 }
@@ -204,9 +209,10 @@ class Merge {
   private readonly lists = new Map<number, number>();
   /** The file's comments (by id) and the document's they are. */
   private readonly comments = new Map<string, string>();
-  /** The styles that what is taken from the file uses, and the document's comments it has taken. */
+  /** The styles that what is taken from the file uses. */
   private readonly usedStyles = new Set<string>();
-  private readonly commentsTaken = new Set<string>();
+  /** The id the next comment taken from the file gets. */
+  private nextComment = -1;
   /** Paragraphs taken from the file, whose lists are numbered once every list is known. */
   private readonly adopted: Paragraph[] = [];
 
@@ -292,20 +298,35 @@ class Merge {
       this.collect(part);
       children.push(...part);
     };
-    const pairs = a.length * b.length > MAX_CELLS ? [] : lcs(a.length, b.length, (i, j) => a[i].key === b[j].key);
-    // Walked in runs of matched pieces: the old text of a run is kept, and what the file has between two runs is new.
-    const startOf = (j: number) => (j < b.length ? b[j].from : end(b));
-    let placed = 0;
-    for (let k = 0; k < pairs.length; ) {
-      const [i, j] = pairs[k];
-      let run = 1;
-      while (k + run < pairs.length && pairs[k + run][0] === i + run && pairs[k + run][1] === j + run) run++;
-      add(startOf(placed), b[j].from);
-      keep(a[i].from, a[i + run - 1].to);
-      placed = j + run;
-      k += run;
+    const matched = a.length * b.length > MAX_CELLS ? [] : lcs(a.length, b.length, (i, j) => a[i].key === b[j].key);
+    // Runs of matched pieces. A short one that is only part of a word is a coincidence of letters, not text that stayed.
+    const runs: { i: number; j: number; n: number }[] = [];
+    for (let k = 0; k < matched.length; ) {
+      const [i, j] = matched[k];
+      let n = 1;
+      while (k + n < matched.length && matched[k + n][0] === i + n && matched[k + n][1] === j + n) n++;
+      runs.push({ i, j, n });
+      k += n;
     }
-    add(startOf(placed), end(b));
+    const word = (ps: readonly Piece[], x: number) => x >= 0 && x < ps.length && WORD.test(ps[x].ch ?? '');
+    const whole = (ps: readonly Piece[], x: number, n: number) => !(word(ps, x - 1) && word(ps, x)) && !(word(ps, x + n - 1) && word(ps, x + n));
+    const kept = runs.filter((r) => r.n >= MIN_RUN || (whole(a, r.i, r.n) && whole(b, r.j, r.n)));
+    // The old text of a run is kept, and what the file has between two runs is new. What the old text has that Markdown
+    // can't show (a bookmark, a field's code, a tracked deletion) is kept where it was, since the file could not have removed it.
+    const startOf = (j: number) => (j < b.length ? b[j].from : end(b));
+    let placedA = 0;
+    let placedB = 0;
+    const gap = (i: number, j: number) => {
+      for (let x = placedA; x < i; x++) if (a[x].key.startsWith('obj:')) keep(a[x].from, a[x].to);
+      add(startOf(placedB), startOf(j));
+    };
+    for (const r of kept) {
+      gap(r.i, r.j);
+      keep(a[r.i].from, a[r.i + r.n - 1].to);
+      placedA = r.i + r.n;
+      placedB = r.j + r.n;
+    }
+    gap(a.length, b.length);
     return { ...old, properties, children: normalizeInlines(children) };
   }
 
@@ -313,10 +334,8 @@ class Merge {
   private pieces(doc: WordDocument, reader: Reader, inlines: readonly Inline[]): Piece[] {
     const out: Piece[] = [];
     let pos = 0;
-    const comment = (id: string) => {
-      const c = doc.comments.find((x) => x.id === id);
-      return c ? `${c.author}|${c.date ?? ''}|${c.paragraphs.join('\n')}` : id;
-    };
+    // A comment's marker stands for its whole thread: a reply added, changed or taken away, or the thread resolved, is a change.
+    const comment = (id: string) => threadKey(doc, id);
     const walk = (list: readonly Inline[], link: string) => {
       for (const inline of list) {
         const length = inlineLength(inline);
@@ -326,7 +345,7 @@ class Merge {
             const marks = `${m.bold ? 'b' : ''}${m.italic ? 'i' : ''}${m.strike ? 's' : ''}${m.code ? 'c' : ''}${link}`;
             for (const item of inline.content) {
               if (item.kind === 'text') {
-                for (let k = 0; k < item.text.length; k++) out.push({ key: `${marks}|${item.text[k]}`, from: pos + k, to: pos + k + 1 });
+                for (let k = 0; k < item.text.length; k++) out.push({ key: `${marks}|${item.text[k]}`, ch: item.text[k], from: pos + k, to: pos + k + 1 });
                 pos += item.text.length;
                 continue;
               }
@@ -390,29 +409,28 @@ class Merge {
     for (const [k, v] of Object.entries(record)) if (k !== 'xml') this.collect(v);
   }
 
-  /** The document's id for the file's comment `id`: the same comment if the document has it, else the file's, added. */
+  /**
+   * The document's id for the file's comment `id`. A comment the file brings anew comes with its whole thread, each with a
+   * fresh id: one whose thread is unchanged keeps its marker through the text match instead (see `pieces`), so a comment
+   * is never matched by its text alone, which could hand two ranges one comment.
+   */
   private comment(id: string): string {
     const known = this.comments.get(id);
     if (known !== undefined) return known;
     const c = this.next.comments.find((x) => x.id === id);
-    let mine: string;
-    if (!c) mine = id;
-    else {
-      const same = this.doc.comments.find((x) => !this.commentsTaken.has(x.id) && x.author === c.author && (x.date ?? '') === (c.date ?? '') && x.paragraphs.join('\n') === c.paragraphs.join('\n'));
-      if (same) mine = same.id;
-      else {
-        mine = String(Math.max(-1, ...this.doc.comments.map((x) => Number(x.id)).filter(Number.isFinite)) + 1);
-        const added: Comment = { ...structuredClone(c), id: mine };
-        // A reply's parent is the document's too.
-        if (c.parentId !== undefined) added.parentId = this.comment(c.parentId);
-        this.doc.comments.push(added);
-      }
+    if (!c) {
+      this.comments.set(id, id);
+      return id;
     }
-    this.commentsTaken.add(mine);
-    this.comments.set(id, mine);
-    // A thread's replies come with it.
-    for (const reply of this.next.comments) if (reply.parentId === id) this.comment(reply.id);
-    return mine;
+    if (this.nextComment < 0) this.nextComment = Math.max(-1, ...this.doc.comments.map((x) => Number(x.id)).filter(Number.isFinite)) + 1;
+    const members = threadOf(this.next, id);
+    for (const m of members) this.comments.set(m.id, String(this.nextComment++));
+    for (const m of members) {
+      const added: Comment = { ...structuredClone(m), id: this.comments.get(m.id)! };
+      if (m.parentId !== undefined) added.parentId = this.comments.get(m.parentId) ?? m.parentId;
+      this.doc.comments.push(added);
+    }
+    return this.comments.get(id)!;
   }
 
   /** Once the body is whole: the file's lists are the document's, the styles it uses are there, comments no longer in it go. */
@@ -482,6 +500,31 @@ class Merge {
     const comments = this.doc.comments.filter((c) => kept(c));
     if (comments.length !== this.doc.comments.length) this.doc.comments = comments;
   }
+}
+
+/** The thread comment `id` is in: its first comment, then every reply, in the document's order. */
+function threadOf(doc: WordDocument, id: string): Comment[] {
+  const byId = new Map(doc.comments.map((c) => [c.id, c]));
+  let root = byId.get(id);
+  for (const seen = new Set<string>(); root?.parentId !== undefined && !seen.has(root.id) && byId.has(root.parentId); ) {
+    seen.add(root.id);
+    root = byId.get(root.parentId);
+  }
+  if (!root) return [];
+  const members = new Set([root.id]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const c of doc.comments) if (c.parentId !== undefined && members.has(c.parentId) && !members.has(c.id)) grew = members.add(c.id) !== null;
+  }
+  return doc.comments.filter((c) => members.has(c.id));
+}
+
+/** What a comment's thread says (who, when, what, replies, resolved), for telling whether it is the same thread. */
+function threadKey(doc: WordDocument, id: string): string {
+  const thread = threadOf(doc, id);
+  if (!thread.length) return id;
+  const at = new Map(thread.map((c, k) => [c.id, k]));
+  return thread.map((c) => `${at.get(c.parentId ?? '') ?? ''}|${c.author}|${c.date ?? ''}|${c.resolved ? 1 : 0}|${c.paragraphs.join('\n')}`).join('\u0001');
 }
 
 /** A block's visible text, for telling how alike two blocks are. */

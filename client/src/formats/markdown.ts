@@ -66,6 +66,9 @@ import { isLiveSourceName, liveTag, liveWrapper } from '../live/liveMarks.ts';
 import { LIVE_CLOSE, liveClose, liveOpen, liveOpenAt, liveOpenTag } from '../live/markdownMarks.ts';
 import type { LiveTag } from '../live/liveMarks.ts';
 import { normalizeTag, parseTagAddress, readTag, tagAddress } from '@golemdocs/docx';
+import { mergeDocuments } from './markdownMerge.ts';
+import { splitFrontMatter } from './frontMatter.ts';
+import { readWdoc, writeWdoc } from './wdoc.ts';
 
 const MAX_DEPTH = 24;
 const PAGE_TEXT_WIDTH = 9360;
@@ -2029,7 +2032,7 @@ function renderInline(input: Seg[], mode: Mode, notes?: ReadonlyMap<string, stri
 
 class Exporter {
   private readonly resolver: StyleResolver;
-  private readonly body: Block[];
+  private body: readonly Block[];
   private readonly chunks: string[] = [];
   private prev: 'none' | 'list' | 'listcont' | 'other' = 'none';
   private levels: ({ id: number; ordered: boolean; parity: number; count: number; col: number; task: boolean } | undefined)[] = [];
@@ -2082,6 +2085,22 @@ class Exporter {
   /** Whether a paragraph is a line of a code block (written inside a fence, so not as a paragraph of its own). */
   isCode(p: Paragraph): boolean {
     return this.classify(p).kind === 'code';
+  }
+
+  /** Some blocks on their own, as Markdown: written as if they were the whole document (a list starts at 1). */
+  source(blocks: readonly Block[]): string {
+    this.body = blocks;
+    this.chunks.length = 0;
+    this.prev = 'none';
+    this.levels = [];
+    this.lastCol = 0;
+    this.markers.clear();
+    return this.run();
+  }
+
+  /** What Markdown writes of a run's formatting (its style's and its own): bold, italic, strikethrough, code. */
+  runMarks(props: RunProperties): { bold: boolean; italic: boolean; strike: boolean; code: boolean } {
+    return this.marks(props);
   }
 
   run(): string {
@@ -2557,6 +2576,19 @@ export function paragraphParts(doc: WordDocument, p: Paragraph): { source: strin
   return { source, prefix: source.endsWith(body) ? source.slice(0, source.length - body.length) : '', segs };
 }
 
+/**
+ * Reads blocks of a document the way the Markdown writer does: each block alone as Markdown (`source`), and a run's
+ * formatting as the marks Markdown keeps (`marks`). For telling which blocks of a document a Markdown file still has
+ * as they were (see markdownMerge.ts).
+ */
+export function markdownReader(doc: WordDocument): {
+  source(block: Block): string;
+  marks(props: RunProperties): { bold: boolean; italic: boolean; strike: boolean; code: boolean };
+} {
+  const exporter = new Exporter(doc);
+  return { source: (block) => exporter.source([block]), marks: (props) => exporter.runMarks(props) };
+}
+
 /** The source of a paragraph (see `paragraphParts`), or null. */
 export function paragraphToMarkdown(doc: WordDocument, p: Paragraph): string | null {
   return paragraphParts(doc, p)?.source ?? null;
@@ -2574,4 +2606,30 @@ export function renderSegments(segs: readonly MarkdownSegment[]): string {
 export function paragraphSource(doc: WordDocument, p: Paragraph): string {
   const alone = Object.assign(Object.create(doc), { body: [p] }) as WordDocument;
   return renderInline(new Exporter(alone, true).inlineParts(p).segs, 'block');
+}
+
+// --- Merging an edited file back ------------------------------------------------------------------
+// With the reader and writer, in their chunk: see markdownMerge.ts.
+
+/**
+ * `previous` with its body made what the Markdown `source` (without front matter) says, keeping everything of it that
+ * the edit didn't touch (markdownMerge.ts). Changes `previous` and returns it.
+ */
+export async function mergeMarkdown(previous: WordDocument, source: string): Promise<WordDocument> {
+  return mergeDocuments(previous, await markdownToDocument(source), markdownReader);
+}
+
+/**
+ * The app's container for a Markdown document (`previous`) with an edited Markdown `file` merged into its document: the vault's
+ * `.md` file changed on disk, or the Markdown Source view's text. Everything else the container holds stays, and the front matter
+ * is the file's. Null when it has no document to merge into.
+ */
+export async function mergeMarkdownWdoc(previous: Uint8Array, file: Uint8Array | string): Promise<Uint8Array | null> {
+  const wdoc = await readWdoc(previous);
+  if (!wdoc.document || wdoc.delimited) return null;
+  const { frontMatter, body } = splitFrontMatter(typeof file === 'string' ? file : new TextDecoder('utf-8').decode(file));
+  const document = await mergeMarkdown(await WordDocument.read(wdoc.document), body);
+  const { md: _md, ...rest } = wdoc.extensions;
+  const extensions = frontMatter === null ? rest : { ...rest, md: { frontMatter } };
+  return writeWdoc({ ...wdoc, manifest: { ...wdoc.manifest, lens: 'md', pagesCurrent: false }, document: await document.write(), extensions });
 }

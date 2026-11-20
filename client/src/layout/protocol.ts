@@ -352,6 +352,8 @@ export type ToWorker =
        * edited together: refused ('typed') if anything changed since, so no one's edit is undone.
        */
       changes?: number;
+      /** The person's own edit (the Markdown Source view's text, put back): one step that Undo takes back. */
+      undoable?: boolean;
     }
   /** The stored document an embed asked for (`embed`), or none; its bytes are the file as stored. */
   | { type: 'embedFile'; request: number; file: { name: string; bytes: ArrayBuffer } | null }

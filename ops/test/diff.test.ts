@@ -103,10 +103,35 @@ test('a list added before another: the existing list keeps its definition, the n
   assert.equal(replica.doc.numbering.abstracts.find((x) => x.id === instance.abstractId)?.levels[0].format, 'decimal');
 });
 
-test('a changed style sheet is not done with operations', async () => {
+test('a style added, and a paragraph using it, are operations; undoing them takes the style away again', async () => {
+  const before = await documentOf([para('A')]);
+  const after = await documentOf([para('A', { style: 'Mine' })]);
+  after.styles = { ...after.styles, styles: [...after.styles.styles, { id: 'Mine', type: 'paragraph', name: 'Mine' } as never] };
+  const replica = new Replica(before, { clientId: 't' });
+  const diff = diffDocuments(before, after, () => replica.newId());
+  assert.ok(diff);
+  assert.deepEqual(diff.ops.map((op) => op.type), ['setStyle', 'setParagraphProperties']);
+  replica.external(diff.ops, { undoable: true });
+  assert.ok(replica.doc.styles.styles.some((x) => x.id === 'Mine'));
+  assert.equal(paragraphsIn(replica.doc.body)[0].properties.style, 'Mine');
+  replica.undo();
+  assert.ok(!replica.doc.styles.styles.some((x) => x.id === 'Mine'));
+});
+
+test('comments added and removed are operations', async () => {
+  const before = await documentOf([para('A')]);
+  before.comments = [{ id: '0', author: 'Ann', paragraphs: ['old'] }];
+  const after = await documentOf([para('A')]);
+  after.comments = [{ id: '1', author: 'Bo', paragraphs: ['new'] }];
+  const { replica, diff } = await roundTrip(before, after);
+  assert.deepEqual(diff.ops.map((op) => op.type), ['setComment', 'setComment']);
+  assert.deepEqual(replica.doc.comments, after.comments);
+});
+
+test("a stylesheet whose defaults changed is not done with operations", async () => {
   const before = await documentOf([para('A')]);
   const after = await documentOf([para('A')]);
-  after.styles = { ...after.styles, styles: [...after.styles.styles, { id: 'Mine', type: 'paragraph', name: 'Mine', attrs: {} } as never] };
+  after.styles = { ...after.styles, defaultRunProperties: { bold: true } };
   assert.equal(diffDocuments(before, after, () => 'X'), null);
 });
 

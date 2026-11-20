@@ -7,7 +7,7 @@
 // a paragraph that changed keeps its id and gets only the text between what it has in common with its
 // new version at its start and end. Lists are matched by what they look like, not by number, since a
 // file read again numbers its lists afresh. The result is checked by applying it to a copy: anything
-// it can't reproduce exactly (styles, sections, comments, pictures...) gives null, and the caller opens
+// it can't reproduce exactly (sections, the stylesheet's defaults, pictures...) gives null, and the caller opens
 // the document again instead.
 
 import {
@@ -45,13 +45,16 @@ const MAX_CELLS = 4_000_000;
 
 /**
  * The operations that turn `doc` (an open document: its paragraphs have ids) into `next` (just read), or
- * null when operations can't (something besides the body changed, or a picture was added). `newId` gives
+ * null when operations can't (something besides the body, styles and comments changed, or a picture was added). `newId` gives
  * paragraph ids the open document doesn't use. `next` is normalized in place.
  */
 export function diffDocuments(doc: WordDocument, next: WordDocument, newId: () => string): DocumentDiff | null {
-  for (const key of ['styles', 'section', 'comments', 'properties', 'settings'] as const) {
+  for (const key of ['section', 'properties', 'settings'] as const) {
     if (canonical(doc[key]) !== canonical(next[key])) return null;
   }
+  // Styles and comments added, changed or gone are operations of their own; anything else about the stylesheet isn't.
+  const head = styleAndCommentOps(doc, next);
+  if (!head) return null;
   if (canonical([...doc.headersFooters]) !== canonical([...next.headersFooters])) return null;
   if (paragraphsIn(next.body).length === 0) next.body.push({ kind: 'paragraph', properties: {}, children: [], attrs: {} });
   for (const p of paragraphsIn(next.body)) p.children = normalizeInlines(p.children);
@@ -92,7 +95,7 @@ export function diffDocuments(doc: WordDocument, next: WordDocument, newId: () =
     }
     pairings.set(s, pairs);
   }
-  const ops: Operation[] = [];
+  const ops: Operation[] = [...head];
   let instanceId = Math.max(0, ...doc.numbering.instances.map((x) => x.id)) + 1;
   let abstractId = Math.max(-1, ...doc.numbering.abstracts.map((x) => x.id)) + 1;
   for (const p of paragraphsIn(next.body)) {
@@ -219,11 +222,35 @@ export function diffDocuments(doc: WordDocument, next: WordDocument, newId: () =
   return reproduces(doc, next, ops) ? { ops, changes: changes.filter((c) => c.to > c.from) } : null;
 }
 
-/** A copy of `doc` whose body and lists can be changed without touching it (everything else is shared). */
+/** The operations that give `doc` `next`'s styles and comments, or null when its stylesheet differs in more than its styles. */
+function styleAndCommentOps(doc: WordDocument, next: WordDocument): Operation[] | null {
+  const { styles: _a, ...sheet } = doc.styles;
+  const { styles: _b, ...nextSheet } = next.styles;
+  if (canonical(sheet) !== canonical(nextSheet)) return null;
+  const ops: Operation[] = [];
+  const styles = new Map(doc.styles.styles.map((x) => [x.id, x]));
+  for (const style of next.styles.styles) {
+    const old = styles.get(style.id);
+    if (!old || canonical(old) !== canonical(style)) ops.push({ type: 'setStyle', id: style.id, style: structuredClone(style) });
+    styles.delete(style.id);
+  }
+  for (const id of styles.keys()) ops.push({ type: 'setStyle', id, style: null });
+  const comments = new Map(doc.comments.map((x) => [x.id, x]));
+  for (const comment of next.comments) {
+    const old = comments.get(comment.id);
+    if (!old || canonical(old) !== canonical(comment)) ops.push({ type: 'setComment', id: comment.id, comment: structuredClone(comment) });
+    comments.delete(comment.id);
+  }
+  for (const id of comments.keys()) ops.push({ type: 'setComment', id, comment: null });
+  return ops;
+}
+
+/** A copy of `doc` whose body, lists, styles and comments can be changed without touching it (everything else is shared). */
 export function copyDocument(doc: WordDocument): WordDocument {
   return Object.assign(Object.create(Object.getPrototypeOf(doc)) as WordDocument, doc, {
     body: structuredClone(doc.body),
     numbering: structuredClone(doc.numbering),
+    comments: structuredClone(doc.comments),
   });
 }
 
@@ -240,7 +267,8 @@ function reproduces(doc: WordDocument, next: WordDocument, ops: Operation[]): bo
   } catch {
     return false;
   }
-  return sameBody(copy, next);
+  const byId = <T extends { id: string }>(list: readonly T[]) => canonical([...list].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)));
+  return sameBody(copy, next) && byId(copy.styles.styles) === byId(next.styles.styles) && byId(copy.comments) === byId(next.comments);
 }
 
 type Segment = { kind: 'equal'; i: number; j: number } | { kind: 'change'; i0: number; i1: number; j0: number; j1: number };

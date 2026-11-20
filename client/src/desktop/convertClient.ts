@@ -40,7 +40,7 @@ export class ConvertWorker implements VaultCodec {
 
   keepsLayout(name: string): boolean {
     const format = vaultFormat(name);
-    return format === 'csv' || format === 'tsv';
+    return format === 'csv' || format === 'tsv' || format === 'md';
   }
 
   async fromFile(file: Uint8Array, name: string, previous?: Uint8Array): Promise<Uint8Array> {

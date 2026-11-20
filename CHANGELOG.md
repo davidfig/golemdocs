@@ -1,5 +1,15 @@
 # What’s New in Golem Docs
 
+## 0.42.0 - Unreleased
+
+### Added
+
+- View › Markdown Source (⌘/, Ctrl+/ on Windows and Linux) shows a Markdown document's file as text. Edit it, switch back, and the changes go into the document as one step you can undo, while alignment, colours, fonts and anything else Markdown can't hold stay wherever you didn't edit.
+
+### Changed
+
+- When an AI agent or another app edits a Markdown file in your vault folder, its changes are merged into the document instead of replacing it, so formatting Markdown can't hold is kept wherever the edit didn't reach.
+
 ## 0.41.0 - 2026-11-18
 
 ### Changed

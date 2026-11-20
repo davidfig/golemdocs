@@ -450,6 +450,8 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       case 'selectAll':
       case 'openSelection':
       case 'insertText':
+      // A Markdown document's source is shown in the text editor: this goes back (the command shows only then).
+      case 'toggleMarkdownSource':
         return true;
       case 'changeCase':
         return false;
@@ -491,6 +493,8 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       return true;
     case 'setFormMode':
       return profile.kind === 'pdf';
+    case 'toggleMarkdownSource':
+      return profile.kind === 'md';
     // Only the large-text editor has a selection of lines to open (answered above).
     case 'openSelection':
       return false;

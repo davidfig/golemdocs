@@ -1970,9 +1970,10 @@ class OpenDocument {
    * The document's file changed outside the app (see the `refresh` message): what changed is put in as edits, so only that is laid out
    * again, the caret stays on its text, the view stays on what it showed, and the new text is highlighted for a moment. False when it
    * can't be done that way (not a flowing document, or a change operations can't make): the page opens the document again instead.
-   * Edits made here meanwhile win: the file is left for the next sync to settle, and the answer is 'typed'.
+   * Edits made here meanwhile win: the file is left for the next sync to settle, and the answer is 'typed'. `undoable`: the person's
+   * own edit made elsewhere (the Markdown Source view), one step that Undo takes back.
    */
-  async refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null, changes?: number): Promise<boolean | 'typed'> {
+  async refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null, changes?: number, undoable = false): Promise<boolean | 'typed'> {
     const { editor, session, document, replica } = this;
     if (!this.isSetUp || this.closed || !editor || !session || !document || !replica) return false;
     // Edited together, only a live update made from the document as it is now goes in (its own ops go to the room).
@@ -2004,7 +2005,7 @@ class OpenDocument {
       const caret = editor.caretAt(pos);
       if (caret?.page.id === view!.page) anchor = { pos, dy: view!.y - caret.y };
     }
-    const { mapping } = editor.external(diff.ops);
+    const { mapping } = editor.external(diff.ops, { undoable });
     if (anchor && mapping) {
       const { paragraph, offset } = mapping.map(anchor.pos, -1);
       this.keepView = { pos: { paragraph, offset }, dy: anchor.dy };
@@ -3435,7 +3436,7 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       void pictureBase(message.doc, message.request);
       break;
     case 'refresh':
-      void (current?.doc === message.doc ? current.refresh(message.source, message.view, message.changes) : Promise.resolve(false))
+      void (current?.doc === message.doc ? current.refresh(message.source, message.view, message.changes, message.undoable) : Promise.resolve(false))
         .catch((e: unknown) => {
           console.error(e);
           return false;

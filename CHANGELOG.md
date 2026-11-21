@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.42.1 - Unreleased
+
+### Fixed
+
+- The desktop app's vault folder no longer stops syncing after the computer sleeps or changes networks: a request to the server that never gets an answer now gives up and is tried again, and a sync stuck for ten minutes is started over, instead of new and changed files going unnoticed until the app is restarted.
+
 ## 0.42.0 - 2026-11-20
 
 ### Added

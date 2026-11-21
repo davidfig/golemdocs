@@ -186,3 +186,19 @@ test('the Mac app copies through the shell, and an older shell through the page'
     else delete (navigator as unknown as Record<string, unknown>).clipboard;
   }
 });
+
+test('the app log is written through the shell, a shell too old to keep one is not asked again, and nothing rejects', async () => {
+  const lines: string[] = [];
+  const g = globalThis as Record<string, unknown>;
+  g.__TAURI__ = { core: { invoke: async (command: string, args?: { line: string }) => (command === 'app_log' ? void lines.push(args!.line) : Promise.reject(`Command ${command} not found`)) } };
+  await desktopBridge()!.log!('sync idle');
+  assert.deepEqual(lines, ['sync idle']);
+  let asked = 0;
+  g.__TAURI__ = { core: { invoke: async (command: string) => (asked++, Promise.reject(`Command ${command} not found`)) } };
+  const old = desktopBridge()!;
+  await old.log!('one');
+  await old.log!('two');
+  assert.equal(asked, 1);
+  shell({ app_log: Promise.reject('Permission denied') });
+  await desktopBridge()!.log!('still fine');
+});

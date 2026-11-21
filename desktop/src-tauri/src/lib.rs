@@ -11,6 +11,8 @@ mod update;
 mod icloud;
 mod incoming;
 #[cfg(any(desktop, target_os = "ios"))]
+mod log;
+#[cfg(any(desktop, target_os = "ios"))]
 mod vault;
 
 #[cfg(any(desktop, target_os = "ios"))]
@@ -79,6 +81,7 @@ fn builder() -> tauri::Builder<tauri::Wry> {
             vault::vault_make_folder,
             vault::vault_remove_folder,
             vault::vault_set_times,
+            log::app_log,
             menu::set_native_menu,
             print::print_open_pdf,
             update::update_check,
@@ -115,6 +118,7 @@ fn builder() -> tauri::Builder<tauri::Wry> {
             vault::vault_make_folder,
             vault::vault_remove_folder,
             vault::vault_set_times,
+            log::app_log,
             incoming::incoming_pending,
             incoming::incoming_read,
             incoming::incoming_done,

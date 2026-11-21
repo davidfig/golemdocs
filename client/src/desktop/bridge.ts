@@ -48,6 +48,8 @@ export interface DesktopBridge {
    * where the system can't set one (Linux). Returns the file's modification time after, or null when the shell is too old to date files.
    */
   setTimes(path: string, times: { created?: number; modified?: number }): Promise<number | null>;
+  /** Adds a line to the app's log file (desktop/src-tauri/src/log.rs). Never rejects: a shell too old to keep a log, or a failed write, is skipped. */
+  log?(line: string): Promise<void>;
 }
 
 /**
@@ -128,6 +130,7 @@ export function desktopBridge(): DesktopBridge | null {
   // numbers when it falls back to postMessage: far too slow for a large file). A shell without those commands takes the raw form.
   let base64 = true;
   let dating = true;
+  let logging = true;
   const ms = (time: number | undefined) => (time === undefined || !Number.isFinite(time) ? null : Math.max(0, Math.round(time)));
   return {
     fixed: isIosApp(),
@@ -185,6 +188,14 @@ export function desktopBridge(): DesktopBridge | null {
         if (!isMissingCommand(error)) throw error;
         dating = false;
         return null;
+      }
+    },
+    async log(line) {
+      if (!logging) return;
+      try {
+        await core.invoke<void>('app_log', { line });
+      } catch (error) {
+        if (isMissingCommand(error)) logging = false;
       }
     },
   };

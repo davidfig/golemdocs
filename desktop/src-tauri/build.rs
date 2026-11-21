@@ -34,6 +34,7 @@ fn main() {
             "incoming_done",
             "link_pending",
             "clipboard_write_text",
+            "app_log",
         ])),
     )
     .expect("failed to run tauri-build");

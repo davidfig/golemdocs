@@ -8,7 +8,7 @@ import { addPointers, pointerState, writeGuide, type PointerState } from './agen
 import { desktopBridge, type DesktopBridge } from './bridge.ts';
 import { ConvertWorker, startConvertWorker } from './convertClient.ts';
 import { realHost } from './vaultHost.ts';
-import { syncVault, type SyncProgress, type SyncReport, type VaultCodec } from './vaultSync.ts';
+import { syncVault, type SyncProgress, type SyncReport, type VaultCodec, type VaultHost } from './vaultSync.ts';
 
 export type VaultState = 'off' | 'signedOut' | 'waiting' | 'syncing' | 'idle' | 'offline' | 'error' | 'access' | 'blocked' | 'wrongAccount';
 
@@ -43,6 +43,56 @@ const HIDDEN_LOOK_MS = 30_000;
 const ACCOUNT_MS = 60_000;
 /** The longest the page's own uploads are waited for before a sync looks anyway. */
 const SETTLE_MS = 20_000;
+/**
+ * A sync that has stayed on one step (one phase, one file) this long is stuck, most likely on a request that will never
+ * settle: it is let go of and a new one started. Requests give up on their own after `ANSWER_MS` (cloud.ts), so this is the
+ * backstop for whatever else could hang. Without it one stuck sync stops every later one until the app is restarted.
+ */
+export const STUCK_MS = 10 * 60_000;
+/** A sync slower than this is noted in the app's log even when it went well. */
+const SLOW_MS = 60_000;
+
+/** Whether a sync that moved to its current step at `since` is stuck at `now`. */
+export function syncStuck(since: number, now: number): boolean {
+  return now - since >= STUCK_MS;
+}
+
+/** Thrown by a sync that was let go of as stuck, at its next step, so it changes nothing more. */
+export class SyncAbandoned extends Error {
+  constructor() {
+    super('the sync was let go of as stuck');
+    this.name = 'SyncAbandoned';
+  }
+}
+
+/** `target`, with every method throwing `SyncAbandoned` once `gone()` is true. */
+export function abandonable<T extends object>(target: T, gone: () => boolean): T {
+  return new Proxy(target, {
+    get(object, key) {
+      const value: unknown = Reflect.get(object, key);
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) => {
+        if (gone()) throw new SyncAbandoned();
+        return (value as (...a: unknown[]) => unknown).apply(object, args);
+      };
+    },
+  });
+}
+
+/** The sync's host, with each part let go of when the sync is (see `abandonable`). */
+function abandonableHost(host: VaultHost, gone: () => boolean): VaultHost {
+  return {
+    ...host,
+    disk: abandonable(host.disk, gone),
+    memory: abandonable(host.memory, gone),
+    cloud: abandonable(host.cloud, gone),
+    codec: abandonable(host.codec, gone),
+    hash: (bytes) => {
+      if (gone()) throw new SyncAbandoned();
+      return host.hash(bytes);
+    },
+  };
+}
 
 /** Whether a tick of the timer should look at the folder, `sinceLook` ms after the last look. */
 export function lookDue(hidden: boolean, sinceLook: number): boolean {
@@ -54,6 +104,8 @@ export class VaultService {
   private listeners = new Set<(status: VaultStatus) => void>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  /** Counts syncs; a sync whose number is no longer the latest was let go of as stuck, and touches nothing more. */
+  private generation = 0;
   private wanted = false;
   private signature = '';
   private lastAccountLook = 0;
@@ -95,6 +147,23 @@ export class VaultService {
     return () => void this.listeners.delete(listener);
   }
 
+  /** The outcome of the last sync, as `logOutcome` last saw it. */
+  private lastOutcome = 'idle ';
+
+  /**
+   * Logs how a sync ended when it ended differently from the one before (so a folder that stays offline or failing is noted
+   * once, not every few seconds), or when `notable` (it changed something, or was slow). A quiet idle sync is not logged.
+   */
+  private logOutcome(outcome: string, notable: boolean, line: () => string): void {
+    if (notable || outcome !== this.lastOutcome) this.log(line());
+    this.lastOutcome = outcome;
+  }
+
+  /** A line in the app's log (desktop only; a shell too old to keep one skips it). */
+  private log(text: string): void {
+    void this.bridge.log?.(`${new Date().toISOString()} vault: ${text}`);
+  }
+
   private set(patch: Partial<VaultStatus>): void {
     this.status = { ...this.status, ...patch };
     for (const listener of this.listeners) listener(this.status);
@@ -111,6 +180,7 @@ export class VaultService {
     addEventListener('online', this.onWake);
     addEventListener('visibilitychange', this.onShown);
     if (root) this.wanted = true;
+    this.log(root ? `keeping ${root} (${this.signedIn ? 'signed in' : 'signed out'})` : 'no folder chosen');
     this.lastAccountLook = 0; // signing in or out changes what the folder is kept with
     this.set({ state: root ? 'waiting' : 'off' });
     void this.look();
@@ -222,6 +292,13 @@ export class VaultService {
 
   private async look(): Promise<void> {
     this.lastLook = Date.now();
+    const progress = this.status.progress;
+    if (this.running && progress && syncStuck(progress.since, Date.now())) {
+      this.log(`sync stuck for ${Math.round((Date.now() - progress.since) / 60_000)} min at ${progress.phase}${progress.path ? ` (${progress.path})` : ''}; starting again`);
+      this.generation++; // the stuck one throws at its next step and leaves `running` alone
+      this.running = false;
+      this.set({ progress: undefined });
+    }
     // A sync that ended with errors is not started again every few seconds (that would repeat the same failures for ever): it tries again with the next look at the account.
     // A refused folder waits for the person (Try Again, or coming back to the window), not for a retry every few seconds.
     if (!this.wanted || this.running || !this.status.root || this.status.state === 'access') return;
@@ -240,11 +317,15 @@ export class VaultService {
     const root = this.status.root;
     if (this.running || !root) return;
     this.running = true;
+    const generation = ++this.generation;
+    const current = () => generation === this.generation;
+    const started = Date.now();
     this.progress({ phase: 'access' });
     try {
       try {
         await this.bridge.check();
       } catch (error) {
+        if (!current()) return;
         this.set({ state: 'access', progress: undefined, message: error instanceof Error ? error.message : String(error) }); // the shell rejects with a string
         return;
       }
@@ -252,6 +333,7 @@ export class VaultService {
       try {
         await this.bridge.scan();
       } catch (error) {
+        if (!current()) return;
         if (String(error) === ICLOUD_DOWNLOADING) {
           this.set({ state: 'waiting', progress: undefined, message: ICLOUD_DOWNLOADING });
           return;
@@ -262,10 +344,15 @@ export class VaultService {
         // Uploads that never finish (offline, a failing save) must not keep the vault from looking.
         await Promise.race([this.hooks.settled(), new Promise((resolve) => setTimeout(resolve, SETTLE_MS))]);
       }
+      if (!current()) return;
       const account = this.account(); // signing out can happen while waiting
-      const report = await syncVault(realHost(root, this.bridge, this.codec, account, () => this.hooks.openLocalId?.() ?? null), { ...options, progress: (p) => this.progress(p) });
+      const host = abandonableHost(realHost(root, this.bridge, this.codec, account, () => this.hooks.openLocalId?.() ?? null), () => !current());
+      const report = await syncVault(host, { ...options, progress: (p) => current() && this.progress(p) });
+      if (!current()) return;
       // What the sync itself wrote is not a change to sync again.
-      this.signature = await this.fingerprint();
+      const signature = await this.fingerprint();
+      if (!current()) return;
+      this.signature = signature;
       // The guide for ai apps, once the folder is known to be this account's. A phone keeps `.golemdocs/` outside the shared folder, where no agent would see it.
       if (!report.wrongAccount && !this.bridge.fixed && this.guideRoot !== root) {
         this.guideRoot = root;
@@ -275,12 +362,18 @@ export class VaultService {
       // Signed out, a folder that belongs to an account waits for that account to sign in.
       const state: VaultState = report.wrongAccount ? (account ? 'wrongAccount' : 'signedOut') : report.blocked ? 'blocked' : report.errors.length ? 'error' : 'idle';
       this.set({ state, report, progress: undefined, lastSync: Date.now(), message: report.errors[0]?.message });
-      if (report.downloaded + report.uploaded + report.created + report.renamed + report.movedHere + report.deletedHere + report.trashed + report.foldersRemoved + report.foldersMade > 0) this.hooks.changed(report.touched);
+      const changes = report.downloaded + report.uploaded + report.created + report.renamed + report.movedHere + report.deletedHere + report.trashed + report.foldersRemoved + report.foldersMade;
+      const took = Date.now() - started;
+      this.logOutcome(`${state} ${report.errors[0]?.message ?? ''}`, changes > 0 || took >= SLOW_MS, () => `sync ${state} in ${Math.round(took / 1000)} s: ${changes} change(s)${report.errors.length ? `, ${report.errors.length} error(s), first: ${report.errors[0].message}` : ''}`);
+      if (changes > 0) this.hooks.changed(report.touched);
     } catch (error) {
+      if (!current() || error instanceof SyncAbandoned) return;
       const offline = error instanceof TypeError || (error instanceof CloudError && error.status >= 500);
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logOutcome(`failed ${reason}`, false, () => `sync failed after ${Math.round((Date.now() - started) / 1000)} s: ${reason}`);
       this.set({ progress: undefined, state: offline ? 'offline' : error instanceof CloudError && error.status === 401 ? 'signedOut' : 'error', message: error instanceof Error ? error.message : String(error) });
     } finally {
-      this.running = false;
+      if (current()) this.running = false;
     }
   }
 }

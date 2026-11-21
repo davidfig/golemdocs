@@ -234,6 +234,11 @@ export class VaultService {
     return this.bridge.reveal();
   }
 
+  /** Shows a file or folder of the vault (`revealPath`) selected in Finder (File Explorer, the file manager). */
+  revealItem(path: string): Promise<void> {
+    return this.bridge.revealItem(path);
+  }
+
   /** Asks again, after the person allowed the folder or fixed what was wrong. Macs ask for permission again only after the first refusal is undone in System Settings. */
   async retry(): Promise<void> {
     await this.syncNow();

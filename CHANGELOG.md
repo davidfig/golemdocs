@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.43.0 - Unreleased
+
+### Added
+
+- Desktop app: Show in Finder (Show in File Explorer on Windows, Show in Files on Linux) selects a document's file, or a folder, in your vault folder. It is in the File menu for the open document, and in the right-click menu of documents and folders in the Files pane.
+
 ## 0.42.1 - 2026-11-21
 
 ### Fixed

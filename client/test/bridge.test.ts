@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { copyText, desktopBridge, fromBase64, isMissingCommand, linkBridge, macPrinter, ShellTooOldError, toBase64 } from '../src/desktop/bridge.ts';
+import { copyText, desktopBridge, fileManagerName, fromBase64, isMissingCommand, linkBridge, macPrinter, ShellTooOldError, toBase64 } from '../src/desktop/bridge.ts';
 import { incomingBridge } from '../src/desktop/incoming.ts';
 
 /** A shell with only the commands in `have`; any other call rejects the way Tauri does. */
@@ -36,6 +36,32 @@ test('Show in Finder and Open Privacy Settings say the app needs updating when t
   await assert.rejects(desktopBridge()!.openPrivacy(), ShellTooOldError);
   shell({}, (command) => `${command} not allowed by ACL`);
   await assert.rejects(desktopBridge()!.reveal(), ShellTooOldError);
+});
+
+test('Show in Finder selects the file, and a shell too old to select one shows the vault folder', async () => {
+  const calls: unknown[] = [];
+  (globalThis as Record<string, unknown>).__TAURI__ = {
+    core: {
+      invoke: async (command: string, args?: unknown) => {
+        calls.push([command, args]);
+        if (command !== 'vault_reveal_item') return undefined;
+      },
+    },
+  };
+  await desktopBridge()!.revealItem('Notes/a.md');
+  assert.deepEqual(calls, [['vault_reveal_item', { path: 'Notes/a.md' }]]);
+  shell({ vault_reveal: undefined });
+  await desktopBridge()!.revealItem('Notes/a.md');
+  shell({});
+  await assert.rejects(desktopBridge()!.revealItem('Notes/a.md'), ShellTooOldError);
+  shell({ vault_reveal_item: Promise.reject('no vault folder chosen') });
+  await assert.rejects(desktopBridge()!.revealItem('Notes/a.md'), /no vault folder chosen/);
+});
+
+test('the file manager is named for the system', () => {
+  assert.equal(fileManagerName('MacIntel'), 'Finder');
+  assert.equal(fileManagerName('Win32'), 'File Explorer');
+  assert.equal(fileManagerName('Linux x86_64'), 'Files');
 });
 
 test('a new install starts with the default folder, and a shell too old to have one gives none', async () => {

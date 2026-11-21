@@ -44,7 +44,7 @@ import {
   putSearchIndex,
   type SavedInfo,
 } from './storage/local.ts';
-import { folderContents, folderOf, folderPath, resolveFolder } from './folders.ts';
+import { folderContents, folderOf, folderPath, resolveFolder, type Folder } from './folders.ts';
 import { isBuiltin } from './live/builtinAddress.ts';
 import { UploadQueue } from './uploadQueue.ts';
 import { LibraryStore } from './libraryStore.ts';
@@ -128,7 +128,7 @@ import { TrashDialog } from './ui/trashDialog.ts';
 import { VaultDialog } from './ui/vaultDialog.ts';
 import { copyText, desktopBridge, desktopUpdater, isDesktopApp, isTouchDevice, linkBridge, macPrinter, ShellTooOldError } from './desktop/bridge.ts';
 import { vaultMemory } from './desktop/vaultMemory.ts';
-import { findInManifest, folderName, headingsAbove, makeLink, parseLink, pathInVault, shownText, vaultMatches } from './desktop/vaultLink.ts';
+import { findInManifest, folderName, headingsAbove, makeLink, parseLink, pathInVault, revealPath, shownText, vaultMatches } from './desktop/vaultLink.ts';
 import { saveFile } from './ui/saveFile.ts';
 import { VaultService } from './desktop/vaultService.ts';
 import { UpdateService } from './desktop/updateService.ts';
@@ -6258,6 +6258,8 @@ const chromeHost = createChromeHost({
   showTrash: () => trashDialog.open(),
   showVault: () => vaultDialog.open(),
   copyNoteLink: () => void copyNoteLink(),
+  canShowInVault,
+  showInVault: () => showInVault('open'),
   vaultFolder: () => {
     const service = vaultService;
     if (!service) return null;
@@ -6916,6 +6918,8 @@ input.addEventListener('contextmenu', (e) => {
 // same paths as File ▸ Open Recent.
 /** What the Documents screen and the Files Sidebar both ask of the app: one copy, so the two can't drift apart. */
 const libraryHost = {
+  canShowInVault,
+  showInVault: (item: { doc: LibraryEntry } | { folder: Folder }) => void showInVault(item),
   open: (entry: LibraryEntry) => {
     newDocumentFolder = null;
     showLoading(entry.name);
@@ -7132,6 +7136,31 @@ function watchLinks(bridge: { pending(): Promise<string[]> }): void {
 }
 
 /** File › Copy Link to Note: a `golemdocs://` link to the open document, at the heading the caret is under, if any. */
+/** Whether Show in Finder applies: a vault folder kept on this computer (a phone's is in iCloud, with no file manager to show). */
+function canShowInVault(): boolean {
+  return !!vaultService?.current.root && !vaultService.fixed;
+}
+
+/** Show in Finder: the open document, a listed one or a folder, selected in the file manager (its folder if not written yet). */
+async function showInVault(item: 'open' | { doc: LibraryEntry } | { folder: Folder }): Promise<void> {
+  const service = vaultService;
+  const root = service?.current.root;
+  if (!service || !root) return;
+  let target: Parameters<typeof revealPath>[2];
+  if (item !== 'open' && 'folder' in item) target = { folderId: item.folder.id };
+  else {
+    const open = item === 'open' ? openDocumentIds() : null;
+    const entry = item === 'open' ? library.entries.find((e) => (open!.localId && e.local?.id === open!.localId) || (open!.cloudId && e.cloud?.id === open!.cloudId)) : item.doc;
+    const ids = [open?.localId, open?.cloudId, entry?.local?.id, entry?.cloud?.id];
+    target = { ids, folderId: entry ? folderOf(entry, library.folders) : null };
+  }
+  try {
+    await service.revealItem(revealPath(await vaultEntries(root), library.folders, target));
+  } catch (e) {
+    say(e instanceof Error ? e.message : String(e));
+  }
+}
+
 async function copyNoteLink(): Promise<void> {
   const root = vaultService?.current.root;
   const open = openDocumentIds();

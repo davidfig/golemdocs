@@ -72,6 +72,7 @@ export const vault: Catalog = {
   'vault.agents.line': 'Golem Docs がこのフォルダーをどう管理しているか（同期、ファイル形式、ノートを開いて見せる方法）は .golemdocs/AGENTS.md にあります。ここのファイルを変更する前に読んでください。',
   'vault.link.menu': 'ノートへのリンクをコピー',
   'vault.link.menu.tip': 'ほかのアプリからこの文書を開く golemdocs:// リンクを、カーソルのある見出しの位置でコピーします',
+  'vault.reveal.menu.tip': 'この文書のファイルを保管フォルダ内で選択した状態でファイルマネージャに表示します',
   'vault.link.copied': 'このノートへのリンクをコピーしました。',
   'vault.link.copiedHeading': '「{heading}」へのリンクをコピーしました。',
   'vault.link.copyFailed': 'リンクをコピーできませんでした。',

@@ -641,6 +641,10 @@ export interface ChromeHost {
   vaultFolder?(): { path: string | null; problem?: string | null; reveal(): void; retry(): void } | null;
   /** File › Copy Link to Note (desktop app): copy a `golemdocs://` link to the open document, at the heading the caret is under. */
   copyNoteLink?(): void;
+  /** Whether File › Show in Finder applies: the desktop app keeps a vault folder on this computer (not a phone's iCloud one). */
+  canShowInVault?(): boolean;
+  /** File › Show in Finder (desktop app): the open document's file in the vault, selected in the file manager. */
+  showInVault?(): void;
   /** Samples for Help ▸ Open Sample, read each time the menu opens. */
   samples?(): Sample[];
   /** The user's documents, for File ▸ Open Recent. */

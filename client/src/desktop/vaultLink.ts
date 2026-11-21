@@ -6,6 +6,8 @@
 // takes them (`linkBridge` in bridge.ts). A Markdown file opened in the app (Open With, a double-click once the app is the
 // default) arrives the same way, as `file` with an absolute path. Everything here is pure: the page decides what to open.
 
+import { folderPaths, type CloudFolder } from './vaultPlan.ts';
+
 export const LINK_SCHEME = 'golemdocs';
 
 export interface VaultLink {
@@ -187,4 +189,20 @@ export function headingAt(heads: readonly { text: string; paragraph: number }[],
     found = h.text;
   }
   return found;
+}
+
+/**
+ * Where "Show in Finder" points for a document or folder: a document's file as the last sync recorded it (`entries`, by any
+ * of its `ids`), else the folder it is filed in; a folder's path as the sync spells it. "" is the vault itself.
+ */
+export function revealPath(
+  entries: readonly { id: string; path: string }[],
+  folders: readonly CloudFolder[],
+  item: { ids: readonly (string | null | undefined)[]; folderId: string | null } | { folderId: string },
+): string {
+  if ('ids' in item) {
+    const found = entries.find((e) => item.ids.includes(e.id));
+    if (found) return found.path;
+  }
+  return item.folderId ? (folderPaths(folders).get(item.folderId) ?? '') : '';
 }

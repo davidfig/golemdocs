@@ -69,6 +69,7 @@ fn builder() -> tauri::Builder<tauri::Wry> {
             vault::vault_use_default,
             vault::vault_forget,
             vault::vault_reveal,
+            vault::vault_reveal_item,
             vault::vault_check,
             vault::vault_open_privacy,
             vault::vault_scan,

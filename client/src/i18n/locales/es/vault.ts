@@ -79,6 +79,7 @@ export const vault: Catalog = {
   'vault.agents.line': 'Cómo mantiene Golem Docs esta carpeta (sincronización, formatos de archivo, abrirme una nota) está en .golemdocs/AGENTS.md: léelo antes de cambiar archivos aquí.',
   'vault.link.menu': 'Copiar enlace a la nota',
   'vault.link.menu.tip': 'Copia un enlace golemdocs:// que abre este documento desde otras apps, en el encabezado donde está el cursor',
+  'vault.reveal.menu.tip': 'Muestra el archivo de este documento en la carpeta de la bóveda, seleccionado en el gestor de archivos',
   'vault.link.copied': 'Enlace a esta nota copiado.',
   'vault.link.copiedHeading': 'Enlace a «{heading}» copiado.',
   'vault.link.copyFailed': 'No se pudo copiar el enlace.',

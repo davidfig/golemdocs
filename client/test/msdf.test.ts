@@ -4,7 +4,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Outline } from '../../pdf/src/fonts/program.ts';
-import { generateField, type Field } from '../src/formats/msdf.ts';
+import { generateField, thinnestStroke, type Field } from '../src/formats/msdf.ts';
+import { resolution } from '../src/formats/pdfFaces.ts';
 
 const PX = 48;
 const RANGE = 8;
@@ -95,4 +96,39 @@ test('curves: a circle from four cubics is round', () => {
 
 test('nothing to draw: no field', () => {
   assert.equal(generateField([], PX, RANGE), null);
+});
+
+test('the thinnest stroke: a hairline is measured, a thick shape or a sharp point is not', () => {
+  const limit = 2 / PX;
+  // A hairline a hundredth of an em wide (a Didot or Bodoni thin stroke).
+  const hairline = thinnestStroke([square(0, 0, 0.6, 0.01)], limit);
+  assert.ok(Math.abs(hairline - 0.01) < 1e-3, `hairline ${hairline}`);
+  // A frame with one thin side, its hole running the other way round.
+  const hole = polygon([0.1, 0.1], [0.1, 0.4], [0.4, 0.4], [0.4, 0.1]);
+  const frame = thinnestStroke([square(0, 0, 0.5, 0.5), polygon([0.015, 0.1], [0.015, 0.4], [0.4, 0.4], [0.4, 0.1])], limit);
+  assert.ok(Math.abs(frame - 0.015) < 1e-3, `frame ${frame}`);
+  assert.equal(thinnestStroke([square(0, 0, 0.5, 0.5), hole], limit), Infinity);
+  // Thin only toward its tip: a point, not a stroke.
+  assert.equal(thinnestStroke([polygon([0, 0], [0.6, 0.05], [0, 0.1])], limit), Infinity);
+  // A stroke wider than the limit asks about.
+  assert.equal(thinnestStroke([square(0, 0, 0.6, 0.1)], limit), Infinity);
+});
+
+test('a glyph with hairlines gets a finer atlas, and its hairline survives in it', () => {
+  assert.equal(resolution([square(0, 0, 0.5, 0.5)]), 48);
+  assert.equal(resolution([square(0, 0, 0.6, 0.015)]), 192);
+  assert.equal(resolution([square(0, 0, 0.6, 0.002)]), 256);
+  const hairline = [square(0, 0, 0.6, 0.012)];
+  const px = resolution(hairline);
+  const f = generateField(hairline, px, (RANGE * px) / PX)!;
+  const at = (x: number, y: number) => {
+    const fx = (x - f.left) * px - 0.5;
+    const fy = (f.top - y) * px - 0.5;
+    const k = (Math.round(fy) * f.width + Math.round(fx)) * 3;
+    const c = [f.pixels[k], f.pixels[k + 1], f.pixels[k + 2]];
+    return Math.max(Math.min(c[0], c[1]), Math.min(Math.max(c[0], c[1]), c[2])) / 255;
+  };
+  // Inside all along its length, outside just past either side.
+  for (let x = 0.05; x < 0.6; x += 0.05) assert.ok(at(x, 0.006) > 0.5, `inside at ${x}`);
+  assert.ok(at(0.3, 0.02) < 0.5 && at(0.3, -0.008) < 0.5);
 });

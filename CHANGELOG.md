@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.43.1 - Unreleased
+
+### Fixed
+
+- PDFs: text in fonts with very thin strokes, such as Didot and Bodoni, now shows in its own font when large, instead of with broken, patchy hairlines.
+
 ## 0.43.0 - 2026-11-21
 
 ### Added

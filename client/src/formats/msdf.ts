@@ -154,6 +154,94 @@ export function generateField(outline: Outline, pxPerEm: number, range: number):
   return { width, height, pixels, left: left / pxPerEm, bottom: bottom / pxPerEm, right: (left + width) / pxPerEm, top: top / pxPerEm };
 }
 
+/** Where the thinnest stroke is measured: across the outline every this many ems along its edges. */
+const STROKE_STEP = 0.01;
+/** A thin stroke counts only if its two sides run this close to parallel (a sharp point's sides don't). */
+const STROKE_PARALLEL = Math.cos((5 * Math.PI) / 180);
+/** ... and only if edges at most that thin run at least this many times its width (so not a corner). */
+const STROKE_RUN = 8;
+
+/**
+ * About how wide (ems) the outline's thinnest stroke is, if it's thinner than `limit`; Infinity
+ * if not. A field needs a stroke a couple of pixels wide to draw it: a high-contrast face's
+ * hairlines (Didot, Bodoni) are a hundredth of an em, and break up at the atlases' usual 48
+ * pixels per em. A stroke is measured straight across from each point of its edge to the
+ * other side, which must run near parallel and be no farther than `limit`; the width given is the
+ * thinnest that holds for edges of at least `STROKE_RUN` times that width, so a corner or a point
+ * (thin only right at its tip) isn't taken for one.
+ */
+export function thinnestStroke(outline: Outline, limit: number): number {
+  const white = orient(outline.filter((c) => c.length)).map((c) => c.map((s) => ({ ...s, color: WHITE })));
+  const pieces = flatten(white, 256).filter((p) => p.x0 !== p.x1 || p.y0 !== p.y1);
+  if (!pieces.length) return Infinity;
+
+  // Pieces by the grid cells (`limit` wide) their bounds touch, so a ray of that length looks only nearby.
+  const cell = limit;
+  const grid = new Map<string, number[]>();
+  pieces.forEach((p, i) => {
+    for (let gx = Math.floor(Math.min(p.x0, p.x1) / cell); gx <= Math.floor(Math.max(p.x0, p.x1) / cell); gx++) {
+      for (let gy = Math.floor(Math.min(p.y0, p.y1) / cell); gy <= Math.floor(Math.max(p.y0, p.y1) / cell); gy++) {
+        const key = `${gx},${gy}`;
+        const list = grid.get(key);
+        if (list) list.push(i);
+        else grid.set(key, [i]);
+      }
+    }
+  });
+
+  const samples: { width: number; length: number }[] = [];
+  const near = new Set<number>();
+  pieces.forEach((p, i) => {
+    const dx = p.x1 - p.x0;
+    const dy = p.y1 - p.y0;
+    const len = Math.hypot(dx, dy);
+    // The inside is on each edge's left (`orient`).
+    const nx = -dy / len;
+    const ny = dx / len;
+    const count = Math.ceil(len / STROKE_STEP);
+    for (let k = 0; k < count; k++) {
+      const t = (k + 0.5) / count;
+      const px = p.x0 + dx * t;
+      const py = p.y0 + dy * t;
+      near.clear();
+      for (let gx = Math.floor((px - limit) / cell); gx <= Math.floor((px + limit) / cell); gx++) {
+        for (let gy = Math.floor((py - limit) / cell); gy <= Math.floor((py + limit) / cell); gy++) for (const j of grid.get(`${gx},${gy}`) ?? []) near.add(j);
+      }
+      // The nearest edge straight across.
+      let best = limit;
+      let across = -1;
+      for (const j of near) {
+        if (j === i) continue;
+        const q = pieces[j];
+        const ex = q.x1 - q.x0;
+        const ey = q.y1 - q.y0;
+        const denom = nx * ey - ny * ex;
+        if (Math.abs(denom) < 1e-12) continue;
+        const ax = q.x0 - px;
+        const ay = q.y0 - py;
+        const s = (ax * ey - ay * ex) / denom;
+        const u = (ax * ny - ay * nx) / denom;
+        if (s > 1e-9 && s < best && u >= 0 && u <= 1) {
+          best = s;
+          across = j;
+        }
+      }
+      if (across < 0) continue;
+      const q = pieces[across];
+      const dot = (dx * (q.x1 - q.x0) + dy * (q.y1 - q.y0)) / (len * Math.hypot(q.x1 - q.x0, q.y1 - q.y0));
+      if (dot <= -STROKE_PARALLEL) samples.push({ width: best, length: len / count });
+    }
+  });
+
+  samples.sort((a, b) => a.width - b.width);
+  let run = 0;
+  for (const s of samples) {
+    run += s.length;
+    if (run >= STROKE_RUN * s.width) return s.width;
+  }
+  return Infinity;
+}
+
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }

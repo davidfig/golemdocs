@@ -2,16 +2,24 @@
 // its font's program (`FontProgram`), turned into a distance field (msdf.ts) and packed into an
 // atlas made at runtime, which the layout sends to the renderer like any of the app's own faces
 // (with its pixels, since there is no file to fetch). Atlases are made as pages are laid out, from
-// the glyphs not yet in one, so a long document only pays for the pages that are shown.
+// the glyphs not yet in one, so a long document only pays for the pages that are shown. Most
+// glyphs go in 48 pixel-per-em atlases like ours; one with hairlines too thin for that (Didot,
+// Bodoni) goes in a finer one, so its strokes don't break up when it is drawn large.
 
 import { FaceMetrics, type FontMetrics, type ManifestFace, type ManifestFamily, type MsdfLayout, type ResolvedFont } from '@golemdocs/layout';
 import type { GlyphRun, PdfDict, PdfDocument } from '@golemdocs/pdf';
-import { FontProgram } from '@golemdocs/pdf/fontProgram';
-import { generateField, type Field } from './msdf.ts';
+import { FontProgram, type Outline } from '@golemdocs/pdf/fontProgram';
+import { generateField, thinnestStroke, type Field } from './msdf.ts';
 
 /** Atlas pixels per em and distance range in pixels: the same as the app's own atlases (fonts/manifest.json). */
 const PX_PER_EM = 48;
 const RANGE = 8;
+/**
+ * Finer atlases, for a glyph whose thinnest stroke would be under `MIN_STROKE_PX` wide at 48 (a
+ * hairline of Didot or Bodoni breaks up there). Each keeps the same distance range in ems.
+ */
+const FINER = [96, 192, 256];
+const MIN_STROKE_PX = 2;
 const ATLAS_WIDTH = 1024;
 const MAX_ATLAS_HEIGHT = 4096;
 /** Pixels between glyphs in an atlas. */
@@ -57,7 +65,7 @@ export class PdfFaces {
 
   /** Makes atlases for the glyphs these runs show that aren't in one yet. */
   prepare(runs: readonly GlyphRun[]): void {
-    const wanted: { state: FontState; glyph: number; field: Field }[] = [];
+    const wanted: Wanted[] = [];
     for (const run of runs) {
       const state = this.state(run.fontDict);
       if (!state.program) continue;
@@ -65,22 +73,30 @@ export class PdfFaces {
         if (state.glyphs.has(g.glyph)) continue;
         const outline = state.program.outline(g.glyph);
         let field: Field | null = null;
+        let pxPerEm = PX_PER_EM;
         try {
-          field = outline && generateField(outline, PX_PER_EM, RANGE);
+          if (outline) {
+            pxPerEm = resolution(outline);
+            field = generateField(outline, pxPerEm, (RANGE * pxPerEm) / PX_PER_EM);
+          }
         } catch {
           // a glyph that can't be drawn this way is drawn with a stand-in
         }
         if (field) {
           // Claimed now, so a glyph shown twice on the page is made once; filled in with its atlas below.
           state.glyphs.set(g.glyph, 'missing');
-          wanted.push({ state, glyph: g.glyph, field });
+          wanted.push({ state, glyph: g.glyph, field, pxPerEm });
         } else state.glyphs.set(g.glyph, outline && !outline.length ? null : 'missing');
       }
     }
-    while (wanted.length) {
-      const packed = pack(wanted);
-      packed.items.forEach((item, i) => item.state.glyphs.set(item.glyph, { ...packed.face, glyph: i }));
-      wanted.splice(0, packed.items.length);
+    // An atlas per resolution, since a face has one.
+    for (const pxPerEm of new Set(wanted.map((w) => w.pxPerEm))) {
+      const group = wanted.filter((w) => w.pxPerEm === pxPerEm);
+      while (group.length) {
+        const packed = pack(group, pxPerEm);
+        packed.items.forEach((item, i) => item.state.glyphs.set(item.glyph, { ...packed.face, glyph: i }));
+        group.splice(0, packed.items.length);
+      }
     }
   }
 
@@ -103,8 +119,22 @@ export class PdfFaces {
   }
 }
 
+interface Wanted {
+  state: FontState;
+  glyph: number;
+  field: Field;
+  pxPerEm: number;
+}
+
+/** The atlas resolution (pixels per em) that draws an outline's thinnest stroke at least `MIN_STROKE_PX` wide, up to the finest there is. */
+export function resolution(outline: Outline): number {
+  const stroke = thinnestStroke(outline, MIN_STROKE_PX / PX_PER_EM);
+  if (stroke === Infinity) return PX_PER_EM;
+  return FINER.find((px) => stroke * px >= MIN_STROKE_PX) ?? FINER[FINER.length - 1];
+}
+
 /** Packs as many of the fields as fit into one atlas (shelf by shelf, tallest first) and makes its face. */
-function pack<T extends { field: Field }>(items: T[]): { items: T[]; face: Omit<DrawnGlyph, 'glyph'> } {
+function pack<T extends { field: Field }>(items: T[], pxPerEm: number): { items: T[]; face: Omit<DrawnGlyph, 'glyph'> } {
   items.sort((a, b) => b.field.height - a.field.height);
   const placed: { x: number; y: number }[] = [];
   let x = 0;
@@ -143,13 +173,13 @@ function pack<T extends { field: Field }>(items: T[]): { items: T[]; face: Omit<
     return {
       advance: 0,
       // Plane bounds run y down from the baseline.
-      planeBounds: { left: field.left, top: -field.top, right: field.left + w / PX_PER_EM, bottom: -field.bottom },
+      planeBounds: { left: field.left, top: -field.top, right: field.left + w / pxPerEm, bottom: -field.bottom },
       atlasBounds: { left: ax, top: ay, right: ax + w, bottom: ay + field.height },
     };
   });
   const key = `${KEY_PREFIX}${nextAtlas++}`;
   const layout: MsdfLayout = {
-    atlas: { type: 'msdf', distanceRange: RANGE, size: PX_PER_EM, width: ATLAS_WIDTH, height, yOrigin: 'top' },
+    atlas: { type: 'msdf', distanceRange: (RANGE * pxPerEm) / PX_PER_EM, size: pxPerEm, width: ATLAS_WIDTH, height, yOrigin: 'top' },
     metrics: { emSize: 1, lineHeight: 1, ascender: 0.8, descender: -0.2, underlineY: -0.1, underlineThickness: 0.05 },
     glyphs,
   };

@@ -19,6 +19,7 @@
 
 - Very long documents take far less memory, so a book of 50,000 pages no longer runs out of memory and closes while it opens.
 - The Page Sidebar no longer freezes the window for minutes on a very long document.
+- Comments no longer disappear from beside the page after the page is reloaded; before, they came back only after an edit.
 
 ## 0.42.1 - 2026-11-21
 

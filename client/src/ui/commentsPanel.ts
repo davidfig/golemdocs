@@ -110,10 +110,12 @@ export class CommentsPanel {
       this.active = active;
       changed = true;
     }
-    if (renderKey(comments, this.active) === this.shown && !changed) return;
     // A comment the panel was waiting for (written here) opens.
     const known = new Set(this.comments.map((c) => c.id));
+    // Kept even when there is nothing to redraw: where each comment's text is (page, y) is not in the key, and the first update
+    // after opening comes before the pages are laid out, with no place for any; keeping that one hid every card until an edit.
     this.comments = comments;
+    if (renderKey(comments, this.active) === this.shown && !changed) return;
     if (this.drafting && comments.some((c) => !known.has(c.id))) {
       this.drafting = false;
       this.active = comments.find((c) => !known.has(c.id) && !c.parentId)?.id ?? this.active;

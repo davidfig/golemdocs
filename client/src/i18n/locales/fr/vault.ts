@@ -90,4 +90,10 @@ export const vault: Catalog = {
   'vault.link.outside': '« {file} » n’est pas dans le dossier du coffre « {name} ».',
   'vault.link.missing': '« {file} » n’est pas dans le dossier du coffre.',
   'vault.link.placeMissing': 'La note est ouverte, mais l’endroit visé par le lien est introuvable.',
+  'vault.shared.index.file': '{name} (pas dans le coffre)',
+  'vault.shared.index.title': '{name} (pas dans ce coffre)',
+  'vault.shared.index.intro': 'Le dossier « {folder} » du dossier partagé « {share} » n’est pas copié dans ce coffre : ses fichiers ne sont donc pas ici. Ils restent dans Golem Docs. Voici les fichiers qu’il contient :',
+  'vault.shared.index.empty': 'Il ne contient encore aucun fichier.',
+  'vault.shared.index.more': '…et {count} de plus',
+  'vault.shared.index.how': 'Pour garder aussi ce dossier dans ton coffre, ouvre Fichier › Ouvrir dans Golem Docs et choisis « Dans mon coffre… » sur la carte de « {share} ». Golem Docs tient cette liste à jour : les modifications faites dans ce fichier ne sont pas gardées.',
 };

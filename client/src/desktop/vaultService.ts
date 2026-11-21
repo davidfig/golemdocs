@@ -7,7 +7,9 @@ import { CloudError } from '../cloud.ts';
 import { addPointers, pointerState, writeGuide, type PointerState } from './agentGuide.ts';
 import { desktopBridge, type DesktopBridge } from './bridge.ts';
 import { ConvertWorker, startConvertWorker } from './convertClient.ts';
-import { realHost } from './vaultHost.ts';
+import { realHost, sharedApi } from './vaultHost.ts';
+import { vaultMemory } from './vaultMemory.ts';
+import { excludedFolders, keepsCopy, outsideDisk, setExcludedFolders, sharedRoot, syncShared, type MemoryFor, type SharedSyncReport } from './vaultShared.ts';
 import { syncVault, type SyncProgress, type SyncReport, type VaultCodec, type VaultHost } from './vaultSync.ts';
 
 export type VaultState = 'off' | 'signedOut' | 'waiting' | 'syncing' | 'idle' | 'offline' | 'error' | 'access' | 'blocked' | 'wrongAccount';
@@ -22,6 +24,8 @@ export interface VaultStatus {
   progress?: SyncProgress & { since: number };
   /** The first error of the last sync (for `access`: why the folder can't be read or written). */
   message?: string;
+  /** What the last sync did to the copies of folders shared with this account (vaultShared.ts), when it kept any. */
+  shared?: SharedSyncReport | null;
 }
 
 /** What the page lends the service. */
@@ -351,9 +355,30 @@ export class VaultService {
       }
       if (!current()) return;
       const account = this.account(); // signing out can happen while waiting
-      const host = abandonableHost(realHost(root, this.bridge, this.codec, account, () => this.hooks.openLocalId?.() ?? null), () => !current());
+      const gone = () => !current();
+      const real = realHost(root, this.bridge, this.codec, account, () => this.hooks.openLocalId?.() ?? null);
+      // Copies of folders shared with this account are kept apart (vaultShared.ts): the vault's own sync never sees them.
+      const memoryFor: MemoryFor = (name) => vaultMemory(`${root}\n${name}`);
+      const copies = account ? await sharedRoot(memoryFor).catch(() => null) : null;
+      if (!current()) return;
+      if (copies) real.disk = outsideDisk(real.disk, copies);
+      const host = abandonableHost(real, gone);
       const report = await syncVault(host, { ...options, progress: (p) => current() && this.progress(p) });
       if (!current()) return;
+      let shared: SharedSyncReport | null = null;
+      if (account && !report.wrongAccount && !report.blocked) {
+        try {
+          shared = await syncShared({ disk: abandonable(this.bridge, gone), memory: memoryFor, api: sharedApi(), codec: this.codec, hash: host.hash, account, wanted: keepsCopy, excluded: excludedFolders, setExcluded: setExcludedFolders });
+          for (const { label, report: copy } of shared.copies) {
+            report.errors.push(...copy.errors.map((e) => ({ ...e, message: `${shared!.root}/${label}: ${e.message}` })));
+            for (const key of ['downloaded', 'uploaded', 'created', 'renamed', 'movedHere', 'deletedHere', 'trashed', 'foldersRemoved', 'foldersMade'] as const) report[key] += copy[key];
+          }
+        } catch (error) {
+          if (error instanceof SyncAbandoned) throw error;
+          // The shares could not be listed (offline, say): the copies are left as they are until the next sync.
+        }
+        if (!current()) return;
+      }
       // What the sync itself wrote is not a change to sync again.
       const signature = await this.fingerprint();
       if (!current()) return;
@@ -366,7 +391,7 @@ export class VaultService {
       this.lastAccountLook = Date.now();
       // Signed out, a folder that belongs to an account waits for that account to sign in.
       const state: VaultState = report.wrongAccount ? (account ? 'wrongAccount' : 'signedOut') : report.blocked ? 'blocked' : report.errors.length ? 'error' : 'idle';
-      this.set({ state, report, progress: undefined, lastSync: Date.now(), message: report.errors[0]?.message });
+      this.set({ state, report, shared, progress: undefined, lastSync: Date.now(), message: report.errors[0]?.message });
       const changes = report.downloaded + report.uploaded + report.created + report.renamed + report.movedHere + report.deletedHere + report.trashed + report.foldersRemoved + report.foldersMade;
       const took = Date.now() - started;
       this.logOutcome(`${state} ${report.errors[0]?.message ?? ''}`, changes > 0 || took >= SLOW_MS, () => `sync ${state} in ${Math.round(took / 1000)} s: ${changes} change(s)${report.errors.length ? `, ${report.errors.length} error(s), first: ${report.errors[0].message}` : ''}`);

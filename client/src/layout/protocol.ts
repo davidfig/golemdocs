@@ -269,6 +269,13 @@ export type ToWorker =
   | { type: 'a11y'; on: boolean }
   /** Screen Reader Mode: the structure of these pages (by id) for the reading layer, and the document's headings when `headings` is set. */
   | { type: 'a11yPages'; doc: number; pages: number[]; headings: boolean }
+  /**
+   * The pages in or near the view, by position in the page order (`from` inclusive, `to` exclusive): positions, not ids, as a page
+   * laid out again after an edit gets a new id. Spelling and grammar squiggles are found only on these, not on every page: in a book
+   * of tens of thousands of pages that took more memory than the tab has, and work on every move of the caret. Until it is first
+   * sent, every page is checked.
+   */
+  | { type: 'view'; doc: number; from: number; to: number }
   /** The page's language, so errors and default names the worker makes are in it. Sent before any `open`. */
   | { type: 'locale'; locale: string }
   /** A document is on its way (still downloading): load the faces nearly every document uses now, so they are there when its bytes are. */
@@ -392,6 +399,8 @@ export interface LayoutUpdate {
   drop: number[];
   /** The selection on these pages, so text and caret change in the same frame. */
   selection?: SelectionUpdate;
+  /** While the document is first laid out: how many pages it will have (exact for a PDF, an estimate otherwise), when more than `order` holds. */
+  expected?: number;
   /** After a change made outside the app: scroll so this point (page id, y on it) is at the top of the view, as the text there was before. */
   keep?: { page: number; y: number };
 }

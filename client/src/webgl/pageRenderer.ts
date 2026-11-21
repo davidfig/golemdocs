@@ -7,6 +7,7 @@ import { TextRenderer } from './text/textRenderer.ts';
 import { DARK_PAGE_RGB, type ForcedColors } from './program.ts';
 import type { Camera } from '../view/camera.ts';
 import type { GpuPage } from './gpuPage.ts';
+import { shownBottom, shownTop, type Page } from '../document/arrange.ts';
 import type { SelectionLayer } from './selectionLayer.ts';
 
 const PAGE_COLOR = packColor(0xffffff);
@@ -50,6 +51,8 @@ export class PageRenderer {
   joined = false;
   /** The system's high contrast colors, when it asks for them (forced-colors): pages and text are drawn in them. */
   forced: ForcedColors | null = null;
+  /** Empty sheets for pages not laid out yet (the page grid while a document loads), sorted by y like the pages. */
+  blanks: readonly Page[] = [];
 
   /** `darkPages`: dark sheets with light letters (View › Color Scheme › Dark Pages); pictures of pages leave it off. */
   render(camera: Camera, pages: readonly GpuPage[], selection?: SelectionLayer, caretVisible = true, darkPages = false): FrameStats {
@@ -68,13 +71,13 @@ export class PageRenderer {
     let hi = pages.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (pages[mid].y + pages[mid].height < top) lo = mid + 1;
+      if (shownBottom(pages[mid]) < top) lo = mid + 1;
       else hi = mid;
     }
     this.visible.length = 0;
-    for (let i = lo; i < pages.length && pages[i].y < bottom; i++) {
+    for (let i = lo; i < pages.length && shownTop(pages[i]) < bottom; i++) {
       const page = pages[i];
-      if (page.x < right && page.x + page.width > left) this.visible.push(page);
+      if (page.x < right && page.x + page.width > left && shownBottom(page) > top) this.visible.push(page);
     }
 
     gl.viewport(0, 0, camera.width, camera.height);
@@ -83,12 +86,17 @@ export class PageRenderer {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     // Sheets, snapped to whole device pixels so their edges stay crisp at any zoom.
-    for (const page of this.visible) {
+    const sheets: Page[] = this.visible.slice();
+    for (const blank of this.blanks) {
+      if (blank.y >= bottom) break;
+      if (blank.x < right && blank.x + blank.width > left && blank.y + blank.height > top) sheets.push(blank);
+    }
+    for (const page of sheets) {
       const x0 = Math.round((page.x - left) * scale);
-      const y0 = Math.round((page.y - top) * scale);
+      const y0 = Math.round((shownTop(page) - top) * scale);
       // Flow view: the text lags a zoom by a moment, so the sheet meets the window's edge meanwhile.
       const x1 = this.flat ? Math.max(Math.round((page.x + page.width - left) * scale), camera.width) : Math.round((page.x + page.width - left) * scale);
-      const y1 = Math.round((page.y + page.height - top) * scale);
+      const y1 = Math.round((shownBottom(page) - top) * scale);
       // A soft drop shadow: a few faint layers, each larger than the last, sinking below the sheet.
       for (let i = 0; !this.flat && i < SHADOW_LAYERS && !this.joined; i++) {
         const grow = (i + 1) * scale;
@@ -99,6 +107,37 @@ export class PageRenderer {
     }
     this.sheets.flush(camera.width, camera.height);
 
+    let drawCalls = 0;
+    let glyphs = 0;
+    if (this.visible.some((p) => p.shown)) {
+      // Pages shown only in part (their margins hidden) overlap: each is drawn on its own, clipped to the part shown.
+      const all = this.visible.slice();
+      gl.enable(gl.SCISSOR_TEST);
+      for (const page of all) {
+        const y0 = Math.max(0, Math.round((shownTop(page) - top) * scale));
+        const y1 = Math.min(camera.height, Math.round((shownBottom(page) - top) * scale));
+        if (y1 <= y0) continue;
+        gl.scissor(0, camera.height - y1, camera.width, y1 - y0);
+        this.visible.length = 0;
+        this.visible.push(page);
+        const drawn = this.content(camera, selection, caretVisible);
+        drawCalls += drawn.drawCalls;
+        glyphs += drawn.glyphs;
+      }
+      gl.disable(gl.SCISSOR_TEST);
+      this.visible.length = 0;
+      this.visible.push(...all);
+    } else {
+      const drawn = this.content(camera, selection, caretVisible);
+      drawCalls = drawn.drawCalls;
+      glyphs = drawn.glyphs;
+    }
+
+    return { pages: pages.length, visiblePages: this.visible.length, glyphs, drawCalls };
+  }
+
+  /** Draws what is on the visible pages, over their sheets. */
+  private content(camera: Camera, selection: SelectionLayer | undefined, caretVisible: boolean): { drawCalls: number; glyphs: number } {
     const images = (behind: boolean): DrawImage[] =>
       this.visible.flatMap((p) =>
         p.images.filter((i) => i.behind === behind).map((i) => ({ ...i, x: p.x + i.x, y: p.y + i.y })),
@@ -119,6 +158,6 @@ export class PageRenderer {
     if (selection) drawCalls += this.rects.render(camera, selection.remoteFor(this.visible));
     if (selection && caretVisible) drawCalls += this.rects.render(camera, selection.caretFor(this.visible));
 
-    return { pages: pages.length, visiblePages: this.visible.length, glyphs: text.glyphs, drawCalls };
+    return { drawCalls, glyphs: text.glyphs };
   }
 }

@@ -25,6 +25,12 @@ test('an open message is read with its bytes, and anything else is ignored', () 
   assert.deepEqual(readToViewer({ type: 'golemdocs:open', name: 'a', bytes, dark: 'yes', fontBase: 3, locale: '' }), { type: 'golemdocs:open', name: 'a', bytes });
 });
 
+test('a host asks for the status bar and the view to start in; the page grid and other views are not taken', () => {
+  const bytes = new Uint8Array([1]).buffer;
+  assert.deepEqual(readToViewer({ type: 'golemdocs:open', name: 'a', bytes, statusBar: true, view: 'flow' }), { type: 'golemdocs:open', name: 'a', bytes, statusBar: true, view: 'flow' });
+  assert.deepEqual(readToViewer({ type: 'golemdocs:open', name: 'a', bytes, statusBar: 'yes', view: 'grid' }), { type: 'golemdocs:open', name: 'a', bytes });
+});
+
 test('only web, mail, phone and FTP links go to the host', () => {
   assert.equal(linkForHost('https://example.com/x'), 'https://example.com/x');
   assert.equal(linkForHost(' http://example.com '), 'http://example.com');

@@ -104,4 +104,10 @@ export const vault: Catalog = {
   'vault.link.outside': '«{file}» нет в папке хранилища «{name}».',
   'vault.link.missing': '«{file}» нет в папке хранилища.',
   'vault.link.placeMissing': 'Заметка открыта, но место, на которое указывает ссылка, не найдено.',
+  'vault.shared.index.file': '{name} (не в хранилище)',
+  'vault.shared.index.title': '{name} (нет в этом хранилище)',
+  'vault.shared.index.intro': 'Папка «{folder}» общей папки «{share}» не копируется в это хранилище, поэтому её файлов здесь нет. Они по-прежнему в Golem Docs. Вот файлы в ней:',
+  'vault.shared.index.empty': 'Файлов в ней пока нет.',
+  'vault.shared.index.more': '…и ещё {count}',
+  'vault.shared.index.how': 'Чтобы хранить и эту папку, откройте в Golem Docs Файл › Открыть и выберите «В хранилище…» на карточке «{share}». Golem Docs обновляет этот список сам, поэтому изменения в этом файле не сохраняются.',
 };

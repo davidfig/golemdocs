@@ -20,6 +20,10 @@ export type ToViewer = {
   screenReader?: boolean;
   /** The High Contrast colors around the pages (the host's own high contrast setting). */
   contrast?: boolean;
+  /** The editor's status bar under the document (page, words, zoom, and Print Layout, Flow and Page Grid). Off unless asked for. */
+  statusBar?: boolean;
+  /** The view to start in, with the status bar: 'print' (the default) or 'flow'. */
+  view?: 'print' | 'flow';
 };
 
 /** Sent by the viewer page to its host (`window.parent`). */
@@ -157,6 +161,8 @@ export function readToViewer(data: unknown): ToViewer | null {
     ...(typeof m.locale === 'string' && m.locale && { locale: m.locale }),
     ...(typeof m.screenReader === 'boolean' && { screenReader: m.screenReader }),
     ...(typeof m.contrast === 'boolean' && { contrast: m.contrast }),
+    ...(typeof m.statusBar === 'boolean' && { statusBar: m.statusBar }),
+    ...((m.view === 'print' || m.view === 'flow') && { view: m.view }),
   };
 }
 

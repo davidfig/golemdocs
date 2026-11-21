@@ -44,6 +44,15 @@ function isXmlChar(code: number): boolean {
   );
 }
 
+/**
+ * A copy of a piece of the source that doesn't keep the source alive. JavaScript engines make a slice of 13 or more characters a
+ * view into the string it was cut from, so one paragraph's text kept a whole document.xml (hundreds of megabytes for a long book)
+ * in memory for as long as the document was open. Shorter slices are copies already.
+ */
+function own(text: string): string {
+  return text.length < 13 ? text : (' ' + text).slice(1);
+}
+
 function isNameEnd(c: number): boolean {
   // whitespace, '/', '>', '='
   return c === 32 || c === 10 || c === 9 || c === 13 || c === 47 || c === 62 || c === 61;
@@ -73,6 +82,7 @@ export function parseXml(source: string): XmlElement {
   const addText = (text: string) => {
     const parent = stack[stack.length - 1];
     if (!parent || !text) return;
+    text = own(text);
     const children = parent.children;
     const last = children.length - 1;
     if (last >= 0 && typeof children[last] === 'string') children[last] += text;
@@ -152,7 +162,7 @@ export function parseXml(source: string): XmlElement {
       if (quote !== 34 && quote !== 39) throw new XmlError(`attribute ${attrName} is not quoted`);
       const end = xml.indexOf(quote === 34 ? '"' : "'", j + 1);
       if (end < 0) throw new XmlError(`unterminated attribute ${attrName}`);
-      attrs[attrName] = decode(xml.slice(j + 1, end));
+      attrs[attrName] = own(decode(xml.slice(j + 1, end)));
       j = end + 1;
       if (attrName.startsWith('xmlns:')) (declarations ??= []).push([attrName.slice(6), attrs[attrName]]);
     }

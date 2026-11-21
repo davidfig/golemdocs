@@ -1,12 +1,13 @@
 // The real `VaultHost`: the folder through the native bridge, the account through cloud.ts, the converter that
 // is handed in (convertClient.ts: another thread). Kept apart from vaultSync.ts so that file runs in tests with nothing but memory.
 
-import { createDocument, deleteDocuments, downloadDocument, listDocuments, listFolders, moveDocuments, putFolders, removeFolders, renameCloudDocument, saveCloudVersion, saveDocument, throwIfFailed } from '../cloud.ts';
+import { createDocument, createInSharedFolder, deleteDocuments, deleteSharedDocument, deleteSharedSubfolder, downloadDocument, listDocuments, listFolders, listSharedFolders, moveDocuments, putFolders, putSharedSubfolder, removeFolders, renameCloudDocument, saveCloudVersion, saveDocument, setSharedFolderLabel, sharedFolderTree, throwIfFailed } from '../cloud.ts';
 import type { Folder } from '../folders.ts';
 import { keepSyncedCopy } from '../library.ts';
 import type { DesktopBridge } from './bridge.ts';
 import { safeName } from './vaultPlan.ts';
 import { guestCloud } from './vaultGuest.ts';
+import type { SharedApi } from './vaultShared.ts';
 import { vaultMemory } from './vaultMemory.ts';
 import { GUEST_ACCOUNT, type VaultCloud, type VaultCodec, type VaultHost } from './vaultSync.ts';
 
@@ -103,4 +104,22 @@ export function realHost(root: string, disk: DesktopBridge, codec: VaultCodec, a
     if (account) await keepSyncedCopy(cloud, bytes, account, open());
   };
   return { disk, memory: vaultMemory(root), cloud: account ? accountCloud(keep) : guestCloud(), codec, hash: sha256Hex, account: account ?? GUEST_ACCOUNT };
+}
+
+/** The folders shared with the signed-in account, for their copies in the vault (vaultShared.ts), through cloud.ts. */
+export function sharedApi(): SharedApi {
+  return {
+    shares: listSharedFolders,
+    tree: sharedFolderTree,
+    download: async (id) => new Uint8Array(await downloadDocument(id)),
+    save: (id, bytes) => saveDocument(id, bytes),
+    keepVersion: async (id) => void (await saveCloudVersion(id)),
+    create: (share, folderId, name, bytes) => createInSharedFolder(share.ownerId, folderId, name, bytes),
+    rename: async (id, name) => void (await renameCloudDocument(id, name)),
+    trash: deleteSharedDocument,
+    putFolder: async (share, id, name, parentId) => void (await putSharedSubfolder(share, id, name, parentId)),
+    deleteFolder: deleteSharedSubfolder,
+    setLabel: setSharedFolderLabel,
+    topFolders: async () => (await listFolders()).filter((f) => !f.parentId).map((f) => f.name),
+  };
 }

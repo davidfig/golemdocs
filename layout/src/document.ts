@@ -13,6 +13,7 @@ import {
   ListCounter,
   StyleResolver,
   isMathInline,
+  paragraphLength,
   type HeaderFooterReference,
   type Inline,
   type ListState,
@@ -30,7 +31,7 @@ import { isCjk, type CjkLang } from './fonts/cjk.ts';
 import { addEmoji, MAYBE_EMOJI } from './fonts/emoji.ts';
 import type { FaceMetrics } from './fonts/faceMetrics.ts';
 import { REFLOW_SIDE, REFLOW_VERTICAL, reflowWidth } from './reflow.ts';
-import { emitLine, layoutParagraph, type CachedParagraph, type FloatSpec, type ParagraphLayout, emitBoxBottom, emitBoxJoin, emitBoxTop, sameBox, type BorderBox } from './paragraph.ts';
+import { emitLine, layoutParagraph, ParagraphCache, type FloatSpec, type ParagraphLayout, emitBoxBottom, emitBoxJoin, emitBoxTop, sameBox, type BorderBox } from './paragraph.ts';
 import { clearTableStyles, cutBox, emitBox, emitRow, emitRowSlice, flattenBlocks, layoutBox, layoutTable, type BoxLayout, type TableLayout } from './table.ts';
 
 const twips = (v: number | undefined, fallback: number) => (v ?? fallback) / 20;
@@ -167,6 +168,17 @@ function geometry(props: SectionProperties, previous: SectionGeometry | undefine
 interface SectionBlocks {
   properties: SectionProperties;
   blocks: Block[];
+}
+
+/** How much of the text (by `blockWeight`) a first layout must have placed before `estimatedPages` scales it up. */
+const ESTIMATE_MIN_SHARE = 0.02;
+
+/**
+ * Roughly how many lines of the page a block takes, for `estimatedPages`: a paragraph a line per 90 characters (at least one) and
+ * half a line of space after it, a table one line per row. Lengths matter: a book's contents is hundreds of one-line paragraphs.
+ */
+function blockWeight(block: Block): number {
+  return block.kind === 'table' ? Math.max(1, block.rows.length) : 0.5 + Math.max(1, paragraphLength(block) / 90);
 }
 
 /** Splits the body into sections: each ends at a paragraph carrying section properties. */
@@ -539,7 +551,7 @@ export class LayoutSession {
   private readonly ctx: LayoutContext;
   private readonly measureCtx: LayoutContext;
   private readonly headerHeights = new Map<string, number>();
-  private paragraphCache = new WeakMap<Paragraph, CachedParagraph>();
+  private paragraphCache = new ParagraphCache();
   /** First page each paragraph has lines on (valid while pages[page.index] === page). */
   private readonly pageOfParagraph = new WeakMap<Paragraph, PageLayout>();
   private readonly partsWithFields = new Set<string>();
@@ -551,7 +563,8 @@ export class LayoutSession {
   private noReuse = false;
   private generation = 0;
   /** A run in progress: its pages so far, for display while it continues. */
-  private running: { from: number; pages: PageLayout[] } | null = null;
+  /** The run under way: where it started, the pages it has laid out, and, for one from the document's start, how far through it is (blocks weighted by `blockWeight`). */
+  private running: { from: number; pages: PageLayout[]; progress?: { done: number; total: number } } | null = null;
 
   private constructor(
     readonly doc: WordDocument,
@@ -609,6 +622,21 @@ export class LayoutSession {
     const r = this.running;
     if (!r) return this.pages;
     return [...this.pages.slice(0, r.from), ...r.pages, ...this.pages.slice(r.from + r.pages.length)];
+  }
+
+  /**
+   * While a run lays the document out from its start, how many pages it will come to: the pages so far, scaled by how much of the
+   * text they hold. A guess that firms up as layout goes on (exact once it is done); null when no such run is under way, or
+   * while too little is laid out to scale up: under two pages (one page, half of it guessed, says next to nothing) or under
+   * `ESTIMATE_MIN_SHARE` of the text (a book's first few pages are its title and contents, and scaling them up 1000-fold put
+   * War and Peace at 14,459 pages; from 2% on it is within 40% of its 1006).
+   */
+  get estimatedPages(): number | null {
+    const progress = this.running?.progress;
+    const pages = this.running?.pages.length ?? 0;
+    if (!progress || pages < 2 || progress.done < progress.total * ESTIMATE_MIN_SHARE) return null;
+    // The last page is still filling: count it as half full.
+    return Math.max(pages, Math.round(((pages - 0.5) * progress.total) / progress.done));
   }
 
   /** The first page a paragraph has lines on, in displayPages order, if known. */
@@ -735,7 +763,7 @@ export class LayoutSession {
     invalidateStyles(doc);
     this.ctx.runStyles = new Map();
     runStyleCaches.set(this.doc, this.ctx.runStyles);
-    this.paragraphCache = new WeakMap();
+    this.paragraphCache = new ParagraphCache();
     this.ctx.paragraphCache = this.paragraphCache;
     // The measuring context was copied from ctx: it must not keep the old caches either.
     this.measureCtx.runStyles = this.ctx.runStyles;
@@ -807,7 +835,9 @@ export class LayoutSession {
       split.slice(s + 1).some((x) => x.properties.type === 'oddPage' || x.properties.type === 'evenPage');
 
     const pages: PageLayout[] = [];
-    this.running = { from, pages };
+    // A run from the start keeps count of how far through the text it is, for `estimatedPages`.
+    const progress = from === 0 ? { done: 0, total: split.reduce((sum, s) => sum + s.blocks.reduce((n, b) => n + blockWeight(b), 0), 0) } : undefined;
+    this.running = { from, pages, progress };
     // Sections are recomputed as layout reaches them; ones after where it converges are
     // unchanged (a change to sections is structural and never reuses old pages).
     if (!reuse) this.sections = [];
@@ -1149,6 +1179,7 @@ export class LayoutSession {
       const upTo = all ? pages.length : pages.length - 1;
       while (delivered < upTo) {
         const page = pages[delivered++];
+        page.compactLines();
         onPage?.(page);
       }
     };
@@ -1241,6 +1272,7 @@ export class LayoutSession {
             previous = null;
             pendingAfter = 0;
           }
+          if (progress) progress.done += blockWeight(blocks.block(i)!);
           blocks.release(i);
           if (onSlice && performance.now() - sliceStart >= sliceMs) await slice();
         }

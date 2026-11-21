@@ -61,8 +61,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.publicLinkLabel': 'Link pubblico',
   'dialogs.share.copyLink': 'Copia link',
   'dialogs.share.copyEmbed': 'Copia codice di incorporamento',
-  'dialogs.share.resetLink': 'Reimposta link',
-  'dialogs.share.resetNote': 'Reimposta link crea un nuovo indirizzo; quello vecchio smette di funzionare.',
+  'dialogs.share.resetLink': 'Rigenera link',
+  'dialogs.share.resetNote': 'Rigenera link crea un nuovo indirizzo; quello vecchio smette di funzionare.',
   'dialogs.share.copied': 'Copiato.',
   'dialogs.share.embedTitle': '{name} su Golem Docs',
   'dialogs.share.note': 'Le persone devono aver effettuato l\'accesso a Golem Docs almeno una volta. Gli editor vedono le modifiche in tempo reale; i lettori ricevono una copia di sola lettura che si aggiorna a ogni salvataggio del documento.',
@@ -188,4 +188,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.replacementsRemove': 'Rimuovi',
   'dialogs.find.wholeWord': 'Parola intera',
   'dialogs.find.regex': 'Espressione regolare',
+  'dialogs.share.folderNote': 'Vedono tutto ciò che c’è in questa cartella e nelle sue sottocartelle, compreso ciò che aggiungerai in seguito. Gli editor possono modificare ogni file e aggiungerne di nuovi, e possono rinominare o eliminare solo ciò che hanno aggiunto loro.',
+  'dialogs.share.folderPublicNote': 'Chiunque abbia il link può leggere ogni file di questa cartella senza accedere. I link tra i suoi file funzionano; quelli verso qualcosa al di fuori no. Ai motori di ricerca viene chiesto di non indicizzarla.',
 };

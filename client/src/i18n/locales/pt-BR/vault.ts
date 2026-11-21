@@ -90,4 +90,10 @@ export const vault: Catalog = {
   'vault.link.outside': '“{file}” não está na pasta do cofre “{name}”.',
   'vault.link.missing': '“{file}” não está na pasta do cofre.',
   'vault.link.placeMissing': 'A nota está aberta, mas o lugar indicado pelo link não foi encontrado.',
+  'vault.shared.index.file': '{name} (fora do cofre)',
+  'vault.shared.index.title': '{name} (fora deste cofre)',
+  'vault.shared.index.intro': 'A pasta “{folder}” da pasta compartilhada “{share}” não é copiada para este cofre, então os arquivos dela não estão aqui. Eles continuam no Golem Docs. Estes são os arquivos que ela contém:',
+  'vault.shared.index.empty': 'Ela ainda não tem arquivos.',
+  'vault.shared.index.more': '…e mais {count}',
+  'vault.shared.index.how': 'Para manter esta pasta no seu cofre também, abra Arquivo › Abrir no Golem Docs e escolha “No meu cofre…” no cartão de “{share}”. O Golem Docs mantém esta lista atualizada, então alterações feitas neste arquivo não são mantidas.',
 };

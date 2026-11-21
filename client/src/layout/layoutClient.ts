@@ -228,6 +228,15 @@ export class LayoutClient {
   }
 
   /** What is under a point on a page: the address of a link (null when there is none), and whether it is a check box that a click changes. */
+  /** The positions of the pages in or near the view (see the `view` message): squiggles are found on these. Sent only when they change. */
+  view(from: number, to: number): void {
+    const sent = this.viewSent;
+    if (sent.doc === this.doc && sent.from === from && sent.to === to) return;
+    this.viewSent = { doc: this.doc, from, to };
+    this.send({ type: 'view', doc: this.doc, from, to });
+  }
+  private viewSent = { doc: -1, from: -1, to: -1 };
+
   linkAt(page: number, x: number, y: number): Promise<{ url: string | null; text: string; checkbox: boolean }> {
     const request = this.nextRequest++;
     return new Promise((resolve) => {

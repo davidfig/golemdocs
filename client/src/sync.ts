@@ -8,7 +8,7 @@
 // app's job (main.ts), one at a time: this only says which copies have something to send.
 
 import type { User } from './auth.ts';
-import { CloudError, isDeleted, isDeletedDocument, listDocuments, listFolders, listShared, type CloudDocument } from './cloud.ts';
+import { CloudError, isDeleted, isDeletedDocument, listDocuments, listFolders, listShared, listSharedFolders, type CloudDocument, type SharedFolder } from './cloud.ts';
 import type { Folder } from './folders.ts';
 import { deleteSavedIfUnchanged, listLocalFolders, listSaved, ownedBy, type SavedInfo } from './storage/local.ts';
 import { t } from './i18n/index.ts';
@@ -146,6 +146,8 @@ export interface Library {
   signedOut: boolean;
   /** Documents other people shared with the user. */
   shared: CloudDocument[];
+  /** Folders other people shared with the user (docs/folder-sharing.md); null when they couldn't be listed, so the caller keeps the ones it has. */
+  sharedFolders: SharedFolder[] | null;
   /** The folders the documents are arranged in; null when they couldn't be listed, so the caller keeps the ones it has. */
   folders: Folder[] | null;
 }
@@ -287,13 +289,15 @@ export async function loadLocalLibrary(user: User | null): Promise<{ entries: Li
 export async function loadLibrary(user: User | null, identity: User | null = user): Promise<Library> {
   const local = notDeleted(await listSaved().catch(() => []), user);
   if (!user) {
+    const sharedFoldersRequest = identity ? listSharedFolders().catch(() => null) : Promise.resolve([]);
     const shared = identity ? await listShared().catch(() => []) : [];
-    return { entries: mergeLibrary(local, null), local, cloud: null, cloudProblem: null, offline: false, signedOut: false, shared, folders: await listLocalFolders().catch(() => []) };
+    return { entries: mergeLibrary(local, null), local, cloud: null, cloudProblem: null, offline: false, signedOut: false, shared, sharedFolders: await sharedFoldersRequest, folders: await listLocalFolders().catch(() => []) };
   }
 
   const editsBefore = catalogueEdits;
   // Asked together: each is a round trip, and none depends on another.
   const sharedRequest = listShared().catch(() => []);
+  const sharedFoldersRequest = listSharedFolders().catch(() => null);
   const foldersRequest = listFolders().catch(() => null);
   let cloud: CloudDocument[];
   try {
@@ -301,7 +305,7 @@ export async function loadLibrary(user: User | null, identity: User | null = use
   } catch (error) {
     const signedOut = error instanceof CloudError && error.status === 401;
     const problem = signedOut ? t('app.signedOutProblem') : t('app.cloudUnreachable', { message: (error as Error).message });
-    return { entries: mergeLibrary(local, null), local, cloud: null, cloudProblem: problem, offline: error instanceof TypeError, signedOut, shared: [], folders: null };
+    return { entries: mergeLibrary(local, null), local, cloud: null, cloudProblem: problem, offline: error instanceof TypeError, signedOut, shared: [], sharedFolders: null, folders: null };
   }
 
   // Decided from copies read before the account was asked: one saved to meanwhile is kept.
@@ -314,5 +318,5 @@ export async function loadLibrary(user: User | null, identity: User | null = use
   const folders = await foldersRequest;
   // Unless the catalogue was changed here meanwhile: this answer may be from before, and the next one writes it.
   if (catalogueEdits === editsBefore) writeCatalogue(user, cloud, shared, folders ?? readCatalogue(user)?.folders ?? []);
-  return { entries: mergeLibrary(kept, cloud), local: kept, cloud, cloudProblem: null, offline: false, signedOut: false, shared, folders };
+  return { entries: mergeLibrary(kept, cloud), local: kept, cloud, cloudProblem: null, offline: false, signedOut: false, shared, sharedFolders: await sharedFoldersRequest, folders };
 }

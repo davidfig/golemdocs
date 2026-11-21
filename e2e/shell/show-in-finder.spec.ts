@@ -1,5 +1,6 @@
 // Show in Finder (File Explorer, Files) in the desktop app, with a stand-in shell holding a small vault in memory: File › Show in
-// Finder and the Files pane's right-click menu ask the shell to select the document's file, or the folder, in the vault. In a browser there is no vault and none of them is offered. docs/architecture/desktop.md.
+// Finder and the right-click menus of the Files pane and the Documents screen ask the shell to select the document's file, or the
+// folder, in the vault. In a browser there is no vault and none of them is offered. docs/architecture/desktop.md.
 
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
@@ -28,7 +29,7 @@ test('File › Show in Finder selects the open document\'s file in the vault', a
   await expect.poll(() => revealed(page)).toEqual([FILE]);
 });
 
-test('the Files pane shows a document or a folder in Finder from its right-click menu', async ({ page, app }) => {
+test('the Files pane and the Documents screen show a document or a folder in Finder from their right-click menus', async ({ page, app }) => {
   await start(page, app);
   if (!(await sidebar(page).isVisible())) await app.menu('View', 'Files Sidebar');
   const folder = sidebar(page).locator('.wm-files-folder', { hasText: "Bob's notes" });
@@ -43,6 +44,11 @@ test('the Files pane shows a document or a folder in Finder from its right-click
   await page.getByRole('menuitem', { name: 'Show in Finder' }).click();
   await expect.poll(() => revealed(page)).toEqual(["Bob's notes", FILE]);
 
+  await app.menu('File', 'Open…');
+  const screen = page.locator('.wm-dashboard');
+  await screen.locator('article.wm-folder').filter({ hasText: "Bob's notes" }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Show in Finder' }).click();
+  await expect.poll(() => revealed(page)).toEqual(["Bob's notes", FILE, "Bob's notes"]);
 });
 
 test('in a browser there is no Show in Finder', async ({ page, app }) => {

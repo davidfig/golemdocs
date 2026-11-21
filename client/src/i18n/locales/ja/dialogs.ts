@@ -61,8 +61,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.publicLinkLabel': '公開リンク',
   'dialogs.share.copyLink': 'リンクをコピー',
   'dialogs.share.copyEmbed': '埋め込みコードをコピー',
-  'dialogs.share.resetLink': 'リンクをリセット',
-  'dialogs.share.resetNote': 'リンクをリセットすると新しいアドレスになり、古いアドレスは使えなくなります。',
+  'dialogs.share.resetLink': 'リンクを再生成',
+  'dialogs.share.resetNote': 'リンクを再生成すると新しいアドレスになり、古いアドレスは使えなくなります。',
   'dialogs.share.copied': 'コピーしました。',
   'dialogs.share.embedTitle': '{name}（Golem Docs）',
   'dialogs.share.note': '相手は事前に Golem Docs に一度サインインしている必要があります。編集者には変更がリアルタイムで表示されます。閲覧者には読み取り専用のコピーが表示され、文書が保存されるたびに更新されます。',
@@ -188,4 +188,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.replacementsRemove': '削除',
   'dialogs.find.wholeWord': '単語単位',
   'dialogs.find.regex': '正規表現',
+  'dialogs.share.folderNote': 'このフォルダーとサブフォルダーの中身すべて（後から追加したものも含む）が表示されます。編集者はすべてのファイルを変更したり新しいファイルを追加したりできますが、名前の変更や削除は自分が追加したものだけです。',
+  'dialogs.share.folderPublicNote': 'リンクを知っている人は誰でも、サインインせずにこのフォルダー内のすべてのファイルを読めます。フォルダー内のファイル同士のリンクは機能しますが、外部へのリンクは機能しません。検索エンジンには掲載しないよう求めます。',
 };

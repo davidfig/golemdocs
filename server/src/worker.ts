@@ -10,6 +10,8 @@ import { handleDocuments, handlePublic, handleView, ownStorage, resolveAccess, t
 import { MAX_FEEDBACK_CHARS, addFeedback, allFeedback, deleteFeedback, resolveFeedback } from './feedback.ts';
 import { HttpError, ID, json } from './http.ts';
 import { handleFolders } from './folders.ts';
+import { forgetFolders } from './folderShares.ts';
+import { handleFolderLinkOrShares, handleFolderView, handleSharedFolders } from './sharedFolders.ts';
 import { handleRoomMedia } from './roomMedia.ts';
 import { handlePreferences } from './preferences.ts';
 import { handleScriptClaims } from './scriptClaims.ts';
@@ -72,6 +74,10 @@ const routes: ExportedHandler = {
       const publicMatch = /^\/api\/public\/([^/]+)(\/file)?$/.exec(path);
       if (publicMatch) return await handlePublic(request, env, publicMatch[1]!, !!publicMatch[2]);
 
+      // GET /api/folder-public/:token[/file?path=…]: a folder's public link, for anyone (see handleFolderView).
+      const folderPublicMatch = /^\/api\/folder-public\/([^/]+)(\/file)?$/.exec(path);
+      if (folderPublicMatch) return await handleFolderView(request, env, url, null, folderPublicMatch[1]!, !!folderPublicMatch[2]);
+
       if (path.startsWith('/api/auth/')) return await handleAuth(request, env, url);
 
       // Polar's webhook has no session or origin; its signature is checked inside.
@@ -114,6 +120,27 @@ const routes: ExportedHandler = {
       // GET /api/view/:token[/file]: a document shared view-only, by its share's own address (see handleView).
       const viewMatch = /^\/api\/view\/([^/]+)(\/file)?$/.exec(path);
       if (viewMatch) return await handleView(request, env, userId, viewMatch[1], !!viewMatch[2]);
+
+      // GET /api/folder-view/:token[/file?path=…]: a folder shared view-only, by its share's own address (see handleFolderView).
+      const folderViewMatch = /^\/api\/folder-view\/([^/]+)(\/file)?$/.exec(path);
+      if (folderViewMatch) return await handleFolderView(request, env, url, userId, folderViewMatch[1]!, !!folderViewMatch[2]);
+
+      // /api/shared-folders[/:ownerId/:folderId[/tree|/folders/:id]]: folders other people shared with this user (sharedFolders.ts).
+      const sharedFoldersMatch = /^\/api\/shared-folders(?:\/([^/]+)\/([^/]+)(?:\/(tree|folders)(?:\/([^/]+))?)?)?$/.exec(path);
+      if (sharedFoldersMatch) {
+        if (!cloudStorageConfigured(env)) throw new HttpError(503, 'cloud storage is not configured');
+        const [, ownerId, folderId, sub, childId] = sharedFoldersMatch;
+        return await handleSharedFolders(request, env, userId, { ownerId, folderId, sub: sub as 'tree' | 'folders' | undefined, childId }, ctx && ((work) => ctx.waitUntil(work)));
+      }
+
+      // /api/folders/:id/shares[/:userId] and /api/folders/:id/link: who an owner's folder is shared with, and its public link.
+      const folderShareMatch = /^\/api\/folders\/([^/]+)\/(shares|link)(?:\/([^/]+))?$/.exec(path);
+      if (folderShareMatch) {
+        if (!cloudStorageConfigured(env)) throw new HttpError(503, 'cloud storage is not configured');
+        const [, folderId, sub, granteeId] = folderShareMatch;
+        if (!ID.test(folderId!)) throw new HttpError(404, 'not found');
+        return await handleFolderLinkOrShares(request, env, userId, folderId!, sub as 'shares' | 'link', granteeId, ctx && ((work) => ctx.waitUntil(work)));
+      }
 
       // GET /api/subscription: whether this user has paid for sync.
       if (path === '/api/subscription' && request.method === 'GET') return json({ ...((await subscriptionFor(env, userId)) ?? { status: 'none', active: false, currentPeriodEnd: null, cancelAtPeriodEnd: false }), sync: await hasSync(env, userId) });
@@ -229,7 +256,7 @@ const routes: ExportedHandler = {
       }
       if (collection === 'folders') {
         const { syncing, ownDb } = await ownStorage(env, userId, request.method);
-        return await handleFolders(request, id, ownDb, syncing);
+        return await handleFolders(request, id, ownDb, syncing, (ids) => forgetFolders(env, userId, ids));
       }
       return await handleDocuments(request, env, userId, url, { collection, id, sub, granteeId, action } as DocumentRoute, ctx && ((work) => ctx.waitUntil(work)));
     } catch (error) {

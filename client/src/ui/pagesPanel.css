@@ -57,16 +57,26 @@
 }
 
 .wm-pages-list {
+  position: relative; /* the items are placed in it (see pagesPanel.ts) */
   flex: 1;
   min-height: 0;
   margin: 0;
-  padding: 10px 0;
+  padding: 10px 0; /* PADDING in pagesPanel.ts */
   overflow-y: auto;
   list-style: none;
 }
 
+/* The list's full height, for the items that are not there (only the pages scrolled to have one). */
+.wm-pages-sizer {
+  width: 1px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .wm-pages-item {
-  position: relative;
+  position: absolute;
+  left: 0;
+  right: 0;
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -59,8 +59,8 @@ export const dialogs = {
   'dialogs.share.publicLinkLabel': 'Public link',
   'dialogs.share.copyLink': 'Copy Link',
   'dialogs.share.copyEmbed': 'Copy Embed Code',
-  'dialogs.share.resetLink': 'Reset Link',
-  'dialogs.share.resetNote': 'Reset Link makes a new address; the old one stops working.',
+  'dialogs.share.resetLink': 'Regenerate Link',
+  'dialogs.share.resetNote': 'Regenerate Link makes a new address; the old one stops working.',
   'dialogs.share.copied': 'Copied.',
   'dialogs.share.embedTitle': '{name} on Golem Docs',
   'dialogs.share.note': 'People need to have signed in to Golem Docs once. Editors see changes live; viewers get a read-only copy that catches up each time the document is saved.',
@@ -186,4 +186,6 @@ export const dialogs = {
   'dialogs.options.replacementsRemove': 'Remove',
   'dialogs.find.wholeWord': 'Whole word',
   'dialogs.find.regex': 'Regular expression',
+  'dialogs.share.folderNote': 'They see everything in this folder and its subfolders, including what you add later. Editors can change every file and add new ones, and can rename or delete only what they added.',
+  'dialogs.share.folderPublicNote': 'Anyone with the link can read every file in this folder without signing in. Links between its files work; links to anything outside it don’t. Search engines are asked not to list it.',
 } as const;

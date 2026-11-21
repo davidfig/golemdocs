@@ -13,49 +13,25 @@
 // file has changed (`If-None-Match`, answered 304 while it hasn't), and shows the newer one in place (`Viewer.reload`). While it is
 // being edited the file is saved within seconds of each change (an editor's autosave, or a shared room's snapshot), so it catches
 // up. See docs/architecture/viewer.md.
+//
+// A shared folder is the same page at /view?f=<token> (a person's view-only share) or /view?pf=<token> (its public link), with
+// `&path=` for the file shown: see folderPage.ts.
 
 import { loadLocale, pickLocale, t } from '../i18n/index.ts';
-import { h } from '../ui/dom.ts';
-import { FORMATS, kindFromName } from '../ui/formats.ts';
-import { saveFile } from '../ui/saveFile.ts';
 import { mountSignIn } from '../ui/signIn.ts';
-import { ConvertWorker, startConvertWorker } from '../desktop/convertClient.ts';
+import { showFolder } from './folderPage.ts';
+import { savedViewMode } from '../ui/viewMode.ts';
+import { CHECK_MS, downloader, downloading, highContrast, PAGE_TITLE, PUBLIC_CHECK_MS, say } from './page.ts';
 import { checkOutcome } from './protocol.ts';
 import { mount, type Viewer } from './viewer.ts';
-
-/** How often the file is checked for a newer save while the page is in view. */
-const CHECK_MS = 30_000;
-/** The same for a public link, which may be open in many places at once (every visitor of a page embedding it). */
-const PUBLIC_CHECK_MS = 120_000;
-
-/** A message in place of the document; returns where to put anything more (the sign-in buttons). */
-function say(text: string): HTMLElement {
-  const more = h('div');
-  const status = h('div', { class: 'wm-viewer-status', attrs: { role: 'status' } }, h('div', {}, h('p', { text }), more));
-  document.body.replaceChildren(h('div', { class: 'wm-viewer' }, h('div', { class: 'wm-viewer-view' }, status)));
-  return more;
-}
-
-/**
- * The person chose High Contrast in the app (`golem.theme`, ui/theme.ts, which this page doesn't load: it would restyle the page
- * as the app). The site's page shares the app's storage; Screen Reader Mode (`golem.screenReader`) is read by the viewer itself.
- */
-function highContrast(): boolean {
-  try {
-    return localStorage.getItem('golem.theme') === 'contrast';
-  } catch {
-    return false;
-  }
-}
-
-/** The page's own title, put back when the document is taken away. */
-const PAGE_TITLE = document.title;
 
 async function start(): Promise<void> {
   const locale = pickLocale(navigator.languages ?? [navigator.language]);
   await loadLocale(locale).catch(() => undefined);
   document.documentElement.lang = locale;
   const params = new URLSearchParams(location.search);
+  // A shared folder: its files, and links between them (folderPage.ts).
+  if (params.has('f') || params.has('pf')) return showFolder(params, locale);
   const isPublic = params.has('p');
   const embedded = isPublic && params.has('embed');
   const token = params.get(isPublic ? 'p' : 's') ?? '';
@@ -67,6 +43,8 @@ async function start(): Promise<void> {
 
   let name: string;
   let file: Response;
+  // The loading screen, from when the file is asked for until its last byte is in.
+  let loaded = (): boolean => false;
   try {
     const info = await fetch(api, { cache: 'no-store' });
     if (info.status === 401) return signInHere();
@@ -74,6 +52,7 @@ async function start(): Promise<void> {
     if (info.status === 404) return void say(gone);
     if (!info.ok) throw new Error(`HTTP ${info.status}`);
     name = ((await info.json()) as { name: string }).name;
+    loaded = downloading(document.body, name);
     file = await fetch(`${api}/file`, { cache: 'no-store' });
     if (file.status === 404) return void say(gone);
     if (!file.ok) throw new Error(`HTTP ${file.status}`);
@@ -84,19 +63,14 @@ async function start(): Promise<void> {
   const title = embedded ? name : t('viewer.viewOnlyTitle', { name });
   document.title = title;
   let etag = file.headers.get('etag');
-  const bytes = await file.arrayBuffer();
+  const bytes = await file.arrayBuffer().catch(() => null);
+  const waited = loaded();
+  if (!bytes) return void say(t('app.openSharedFailed', { message: '' }));
   // A copy for Download: the viewer is handed the bytes, which go to its worker.
   let stored = isPublic ? new Uint8Array(bytes.slice(0)) : null;
-  let converter: ConvertWorker | null = null;
+  const save = downloader();
   const download = async (): Promise<void> => {
-    if (!stored) return;
-    try {
-      converter ??= new ConvertWorker(startConvertWorker);
-      const out = (await converter.toFile(stored, name)) ?? stored;
-      await saveFile(name, out, FORMATS[kindFromName(name)].mime);
-    } catch (error) {
-      console.error(error);
-    }
+    if (stored) await save(stored, name);
   };
   const viewer: Viewer = mount(document.body, {
     bytes,
@@ -106,6 +80,10 @@ async function start(): Promise<void> {
     locale,
     title,
     contrast: highContrast(),
+    // Embedded in another site's page the viewer stays compact, as in a mail client's pane.
+    statusBar: !embedded,
+    view: savedViewMode(),
+    waited,
     onError: (message) => console.error(message),
     onDownload: isPublic ? () => void download() : undefined,
     // The page is the site's: a link opens in a tab of its own.

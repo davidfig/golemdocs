@@ -1,7 +1,6 @@
 // The embeddable viewer (src/viewer/): a document shown read-only, with page, zoom and find controls.
 
 export const viewer = {
-  'viewer.opening': 'Opening {name}…',
   'viewer.cannotOpen': '{name} can\'t be shown: Golem Docs doesn\'t open this kind of file.',
   'viewer.document': 'Document',
   'viewer.previousPage': 'Previous Page',
@@ -21,4 +20,11 @@ export const viewer = {
   'viewer.toolbar': 'Viewer',
   'viewer.zoomButton': 'Actual Size (now {zoom})',
   'viewer.foundOnPage': 'Found on page {page} of {pages}',
+  'viewer.files': 'Files',
+  'viewer.notShared': 'That link goes to a document outside this shared folder.',
+  'viewer.folderGone': 'This folder isn’t shared with you any more.',
+  'viewer.folderLinkGone': 'This link no longer works: the folder isn’t shared publicly any more.',
+  'viewer.signInToViewFolder': 'Sign in to see this folder.',
+  'viewer.folderEmpty': 'This folder is empty.',
+  'viewer.fileGone': 'That file isn’t in the folder any more.',
 } as const;

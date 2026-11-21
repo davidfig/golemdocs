@@ -25,6 +25,10 @@ export class GpuPage {
   readonly id: number;
   readonly width: number;
   readonly height: number;
+  /** Where the body sits between the top and bottom margins, if the page has one. */
+  readonly bodyBand: { top: number; bottom: number } | null;
+  /** The band of the page drawn (see Page.shown): null for all of it. */
+  shown: { top: number; bottom: number } | null = null;
   private readonly body: Content;
   private overlay: Content | null = null;
   /** Body and overlay batches, for drawing. */
@@ -42,6 +46,7 @@ export class GpuPage {
     this.id = page.id;
     this.width = page.width;
     this.height = page.height;
+    this.bodyBand = page.body && page.body.bottom > page.body.top ? page.body : null;
     this.body = this.content(page);
     this.combine();
   }
@@ -78,6 +83,26 @@ export class GpuPage {
     this.images = parts.flatMap((p) => p.images);
   }
 
+  /** Whether some of its glyphs still wait for their first draw, unpacked (`PageShelf` may pack them). */
+  get waiting(): boolean {
+    return this.text.some((t) => t.waiting);
+  }
+
+  /** Whether some of its glyphs are packed away: `unshelve` before drawing it, or they are missing. */
+  get shelved(): boolean {
+    return this.text.some((t) => t.shelved);
+  }
+
+  /** Packs the glyphs not drawn yet (see PageShelf). */
+  async shelve(): Promise<void> {
+    await Promise.all(this.text.map((t) => t.shelve()));
+  }
+
+  /** Unpacks what `shelve` packed, so the page draws whole. */
+  async unshelve(): Promise<void> {
+    await Promise.all(this.text.map((t) => t.unshelve()));
+  }
+
   get x(): number {
     return this._x;
   }
@@ -86,11 +111,15 @@ export class GpuPage {
   }
 
   moveTo(x: number, y: number): void {
+    // Every page is placed again on each layout update: nothing to do (and nothing to allocate) for one that stays put.
+    if (x === this._x && y === this._y) return;
     this._x = x;
     this._y = y;
-    for (const batch of [...this.text, ...this.background, ...this.foreground]) {
-      batch.originX = x;
-      batch.originY = y;
+    for (const batches of [this.text, this.background, this.foreground]) {
+      for (const batch of batches) {
+        batch.originX = x;
+        batch.originY = y;
+      }
     }
   }
 

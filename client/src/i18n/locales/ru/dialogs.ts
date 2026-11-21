@@ -61,8 +61,8 @@ export const dialogs: Catalog = {
   'dialogs.share.publicLinkLabel': 'Публичная ссылка',
   'dialogs.share.copyLink': 'Копировать ссылку',
   'dialogs.share.copyEmbed': 'Копировать код для вставки',
-  'dialogs.share.resetLink': 'Сбросить ссылку',
-  'dialogs.share.resetNote': 'Сброс создаёт новый адрес; старый перестаёт работать.',
+  'dialogs.share.resetLink': 'Создать новую ссылку',
+  'dialogs.share.resetNote': 'Создаётся новый адрес; старый перестаёт работать.',
   'dialogs.share.copied': 'Скопировано.',
   'dialogs.share.embedTitle': '{name} в Golem Docs',
   'dialogs.share.note': 'Пользователи должны хотя бы раз войти в Golem Docs. Редакторы видят изменения в реальном времени; читатели получают копию только для чтения, которая обновляется при каждом сохранении документа.',
@@ -188,4 +188,6 @@ export const dialogs: Catalog = {
   'dialogs.options.replacementsRemove': 'Удалить',
   'dialogs.find.wholeWord': 'Слово целиком',
   'dialogs.find.regex': 'Регулярное выражение',
+  'dialogs.share.folderNote': 'Они видят всё в этой папке и её подпапках, включая то, что вы добавите позже. Редакторы могут менять любой файл и добавлять новые, а переименовывать и удалять — только то, что добавили сами.',
+  'dialogs.share.folderPublicNote': 'Любой, у кого есть ссылка, может читать все файлы в этой папке без входа. Ссылки между её файлами работают, ссылки на что-либо вне её — нет. Поисковым системам запрещено её индексировать.',
 };

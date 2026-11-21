@@ -4,7 +4,7 @@ import { type Command, type Rect, type CommentGeometry } from './types.ts';
 
 import { type Comment, commentEnd, commentMarkerOffsets, commentRanges, commentReference, commentStart, type Paragraph } from '@golemdocs/docx';
 import { type Operation, type Pos } from '@golemdocs/ops';
-import { toVisible } from '@golemdocs/layout';
+import { toVisible, type PageLayout } from '@golemdocs/layout';
 import { EditorFormatting } from './formatting.ts';
 
 export abstract class EditorComments extends EditorFormatting {
@@ -87,13 +87,13 @@ export abstract class EditorComments extends EditorFormatting {
   }
 
   /**
-   * Rectangles over ranges of the text on the pages shown (spelling marks). `rangesOf` gives a
-   * paragraph's ranges as model offsets, and is asked once per paragraph that has a line in view.
+   * Rectangles over ranges of the text on the pages shown (spelling marks), or on `pages` (those in view) when given. `rangesOf`
+   * gives a paragraph's ranges as model offsets, and is asked once per paragraph that has a line on them.
    */
-  marks<K>(rangesOf: (paragraph: Paragraph) => { start: number; end: number; kind: K }[]): (Rect & { kind: K })[] {
+  marks<K>(rangesOf: (paragraph: Paragraph) => { start: number; end: number; kind: K }[], pages: readonly PageLayout[] = this.session.displayPages): (Rect & { kind: K })[] {
     const cache = new Map<Paragraph, { start: number; end: number; kind: K }[]>();
     const marks: (Rect & { kind: K })[] = [];
-    for (const page of this.session.displayPages) {
+    for (const page of pages) {
       for (const line of page.lines) {
         let ranges = cache.get(line.paragraph);
         if (!ranges) cache.set(line.paragraph, (ranges = rangesOf(line.paragraph)));

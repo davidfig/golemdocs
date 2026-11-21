@@ -3,7 +3,7 @@
 // look: they open it in the read-only viewer, docs/architecture/viewer.md), and removes them; and its public link, which anyone may
 // open in that viewer without signing in, or embed in another website.
 
-import { addShare, listShares, publicLink, publicLinkUrl, removeShare, type Share, type ShareRole } from '../cloud.ts';
+import { addFolderShare, addShare, folderPublicLink, folderViewUrl, listFolderShares, listShares, publicLink, publicLinkUrl, removeFolderShare, removeShare, type Share, type ShareRole } from '../cloud.ts';
 import { t } from '../i18n/index.ts';
 import { avatar } from './avatar.ts';
 import { writeClipboardText } from './clipboard.ts';
@@ -34,7 +34,45 @@ export interface ShareTarget {
   people: { id: string } | { unavailable: string };
   /** The files the document's live blocks show (docs/live-blocks.md §6): visitors to its public link see their last results. */
   liveSources?: Promise<string[]>;
+  /** What is shared: a document (the default) or a folder, with everything in it (docs/folder-sharing.md). */
+  api?: ShareApi;
 }
+
+/** How the dialog reads and changes who something is shared with and its public link. */
+export interface ShareApi {
+  list(id: string): Promise<Share[]>;
+  add(id: string, email: string, role: ShareRole): Promise<unknown>;
+  remove(id: string, userId: string): Promise<void>;
+  link(id: string, change?: 'make' | 'reset' | 'off'): Promise<string | null>;
+  linkUrl(token: string, embed?: boolean): string;
+  /** Whether its public link can be embedded in another site. */
+  embeds: boolean;
+  /** What sharing with people gives them, and what the public link does. */
+  note(): string;
+  publicNote(): string;
+}
+
+const documentApi = (): ShareApi => ({
+  list: listShares,
+  add: addShare,
+  remove: removeShare,
+  link: publicLink,
+  linkUrl: publicLinkUrl,
+  embeds: true,
+  note: () => t('dialogs.share.note'),
+  publicNote: () => t('dialogs.share.publicNote'),
+});
+
+const folderApi = (): ShareApi => ({
+  list: listFolderShares,
+  add: addFolderShare,
+  remove: removeFolderShare,
+  link: folderPublicLink,
+  linkUrl: (token) => folderViewUrl(token, true),
+  embeds: false,
+  note: () => t('dialogs.share.folderNote'),
+  publicNote: () => t('dialogs.share.folderPublicNote'),
+});
 
 const section = (heading: string, ...content: (HTMLElement | null)[]): HTMLElement =>
   // Named by its heading, so each section's status line can be told apart (People, Public link).
@@ -56,23 +94,25 @@ function statusLine(): { el: HTMLElement; say(text: string, error?: boolean): vo
 export const embedCode = (url: string, title: string): string =>
   `<iframe src="${url.replace(/&/g, '&amp;')}" title="${title.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" width="800" height="600" style="border:0" allowfullscreen></iframe>`;
 
-/** The public link: a switch, and while it is on, the address, Copy Link, Copy Embed Code and Reset Link. */
-function publicSection(id: string, name: string, liveSources?: Promise<string[]>): HTMLElement {
+/** The public link: a switch, and while it is on, the address, Copy Link, Copy Embed Code and Regenerate Link. */
+function publicSection(api: ShareApi, id: string, name: string, liveSources?: Promise<string[]>): HTMLElement {
+  const publicLink = api.link;
+  const publicLinkUrl = api.linkUrl;
   const toggle = h('input', { attrs: { type: 'checkbox' } });
   const address = h('input', { class: 'wm-input', attrs: { type: 'text', readonly: '', 'aria-label': t('dialogs.share.publicLinkLabel') } });
   address.addEventListener('focus', () => address.select());
   const copyLink = h('button', { class: 'wm-button', text: t('dialogs.share.copyLink'), attrs: { type: 'button' } });
   const copyEmbed = h('button', { class: 'wm-button', text: t('dialogs.share.copyEmbed'), attrs: { type: 'button' } });
   const reset = h('button', { class: 'wm-button', text: t('dialogs.share.resetLink'), attrs: { type: 'button', title: t('dialogs.share.resetNote') } });
-  const linkRow = h('div', { class: 'wm-share-link' }, address, copyLink);
-  const moreRow = h('div', { class: 'wm-share-more' }, copyEmbed, reset);
+  // One row: the address, then every button for it (the dialog is sized to fit them, see .wm-share-embeds in ui.css).
+  const linkRow = h('div', { class: 'wm-share-link' }, address, copyLink, ...(api.embeds ? [copyEmbed] : []), reset);
   const { el: message, say } = statusLine();
 
   let token: string | null = null;
   const show = (next: string | null) => {
     token = next;
     toggle.checked = !!token;
-    for (const row of [linkRow, moreRow]) row.hidden = !token;
+    linkRow.hidden = !token;
     address.value = token ? publicLinkUrl(token) : '';
   };
   show(null);
@@ -99,7 +139,7 @@ function publicSection(id: string, name: string, liveSources?: Promise<string[]>
   copyEmbed.addEventListener('click', () => token && void copy(embedCode(publicLinkUrl(token, true), t('dialogs.share.embedTitle', { name }))));
   publicLink(id).then(show, (error: Error) => say(error.message, true));
 
-  const note = h('p', { class: 'wm-hint', text: t('dialogs.share.publicNote') });
+  const note = h('p', { class: 'wm-hint', text: api.publicNote() });
   // Live blocks are kept up to date by an app, not by the link: a visitor sees what they showed at the last update.
   const live = h('p', { class: 'wm-hint' });
   live.hidden = true;
@@ -109,12 +149,16 @@ function publicSection(id: string, name: string, liveSources?: Promise<string[]>
     live.textContent = t('dialogs.share.liveNote', { sources: names.join(', ') });
     live.hidden = false;
   });
-  return section(t('dialogs.share.publicHeading'), h('label', { class: 'wm-find-case' }, toggle, t('dialogs.share.publicToggle')), note, live, linkRow, moreRow, message);
+  return section(t('dialogs.share.publicHeading'), h('label', { class: 'wm-find-case' }, toggle, t('dialogs.share.publicToggle')), note, live, linkRow, message);
 }
 
 /** A modal for sharing the open document with people. */
 export function showShareDialog(target: ShareTarget): void {
-  const dialog = h('dialog', { class: 'wm-dialog wm-share', attrs: { 'aria-label': t('dialogs.share.label', { name: target.name }) } });
+  const api = target.api ?? documentApi();
+  const listShares = api.list;
+  const addShare = api.add;
+  const removeShare = api.remove;
+  const dialog = h('dialog', { class: `wm-dialog wm-share${api.embeds ? ' wm-share-embeds' : ''}`, attrs: { 'aria-label': t('dialogs.share.label', { name: target.name }) } });
 
   const personId = 'id' in target.people ? target.people.id : '';
   const people = h('div', { class: 'wm-share-people', attrs: { role: 'list' } });
@@ -199,9 +243,9 @@ export function showShareDialog(target: ShareTarget): void {
 
   const peopleSection =
     'id' in target.people
-      ? section(t('dialogs.share.peopleHeading'), form, message, h('p', { class: 'wm-hint', text: t('dialogs.share.note') }), people)
+      ? section(t('dialogs.share.peopleHeading'), form, message, h('p', { class: 'wm-hint', text: api.note() }), people)
       : section(t('dialogs.share.peopleHeading'), h('p', { text: target.people.unavailable }));
-  const body = h('div', { class: 'wm-dialog-body' }, peopleSection, 'id' in target.people ? publicSection(target.people.id, target.name, target.liveSources) : null);
+  const body = h('div', { class: 'wm-dialog-body' }, peopleSection, 'id' in target.people ? publicSection(api, target.people.id, target.name, target.liveSources) : null);
   dialog.append(dialogTitleBar(t('dialogs.share.title', { name: target.name }), () => dialog.close()), body, h('div', { class: 'wm-dialog-buttons' }, done));
   // Keys stay in the dialog: the document's handlers listen on the window.
   dialog.addEventListener('keydown', (e) => e.stopPropagation());
@@ -215,4 +259,9 @@ export function showShareDialog(target: ShareTarget): void {
   } else {
     done.focus();
   }
+}
+
+/** The sharing dialog for one of the user's own folders: people (to view or edit everything in it) and its public link (to read it). */
+export function showFolderShareDialog(folder: { id: string; name: string }): void {
+  showShareDialog({ name: folder.name, people: { id: folder.id }, api: folderApi() });
 }

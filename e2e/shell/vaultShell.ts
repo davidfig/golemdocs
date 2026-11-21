@@ -19,9 +19,10 @@ declare global {
   }
 }
 
-/** Signs the page in as a new account and installs the shell before the page loads, with `files` (path to text) in the vault. */
-export async function vaultShell(page: Page, files: Record<string, string>): Promise<void> {
-  await signInAs(page.context(), uniqueEmail('vault'));
+/** Signs the page in as a new account and installs the shell before the page loads, with `files` (path to text) in the vault. Returns the account's email. */
+export async function vaultShell(page: Page, files: Record<string, string>): Promise<string> {
+  const email = uniqueEmail('vault');
+  await signInAs(page.context(), email);
   await page.addInitScript(
     ({ root, files }) => {
       localStorage.setItem('word.vaultAsked', '1');
@@ -74,4 +75,5 @@ export async function vaultShell(page: Page, files: Record<string, string>): Pro
     },
     { root: VAULT_ROOT, files },
   );
+  return email;
 }

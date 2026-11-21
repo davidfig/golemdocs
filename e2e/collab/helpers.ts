@@ -362,3 +362,39 @@ export async function cloudParts(page: Page, id: string): Promise<Record<string,
   expect(response.ok()).toBe(true);
   return unzip(Buffer.from(await response.body()));
 }
+
+const md = (text: string): Buffer => Buffer.from(text, 'utf8');
+
+/** A link that fills the first lines of the page, so a click near the top of the page lands on it whatever the zoom. */
+const bigLink = (target: string): string => `[[${target}|${`Go to ${target} `.repeat(30).trim()}]]\n`;
+
+/** For folder sharing (share-folder.spec.ts): the owner's folder `Project` (with a subfolder `Notes`), and a document outside it. Returns the folder's id. */
+export async function folderProject(page: Page): Promise<string> {
+  const folder = async (name: string, parentId: string | null) => {
+    const id = crypto.randomUUID();
+    const response = await page.request.put(`/api/folders/${id}`, { data: { name, parentId }, headers: { origin: CLIENT_ORIGIN } });
+    expect(response.status(), await response.text()).toBe(201);
+    return id;
+  };
+  const projectId = await folder('Project', null);
+  const notesId = await folder('Notes', projectId);
+  const add = async (name: string, text: string, folderId: string | null) => {
+    const response = await page.request.post(`/api/documents?name=${encodeURIComponent(name)}${folderId ? `&folder=${folderId}` : ''}`, { data: md(text), headers: { origin: CLIENT_ORIGIN } });
+    expect(response.status(), await response.text()).toBe(201);
+  };
+  await add('README.md', bigLink('Ideas'), projectId);
+  await add('Ideas.md', bigLink('Secret'), notesId);
+  await add('Secret.md', '# Not shared\n', null);
+  return projectId;
+}
+
+/** Clicks the link at the top of the folder viewer's first page (`bigLink`). */
+export async function clickTopLink(page: Page): Promise<void> {
+  const canvas = page.locator('.wm-folder-doc canvas');
+  await expect(canvas).toBeVisible();
+  await page.waitForTimeout(500);
+  const box = (await canvas.boundingBox())!;
+  // The page is fitted to the width at most: its first text line is an inch (and a bit) down, which is under a ninth of its width.
+  await page.mouse.click(box.x + box.width / 2, box.y + Math.min(box.width, 816) * 0.16);
+}
+

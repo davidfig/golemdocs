@@ -21,10 +21,12 @@ It opens everything `sourceFromFile` recognises (`client/src/formats/source.ts`)
 
 - **Read-only from the start.** `LayoutClient.openReadOnly` sends `open` with `readOnly: true`. The worker sets `OpenDocument.viewOnly`, which makes its `readOnly` true with no room: every edit, paste, format, undo, check box, picture or PDF markup is refused (the same gate a room's viewer goes through), no room is joined, and no squiggles are drawn, so no dictionary is fetched. Selecting, select-all, find and copy work as in the app. Tested in `client/test/layoutWorker.readOnly.test.ts`.
 - **Fonts from the host.** The worker reads where its fonts are from its name, before any message arrives (`layoutWorkerName` / `fontBaseOf` in `layout/protocol.ts`; `loadAppFonts(base)` in `formats/appFonts.ts`). The app's worker keeps its usual name and the site's `/fonts/`.
-- **The page** (`src/viewer/viewer.ts`) is the editor's render loop without its chrome: `GpuPage`s from layout updates, `arrangePages` in one column, a `Camera` placed as the editor places it (the first page at 100%, or zoomed out to fit its width; a picture fitted whole), and `PageRenderer.render` on demand. `PageRenderer` takes its desk colour as a function, so the viewer doesn't load the app's colour-scheme module (which reads browser storage).
+- **The page** (`src/viewer/viewer.ts`) is the editor's render loop without its chrome: `GpuPage`s from layout updates, `arrangePages` in one column (or as many as fill the window in the page grid), a `Camera` placed as the editor places it (the first page at 100%, or zoomed out to fit its width; a picture fitted whole; the grid fitted whole; Flow from the top), and `PageRenderer.render` on demand. `PageRenderer` takes its desk colour as a function, so the viewer doesn't load the app's colour-scheme module (which reads browser storage).
 - **Input.** A hidden textarea holds the focus (`inputmode="none"`, so no on-screen keyboard), for copy and the keys; whatever is typed in it is dropped. A press sends `pointer` commands (a double click a word, a triple a paragraph, a drag extends), a click that didn't move asks `linkAt`, and a link that passes `linkForHost` (http, https, mailto, tel, ftp) goes to `onLink`. Wheel scrolls, Ctrl/⌘ + wheel or a pinch zooms. Copy (and cut, which only copies) puts the selection's text and HTML on the clipboard.
 - **Keys, and which are the host's.** `viewerKey` (`protocol.ts`, unit-tested in `viewer.test.ts`) decides each key press, and the handler does what it says. The viewer's own: Ctrl/⌘ + − 0 zoom; Ctrl/⌘ F opens the find bar, F3 or Ctrl/⌘ G finds again (Shift: back), Escape closes the find bar while it is open; Ctrl/⌘ A selects all; ↑ ↓ Page Up/Down Space (Shift+Space back) Home End move through the document, and ← → too, but only when there is room to scroll sideways. That is the camera's own room (`Camera.sideRoom`, the same math as its clamp, over 2 px to allow for rounding; `canScrollSideways` in `protocol.ts`). Sideways the view may run only half the fit-to-width margin past the pages (`SIDE_PADDING_X`, 8 px), so a page opened zoomed to fit a narrow frame (a mail client's reading pane) has none, and ← → go to the host. The browser's: Ctrl/⌘ C X V, Tab, everything typed in the find or page field, Enter and Space on a focused button, an input method's composing, and keys that only modify others. Every other key goes to the host (`onKey`, or the `golemdocs:key` message), so the page around the viewer can act on it while the focus is in the frame: Escape with the find bar closed, letters (Satchel's `f`), ← → over pages that fit, and combinations the viewer doesn't use. Its default isn't stopped.
 - **Screen readers.** The viewer uses the app's Screen Reader Mode (`ScreenReaderSupport`, the same setting `golem.screenReader`): the reading layer over the pages, the textarea mirroring a caret the arrows move, and announcements, built only while the mode is on. It is turned on by the setting, a host's `screenReader`, Mod+Alt+Z, or a button that is the first thing Tab reaches. The bar is a named toolbar with arrow keys, the find bar a named search region, the pages a `<main>` named by the document; Find says where it found the text; Windows contrast themes draw the pages in the system's colours. See [Accessibility](accessibility.md#the-viewer).
+- **Loading.** While a file opens, the editor's loading screen (`ui/loadingScreen.ts`) covers the document, saying which file and how far along it is (laying out); it goes when the first pages arrive. Its box shows only after a moment, so a quick load just looks like the document arriving. The site's pages show the same screen while they download the file (`downloading` in `page.ts`) and pass `waited` when it was already showing, so the viewer's carries on without a gap. A `reload` keeps the old pages until the new ones come instead.
+- **The status bar and the views** (`statusBar`, on for the site's pages, off by default for other hosts so a small pane stays compact). It is the editor's own (`Footer`, `ui/footer.ts`, styled by `.wm-footer` in `ui.css`): the page (a button that goes to the bar's page field, as the editor's opens Go To), the word count and the selection's (`countWords` with `footer`, asked for once the document is open and after the selection settles; a PDF's own pages and pictures have none; a picture shows its size in pixels), the zoom (the editor's list of sizes, `ui/zoomList.ts`), and Print Layout, Flow and Page Grid. Flow sends the worker the width to reflow to (`setReflow`, as the editor's `syncReflow`), draws without page edges (`PageRenderer.flat`) and hides the page buttons, field and count, which mean nothing there; it can't be chosen for a PDF's own pages or a picture. With a status bar the zoom shows there, not in the top bar. The site's pages start in the view the person chose in the editor (`savedViewMode`, `ui/viewMode.ts`, read but never written here), and a page of a folder keeps a view picked there for the next file (`onView`), except the page grid, which is left when another file opens, as in the editor.
 - **The bar** is built from the shared parts (`iconButton` with `.wm-tbutton`, `.wm-input`, `.wm-find-message`, the `--wm-*` colours) and its words go through `t('viewer.*')` (with `dialogs.find.*` reused). The UI font is the system's: the app's Atkinson Hyperlegible is a web font of the site's, so the viewer's build strips its `@font-face` rules (`noUiFont` in `vite.viewer.config.ts`).
 
 ## Shared view-only: the site's own host
@@ -47,6 +49,15 @@ A document may also have one **public link** (File › Share, *Public link*): `/
 - **Cost.** Every visitor loads the viewer and the fonts the document uses (static files, cached), and the file once. A public page checks for a newer save every 2 minutes instead of 30 s, and only while it is in view; the server lets browsers keep its answers for a minute, which is also how long a link turned off can still show to someone who already had it open.
 - **Live blocks.** The viewer shows a live block's last result, as stored; it computes nothing. The block is brought up to date by the owner's apps (`LiveKeeper`), and the change reaches visitors with the next upload and their page's next check. The Share dialog says so when the document has live blocks from spreadsheets or CSV files (`liveSources` in `ShareTarget`, from `LiveKeeper.tableSources`).
 
+## Shared folders
+
+A folder shared view-only, or by its public link ([Folder sharing](../folder-sharing.md)), opens on the same page: `/view?f=<token>` for a person (`folder_shares.view_token`, read with their session) and `/view?pf=<token>` for anyone (`folder_links.token`). `share.ts` hands both to `folderPage.ts`, which reads `/api/folder-view|folder-public/<token>` for the folder's name and its files as paths inside it (never an id) and `…/file?path=<path>` for a file.
+
+- **One file at a time, each with its own address.** `&path=` names the file shown and `#` a heading in it (`heading` in `mount`, sent to the layout worker as `goToPlace` once the file is laid out). With no path the page shows a README or index at the top, else the first file, and writes the path into the address. A file opened from the tree or a link pushes a history entry, so Back goes back; Ctrl- or Cmd-click opens it in a new tab as any link does.
+- **The tree** is a `nav` named Files of nested lists: `<details>` for folders, links for files, the one shown `aria-current`. It is beside the document, or laid over it on a phone (the Files button in the bar opens and closes it, with `aria-expanded`). F6 moves between it and the document.
+- **Links stay inside the folder.** `mount`'s `onDocLink` gets every `doc:` link; the page resolves it against the folder's files alone (`resolveFolderLink` in `folderLinks.ts`, tested in `client/test/folderView.test.ts`), so a link to anything outside it goes nowhere and the bar's status line says so.
+- **Checks and the end of access** work as for a document, with the tree read again at each check. A file that left the folder clears on its own; a folder no longer shared clears the whole page.
+
 ## API
 
 `mount(el, options) → { destroy() }` (`client/src/viewer/viewer.ts`). It sets the colour scheme on the root element, so it is meant to own its document: the viewer page, or a frame of its own.
@@ -65,6 +76,10 @@ A document may also have one **public link** (File › Share, *Public link*): `/
 | `title` | Shown in the bar beside the page number, and the name of the pages' region. |
 | `screenReader` | Screen Reader Mode starts on (otherwise it follows `golem.screenReader`, where the page can read storage). |
 | `contrast` | The High Contrast colours around the pages. |
+| `statusBar` | The editor's status bar under the document, and the three views (see above). Off unless asked for. |
+| `view` | The view to start in: `print` (the default), `flow` or `grid`. |
+| `onView(view)` | The person picked another view in the status bar. |
+| `waited` | The host already showed a loading screen while it fetched the file: the viewer's shows at once. |
 
 `destroy()` stops the worker, frees the GPU (`WEBGL_lose_context`) and removes what it added. `reload(bytes)` shows a newer version of the same file in place, keeping the view where it was.
 
@@ -74,7 +89,7 @@ A document may also have one **public link** (File › Share, *Public link*): `/
 
 | Direction | Message |
 | --- | --- |
-| host → viewer | `{ type: 'golemdocs:open', bytes: ArrayBuffer, name, fontBase?, dark?, locale?, screenReader?, contrast? }`. Transfer `bytes`. The page's title becomes the file's name. A second `open` replaces the file. `fontBase` defaults to `?fonts=` in the page's address, else `fonts/` beside the page. |
+| host → viewer | `{ type: 'golemdocs:open', bytes: ArrayBuffer, name, fontBase?, dark?, locale?, screenReader?, contrast?, statusBar?, view? }` (`view`: `print` or `flow`). Transfer `bytes`. The page's title becomes the file's name. A second `open` replaces the file. `fontBase` defaults to `?fonts=` in the page's address, else `fonts/` beside the page. |
 | viewer → host | `{ type: 'golemdocs:ready' }` once loaded; `{ type: 'golemdocs:opened', name, format, pages }`; `{ type: 'golemdocs:error', message }`; `{ type: 'golemdocs:link', url }`; `{ type: 'golemdocs:key', key, code, shiftKey, ctrlKey, altKey, metaKey, repeat }` for a key the viewer has no use for (see Keys above). |
 
 ## Building it
@@ -148,8 +163,10 @@ Not checked: the real WKWebView inside Tauri (Playwright's WebKit is the same en
 | File | |
 | --- | --- |
 | `client/viewer.html`, `client/src/viewer/main.ts` | The viewer page and its messages |
-| `client/view/index.html`, `client/src/viewer/share.ts` | The site's page for a document shared view-only (`/view?s=<token>`) |
-| `client/src/viewer/viewer.ts` | `mount`: rendering, input, the bar, `startLayoutWorker` |
+| `client/view/index.html`, `client/src/viewer/share.ts` | The site's page for a document shared view-only (`/view?s=<token>`) or by its public link (`?p=`) |
+| `client/src/viewer/folderPage.ts`, `folderLinks.ts`, `page.ts` | A shared folder on that page (`?f=`, `?pf=`): its tree, links between its files (pure; `client/test/folderView.test.ts`), and what the two pages share |
+| `client/src/viewer/viewer.ts` | `mount`: rendering, input, the bar, the views and status bar, `startLayoutWorker` |
+| `client/src/ui/footer.ts`, `loadingScreen.ts`, `zoomList.ts`, `viewMode.ts` | The editor's status bar, loading screen, list of zoom sizes and saved view, which the viewer uses as they are |
 | `client/src/viewer/protocol.ts` | Message types, `linkForHost`, zoom steps, page numbers (pure; `client/test/viewer.test.ts`) |
 | `client/src/viewer/fonts.ts` | The font set the build bundles (pure; tested there too) |
 | `client/src/viewer/viewer.css` | The bar and the view |
@@ -157,6 +174,8 @@ Not checked: the real WKWebView inside Tauri (Playwright's WebKit is the same en
 | `client/src/layout/layoutClient.ts` | `openReadOnly`, `terminate`, the `fontBase` and `startWorker` options |
 | `e2e/accessibility/viewer.spec.ts` | Landmarks, names and keys, Find's announcement, Screen Reader Mode and its caret, forced colours |
 | `e2e/viewer/viewer.spec.ts`, `e2e/viewer/sandbox.spec.ts` | The viewer page in the dev server; the built viewer sandboxed, in Chromium and WebKit |
+| `e2e/collab/share-folder.spec.ts`, `e2e/accessibility/folder-viewer.spec.ts` | A shared folder's public link and a person's share: the tree, links in and out of the folder, Back, the end of access; the tree from the keyboard and F6 |
+| `e2e/viewer/status-bar.spec.ts`, `e2e/accessibility/viewer-status-bar.spec.ts` | The site page's status bar, views, zoom list and loading screen; none in another site's frame; the status bar from the keyboard |
 | `e2e/collab/share-view-only.spec.ts` | Sharing as Can view, opening it in the viewer under its token (no response names the document), catching up with a save, refused writes, a dead token |
 
 ## Related docs

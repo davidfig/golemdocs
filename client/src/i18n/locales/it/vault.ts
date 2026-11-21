@@ -90,4 +90,10 @@ export const vault: Catalog = {
   'vault.link.outside': '«{file}» non è nella cartella del caveau «{name}».',
   'vault.link.missing': '«{file}» non è nella cartella del caveau.',
   'vault.link.placeMissing': 'La nota è aperta, ma il punto indicato dal link non è stato trovato.',
+  'vault.shared.index.file': '{name} (non nel caveau)',
+  'vault.shared.index.title': '{name} (non in questo caveau)',
+  'vault.shared.index.intro': 'La cartella «{folder}» della cartella condivisa «{share}» non viene copiata in questo caveau, quindi i suoi file non sono qui. Restano in Golem Docs. Questi sono i file che contiene:',
+  'vault.shared.index.empty': 'Non contiene ancora file.',
+  'vault.shared.index.more': '…e altri {count}',
+  'vault.shared.index.how': 'Per tenere anche questa cartella nel tuo caveau, apri File › Apri in Golem Docs e scegli «Nel mio caveau…» sulla scheda di «{share}». Golem Docs mantiene aggiornato questo elenco, quindi le modifiche a questo file non vengono conservate.',
 };

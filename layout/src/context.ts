@@ -30,7 +30,7 @@ export interface LayoutContext {
   /** Fill behind the text (cell shading), for resolving "auto" text color. */
   background?: number;
   /** Last layout per paragraph (see layoutParagraph); owned by a LayoutSession. */
-  paragraphCache?: WeakMap<import('@golemdocs/docx').Paragraph, import('./paragraph.ts').CachedParagraph>;
+  paragraphCache?: import('./paragraph.ts').ParagraphCache;
 }
 
 const layerIds = new WeakMap<object, number>();

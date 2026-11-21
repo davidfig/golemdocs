@@ -90,4 +90,10 @@ export const vault: Catalog = {
   'vault.link.outside': '«{file}» no está en la carpeta de la bóveda «{name}».',
   'vault.link.missing': '«{file}» no está en la carpeta de la bóveda.',
   'vault.link.placeMissing': 'La nota está abierta, pero no se encontró el lugar al que apunta el enlace.',
+  'vault.shared.index.file': '{name} (no está en la bóveda)',
+  'vault.shared.index.title': '{name} (no está en esta bóveda)',
+  'vault.shared.index.intro': 'La carpeta «{folder}» de la carpeta compartida «{share}» no se copia en esta bóveda, así que sus archivos no están aquí. Siguen en Golem Docs. Estos son los archivos que contiene:',
+  'vault.shared.index.empty': 'Todavía no tiene archivos.',
+  'vault.shared.index.more': '…y {count} más',
+  'vault.shared.index.how': 'Para guardar también esta carpeta en tu bóveda, abre Archivo › Abrir en Golem Docs y elige «En mi bóveda…» en la tarjeta de «{share}». Golem Docs mantiene esta lista al día, así que los cambios hechos en este archivo no se conservan.',
 };

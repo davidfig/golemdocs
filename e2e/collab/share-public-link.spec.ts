@@ -78,7 +78,7 @@ test('resetting the link kills the old address, and turning it off kills the lin
   await expect(address).toHaveValue(/\/view\?p=/);
   const first = await address.inputValue();
 
-  await dialog.getByRole('button', { name: 'Reset Link' }).click();
+  await dialog.getByRole('button', { name: 'Regenerate Link' }).click();
   await expect(address).not.toHaveValue(first);
   const second = await address.inputValue();
   const stranger = await signedOutContext(browser);

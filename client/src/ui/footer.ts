@@ -37,20 +37,20 @@ const VIEW_ICONS: Record<ViewMode, string> = {
   flow: '<path d="M1.5 3.5h13M1.5 6.5h13M1.5 9.5h13M1.5 12.5h8"/>',
   grid: '<rect x="1.5" y="1.5" width="5.5" height="5.5" rx=".8"/><rect x="9" y="1.5" width="5.5" height="5.5" rx=".8"/><rect x="1.5" y="9" width="5.5" height="5.5" rx=".8"/><rect x="9" y="9" width="5.5" height="5.5" rx=".8"/>',
 };
-/** What the status bar's clickable parts do. */
+/** What the status bar's clickable parts do. A segment whose action is left out is only a fact (the viewer has no Word Count). */
 export interface FooterActions {
   view(view: ViewMode): void;
-  goTo(): void;
-  wordCount(): void;
+  goTo?(): void;
+  wordCount?(): void;
   zoom(anchor: HTMLElement): void;
-  canvasSize(): void;
+  canvasSize?(): void;
   /** Wrap long lines or not (a plain text file). */
-  wrap(): void;
+  wrap?(): void;
   /** The tooltip of a clickable segment. */
   label(action: FooterAction): string;
 }
 
-type FooterAction = 'goTo' | 'wordCount' | 'zoom' | 'canvasSize';
+export type FooterAction = 'goTo' | 'wordCount' | 'zoom' | 'canvasSize';
 
 const SEGMENT_ACTIONS: Partial<Record<MessageKey, FooterAction>> = {
   'panels.footer.page': 'goTo',
@@ -126,7 +126,7 @@ export class Footer {
     this.wrap = h('button', { class: 'wm-footer-view', attrs: { type: 'button', title: wrapLabel, 'aria-label': t('textEditor.wrap'), 'aria-pressed': 'false' } });
     this.wrap.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 3.5h13M1.5 7.5h10a2.5 2.5 0 0 1 0 5H8M9.7 10.5 7.7 12.5l2 2M1.5 11.5h3"/></svg>';
     this.wrap.addEventListener('mousedown', (e) => e.preventDefault());
-    this.wrap.addEventListener('click', () => actions.wrap());
+    this.wrap.addEventListener('click', () => actions.wrap?.());
     el.replaceChildren(this.items, group, this.wrap);
   }
 
@@ -160,14 +160,14 @@ export class Footer {
   }
 
   private segment(text: string, action: FooterAction | undefined): HTMLElement {
-    if (!action) return h('span', { class: 'wm-footer-item', text });
+    if (!action || !this.actions[action]) return h('span', { class: 'wm-footer-item', text });
     const button = h('button', { class: 'wm-footer-item wm-footer-link', text, attrs: { type: 'button', title: this.actions.label(action) } });
     if (action === 'zoom') {
       // The editor keeps the focus while the list is open (it gets it back once a size is chosen).
       button.addEventListener('mousedown', (e) => e.preventDefault());
       button.addEventListener('click', () => this.actions.zoom(button));
     } else {
-      button.addEventListener('click', () => this.actions[action]());
+      button.addEventListener('click', () => this.actions[action]?.());
     }
     return button;
   }

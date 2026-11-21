@@ -61,8 +61,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.publicLinkLabel': '公开链接',
   'dialogs.share.copyLink': '复制链接',
   'dialogs.share.copyEmbed': '复制嵌入代码',
-  'dialogs.share.resetLink': '重置链接',
-  'dialogs.share.resetNote': '重置链接会生成新地址，旧地址将失效。',
+  'dialogs.share.resetLink': '重新生成链接',
+  'dialogs.share.resetNote': '重新生成链接会生成新地址，旧地址将失效。',
   'dialogs.share.copied': '已复制。',
   'dialogs.share.embedTitle': 'Golem Docs 上的 {name}',
   'dialogs.share.note': '对方需要先登录过一次 Golem Docs。编辑者可实时看到更改；查看者看到的是只读副本，每次保存文档时都会更新。',
@@ -188,4 +188,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.replacementsRemove': '删除',
   'dialogs.find.wholeWord': '全字匹配',
   'dialogs.find.regex': '正则表达式',
+  'dialogs.share.folderNote': '他们能看到此文件夹及其子文件夹中的所有内容，包括你之后添加的。编辑者可以修改任何文件并添加新文件，但只能重命名或删除自己添加的内容。',
+  'dialogs.share.folderPublicNote': '任何拥有链接的人无需登录即可阅读此文件夹中的所有文件。文件之间的链接可用，指向文件夹以外内容的链接不可用。会请求搜索引擎不要收录。',
 };

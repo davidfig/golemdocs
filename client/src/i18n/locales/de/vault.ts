@@ -90,4 +90,10 @@ export const vault: Catalog = {
   'vault.link.outside': '„{file}“ ist nicht im Tresorordner „{name}“.',
   'vault.link.missing': '„{file}“ ist nicht im Tresorordner.',
   'vault.link.placeMissing': 'Die Notiz ist geöffnet, aber die Stelle, auf die der Link zeigt, wurde nicht gefunden.',
+  'vault.shared.index.file': '{name} (nicht im Tresor)',
+  'vault.shared.index.title': '{name} (nicht in diesem Tresor)',
+  'vault.shared.index.intro': 'Der Ordner „{folder}“ des geteilten Ordners „{share}“ wird nicht in diesen Tresor kopiert, daher sind seine Dateien nicht hier. Sie sind weiterhin in Golem Docs. Das sind die Dateien darin:',
+  'vault.shared.index.empty': 'Er enthält noch keine Dateien.',
+  'vault.shared.index.more': '…und {count} weitere',
+  'vault.shared.index.how': 'Um diesen Ordner auch in deinem Tresor zu behalten, öffne in Golem Docs Datei › Öffnen und wähle „Im Tresor…“ auf der Karte von „{share}“. Golem Docs hält diese Liste aktuell, Änderungen an dieser Datei werden daher nicht behalten.',
 };

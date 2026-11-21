@@ -15,7 +15,6 @@ import {
   type ImageOp,
   type Mark,
   type TableOp,
-  type ZoomTarget,
 } from './actions.ts';
 import { CommandRegistry, type Command, type CommandSpec } from './commands.ts';
 import { announce } from './announce.ts';
@@ -38,6 +37,7 @@ import { feedbackPanel, showFeedbackDialog } from './feedback.ts';
 import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerDocument, DrawerEntry } from './menuDrawer.ts';
 import { closePopup, openPopup, popupOpenFor, setPopupLayer, showConfirm, showDialog } from './popup.ts';
+import { showZoomList, zoomPresets } from './zoomList.ts';
 import { IS_MAC, isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
 import { inAppMenuOnMac, installFullScreen, isFullScreen, onFullScreenChange, onInAppMenuChange, toggleFullScreen } from './fullScreen.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type PaletteControl, type ToolbarItem } from './toolbar.ts';
@@ -75,19 +75,6 @@ export interface ChromeOptions {
 }
 
 const FONT_SIZES = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
-const zoomPresets = (): { label: string; to: ZoomTarget }[] => [
-  { label: '500%', to: 5 },
-  { label: '200%', to: 2 },
-  { label: '150%', to: 1.5 },
-  { label: '100%', to: 1 },
-  { label: '75%', to: 0.75 },
-  { label: '50%', to: 0.5 },
-  { label: '25%', to: 0.25 },
-  { label: '10%', to: 0.1 },
-  { label: t('chrome.zoom.pageWidth'), to: 'pageWidth' },
-  { label: t('chrome.zoom.wholePage'), to: 'wholePage' },
-  { label: t('chrome.zoom.allPages'), to: 'allPages' },
-];
 const DEFAULT_FONTS = ['Arial', 'Calibri', 'Cambria', 'Comic Sans MS', 'Courier New', 'Georgia', 'JetBrains Mono', 'Segoe UI', 'Times New Roman'];
 const symbols = (): [string, string][] => [
   ['©', t('chrome.symbol.copyright')],
@@ -254,23 +241,10 @@ export class Chrome {
 
   /** The zoom box's list of sizes, shown by `owner` (the status bar's zoom); a second click closes it. */
   showZoomList(owner: HTMLElement): void {
-    if (popupOpenFor(owner)) return closePopup();
-    const current = `${zoomPercent(this.state.zoom)}%`;
-    const list = h('div', { class: 'wm-list', attrs: { role: 'listbox', 'aria-label': t('chrome.control.zoom') } });
-    for (const preset of zoomPresets()) {
-      const chosen = preset.label === current;
-      const row = h('div', { class: chosen ? 'wm-option active' : 'wm-option', text: preset.label, attrs: { role: 'option', 'aria-selected': String(chosen) } });
-      row.addEventListener('pointerenter', () => {
-        for (const other of list.children) other.classList.toggle('active', other === row);
-      });
-      row.addEventListener('click', () => {
-        closePopup();
-        this.registry.perform({ kind: 'zoom', to: preset.to }, t('chrome.perform.zoom'));
-        this.options.host.focusEditor();
-      });
-      list.append(row);
-    }
-    openPopup(owner, list);
+    showZoomList(owner, this.state.zoom, (to) => {
+      this.registry.perform({ kind: 'zoom', to }, t('chrome.perform.zoom'));
+      this.options.host.focusEditor();
+    });
   }
 
   /** The saved shortcuts changed (they came from the account): menus and keys follow them. */

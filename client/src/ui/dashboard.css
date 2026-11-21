@@ -514,3 +514,24 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
+
+/* "In my vault…" on a shared folder's card (vaultFoldersDialog.ts): its folders as a tree of checkboxes, scrolling when long. */
+.wm-vault-dialog .wm-dialog-body {
+  max-width: 480px;
+}
+
+.wm-vault-folders {
+  list-style: none;
+  margin: 4px 0 0;
+  padding-inline-start: 20px;
+}
+
+.wm-vault-choice > .wm-vault-folders {
+  max-height: 50vh;
+  overflow: auto;
+  padding-inline-start: 0;
+}
+
+.wm-vault-folders li {
+  margin-top: 4px;
+}

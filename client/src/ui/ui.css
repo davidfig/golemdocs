@@ -2218,7 +2218,13 @@ html.wm-titlebar .wm-format {
 /* --- Share --------------------------------------------------------------------------------- */
 
 .wm-dialog.wm-share {
-  width: 460px;
+  /* Wide enough for the public link's address with all its buttons on one row (Copy Link, Regenerate Link, and for a document Copy Embed Code). */
+  width: 520px;
+  max-width: calc(100vw - 32px);
+}
+
+.wm-dialog.wm-share.wm-share-embeds {
+  width: 600px;
 }
 
 .wm-share-section {
@@ -2297,20 +2303,19 @@ html.wm-titlebar .wm-format {
   color: var(--wm-muted);
 }
 
-.wm-share-link,
-.wm-share-more {
+/* On a narrow window (or a long translation) the buttons drop below the address, together. */
+.wm-share-link {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
 }
 
-.wm-share-more {
-  flex-wrap: wrap;
-  justify-content: space-between;
+.wm-share-link .wm-input {
+  flex: 1 1 180px;
 }
 
-.wm-share-link[hidden],
-.wm-share-more[hidden] {
+.wm-share-link[hidden] {
   display: none;
 }
 
@@ -3377,7 +3382,8 @@ body.wm-fullscreen .wm-keys {
   stroke-linejoin: round;
 }
 
-#footer {
+/* The status bar (View › Status Bar) in the editor, and under the viewer's document when its host shows one. */
+.wm-footer {
   display: flex;
   flex: none;
   align-items: center;
@@ -3393,7 +3399,7 @@ body.wm-fullscreen .wm-keys {
   user-select: none;
 }
 
-#footer[hidden] {
+.wm-footer[hidden] {
   display: none;
 }
 

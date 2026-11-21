@@ -61,8 +61,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.publicLinkLabel': '공개 링크',
   'dialogs.share.copyLink': '링크 복사',
   'dialogs.share.copyEmbed': '삽입 코드 복사',
-  'dialogs.share.resetLink': '링크 재설정',
-  'dialogs.share.resetNote': '링크를 재설정하면 새 주소가 만들어지고 이전 주소는 더 이상 작동하지 않습니다.',
+  'dialogs.share.resetLink': '링크 재생성',
+  'dialogs.share.resetNote': '링크를 재생성하면 새 주소가 만들어지고 이전 주소는 더 이상 작동하지 않습니다.',
   'dialogs.share.copied': '복사했습니다.',
   'dialogs.share.embedTitle': 'Golem Docs의 {name}',
   'dialogs.share.note': '상대방은 Golem Docs에 한 번 로그인한 적이 있어야 합니다. 편집자는 변경 사항을 실시간으로 보고, 보기 권한이 있는 사람은 문서가 저장될 때마다 갱신되는 읽기 전용 사본을 봅니다.',
@@ -188,4 +188,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.replacementsRemove': '삭제',
   'dialogs.find.wholeWord': '단어 단위',
   'dialogs.find.regex': '정규식',
+  'dialogs.share.folderNote': '이 폴더와 하위 폴더의 모든 항목(나중에 추가하는 항목 포함)을 볼 수 있습니다. 편집자는 모든 파일을 변경하고 새 파일을 추가할 수 있지만, 이름 변경이나 삭제는 자신이 추가한 항목만 할 수 있습니다.',
+  'dialogs.share.folderPublicNote': '링크가 있는 사람은 누구나 로그인하지 않고 이 폴더의 모든 파일을 읽을 수 있습니다. 폴더 안 파일끼리의 링크는 작동하지만 폴더 밖으로의 링크는 작동하지 않습니다. 검색 엔진에는 표시하지 않도록 요청합니다.',
 };

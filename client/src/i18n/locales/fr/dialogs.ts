@@ -61,8 +61,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.share.publicLinkLabel': 'Lien public',
   'dialogs.share.copyLink': 'Copier le lien',
   'dialogs.share.copyEmbed': 'Copier le code d’intégration',
-  'dialogs.share.resetLink': 'Réinitialiser le lien',
-  'dialogs.share.resetNote': 'Réinitialiser le lien crée une nouvelle adresse ; l’ancienne cesse de fonctionner.',
+  'dialogs.share.resetLink': 'Régénérer le lien',
+  'dialogs.share.resetNote': 'Régénérer le lien crée une nouvelle adresse ; l’ancienne cesse de fonctionner.',
   'dialogs.share.copied': 'Copié.',
   'dialogs.share.embedTitle': '{name} sur Golem Docs',
   'dialogs.share.note': 'Les personnes doivent s’être connectées une fois à Golem Docs. Les éditeurs voient les modifications en direct ; les lecteurs reçoivent une copie en lecture seule, mise à jour à chaque enregistrement du document.',
@@ -188,4 +188,6 @@ export const dialogs: Partial<Messages> = {
   'dialogs.options.replacementsRemove': 'Supprimer',
   'dialogs.find.wholeWord': 'Mot entier',
   'dialogs.find.regex': 'Expression régulière',
+  'dialogs.share.folderNote': 'Ils voient tout ce que contient ce dossier et ses sous-dossiers, y compris ce que vous ajouterez plus tard. Les éditeurs peuvent modifier chaque fichier et en ajouter de nouveaux, mais ne peuvent renommer ou supprimer que ce qu’ils ont ajouté.',
+  'dialogs.share.folderPublicNote': 'Toute personne disposant du lien peut lire chaque fichier de ce dossier sans se connecter. Les liens entre ses fichiers fonctionnent ; les liens vers ce qui est en dehors, non. Les moteurs de recherche sont invités à ne pas le référencer.',
 };

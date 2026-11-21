@@ -497,7 +497,7 @@ test('signed in without sync, the library is the browser\'s own documents plus w
   const library = await loadLibrary(null, user);
   assert.deepEqual(library.entries.map((e) => e.local?.id), [guest.id]);
   assert.deepEqual(library.shared.map((d) => d.id), ['s1']);
-  assert.deepEqual(calls.map((c) => c.url), ['/api/shared'], 'no listing of their own cloud documents');
+  assert.deepEqual(calls.map((c) => c.url).sort(), ['/api/shared', '/api/shared-folders'], 'no listing of their own cloud documents, only what others shared');
 
   calls = [];
   assert.deepEqual((await loadLibrary(null, null)).shared, [], 'signed out sees nothing shared');

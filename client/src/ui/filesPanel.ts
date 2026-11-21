@@ -41,6 +41,8 @@ export interface FilesPanelHost {
   delete(entries: LibraryEntry[], folderIds?: string[]): Promise<void>;
   /** Opens the sharing dialog for a cloud document the user owns. */
   share(cloudId: string, name: string): void;
+  /** Opens the sharing dialog for a folder of the account, with what is in it (docs/folder-sharing.md). */
+  shareFolder?(folder: Folder): void;
   /** Whether Show in Finder applies (the desktop app keeps a vault folder here), and showing a document's file or a folder in it. */
   canShowInVault?(): boolean;
   showInVault?(item: { doc: LibraryEntry } | { folder: Folder }): void;
@@ -343,6 +345,7 @@ export class FilesPanel {
     return [
       { label: open ? t('panels.files.closeFolder') : t('panels.files.openFolder'), run: () => this.toggleFolder(folder.id) },
       ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ folder }) }] : []),
+      ...(this.host.shareFolder && this.host.account() ? [{ label: t('panels.dashboard.share'), run: () => this.host.shareFolder!(folder) }] : []),
       { label: t('panels.dashboard.rename'), run: () => this.startRename(folder.id) },
       { label: t('panels.dashboard.move'), run: () => pickFolder(this.folders, t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => void this.relocate({ kind: 'folder', folder }, to)) },
       { label: t('panels.dashboard.deleteFolder'), run: () => void this.ask([folder], [], (before) => removeFolderTree(before.folders, before.entries, [folder], (entries, folderIds) => this.host.delete(entries, folderIds))) },

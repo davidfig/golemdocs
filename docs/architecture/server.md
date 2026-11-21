@@ -90,6 +90,8 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 
 `room.ts` (the Durable Object, one per document id, SQLite log) and `roomCore.ts` (the protocol, testable in Node) are described in [Collaboration](collaboration.md). The rest of the server reaches a room only through `roomGate.ts`: `joinRoom`, `roomHeaders` (the identity headers `x-user/x-role/x-owner/x-doc` are set there and nowhere else), `roomAllowsSave`, `endRooms`, `kickFromRoom`, `rejoinRoom`. `snapshot.ts` turns a base document plus logged transactions into the new file; `roomMedia.ts` stores pictures added during editing. While a room is shared it is the only writer of the file.
 
+**Folder shares.** A folder may be shared too ([Folder sharing](../folder-sharing.md)): `folder_shares` (one row per owner, folder and person, `viewer` or `editor`, with its own `view_token` while view-only and the person's `local_name` for their vault copy) and `folder_links` (one public token per folder), migration `0017_folder_shares.sql`, in `folderShares.ts`. Membership is not stored: `accessFor` (`sharing.ts`) looks up the person's folder shares from a document's owner and walks the document's folder ancestry in the owner's database (`folderShareAbove`), so whatever is in the folder now is shared, and a document moved out is not; the best of a direct share and a folder share wins, and the owner's database is read only when the person has a folder share from that owner. The owner manages `/api/folders/:id/shares[/:userId]` and `/api/folders/:id/link` (`sharedFolders.ts`); the person lists, leaves and labels theirs and reads the tree at `/api/shared-folders[/:owner/:folder[/tree]]`. Editors add documents into the owner's folder (`POST /api/documents?owner=&folder=`, against the owner's storage and sync) and folders (`PUT /api/shared-folders/:owner/:folder/folders/:id`), and rename or delete only what they added (`created_by`, user migration 10); nothing in a shared folder is moved by anyone but the owner. The viewer reads `/api/folder-view/:token` and `/api/folder-public/:token` (`handleFolderView`): the tree as paths inside the folder, never an id, and `…/file?path=`; both answer `x-robots-tag: noindex`. Deleting a folder drops its shares and link (`forgetFolders`). `server/test/folderSharing.test.ts` covers it.
+
 ## Key files
 
 | Path | Role |
@@ -100,6 +102,7 @@ Hand-rolled OAuth/OIDC (no libraries); setup per provider in [server/AUTH.md](..
 | `server/src/userDb.ts`, `schema.ts`, `folders.ts`, `preferences.ts`, `reading.ts` | per-user D1, migrations, folders, settings, reading places |
 | `server/src/authRoutes.ts`, `providers.ts`, `accounts.ts`, `session.ts`, `auth.ts`, `crypto.ts` | sign-in |
 | `server/src/sharing.ts`, `roomGate.ts`, `room.ts`, `roomCore.ts`, `roomMedia.ts`, `snapshot.ts` | access rules and rooms |
+| `server/src/folderShares.ts`, `sharedFolders.ts` | folder shares and public folder links, the person's shared folders, the folder viewer's routes |
 | `server/src/subscriptions.ts`, `billing.ts`, `analytics.ts`, `feedback.ts` | payments and admin |
 | `server/src/storage.ts` | the account storage limit |
 | `server/src/site.ts` | `/api/site`: the server's links and whether it sells the subscription |

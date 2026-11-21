@@ -1,7 +1,6 @@
 import type { Messages } from '../../index.ts';
 
 export const viewer: Partial<Messages> = {
-  'viewer.opening': 'Открывается {name}…',
   'viewer.cannotOpen': 'Не удаётся показать {name}: Golem Docs не открывает файлы этого типа.',
   'viewer.document': 'Документ',
   'viewer.previousPage': 'Предыдущая страница',
@@ -21,4 +20,11 @@ export const viewer: Partial<Messages> = {
   'viewer.toolbar': 'Просмотр',
   'viewer.zoomButton': 'Реальный размер (сейчас {zoom})',
   'viewer.foundOnPage': 'Найдено на странице {page} из {pages}',
+  'viewer.files': 'Файлы',
+  'viewer.notShared': 'Эта ссылка ведёт на документ вне этой общей папки.',
+  'viewer.folderGone': 'Эта папка больше вам не доступна.',
+  'viewer.folderLinkGone': 'Эта ссылка больше не работает: папка больше не опубликована.',
+  'viewer.signInToViewFolder': 'Войдите, чтобы увидеть эту папку.',
+  'viewer.folderEmpty': 'Эта папка пуста.',
+  'viewer.fileGone': 'Этого файла больше нет в папке.',
 };

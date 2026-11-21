@@ -105,4 +105,7 @@ export const USER_MIGRATIONS: string[][] = [
        secret  TEXT NOT NULL
      )`,
   ],
+  // 10: who added a document or folder, when it was not the owner: someone editing a folder shared with them (docs/folder-sharing.md).
+  // They may rename or delete what they added, and nothing else. Null: the owner's own.
+  [`ALTER TABLE documents ADD COLUMN created_by TEXT`, `ALTER TABLE folders ADD COLUMN created_by TEXT`],
 ];

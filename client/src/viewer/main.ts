@@ -29,6 +29,8 @@ window.addEventListener('message', (event) => {
     locale: open.locale,
     screenReader: open.screenReader,
     contrast: open.contrast,
+    statusBar: open.statusBar,
+    view: open.view,
     onOpened: (info) => tell({ type: 'golemdocs:opened', ...info }),
     onError: (message) => tell({ type: 'golemdocs:error', message }),
     onLink: (url) => tell({ type: 'golemdocs:link', url }),

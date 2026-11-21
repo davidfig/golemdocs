@@ -8,7 +8,7 @@
 // whichever list the next change comes through.
 
 import type { User } from './auth.ts';
-import type { CloudDocument } from './cloud.ts';
+import type { CloudDocument, SharedFolder } from './cloud.ts';
 import type { Folder } from './folders.ts';
 import { listSaved, type SavedInfo } from './storage/local.ts';
 import { loadLibrary, loadLocalLibrary, localCopies, mergeLibrary, type LibraryEntry } from './sync.ts';
@@ -29,6 +29,7 @@ export class LibraryStore {
   private entryList: LibraryEntry[] = [];
   private folderList: Folder[] = [];
   private sharedList: CloudDocument[] = [];
+  private sharedFolderList: SharedFolder[] = [];
   /** Whether the account's list is known (signed in and reached, or cached), so a copy missing from it means something. */
   private cloudKnown = false;
   private problemText: string | null = null;
@@ -53,6 +54,11 @@ export class LibraryStore {
 
   get shared(): CloudDocument[] {
     return this.sharedList;
+  }
+
+  /** Folders other people shared with the user (docs/folder-sharing.md). */
+  get sharedFolders(): SharedFolder[] {
+    return this.sharedFolderList;
   }
 
   /** Why the account's documents aren't all listed (offline, say), or null. */
@@ -84,7 +90,8 @@ export class LibraryStore {
     return () => this.listeners.delete(listener);
   }
 
-  private set(change: { entries?: LibraryEntry[]; folders?: Folder[]; shared?: CloudDocument[] }): void {
+  private set(change: { entries?: LibraryEntry[]; folders?: Folder[]; shared?: CloudDocument[]; sharedFolders?: SharedFolder[] }): void {
+    if (change.sharedFolders) this.sharedFolderList = change.sharedFolders;
     if (change.entries) {
       this.entryList = change.entries;
       this.derived = null;
@@ -98,7 +105,7 @@ export class LibraryStore {
    * Shows a change before it is saved (moved, renamed, made or deleted). A listing already on its
    * way is dropped, as it was asked for before: list again once the change is saved.
    */
-  update(change: { entries?: LibraryEntry[]; folders?: Folder[]; shared?: CloudDocument[] }): void {
+  update(change: { entries?: LibraryEntry[]; folders?: Folder[]; shared?: CloudDocument[]; sharedFolders?: SharedFolder[] }): void {
     this.generation++;
     this.set(change);
   }
@@ -158,7 +165,7 @@ export class LibraryStore {
     if (library.cloud !== null || !account) this.cloudKnown = library.cloud !== null;
     const entries = library.cloud === null && account && this.cloudKnown ? mergeLibrary(library.local, this.cloud) : library.entries;
     // Unless they couldn't be listed: what is shown is better than none.
-    this.set({ entries, ...(library.folders && { folders: library.folders }), ...(!library.cloudProblem && { shared: library.shared }) });
+    this.set({ entries, ...(library.folders && { folders: library.folders }), ...(!library.cloudProblem && { shared: library.shared }), ...(library.sharedFolders && { sharedFolders: library.sharedFolders }) });
   }
 
   /** Who is listed changed (signed in or out): start again from what this browser has for them. */

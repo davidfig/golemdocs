@@ -417,6 +417,120 @@ export async function publicLink(id: string, change?: 'make' | 'reset' | 'off'):
 /** The address of a public link: the viewer for anyone, or with `embed`, the same viewer for a frame in another site. */
 export const publicLinkUrl = (token: string, embed = false): string => `${location.origin}/view?p=${encodeURIComponent(token)}${embed ? '&embed' : ''}`;
 
+// --- Folder sharing (server/src/sharedFolders.ts, docs/folder-sharing.md) -----------------------------------------------------
+
+/** A folder someone shared with this user. */
+export interface SharedFolder {
+  ownerId: string;
+  /** The shared folder's id in the owner's account. */
+  folderId: string;
+  name: string;
+  role: ShareRole;
+  owner: { name: string | null; email: string | null };
+  /** Where this person's vault keeps its copy (`Shared/<owner>/<folder>`), once one of their computers made it. */
+  localName: string | null;
+  createdAt: number;
+  /** A view-only share: its own address for the viewer (/view?f=<token>). */
+  viewToken?: string;
+}
+
+/** A folder inside a shared folder (the shared folder itself has `parentId` null). */
+export interface SharedFolderFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  /** Added by this user, who may rename or delete it. */
+  createdByYou: boolean;
+}
+
+/** A document inside a shared folder. */
+export interface SharedFolderDocument extends CloudDocument {
+  folderId: string;
+  /** Its path inside the shared folder, as the viewer's address names it. */
+  path?: string;
+  createdByYou: boolean;
+}
+
+/** What is in a shared folder. */
+export interface SharedFolderTree extends SharedFolder {
+  folders: SharedFolderFolder[];
+  documents: SharedFolderDocument[];
+}
+
+const sharedFolderPath = (f: Pick<SharedFolder, 'ownerId' | 'folderId'>): string => `/api/shared-folders/${encodeURIComponent(f.ownerId)}/${f.folderId}`;
+const jsonBody = (value: unknown): RequestInit => ({ headers: { 'content-type': 'application/json' }, body: JSON.stringify(value) });
+
+/** Folders other people shared with this user. */
+export async function listSharedFolders(): Promise<SharedFolder[]> {
+  return (await check(await send('/api/shared-folders'))).json();
+}
+
+/** The folders and documents in a folder shared with this user. */
+export async function sharedFolderTree(f: Pick<SharedFolder, 'ownerId' | 'folderId'>): Promise<SharedFolderTree> {
+  return (await check(await send(`${sharedFolderPath(f)}/tree`))).json();
+}
+
+/** Leaves a folder shared with this user. */
+export async function leaveSharedFolder(f: Pick<SharedFolder, 'ownerId' | 'folderId'>): Promise<void> {
+  await check(await send(sharedFolderPath(f), { method: 'DELETE' }));
+}
+
+/** Records where this person's vault keeps its copy of a shared folder, for their other computers. */
+export async function setSharedFolderLabel(f: Pick<SharedFolder, 'ownerId' | 'folderId'>, localName: string): Promise<void> {
+  await check(await send(sharedFolderPath(f), { method: 'PATCH', ...jsonBody({ localName }) }));
+}
+
+/** Makes a folder inside a shared folder (as an editor), or renames one this user made there. */
+export async function putSharedSubfolder(f: Pick<SharedFolder, 'ownerId' | 'folderId'>, id: string, name: string, parentId?: string): Promise<SharedFolderFolder> {
+  return (await check(await send(`${sharedFolderPath(f)}/folders/${id}`, { method: 'PUT', ...jsonBody(parentId === undefined ? { name } : { name, parentId }) }))).json();
+}
+
+/** Deletes a folder this user made inside a shared folder (what is in it moves up). */
+export async function deleteSharedSubfolder(f: Pick<SharedFolder, 'ownerId' | 'folderId'>, id: string): Promise<void> {
+  await check(await send(`${sharedFolderPath(f)}/folders/${id}`, { method: 'DELETE' }));
+}
+
+/** Adds a document to a folder of someone else's shared with this user as an editor: it is the owner's, in the owner's account. */
+export async function createInSharedFolder(ownerId: string, folderId: string, name: string, bytes: Uint8Array): Promise<SharedFolderDocument> {
+  const response = await send(`/api/documents?name=${encodeURIComponent(name)}&folder=${folderId}&owner=${encodeURIComponent(ownerId)}`, {
+    method: 'POST',
+    headers: { 'content-type': DOCX },
+    body: bytes as Uint8Array<ArrayBuffer>,
+  });
+  return (await check(response)).json();
+}
+
+/** Deletes a document this user added to a shared folder (it goes to the owner's trash). */
+export async function deleteSharedDocument(id: string): Promise<void> {
+  await check(await send(`/api/documents/${id}`, { method: 'DELETE' }));
+}
+
+/** Who one of this user's folders is shared with. */
+export async function listFolderShares(folderId: string): Promise<Share[]> {
+  return (await check(await send(`/api/folders/${folderId}/shares`))).json();
+}
+
+/** Shares one of this user's folders with the person who signed in with this email, or changes their role. */
+export async function addFolderShare(folderId: string, email: string, role: ShareRole): Promise<Share> {
+  return (await check(await send(`/api/folders/${folderId}/shares`, { method: 'PUT', ...jsonBody({ email, role }) }))).json();
+}
+
+/** Stops sharing one of this user's folders with someone. */
+export async function removeFolderShare(folderId: string, userId: string): Promise<void> {
+  await check(await send(`/api/folders/${folderId}/shares/${encodeURIComponent(userId)}`, { method: 'DELETE' }));
+}
+
+/** A folder's public link token, as `publicLink` for a document. */
+export async function folderPublicLink(folderId: string, change?: 'make' | 'reset' | 'off'): Promise<string | null> {
+  const method = change === 'make' ? 'PUT' : change === 'reset' ? 'POST' : change === 'off' ? 'DELETE' : 'GET';
+  const response = await check(await send(`/api/folders/${folderId}/link`, { method }));
+  return change === 'off' ? null : ((await response.json()) as { token: string | null }).token;
+}
+
+/** The viewer's address for a shared folder: its public link (`public`), or a person's view-only share; at a file inside it, if `path`. */
+export const folderViewUrl = (token: string, isPublic: boolean, path?: string): string =>
+  `${location.origin}/view?${isPublic ? 'pf' : 'f'}=${encodeURIComponent(token)}${path ? `&path=${encodeURIComponent(path)}` : ''}`;
+
 // --- History and the trash (server/src/versions.ts, trash.ts) ----------------------------------------------------------------
 
 /** A version of a document the account kept (`version` is the document's `updatedAt` as it was). */

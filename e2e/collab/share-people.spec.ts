@@ -75,7 +75,7 @@ test.describe('the People section of the Share dialog', () => {
     await owner.context.close();
   });
 
-  test('share by email as an editor, change to a viewer, then remove', async ({ browser }) => {
+  test('share by email as an editor, change to a viewer, then remove', { tag: '@heavy' }, async ({ browser }) => {
     const { owner, guest, doc } = await ownerAndGuest(browser);
     const dialog = await openShareDialog(owner.app);
     await dialog.getByLabel('Email address').fill(guest.email.toUpperCase()); // addresses are matched case-insensitively
@@ -103,7 +103,7 @@ test.describe('the People section of the Share dialog', () => {
     await guest.context.close();
   });
 
-  test('the list is there again when the dialog is reopened', async ({ browser }) => {
+  test('the list is there again when the dialog is reopened', { tag: '@heavy' }, async ({ browser }) => {
     const { owner, guest, doc } = await ownerAndGuest(browser);
     await shareWith(owner.page, doc.id, guest.email, 'viewer');
     const dialog = await openShareDialog(owner.app);

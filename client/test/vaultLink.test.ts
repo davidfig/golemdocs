@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { findHeading, findInManifest, folderName, headingAt, headingKey, headingsAbove, makeLink, parseLink, pathInVault, placeIndex, shownText, vaultMatches } from '../src/desktop/vaultLink.ts';
+import { findHeading, findInManifest, folderName, headingAt, headingKey, headingsAbove, makeLink, parseLink, pathInVault, placeIndex, revealPath, shownText, vaultMatches } from '../src/desktop/vaultLink.ts';
 
 const ROOT = "/Users/someone/Documents/David's Vault";
 const FILE = 'Computer Science/AI Research/Agents/Context and Memory/Preprocessing Large Documents for Agents.md';
@@ -86,4 +86,17 @@ test('a link goes to the paragraph that shows its line, else to its heading', ()
   assert.equal(headingAt(heads, 3), 'Part A');
   assert.equal(headingAt(heads, 0), 'Title');
   assert.equal(headingAt([{ text: 'Late', paragraph: 5 }], 2), null);
+});
+
+test('Show in Finder points at the file the sync wrote, else the folder the document is in', () => {
+  const entries = [{ id: 'cloud-1', path: 'Notes/Plan.md' }];
+  const folders = [
+    { id: 'f1', name: 'Notes', parentId: null },
+    { id: 'f2', name: 'Old: 2025', parentId: 'f1' },
+  ];
+  assert.equal(revealPath(entries, folders, { ids: ['local-1', 'cloud-1'], folderId: 'f1' }), 'Notes/Plan.md');
+  assert.equal(revealPath(entries, folders, { ids: [null, 'cloud-2'], folderId: 'f2' }), 'Notes/Old_ 2025', 'not synced yet: its folder, spelled as on disk');
+  assert.equal(revealPath(entries, folders, { ids: ['cloud-3'], folderId: null }), '', 'at the top level: the vault');
+  assert.equal(revealPath(entries, folders, { folderId: 'f2' }), 'Notes/Old_ 2025');
+  assert.equal(revealPath(entries, folders, { folderId: 'gone' }), '');
 });

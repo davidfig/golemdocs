@@ -4,8 +4,21 @@
 
 ### Added
 
-- Share a whole folder: the Share button on a folder in File › Open shares everything in it, and everything added later, by email (to view or edit) or by a public link anyone can read. Links between its files work; links to anything outside it don’t. People you share it with find it under Shared with me. Editors change every file and add new files and folders, and can rename or delete only what they added. Someone who can view browses the folder’s files beside the document, and each file has its own address.
+- Share a whole folder: Share on a folder (its button or right-click menu in File › Open, or its right-click menu in the Files pane) shares everything in it, and everything added later, by email (to view or edit) or by a public link anyone can read. Links between its files work; links to anything outside it don’t. People you share it with find it under Shared with me. Editors change every file and add new files and folders, and can rename or delete only what they added. Someone who can view browses the folder’s files beside the document, and each file has its own address.
 - Desktop app: folders shared with you are kept in your vault folder too, under Shared, by the owner’s name, so ai apps and other programs can work on them. As an editor, changes you make there reach the owner; as a viewer, they are put back. In my vault… on the folder’s card in File › Open removes the copy and keeps the share, or chooses which of its folders to keep: a folder left out stays in the app, and the vault gets a file in its place listing what is in it. A very large shared folder keeps only its top level until you choose more.
+- File › Open: right-click a document or folder (or press Shift+F10) for the same commands as in the Files pane: Open, Share, Rename, Move and Delete, and for a folder also New, Import and New folder in it.
+- Desktop app: Show in Finder (Show in File Explorer on Windows, Show in Files on Linux) selects a document's file, or a folder, in your vault folder. It is in the File menu for the open document, and in the right-click menu of documents and folders in the Files pane and File › Open.
+
+### Changed
+
+- Shared and public documents and folders open in a viewer that works more like the editor: a loading screen while a file comes, and the status bar with the page, word count and zoom (click it for the list of sizes), and Print Layout, Flow and Page Grid. It starts in the view you use in the editor.
+- View › Hide Space Between Pages (or a double-click between two pages) now also hides each page's top and bottom margins, with their headers and footers, as Word does, so the text runs on from page to page with just a line between. Between two pages the pointer turns into arrows showing what a double-click does.
+- Page Grid: a long document now shows its whole grid while it is still being laid out, with blank pages standing in for the ones not ready yet, so the pages you are looking at no longer move as the rest arrive.
+
+### Fixed
+
+- Very long documents take far less memory, so a book of 50,000 pages no longer runs out of memory and closes while it opens.
+- The Page Sidebar no longer freezes the window for minutes on a very long document.
 
 ## 0.42.1 - 2026-11-21
 

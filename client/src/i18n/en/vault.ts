@@ -77,6 +77,7 @@ export const vault = {
   'vault.agents.line': 'How Golem Docs keeps this folder (syncing, file formats, opening a note for me) is in .golemdocs/AGENTS.md: read it before changing files here.',
   'vault.link.menu': 'Copy Link to Note',
   'vault.link.menu.tip': 'Copy a golemdocs:// link that opens this document from other apps, at the heading the cursor is under',
+  'vault.reveal.menu.tip': "Show this document's file in the vault folder, selected in your file manager",
   'vault.link.copied': 'Link to this note copied.',
   'vault.link.copiedHeading': 'Link to “{heading}” copied.',
   'vault.link.copyFailed': 'The link could not be copied.',

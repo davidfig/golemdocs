@@ -74,6 +74,8 @@ export interface EncodedPage {
   height: number;
   section: number;
   number: number;
+  /** Where the body sits between the margins (points from the page's top), for hiding the white space; absent for a page with no body. */
+  body?: { top: number; bottom: number };
   text: EncodedText[];
   background: EncodedRects;
   foreground: EncodedRects;
@@ -92,6 +94,7 @@ export function encodePage(page: PageLayout): { page: EncodedPage; faces: FaceMe
   let glyphCount = 0;
   for (const list of page.glyphs.values()) {
     if (list.count === 0) continue;
+    list.trim();
     faces.push(list.metrics);
     text.push({
       face: list.metrics.face.atlas,
@@ -104,6 +107,7 @@ export function encodePage(page: PageLayout): { page: EncodedPage; faces: FaceMe
     transferables.push(list.buffer);
   }
   const rects = (list: PageLayout['background']): EncodedRects => {
+    list.trim();
     transferables.push(list.buffer);
     return { count: list.count, instances: list.buffer };
   };
@@ -116,6 +120,7 @@ export function encodePage(page: PageLayout): { page: EncodedPage; faces: FaceMe
       height: page.height,
       section: page.section,
       number: page.number,
+      ...(page.start ? { body: { top: page.start.top, bottom: page.start.bottom } } : {}),
       text,
       background: rects(page.background),
       foreground: rects(page.foreground),

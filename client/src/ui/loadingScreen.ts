@@ -22,10 +22,14 @@ export class LoadingScreen {
     return !this.root.hidden;
   }
 
-  /** Covers the editor, saying that `name` is being opened. */
-  show(name: string): void {
+  /**
+   * Covers the editor, saying that `name` is being opened. Its box shows after a moment, so a quick load just looks like the document
+   * arriving; `now` shows it at once, for a load that has already kept the person waiting (the viewer's page downloaded the file first).
+   */
+  show(name: string, now = false): void {
     this.name.textContent = name;
     this.detail.textContent = t('app.loading', { name });
+    this.root.classList.toggle('wm-loading-now', now);
     this.root.hidden = false;
   }
 

@@ -189,5 +189,39 @@ test.describe('Page Sidebar', () => {
       await item(app, 0).click();
       await expect(item(app, 0)).toHaveClass(/wm-pages-current/);
     });
+
+    test('a long book has items only for the pages scrolled to, and the keyboard and screen readers still reach every page', async ({ app }) => {
+      test.setTimeout(120_000);
+      await app.goto('?doc=war-and-peace');
+      await app.page.waitForFunction(() => (window as unknown as { loaded: boolean }).loaded === true, null, { timeout: 100_000 });
+      await app.page.evaluate(() => (window as unknown as { golem: { waitIdle(ms: number): Promise<void> } }).golem.waitIdle(100_000));
+      const total = await app.page.evaluate(() => (window as unknown as { pages: unknown[] }).pages.length);
+      expect(total).toBeGreaterThan(500);
+      const list = app.page.getByRole('listbox', { name: 'Pages' });
+      await expect(list).toBeVisible();
+      // A few dozen items, not one per page, each saying which page of how many it is.
+      const options = list.getByRole('option');
+      expect(await options.count()).toBeLessThan(60);
+      await expect(options.first()).toHaveAttribute('aria-setsize', String(total));
+      await expect(options.first()).toHaveAttribute('aria-posinset', '1');
+      // End and Home reach the last and first pages, making their items.
+      await options.first().focus();
+      await app.page.keyboard.press('End');
+      const last = list.getByRole('option', { name: `Page ${total}`, exact: true });
+      await expect(last).toBeFocused();
+      await expect(last).toHaveAttribute('aria-posinset', String(total));
+      expect(await options.count()).toBeLessThan(60);
+      await app.page.keyboard.press('Home');
+      await expect(list.getByRole('option', { name: 'Page 1', exact: true })).toBeFocused();
+      // Scrolled halfway down by hand: the pages there get items, in order, with their thumbnails drawn.
+      await list.hover();
+      await list.evaluate((el) => (el.scrollTop = el.scrollHeight / 2));
+      const middle = Math.round(total / 2);
+      await expect.poll(async () => Number(await options.nth(1).getAttribute('aria-posinset'))).toBeGreaterThan(middle - 30);
+      const numbers = await options.evaluateAll((els) => els.map((e) => Number(e.getAttribute('aria-posinset'))));
+      expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
+      expect(numbers.some((n) => Math.abs(n - middle) < 10)).toBe(true);
+      await expect.poll(() => options.nth(2).locator('canvas').evaluate((c: HTMLCanvasElement) => c.width)).toBeGreaterThan(1);
+    });
   });
 });

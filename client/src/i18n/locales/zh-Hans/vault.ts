@@ -72,6 +72,7 @@ export const vault: Catalog = {
   'vault.agents.line': 'Golem Docs 如何维护这个文件夹（同步、文件格式、为我打开笔记）写在 .golemdocs/AGENTS.md 中：修改这里的文件前请先阅读。',
   'vault.link.menu': '复制笔记链接',
   'vault.link.menu.tip': '复制一个 golemdocs:// 链接，可从其他应用打开此文档，并定位到光标所在的标题',
+  'vault.reveal.menu.tip': '在文件管理器中显示并选中此文档在保管库文件夹中的文件',
   'vault.link.copied': '已复制此笔记的链接。',
   'vault.link.copiedHeading': '已复制“{heading}”的链接。',
   'vault.link.copyFailed': '无法复制链接。',

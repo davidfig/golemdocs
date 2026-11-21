@@ -15,6 +15,7 @@ import { droppedFromFiles, pickedFolder, takeDropped, type Dropped } from './sto
 import { incomingBridge, watchIncoming } from './desktop/incoming.ts';
 import { importFiles, readZipFiles, sameBytes, type ZipContents } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
+import { SEAM_HIDE_CURSOR, SEAM_SHOW_CURSOR } from './ui/cursors.ts';
 import { blankSource, lastNewKind, rememberNewKind } from './ui/newKinds.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
 import { adoptGuestFolders, createFolder, renameEntry, setLinkKeeper } from './folderOps.ts';
@@ -44,7 +45,7 @@ import {
   putSearchIndex,
   type SavedInfo,
 } from './storage/local.ts';
-import { folderContents, folderOf, folderPath, resolveFolder } from './folders.ts';
+import { folderContents, folderOf, folderPath, resolveFolder, type Folder } from './folders.ts';
 import { isBuiltin } from './live/builtinAddress.ts';
 import { UploadQueue } from './uploadQueue.ts';
 import { LibraryStore } from './libraryStore.ts';
@@ -92,11 +93,13 @@ import { searchableDocuments, type SourceDeps } from './search/sources.ts';
 import { SearchPanel } from './ui/searchPanel.ts';
 import { embedTitle, liveTitle, parseTagAddress } from '@golemdocs/docx';
 import { LoadingScreen } from './ui/loadingScreen.ts';
+import { savedViewMode, VIEW_KEY } from './ui/viewMode.ts';
 import { NothingOpenScreen } from './ui/nothingOpen.ts';
 import { AltTextPopover } from './ui/altTextPopover.ts';
 import { showToast } from './ui/toast.ts';
-import { arrangePages, columnsToFill, nearestPage, onSeam, type Bounds } from './document/arrange.ts';
+import { arrangeGrid, arrangePages, nearestPage, onSeam, shownBottom, shownTop, type Bounds, type GridState } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
+import { PageShelf, nearRange } from './webgl/pageShelf.ts';
 import { MAX_SHARED_TEXT_BYTES } from '@golemdocs/ops/textOps';
 import type { TextRoom } from './textEditor/view.ts';
 import type { SheetRoom } from './sheet/sheetSync.ts';
@@ -128,7 +131,7 @@ import { TrashDialog } from './ui/trashDialog.ts';
 import { VaultDialog } from './ui/vaultDialog.ts';
 import { copyText, desktopBridge, desktopUpdater, isDesktopApp, isTouchDevice, linkBridge, macPrinter, ShellTooOldError } from './desktop/bridge.ts';
 import { vaultMemory } from './desktop/vaultMemory.ts';
-import { findInManifest, folderName, headingsAbove, makeLink, parseLink, pathInVault, shownText, vaultMatches } from './desktop/vaultLink.ts';
+import { findInManifest, folderName, headingsAbove, makeLink, parseLink, pathInVault, revealPath, shownText, vaultMatches } from './desktop/vaultLink.ts';
 import { saveFile } from './ui/saveFile.ts';
 import { VaultService } from './desktop/vaultService.ts';
 import { excludedFolders, keepsCopy, setExcludedFolders, setKeepsCopy } from './desktop/vaultShared.ts';
@@ -238,6 +241,8 @@ onScrollPastEndChange(() => {
   requestRender();
 });
 const renderer = new PageRenderer(gl, deskColor);
+// The glyphs of pages away from the view are kept packed small (a book of tens of thousands of pages ran out of memory otherwise).
+const shelf = new PageShelf(() => requestRender());
 const atlases = new AtlasLibrary(gl, FONT_BASE, assetLoaded);
 // The default font nearly every document uses: fetch its atlases now, not after the first layout.
 atlases.warm(['calibri/regular.webp', 'calibri/bold.webp']);
@@ -330,21 +335,8 @@ let footerTimer = 0;
 const pictureSizes = new WeakMap<object, { width: number; height: number }>();
 const pictureSizing = new WeakSet<object>();
 
-// View: Print layout (pages) or Flow (the text reflowed to the window). Remembered in this browser. The third
-// view, the page grid, is `grid`: it is left when another document opens, back to this one.
-const VIEW_KEY = 'word.viewMode';
-function savedViewMode(): Exclude<ViewMode, 'grid'> {
-  try {
-    const saved = localStorage.getItem(VIEW_KEY);
-    // 'normal' is Flow's earlier name.
-    if (saved === 'flow' || saved === 'normal') return 'flow';
-    if (saved === 'print') return saved;
-  } catch {
-    // Storage unavailable: use the default for this screen.
-  }
-  // With no saved choice, a phone-sized screen starts in Flow (a page shrunk to fit is unreadable there).
-  return window.matchMedia('(max-width: 720px)').matches ? 'flow' : 'print';
-}
+// View: Print layout or Flow, remembered in this browser (ui/viewMode.ts). The third view, the page grid, is `grid`: it is left
+// when another document opens, back to this one.
 let viewMode = savedViewMode();
 
 let earlySaved: { id: string; saved: Promise<Awaited<ReturnType<typeof getSaved>>> } | null = null;
@@ -372,6 +364,10 @@ let pages: GpuPage[] = [];
 const pagesById = new Map<number, GpuPage>();
 let bounds: Bounds = { x: 0, y: 0, width: 0, height: 0 };
 let grid = false;
+/** While the document is first laid out, how many pages it will have (the worker's count or estimate); 0 when not known. */
+let expectedPages = 0;
+/** The page grid's columns, and its blank sheets for pages still being laid out. */
+const gridState: GridState = { columns: 0, blanks: [] };
 /** A PDF is shown as its own pages, which take markup annotations. */
 let annotating = false;
 /** A PDF's pages: filling in its form, or editing the form itself. */
@@ -762,6 +758,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   renderer.images?.clear();
   renderer.images ??= new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, assetLoaded, requestRender);
   grid = options.grid ?? false;
+  gridState.columns = expectedPages = 0;
   loaded = false;
   cameraPlaced = false;
   userMoved = false;
@@ -1352,14 +1349,28 @@ function applyLayout(update: LayoutUpdate): void {
     keepPages = false;
     for (const page of pagesById.values()) page.dispose(gl!);
     pagesById.clear();
+    shelf.clear();
   }
-  for (const encoded of update.pages) pagesById.set(encoded.id, new GpuPage(encoded, atlases));
+  const added: GpuPage[] = [];
+  for (const encoded of update.pages) {
+    const page = new GpuPage(encoded, atlases);
+    const old = pagesById.get(encoded.id);
+    if (old) shelf.removed(old);
+    pagesById.set(encoded.id, page);
+    added.push(page);
+  }
+  shelf.added(added);
   for (const { page, content } of update.overlays) pagesById.get(page)?.setOverlay(gl!, content);
   for (const id of update.drop) {
-    pagesById.get(id)?.dispose(gl!);
+    const page = pagesById.get(id);
+    if (page) {
+      page.dispose(gl!);
+      shelf.removed(page);
+    }
     pagesById.delete(id);
   }
   screenReader.layout(update.drop);
+  expectedPages = update.expected ?? 0;
   pages = [];
   for (const id of update.order) {
     const page = pagesById.get(id);
@@ -1388,8 +1399,16 @@ function arrange(): void {
   // A big text file draws itself, on this camera: the empty document under it must not move it.
   if (textView.active) return;
   const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
-  const gap = reflowing() || pagesJoined() ? 0 : PAGE_GAP;
-  bounds = arrangePages(pages, grid ? columnsToFill(pages, aspect, gap) : 1, gap);
+  const joined = pagesJoined();
+  const gap = reflowing() || joined ? 0 : PAGE_GAP;
+  // Hiding the space between pages hides each page's top and bottom margins too, as Word does: only the body is shown.
+  for (const page of pages) page.shown = joined ? page.bodyBand : null;
+  if (grid) bounds = arrangeGrid(pages, expectedPages, aspect, gap, gridState);
+  else {
+    gridState.blanks.length = 0;
+    bounds = arrangePages(pages, 1, gap);
+  }
+  renderer.blanks = gridState.blanks;
   if (pages.length && (!cameraPlaced || (grid && !userMoved))) placeCamera();
   requestRender();
 }
@@ -2467,6 +2486,7 @@ async function makeThumbnail(info: SavedInfo): Promise<void> {
   if (!text && (!page || !gl)) return;
   try {
     // A text file has no page: its first lines are drawn on one.
+    if (!text) await shelf.bring(page!);
     const blob = text ? await textThumbnail(textView.headLines()) : await capturePageThumbnail(gl!, renderer, page!, paintEdits);
     if (blob) await saveThumbnail(info.id, blob, info.updatedAt);
   } catch {
@@ -3824,6 +3844,7 @@ async function convertToPicture(to: 'png' | 'jpeg' | 'webp'): Promise<void> {
   setStatus(t('app.switching', { label: FORMATS[to].label }));
   try {
     const layout = pictureLayout(pages.map((p) => ({ width: p.width, height: p.height })), { side: MAX_SIDE, pixels: MAX_PIXELS });
+    await Promise.all(pages.slice(0, layout.count).map((page) => shelf.bring(page)));
     const canvas = drawPages(gl, renderer, pages, layout);
     if (!canvas) throw new Error(t('app.imageTooBig'));
     const name = stem(current.name) + FORMATS[to].extensions[0];
@@ -5162,6 +5183,10 @@ function render(): void {
     if (!pendingView) camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight); // a restored position may lie past the pages that have arrived so far
     if (renderer.flat) camera.x = bounds.x;
     renderer.forced = forcedColors();
+    // The pages in view and a screen either side keep their glyphs unpacked, or get them back, and are where squiggles are found.
+    const range = nearRange(pages, { top: camera.y, bottom: camera.y + camera.height / camera.scale }, 1);
+    shelf.keep(pages.slice(range.from, range.to));
+    worker.view(range.from, range.to);
     lastStats = renderer.render(camera, pages, selection, caretVisible, pagesDark());
     if (selection.fading) requestRender();
   }
@@ -5283,7 +5308,9 @@ function pageAt(cssX: number, cssY: number): { page: GpuPage; x: number; y: numb
   let bestDistance = Infinity;
   for (const page of pages) {
     const dx = point.x < page.x ? page.x - point.x : point.x > page.x + page.width ? point.x - page.x - page.width : 0;
-    const dy = point.y < page.y ? page.y - point.y : point.y > page.y + page.height ? point.y - page.y - page.height : 0;
+    const top = shownTop(page);
+    const bottom = shownBottom(page);
+    const dy = point.y < top ? top - point.y : point.y > bottom ? point.y - bottom : 0;
     const distance = dx * dx + dy * dy;
     if (distance < bestDistance) {
       best = page;
@@ -5301,6 +5328,13 @@ const MULTI_TAP_PX = 24;
 /** How far from where two pages meet (CSS pixels) a double click still counts as between them. */
 const SEAM_PX = 4;
 let lastClick = { time: 0, x: 0, y: 0, count: 0 };
+
+/** Whether a canvas point is between two pages (Print layout), where a double click hides or shows the space between them. */
+function seamAt(cssX: number, cssY: number): boolean {
+  if (!wordView()) return false;
+  const point = camera.toDocument(cssX, cssY);
+  return onSeam(pages, point.x, point.y, SEAM_PX / (camera.zoom * CSS_PX_PER_POINT));
+}
 
 /** Whether a press would be the next click of the clicks before it. */
 function followsClick(e: Press): boolean {
@@ -5339,8 +5373,7 @@ function press(e: Press): void {
   }
   // A double click between two pages hides the space between them, or shows it again.
   let counted: number | undefined;
-  const point = camera.toDocument(e.offsetX, e.offsetY);
-  if (!e.word && wordView() && onSeam(pages, point.x, point.y, SEAM_PX / (camera.zoom * CSS_PX_PER_POINT))) {
+  if (!e.word && seamAt(e.offsetX, e.offsetY)) {
     counted = clickCount(e);
     if (counted === 2) {
       lastClick.count = 0;
@@ -5785,13 +5818,16 @@ let overLink = false;
 let overCheckbox = false;
 /** The pointer is over the selected picture: a drag moves it. */
 let overPicture = false;
+/** The pointer is between two pages: a double click hides or shows the space between them. */
+let overSeam = false;
 let linkKeyDown = false;
 function updateCursor(): void {
   // The vector editor sets the cursor itself, from what is under the pointer.
   if (isDrawing() && vector?.editor.active) return;
   // The picture tools do the same.
   if (isPicture() && drawLayer.active) return;
-  const cursor = painting ? 'copy' : overPicture && !selecting && !pan ? 'move' : overCheckbox && !selecting && !pan ? 'pointer' : overLink && linkKeyDown && !selecting && !pan ? 'pointer' : '';
+  const seam = pagesJoined() ? SEAM_SHOW_CURSOR : SEAM_HIDE_CURSOR;
+  const cursor = painting ? 'copy' : overPicture && !selecting && !pan ? 'move' : overSeam && !selecting && !pan ? seam : overCheckbox && !selecting && !pan ? 'pointer' : overLink && linkKeyDown && !selecting && !pan ? 'pointer' : '';
   if (canvas.style.cursor !== cursor) canvas.style.cursor = cursor;
 }
 function linkKeyChanged(e: { metaKey: boolean; ctrlKey: boolean }): void {
@@ -5862,6 +5898,7 @@ canvas.addEventListener('pointerleave', () => {
   overLink = false;
   overCheckbox = false;
   overPicture = false;
+  overSeam = false;
   updateCursor();
   linkPopover.leave();
 });
@@ -5875,7 +5912,9 @@ canvas.addEventListener('pointermove', (e) => {
   const over = selectedPicture ? pageAt(e.offsetX, e.offsetY) : null;
   const overBefore = overPicture;
   overPicture = !!over && onSelectedPicture(over.page.id, over.x, over.y) && !pressed?.grab;
-  if (overPicture !== overBefore) updateCursor();
+  const seamBefore = overSeam;
+  overSeam = e.buttons === 0 && !overPicture && seamAt(e.offsetX, e.offsetY);
+  if (overPicture !== overBefore || overSeam !== seamBefore) updateCursor();
   linkKeyChanged(e);
   if (sheetView.active) {
     // A workbook: a drag selects or resizes (or pans, with the middle button); the pointer shows what a press would do.
@@ -6082,6 +6121,8 @@ function toggleCollapsePages(): void {
     // Storage unavailable: the choice lasts for this session only.
   }
   rearrangeKeepingPlace();
+  // The pointer is still on the seam: its arrows now point the other way.
+  updateCursor();
 }
 
 /** Positions the pages again with what is at the middle of the window staying there, whatever moved the pages. */
@@ -6110,6 +6151,7 @@ function setViewMode(mode: ViewMode): void {
   if (mode === 'grid') {
     if (grid) return;
     grid = true;
+    gridState.columns = 0;
   } else {
     if (!grid && mode === viewMode) return;
     grid = false;
@@ -6337,6 +6379,8 @@ const chromeHost = createChromeHost({
   showTrash: () => trashDialog.open(),
   showVault: () => vaultDialog.open(),
   copyNoteLink: () => void copyNoteLink(),
+  canShowInVault,
+  showInVault: () => showInVault('open'),
   vaultFolder: () => {
     const service = vaultService;
     if (!service) return null;
@@ -6995,6 +7039,10 @@ input.addEventListener('contextmenu', (e) => {
 // same paths as File ▸ Open Recent.
 /** What the Documents screen and the Files Sidebar both ask of the app: one copy, so the two can't drift apart. */
 const libraryHost = {
+  // File › Open and the Files pane both offer it on a folder of the account (docs/folder-sharing.md).
+  shareFolder: (folder: Folder) => showFolderShareDialog({ id: folder.id, name: folder.name }),
+  canShowInVault,
+  showInVault: (item: { doc: LibraryEntry } | { folder: Folder }) => void showInVault(item),
   open: (entry: LibraryEntry) => {
     newDocumentFolder = null;
     showLoading(entry.name);
@@ -7049,7 +7097,6 @@ const dashboard = new Dashboard(document.body, {
   openInSharedFolder,
   newInSharedFolder: (share, folderId, docKind) => void newInSharedFolder(share, folderId, docKind).then(focusInput),
   importIntoSharedFolder,
-  shareFolder: (folder) => showFolderShareDialog({ id: folder.id, name: folder.name }),
   // In the desktop app: whether the vault keeps a copy of a shared folder (vaultShared.ts); the next sync makes or removes it.
   vaultCopy: desktopBridge()
     ? {
@@ -7226,6 +7273,31 @@ function watchLinks(bridge: { pending(): Promise<string[]> }): void {
 }
 
 /** File › Copy Link to Note: a `golemdocs://` link to the open document, at the heading the caret is under, if any. */
+/** Whether Show in Finder applies: a vault folder kept on this computer (a phone's is in iCloud, with no file manager to show). */
+function canShowInVault(): boolean {
+  return !!vaultService?.current.root && !vaultService.fixed;
+}
+
+/** Show in Finder: the open document, a listed one or a folder, selected in the file manager (its folder if not written yet). */
+async function showInVault(item: 'open' | { doc: LibraryEntry } | { folder: Folder }): Promise<void> {
+  const service = vaultService;
+  const root = service?.current.root;
+  if (!service || !root) return;
+  let target: Parameters<typeof revealPath>[2];
+  if (item !== 'open' && 'folder' in item) target = { folderId: item.folder.id };
+  else {
+    const open = item === 'open' ? openDocumentIds() : null;
+    const entry = item === 'open' ? library.entries.find((e) => (open!.localId && e.local?.id === open!.localId) || (open!.cloudId && e.cloud?.id === open!.cloudId)) : item.doc;
+    const ids = [open?.localId, open?.cloudId, entry?.local?.id, entry?.cloud?.id];
+    target = { ids, folderId: entry ? folderOf(entry, library.folders) : null };
+  }
+  try {
+    await service.revealItem(revealPath(await vaultEntries(root), library.folders, target));
+  } catch (e) {
+    say(e instanceof Error ? e.message : String(e));
+  }
+}
+
 async function copyNoteLink(): Promise<void> {
   const root = vaultService?.current.root;
   const open = openDocumentIds();
@@ -7662,7 +7734,12 @@ drawLayer.onUpdate(() => pagesPanel.refresh()); // a picture's shapes are in its
  * A page's thumbnail: the page as laid out, with what is painted over it while it is edited (a picture's shapes, the drawing being
  * edited, which the laid-out page only catches up with when the drawing is opened again).
  */
-function thumbnailPixels(page: GpuPage, width: number, height: number): Uint8ClampedArray<ArrayBuffer> | null {
+function thumbnailPixels(page: GpuPage, width: number, height: number): Uint8ClampedArray<ArrayBuffer> | null | undefined {
+  // Its glyphs are packed away (it is far from the view): drawn once they are back.
+  if (page.shelved) {
+    void shelf.bring(page);
+    return undefined;
+  }
   const pixels = gl ? traced('pagesPanelThumbnail', () => readPage(gl!, renderer, page, width, height, pagesDark(), forcedColors())) : null;
   if (page !== pages[0] || (!isPicture() && !isDrawing())) return pixels;
   const thumb = document.createElement('canvas');
@@ -7787,8 +7864,9 @@ function updateRuler(): void {
       length: canvas.clientHeight,
       pxPerPoint,
       start: camera.y,
-      page: { start: page.y, length: page.height },
-      margins: same ? { near: setup.top / 20, far: setup.bottom / 20 } : null,
+      // With the margins hidden only the body is there to measure.
+      page: page.shown ? { start: shownTop(page), length: shownBottom(page) - shownTop(page) } : { start: page.y, length: page.height },
+      margins: same && !page.shown ? { near: setup.top / 20, far: setup.bottom / 20 } : null,
     },
     0,
   );

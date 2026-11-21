@@ -55,6 +55,9 @@ export function readPage(gl: WebGL2RenderingContext, renderer: PageRenderer, pag
   let ok = false;
   const screenForced = renderer.forced;
   renderer.forced = forced;
+  // A picture of a page is all of it, even while the view hides its margins.
+  const shown = page.shown;
+  page.shown = null;
   try {
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -69,6 +72,7 @@ export function readPage(gl: WebGL2RenderingContext, renderer: PageRenderer, pag
     }
   } finally {
     renderer.forced = screenForced;
+    page.shown = shown;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.bindTexture(gl.TEXTURE_2D, previousTexture);
     gl.deleteFramebuffer(framebuffer);

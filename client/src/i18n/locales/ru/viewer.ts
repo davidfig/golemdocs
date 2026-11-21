@@ -1,7 +1,6 @@
 import type { Messages } from '../../index.ts';
 
 export const viewer: Partial<Messages> = {
-  'viewer.opening': 'Открывается {name}…',
   'viewer.cannotOpen': 'Не удаётся показать {name}: Golem Docs не открывает файлы этого типа.',
   'viewer.document': 'Документ',
   'viewer.previousPage': 'Предыдущая страница',

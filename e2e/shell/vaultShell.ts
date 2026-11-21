@@ -1,5 +1,6 @@
 // A stand-in desktop shell for the vault specs: `window.__TAURI__` answering the vault commands from a small vault held in
-// memory (`window.__vault`, path to base64), plus golemdocs:// links (`__links`) and the clipboard (`__copied`).
+// memory (`window.__vault`, path to base64), plus golemdocs:// links (`__links`), the clipboard (`__copied`) and what Show in
+// Finder was asked to show (`__revealed`).
 //
 // Each test signs in as an account of its own: the vault syncs its files into the account, and with the account every test
 // shares, tests running at the same time would open the same documents, join one room and see each other come and go.
@@ -14,6 +15,7 @@ declare global {
     __vault: Record<string, string>;
     __links: string[];
     __copied: string[];
+    __revealed: string[];
   }
 }
 
@@ -29,6 +31,7 @@ export async function vaultShell(page: Page, files: Record<string, string>): Pro
       window.__vault = Object.fromEntries(Object.entries(files).map(([path, text]) => [path, enc(text)]));
       window.__links = [];
       window.__copied = [];
+      window.__revealed = [];
       const times: Record<string, number> = {};
       const now = () => Date.now();
       const folders = () => [...new Set(Object.keys(window.__vault).filter((p) => !p.startsWith('.')).flatMap((p) => p.split('/').slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join('/'))))];
@@ -56,6 +59,9 @@ export async function vaultShell(page: Page, files: Record<string, string>): Pro
             return null;
           case 'link_pending':
             return window.__links.splice(0);
+          case 'vault_reveal_item':
+            window.__revealed.push(path);
+            return null;
           case 'clipboard_write_text':
             window.__copied.push(args.text as string);
             return null;

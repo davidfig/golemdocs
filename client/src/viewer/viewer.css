@@ -268,3 +268,12 @@ details[open] > summary > .wm-folder-chevron {
     color: HighlightText;
   }
 }
+
+/* The page buttons, field and count (hidden in Flow, which has no pages): laid out as if they were the bar's own. */
+.wm-viewer-pages {
+  display: contents;
+}
+
+.wm-viewer-pages[hidden] {
+  display: none;
+}

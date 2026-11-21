@@ -37,7 +37,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.filesPanel': 'ファイル サイドバー(&L)',
   'chrome.view.ruler': 'ルーラー(&R)',
   'chrome.view.collapsePages': 'ページ間の余白を隠す',
-  'chrome.view.collapsePages.tip': 'ページ間の余白を隠します。2 ページの間をダブルクリックしても切り替えられます。',
+  'chrome.view.collapsePages.tip': 'ページの上下の余白とページ間の余白を隠します。2 ページの間をダブルクリックしても切り替えられます。',
   'chrome.view.footer': 'ステータス バー(&U)',
   'chrome.view.formattingMarks': '編集記号(&M)',
   'chrome.view.markdownSource': 'Markdown ソース(&K)',

@@ -20,7 +20,8 @@
 import { loadLocale, pickLocale, t } from '../i18n/index.ts';
 import { mountSignIn } from '../ui/signIn.ts';
 import { showFolder } from './folderPage.ts';
-import { CHECK_MS, downloader, highContrast, PAGE_TITLE, PUBLIC_CHECK_MS, say } from './page.ts';
+import { savedViewMode } from '../ui/viewMode.ts';
+import { CHECK_MS, downloader, downloading, highContrast, PAGE_TITLE, PUBLIC_CHECK_MS, say } from './page.ts';
 import { checkOutcome } from './protocol.ts';
 import { mount, type Viewer } from './viewer.ts';
 
@@ -42,6 +43,8 @@ async function start(): Promise<void> {
 
   let name: string;
   let file: Response;
+  // The loading screen, from when the file is asked for until its last byte is in.
+  let loaded = (): boolean => false;
   try {
     const info = await fetch(api, { cache: 'no-store' });
     if (info.status === 401) return signInHere();
@@ -49,6 +52,7 @@ async function start(): Promise<void> {
     if (info.status === 404) return void say(gone);
     if (!info.ok) throw new Error(`HTTP ${info.status}`);
     name = ((await info.json()) as { name: string }).name;
+    loaded = downloading(document.body, name);
     file = await fetch(`${api}/file`, { cache: 'no-store' });
     if (file.status === 404) return void say(gone);
     if (!file.ok) throw new Error(`HTTP ${file.status}`);
@@ -59,7 +63,9 @@ async function start(): Promise<void> {
   const title = embedded ? name : t('viewer.viewOnlyTitle', { name });
   document.title = title;
   let etag = file.headers.get('etag');
-  const bytes = await file.arrayBuffer();
+  const bytes = await file.arrayBuffer().catch(() => null);
+  const waited = loaded();
+  if (!bytes) return void say(t('app.openSharedFailed', { message: '' }));
   // A copy for Download: the viewer is handed the bytes, which go to its worker.
   let stored = isPublic ? new Uint8Array(bytes.slice(0)) : null;
   const save = downloader();
@@ -74,6 +80,10 @@ async function start(): Promise<void> {
     locale,
     title,
     contrast: highContrast(),
+    // Embedded in another site's page the viewer stays compact, as in a mail client's pane.
+    statusBar: !embedded,
+    view: savedViewMode(),
+    waited,
     onError: (message) => console.error(message),
     onDownload: isPublic ? () => void download() : undefined,
     // The page is the site's: a link opens in a tab of its own.

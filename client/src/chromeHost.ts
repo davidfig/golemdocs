@@ -71,6 +71,9 @@ export interface AppHooks {
   vaultFolder(): { path: string | null; problem?: string | null; reveal(): void; retry(): void } | null;
   /** File › Copy Link to Note (desktop app). */
   copyNoteLink(): void;
+  /** File › Show in Finder (desktop app): whether the vault keeps files here, and showing the open document's file. */
+  canShowInVault(): boolean;
+  showInVault(): void;
   /** Help ▸ Check for Updates (desktop app): look for a newer version of the app and offer to install it. */
   showUpdates(): void;
   /** Ask for the page size, margins and orientation, then set them. */
@@ -615,6 +618,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
     documents: app.documents,
     vaultFolder: app.vaultFolder,
     copyNoteLink: app.copyNoteLink,
+    canShowInVault: app.canShowInVault,
+    showInVault: app.showInVault,
     fonts: app.fonts,
   };
 }

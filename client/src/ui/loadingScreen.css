@@ -35,6 +35,11 @@
   animation: wm-loading-appear 0.15s ease-out 400ms both;
 }
 
+/* Already waited on (see LoadingScreen.show): no delay. */
+.wm-loading-now .wm-loading-box {
+  animation-delay: 0s;
+}
+
 @keyframes wm-loading-appear {
   from {
     opacity: 0;

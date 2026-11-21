@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { arrangePages, columnsToFill, nearestPage, onSeam, type Page } from '../src/document/arrange.ts';
+import { arrangeGrid, arrangePages, columnsToFill, gridColumns, nearestPage, onSeam, shownTop, shownBottom, type GridState, type Page } from '../src/document/arrange.ts';
 
 class TestPage implements Page {
   x = -1;
   y = -1;
+  shown: { top: number; bottom: number } | null = null;
   constructor(readonly width: number, readonly height: number) {}
   moveTo(x: number, y: number): void {
     this.x = x;
@@ -75,4 +76,53 @@ test('onSeam finds the gap between pages, or the line where touching pages meet'
   const columns = pages([100, 100], [100, 100]);
   arrangePages(columns, 2, 10);
   assert.equal(onSeam(columns, 105, 50, 1), false, 'between side-by-side pages is not a seam');
+});
+
+test('hiding the white space shows only each page\'s body, the bodies meeting edge to edge', () => {
+  const p = pages([100, 200], [100, 200], [100, 200]);
+  for (const page of p) page.shown = { top: 30, bottom: 170 };
+  const bounds = arrangePages(p, 1, 0);
+  assert.deepEqual(p.map((q) => q.y), [-30, 110, 250], 'each page sits so its body starts where the last one ended');
+  assert.deepEqual(p.map((q) => shownTop(q)), [0, 140, 280]);
+  assert.deepEqual(bounds, { x: 0, y: 0, width: 100, height: 420 });
+  assert.equal(onSeam(p, 50, 140, 2), true, 'the seam is where the bodies meet');
+  assert.equal(onSeam(p, 50, 200, 2), false, 'not where the full pages would meet');
+  assert.equal(nearestPage(p, 50, 145), p[1], 'just below the seam is the second page, though the first one\'s hidden margin reaches there');
+  assert.equal(nearestPage(p, 50, 135), p[0]);
+});
+
+test('a page with no body band is shown whole among cropped ones', () => {
+  const p = pages([100, 200], [100, 200]);
+  p[0].shown = { top: 30, bottom: 170 };
+  arrangePages(p, 1, 0);
+  assert.deepEqual([shownTop(p[1]), shownBottom(p[1])], [140, 340]);
+});
+
+test('the grid keeps its column count while it still fits the view, so pages arriving do not reshuffle it', () => {
+  const square = (n: number) => pages(...Array.from({ length: n }, (): [number, number] => [100, 100]));
+  assert.equal(gridColumns(square(12), 4 / 3, 0, 0), 4, 'none yet: the best');
+  assert.equal(gridColumns(square(13), 4 / 3, 0, 4), 4, 'one more page: kept');
+  assert.equal(gridColumns(square(12), 4 / 3, 0, 5), 4, 'a much worse shape: changed');
+  assert.equal(gridColumns(square(3), 4 / 3, 0, 4), 2, 'more columns than pages: the best');
+});
+
+test('pages still to come are held as blank sheets, and the grid has its final shape from the start', () => {
+  const state: GridState = { columns: 0, blanks: [] };
+  const first = pages([100, 100], [100, 100]);
+  const bounds = arrangeGrid(first, 12, 4 / 3, 0, state);
+  assert.equal(state.blanks.length, 10);
+  assert.deepEqual([state.blanks[0].width, state.blanks[0].height], [100, 100], 'the size of the last page laid out');
+  assert.equal(state.columns, 4);
+  assert.deepEqual(bounds, { x: 0, y: 0, width: 400, height: 300 });
+  assert.deepEqual([state.blanks[9].x, state.blanks[9].y], [300, 200]);
+
+  const more = pages(...Array.from({ length: 7 }, (): [number, number] => [100, 100]));
+  assert.deepEqual(arrangeGrid(more, 12, 4 / 3, 0, state), bounds, 'the grid does not move as pages arrive');
+  assert.equal(state.blanks.length, 5);
+  assert.deepEqual([more[6].x, more[6].y], [200, 100]);
+
+  arrangeGrid(more, 0, 4 / 3, 0, state);
+  assert.equal(state.blanks.length, 0, 'none once the count is not known');
+  arrangeGrid([], 12, 4 / 3, 0, state);
+  assert.equal(state.blanks.length, 0, 'none before the first page');
 });

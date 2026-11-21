@@ -72,6 +72,7 @@ export const vault: Catalog = {
   'vault.agents.line': 'Golem Docs 如何維護這個資料夾（同步、檔案格式、為我打開筆記）寫在 .golemdocs/AGENTS.md 中：修改這裡的檔案前請先閱讀。',
   'vault.link.menu': '拷貝筆記連結',
   'vault.link.menu.tip': '拷貝一個 golemdocs:// 連結，可從其他 App 打開此文件，並定位到游標所在的標題',
+  'vault.reveal.menu.tip': '在檔案管理器中顯示並選取此文件在保管庫資料夾中的檔案',
   'vault.link.copied': '已拷貝此筆記的連結。',
   'vault.link.copiedHeading': '已拷貝「{heading}」的連結。',
   'vault.link.copyFailed': '無法拷貝連結。',

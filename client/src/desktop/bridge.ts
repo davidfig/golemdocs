@@ -28,6 +28,11 @@ export interface DesktopBridge {
   forget(): Promise<void>;
   /** Shows the vault folder in Finder (Explorer, the file manager). */
   reveal(): Promise<void>;
+  /**
+   * Shows a file or folder of the vault (`/` between names) selected in Finder (File Explorer, the file manager); one not on
+   * disk yet shows the folder it would be in. A shell too old to select one shows the vault folder.
+   */
+  revealItem(path: string): Promise<void>;
   /** Whether the app may read and write in the folder; rejects with the reason. The first call on a protected folder makes macOS ask the person. */
   check(): Promise<void>;
   /** Opens the system's privacy settings for files and folders (macOS). */
@@ -104,6 +109,14 @@ export function fromBase64(text: string): Uint8Array {
   return out;
 }
 
+/** What the system calls its file manager, for "Show in Finder". */
+export function fileManagerName(platform: string = navigator.platform): string {
+  return /Mac/.test(platform) ? 'Finder' : /Win/.test(platform) ? 'File Explorer' : 'Files';
+}
+
+/** "Show in Finder" ("Show in File Explorer", "Show in Files"), the same words in every menu that offers it. */
+export const showInFileManagerLabel = (): string => t('dialogs.sync.vault.reveal', { manager: fileManagerName() });
+
 /** True on a phone or tablet (iOS, Android, and an iPad that reports itself as a Mac). */
 export function isTouchDevice(nav: Pick<Navigator, 'userAgent' | 'platform' | 'maxTouchPoints'> = navigator): boolean {
   return /iPhone|iPad|iPod|Android/i.test(nav.userAgent) || (/Mac/.test(nav.platform) && nav.maxTouchPoints > 1);
@@ -142,6 +155,11 @@ export function desktopBridge(): DesktopBridge | null {
     }),
     forget: () => core.invoke<void>('vault_forget'),
     reveal: () => needsNewerShell(() => core.invoke<void>('vault_reveal')),
+    revealItem: (path) =>
+      core.invoke<void>('vault_reveal_item', { path }).catch((error: unknown) => {
+        if (!isMissingCommand(error)) throw error;
+        return needsNewerShell(() => core.invoke<void>('vault_reveal'));
+      }),
     // Only there to make macOS ask for access: an older shell has no such step, and its sync fails with its own error if it can't read the folder.
     check: () => core.invoke<void>('vault_check').catch((error: unknown) => {
       if (!isMissingCommand(error)) throw error;

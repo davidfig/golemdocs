@@ -94,7 +94,7 @@ function statusLine(): { el: HTMLElement; say(text: string, error?: boolean): vo
 export const embedCode = (url: string, title: string): string =>
   `<iframe src="${url.replace(/&/g, '&amp;')}" title="${title.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" width="800" height="600" style="border:0" allowfullscreen></iframe>`;
 
-/** The public link: a switch, and while it is on, the address, Copy Link, Copy Embed Code and Reset Link. */
+/** The public link: a switch, and while it is on, the address, Copy Link, Copy Embed Code and Regenerate Link. */
 function publicSection(api: ShareApi, id: string, name: string, liveSources?: Promise<string[]>): HTMLElement {
   const publicLink = api.link;
   const publicLinkUrl = api.linkUrl;
@@ -104,15 +104,15 @@ function publicSection(api: ShareApi, id: string, name: string, liveSources?: Pr
   const copyLink = h('button', { class: 'wm-button', text: t('dialogs.share.copyLink'), attrs: { type: 'button' } });
   const copyEmbed = h('button', { class: 'wm-button', text: t('dialogs.share.copyEmbed'), attrs: { type: 'button' } });
   const reset = h('button', { class: 'wm-button', text: t('dialogs.share.resetLink'), attrs: { type: 'button', title: t('dialogs.share.resetNote') } });
-  const linkRow = h('div', { class: 'wm-share-link' }, address, copyLink);
-  const moreRow = h('div', { class: 'wm-share-more' }, ...(api.embeds ? [copyEmbed] : []), reset);
+  // One row: the address, then every button for it (the dialog is sized to fit them, see .wm-share-embeds in ui.css).
+  const linkRow = h('div', { class: 'wm-share-link' }, address, copyLink, ...(api.embeds ? [copyEmbed] : []), reset);
   const { el: message, say } = statusLine();
 
   let token: string | null = null;
   const show = (next: string | null) => {
     token = next;
     toggle.checked = !!token;
-    for (const row of [linkRow, moreRow]) row.hidden = !token;
+    linkRow.hidden = !token;
     address.value = token ? publicLinkUrl(token) : '';
   };
   show(null);
@@ -149,7 +149,7 @@ function publicSection(api: ShareApi, id: string, name: string, liveSources?: Pr
     live.textContent = t('dialogs.share.liveNote', { sources: names.join(', ') });
     live.hidden = false;
   });
-  return section(t('dialogs.share.publicHeading'), h('label', { class: 'wm-find-case' }, toggle, t('dialogs.share.publicToggle')), note, live, linkRow, moreRow, message);
+  return section(t('dialogs.share.publicHeading'), h('label', { class: 'wm-find-case' }, toggle, t('dialogs.share.publicToggle')), note, live, linkRow, message);
 }
 
 /** A modal for sharing the open document with people. */
@@ -158,7 +158,7 @@ export function showShareDialog(target: ShareTarget): void {
   const listShares = api.list;
   const addShare = api.add;
   const removeShare = api.remove;
-  const dialog = h('dialog', { class: 'wm-dialog wm-share', attrs: { 'aria-label': t('dialogs.share.label', { name: target.name }) } });
+  const dialog = h('dialog', { class: `wm-dialog wm-share${api.embeds ? ' wm-share-embeds' : ''}`, attrs: { 'aria-label': t('dialogs.share.label', { name: target.name }) } });
 
   const personId = 'id' in target.people ? target.people.id : '';
   const people = h('div', { class: 'wm-share-people', attrs: { role: 'list' } });

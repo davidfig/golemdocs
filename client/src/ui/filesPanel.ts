@@ -18,6 +18,7 @@ import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
 import { showPopupMenu, type PopupItem } from './popupMenu.ts';
 import { onContextMenu } from './contextMenu.ts';
+import { showInFileManagerLabel } from '../desktop/bridge.ts';
 import { newMenuItems } from './newKinds.ts';
 import type { DocumentKind } from './actions.ts';
 import { makeResizable } from './sidebarResize.ts';
@@ -40,6 +41,11 @@ export interface FilesPanelHost {
   delete(entries: LibraryEntry[], folderIds?: string[]): Promise<void>;
   /** Opens the sharing dialog for a cloud document the user owns. */
   share(cloudId: string, name: string): void;
+  /** Opens the sharing dialog for a folder of the account, with what is in it (docs/folder-sharing.md). */
+  shareFolder?(folder: Folder): void;
+  /** Whether Show in Finder applies (the desktop app keeps a vault folder here), and showing a document's file or a folder in it. */
+  canShowInVault?(): boolean;
+  showInVault?(item: { doc: LibraryEntry } | { folder: Folder }): void;
   /** Gives a document a new file name (its extension kept); fails with why, if it could not. */
   rename(entry: LibraryEntry, name: string): Promise<void>;
   account(): User | null;
@@ -326,6 +332,7 @@ export class FilesPanel {
   private fileItems(entry: LibraryEntry): PopupItem[] {
     const items: PopupItem[] = [
       { label: t('panels.files.openItem'), run: () => this.host.open(entry) },
+      ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ doc: entry }) }] : []),
       ...(entry.cloud ? [{ label: t('panels.dashboard.share'), run: () => this.host.share(entry.cloud!.id, entry.cloud!.name) }] : []),
       { label: t('panels.dashboard.rename'), run: () => this.startRename(`doc:${entry.key}`) },
       { label: t('panels.dashboard.move'), run: () => pickFolder(this.folders, t('panels.dashboard.moveTitle', { name: entry.name }), () => false, folderOf(entry, this.folders), (to) => void this.relocate({ kind: 'doc', entry }, to)) },
@@ -337,6 +344,8 @@ export class FilesPanel {
   private folderItems(folder: Folder, open: boolean): PopupItem[] {
     return [
       { label: open ? t('panels.files.closeFolder') : t('panels.files.openFolder'), run: () => this.toggleFolder(folder.id) },
+      ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ folder }) }] : []),
+      ...(this.host.shareFolder && this.host.account() ? [{ label: t('panels.dashboard.share'), run: () => this.host.shareFolder!(folder) }] : []),
       { label: t('panels.dashboard.rename'), run: () => this.startRename(folder.id) },
       { label: t('panels.dashboard.move'), run: () => pickFolder(this.folders, t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => void this.relocate({ kind: 'folder', folder }, to)) },
       { label: t('panels.dashboard.deleteFolder'), run: () => void this.ask([folder], [], (before) => removeFolderTree(before.folders, before.entries, [folder], (entries, folderIds) => this.host.delete(entries, folderIds))) },

@@ -37,7 +37,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.filesPanel': '檔案側邊欄(&L)',
   'chrome.view.ruler': '尺規(&R)',
   'chrome.view.collapsePages': '隱藏頁面之間的空白',
-  'chrome.view.collapsePages.tip': '隱藏頁面之間的空白。也可以按兩下兩頁之間切換。',
+  'chrome.view.collapsePages.tip': '隱藏頁面的上下邊界和頁面之間的空白。也可以按兩下兩頁之間切換。',
   'chrome.view.footer': '狀態列(&U)',
   'chrome.view.formattingMarks': '格式標記(&M)',
   'chrome.view.markdownSource': 'Markdown 原始碼(&K)',

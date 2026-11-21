@@ -6,18 +6,27 @@
 // `mount` styles the document it is in (the color scheme is on the root element), so it is meant to own that document: the viewer
 // page (viewer.html, ./main.ts) or a frame of its own.
 //
+// Like the editor it covers the document with a loading screen while a file opens, and (when the host asks, `statusBar`) shows the
+// editor's status bar under it: the page, the word count, the zoom and the three views (Print Layout, Flow, Page Grid).
+//
 // Screen readers: the app's Screen Reader Mode (ScreenReaderSupport: the reading layer over the pages, the textarea mirroring the
 // caret, announcements), on while the person's `golem.screenReader` setting is (the site's page shares the app's storage), the host
 // asks for it, or it is turned on here (Mod+Alt+Z, or the first button Tab reaches). See docs/architecture/accessibility.md.
 
 import '../ui/ui.css';
 import './viewer.css';
-import { arrangePages, nearestPage, type Bounds } from '../document/arrange.ts';
+import { arrangeGrid, arrangePages, nearestPage, type Bounds, type GridState } from '../document/arrange.ts';
+import { sniffImage } from '../formats/images.ts';
 import { sourceFromFile } from '../formats/source.ts';
 import { loadLocale, t } from '../i18n/index.ts';
 import { LayoutClient, type DocumentListener } from '../layout/layoutClient.ts';
-import type { LayoutUpdate, SelectionUpdate } from '../layout/protocol.ts';
-import { CLOSE_ICON, h, iconButton } from '../ui/dom.ts';
+import type { LayoutUpdate, SelectionUpdate, WordStats } from '../layout/protocol.ts';
+import type { ViewMode, ZoomTarget } from '../ui/actions.ts';
+import { Footer } from '../ui/footer.ts';
+import { kindFromName } from '../ui/formats.ts';
+import { LoadingScreen } from '../ui/loadingScreen.ts';
+import { showZoomList } from '../ui/zoomList.ts';
+import { CLOSE_ICON, h, iconButton, stripMnemonic } from '../ui/dom.ts';
 import { ScreenReaderSupport } from '../screenReaderSupport.ts';
 import { announce } from '../ui/announce.ts';
 import { forcedColors, onAccessibilityChange } from '../ui/accessibilityOptions.ts';
@@ -27,6 +36,7 @@ import { matches, parseShortcut } from '../ui/shortcuts.ts';
 import { editKey } from '../ui/textInput.ts';
 import { Camera, CSS_PX_PER_POINT } from '../view/camera.ts';
 import { GpuPage } from '../webgl/gpuPage.ts';
+import { PageShelf, pagesNear } from '../webgl/pageShelf.ts';
 import { PageRenderer } from '../webgl/pageRenderer.ts';
 import { SelectionLayer } from '../webgl/selectionLayer.ts';
 import { ImageRenderer } from '../webgl/shapes/imageRenderer.ts';
@@ -55,6 +65,18 @@ export interface ViewerOptions {
   contrast?: boolean;
   /** Shown in the bar beside the page number (a shared document's name, say). */
   title?: string;
+  /**
+   * The editor's status bar under the document: the page, the word count, the zoom (a list of sizes) and the three views (Print Layout,
+   * Flow, Page Grid). Off by default, so a host showing the viewer in a small pane (a mail client) keeps it compact; the site's pages
+   * turn it on. With it, the zoom is shown there rather than in the bar at the top.
+   */
+  statusBar?: boolean;
+  /** The view to start in (the person's choice in the editor, on the site's pages); Print Layout if not given. */
+  view?: ViewMode;
+  /** The person picked another view in the status bar (a page of several files keeps it for the next). */
+  onView?(view: ViewMode): void;
+  /** The host kept the person waiting already (it downloaded the file behind its own loading screen): the viewer's shows at once. */
+  waited?: boolean;
   /** Shows a Download button in the bar, which calls this (a public link's page saves the file). */
   onDownload?(): void;
   /** A link in the document was clicked (only web, mail, phone and FTP addresses are passed on). */
@@ -117,6 +139,8 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   const input = h('textarea', { class: 'wm-viewer-input', attrs: { inputmode: 'none', autocomplete: 'off', autocorrect: 'off', spellcheck: 'false', tabindex: '0' } });
   const status = h('div', { class: 'wm-viewer-status', attrs: { role: 'status' } });
   view.append(canvas, input, status);
+  // The editor's loading screen, over the document while it opens (not while a newer save replaces it: the old pages stay).
+  const loading = new LoadingScreen(view);
 
   const tool = (path: string, label: string, run: () => void): HTMLButtonElement => {
     const button = iconButton('wm-tbutton', path, label);
@@ -129,6 +153,8 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   const pageField = h('input', { class: 'wm-input', attrs: { type: 'text', inputmode: 'numeric', autocomplete: 'off', spellcheck: 'false' } });
   const pageCount = h('span', { class: 'wm-viewer-count' });
   const zoomLabel = h('button', { class: 'wm-tbutton wm-viewer-zoom', attrs: { type: 'button' } });
+  // The page buttons, field and count: hidden in Flow, which has no pages.
+  const pageNav = h('span', { class: 'wm-viewer-pages' });
   const query = h('input', { class: 'wm-input wm-viewer-query', attrs: { type: 'search', autocomplete: 'off', spellcheck: 'false' } });
   const findMessage = h('span', { class: 'wm-find-message', attrs: { role: 'status' } });
   const findBar = h('div', { class: 'wm-viewer-bar wm-viewer-find', attrs: { role: 'search' } });
@@ -146,6 +172,10 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   let pages: GpuPage[] = [];
   const pagesById = new Map<number, GpuPage>();
   let bounds: Bounds = { x: 0, y: 0, width: 0, height: 0 };
+  /** While the document is first laid out, how many pages it will have (0: not known). */
+  let expectedPages = 0;
+  /** The page grid's columns, and its blank sheets for pages still being laid out. */
+  const gridState: GridState = { columns: 0, blanks: [] };
   let cameraPlaced = false;
   let userMoved = false;
   /** Opened as a fixed picture (a picture or drawing): fitted whole rather than to its width. */
@@ -154,12 +184,22 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   let fixedPages = false;
   /** What the document was read as (docx, md, pdf...). */
   let format = '';
+  /** Print Layout, Flow or the page grid (`statusBar`'s buttons). */
+  let viewMode: ViewMode = options.view ?? 'print';
+  /** The status bar's counts: the whole document's and the selection's (null until counted, or when there are none). */
+  let words: WordStats | null = null;
+  let selectionWords: WordStats | null = null;
+  let wordsTimer = 0;
+  /** A picture's size in pixels, for the status bar (read from its bytes before they go to the worker). */
+  let picture: { width: number; height: number } | null = null;
   let selectedText = '';
   let selectionHtml: { text: string; html: string } | null = null;
   let frame = 0;
   let destroyed = false;
 
   const renderer = gl ? new PageRenderer(gl, () => desk) : null;
+  // The glyphs of pages away from the view are kept packed small, as in the editor.
+  const shelf = new PageShelf(() => requestRender());
   const atlases = gl ? new AtlasLibrary(gl, fontBase, requestRender) : null;
   const selection = gl ? new SelectionLayer(gl) : null;
   const worker = gl ? new LayoutClient((faces) => faces.forEach((face) => atlases!.define(face)), { fontBase, startWorker: (name) => startLayoutWorker(win, name) }) : null;
@@ -175,6 +215,10 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight, SIDE_PADDING, SIDE_PADDING_X);
     // Windows' contrast themes: the pages and their text in the system's colors, as in the app.
     renderer.forced = forcedColors();
+    // Flow has no page edges: the text runs to the window's sides.
+    renderer.flat = reflowing();
+    syncReflow();
+    shelf.keep(pagesNear(pages, { top: camera.y, bottom: camera.y + camera.height / camera.scale }, 1));
     renderer.render(camera, pages, selection, false, dark);
     reader?.render({ x: camera.x, y: camera.y, scale: camera.zoom * CSS_PX_PER_POINT, width: canvas.clientWidth, height: canvas.clientHeight }, pages);
     updateBar();
@@ -186,6 +230,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   }
 
   function fail(message: string): void {
+    loading.hide();
     showStatus(message);
     options.onError?.(message);
   }
@@ -196,9 +241,63 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
 
   // --- Pages and the camera -----------------------------------------------------------------------
 
+  /** Flow applies to this document: not a PDF's own pages or a picture, which have no text to reflow. */
+  const canFlow = (): boolean => !fixedPages && !fitWhole;
+  const reflowing = (): boolean => viewMode === 'flow' && canFlow();
+  const grid = (): boolean => viewMode === 'grid';
+
+  /** In Flow, the width the worker lays the text out to: the window's, at this zoom (null otherwise). As the editor's `reflowTarget`. */
+  const reflowTarget = (): number | null => (reflowing() ? Math.round(canvas.clientWidth / (camera.zoom * CSS_PX_PER_POINT)) : null);
+  let reflowSent: number | null = null;
+  let reflowTimer = 0;
+  /** Tells the worker the width to reflow to when it changed (a resize, a zoom): at once, or once it has settled. */
+  function syncReflow(immediate = false): void {
+    if (!worker || reflowTarget() === reflowSent) return;
+    const post = (): void => {
+      if (destroyed) return;
+      reflowSent = reflowTarget();
+      worker.setReflow(reflowSent);
+    };
+    win.clearTimeout(reflowTimer);
+    if (immediate) post();
+    else reflowTimer = win.setTimeout(post, 150);
+  }
+
+  /** Lays the pages out: one column, or as many as fill the window in the page grid. */
+  function arrange(): void {
+    const gap = reflowing() ? 0 : PAGE_GAP;
+    if (grid()) bounds = arrangeGrid(pages, expectedPages, canvas.clientWidth / Math.max(1, canvas.clientHeight), gap, gridState);
+    else {
+      gridState.blanks.length = 0;
+      bounds = arrangePages(pages, 1, gap);
+    }
+    if (renderer) renderer.blanks = gridState.blanks;
+    if (pages.length && (!cameraPlaced || ((fitWhole || grid()) && !userMoved))) placeCamera();
+    requestRender();
+  }
+
+  /** Print Layout, Flow or the page grid, from the status bar: the camera is placed again, as the editor does. */
+  function setView(mode: ViewMode): void {
+    if (mode === viewMode) return;
+    viewMode = mode;
+    options.onView?.(mode);
+    cameraPlaced = false;
+    userMoved = false;
+    syncReflow(true);
+    arrange();
+    focusView();
+  }
+
   function placeCamera(): void {
     cameraPlaced = true;
+    if (grid()) return camera.fit(bounds, canvas.clientWidth, canvas.clientHeight);
     if (fitWhole) return camera.fit(bounds, canvas.clientWidth, canvas.clientHeight, 24);
+    if (reflowing()) {
+      // The text fills the window from the top, at the zoom there is.
+      camera.x = bounds.x;
+      camera.y = bounds.y;
+      return;
+    }
     // As the editor opens a document: the first page at 100%, or zoomed out until its width fits, a little grey above it.
     camera.zoom = fitWidthZoom(bounds.width, canvas.clientWidth, FIT_MARGIN, CSS_PX_PER_POINT);
     const pointsPerCss = 1 / (camera.zoom * CSS_PX_PER_POINT);
@@ -215,30 +314,50 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       replacing = false;
       for (const page of pagesById.values()) page.dispose(gl);
       pagesById.clear();
+      shelf.clear();
     }
+    const added: GpuPage[] = [];
     for (const encoded of update.pages) {
-      pagesById.get(encoded.id)?.dispose(gl);
-      pagesById.set(encoded.id, new GpuPage(encoded, atlases));
+      const old = pagesById.get(encoded.id);
+      if (old) {
+        old.dispose(gl);
+        shelf.removed(old);
+      }
+      const page = new GpuPage(encoded, atlases);
+      pagesById.set(encoded.id, page);
+      added.push(page);
     }
+    shelf.added(added);
     for (const { page, content } of update.overlays) pagesById.get(page)?.setOverlay(gl, content);
     for (const id of update.drop) {
-      pagesById.get(id)?.dispose(gl);
+      const page = pagesById.get(id);
+      if (page) {
+        page.dispose(gl);
+        shelf.removed(page);
+      }
       pagesById.delete(id);
     }
     reader?.layout(update.drop);
+    expectedPages = update.expected ?? 0;
     pages = [];
     for (const id of update.order) {
       const page = pagesById.get(id);
       if (page) pages.push(page);
     }
-    bounds = arrangePages(pages, 1, PAGE_GAP);
-    if (pages.length && (!cameraPlaced || (fitWhole && !userMoved))) placeCamera();
-    if (pages.length) showStatus(null);
-    requestRender();
+    if (pages.length) {
+      showStatus(null);
+      loading.hide();
+    }
+    arrange();
   }
 
   function applySelection(update: SelectionUpdate): void {
     selection?.update(update);
+    if (update.footerStats !== undefined) {
+      if (update.footerStats?.selection) selectionWords = update.footerStats;
+      else words = update.footerStats;
+    }
+    if (update.text !== selectedText) countWordsSoon();
     selectedText = update.text;
     if (update.search) findMessage.textContent = update.search.found ? '' : t('dialogs.find.noMatches');
     const pageIndex = update.focus ? pages.findIndex((p) => p.id === update.focus!.page) : -1;
@@ -293,10 +412,78 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     requestRender();
   }
 
+  /** A size from the status bar's list: a percentage, or the page's width, the whole page or all the pages in view. */
+  function zoomToTarget(to: ZoomTarget): void {
+    if (typeof to === 'number') return zoomTo(to);
+    userMoved = true;
+    const page = pages[Math.max(0, currentPage())];
+    if (to === 'allPages' || !page) camera.fit(bounds, canvas.clientWidth, canvas.clientHeight);
+    else if (to === 'wholePage') camera.fit({ x: page.x, y: page.y, width: page.width, height: page.height }, canvas.clientWidth, canvas.clientHeight);
+    else {
+      const middle = camera.toDocument(canvas.clientWidth / 2, canvas.clientHeight / 2).y;
+      camera.zoom = fitWidthZoom(page.width, canvas.clientWidth, FIT_MARGIN, CSS_PX_PER_POINT);
+      const pointsPerCss = 1 / (camera.zoom * CSS_PX_PER_POINT);
+      camera.x = page.x + page.width / 2 - (canvas.clientWidth / 2) * pointsPerCss;
+      camera.y = middle - (canvas.clientHeight / 2) * pointsPerCss;
+    }
+    requestRender();
+  }
+
+  // --- The status bar ---------------------------------------------------------------------------------
+
+  const kind = kindFromName(options.name);
+  const footer = options.statusBar
+    ? new Footer(h('footer', { class: 'wm-footer' }), {
+        view: setView,
+        // The page opens Go To in the editor; here it is the page field in the bar.
+        goTo: () => {
+          pageField.focus();
+          pageField.select();
+        },
+        zoom: (anchor) => showZoomList(anchor, camera.zoom, (to) => {
+          zoomToTarget(to);
+          focusView();
+        }),
+        label: (action) => (action === 'zoom' ? t('chrome.control.zoom') : stripMnemonic(t('chrome.edit.goTo'))),
+      })
+    : null;
+
+  /** Asks the worker for the counts once the selection has been still for a moment (the whole document's, and the selection's). */
+  function countWordsSoon(): void {
+    if (!footer) return;
+    win.clearTimeout(wordsTimer);
+    wordsTimer = win.setTimeout(() => {
+      if (destroyed) return;
+      send({ kind: 'countWords', whole: true, footer: true });
+      if (selectedText) send({ kind: 'countWords', footer: true });
+      else selectionWords = null;
+    }, 300);
+  }
+
+  function updateFooter(): void {
+    if (!footer) return;
+    const here = reflowing() || !pages.length ? -1 : currentPage();
+    footer.update({
+      kind,
+      page: here >= 0 ? { current: here + 1, count: pages.length } : null,
+      zoom: camera.zoom,
+      words: fitWhole ? null : words,
+      selection: selectedText ? selectionWords : null,
+      // A drawing's page is its size at 96 dpi, as the editor says it.
+      picture: picture ?? (fitWhole && pages[0] ? { width: Math.round((pages[0].width * 96) / 72), height: Math.round((pages[0].height * 96) / 72) } : null),
+      view: viewMode === 'flow' && !canFlow() ? 'print' : viewMode,
+      canFlow: canFlow(),
+      text: null,
+    });
+  }
+
   let shownPage = '';
   let shownCount = '';
   let shownZoom = '';
   function updateBar(): void {
+    updateFooter();
+    // Flow has no pages to go between.
+    pageNav.hidden = reflowing();
     const page = pages.length ? String(currentPage() + 1) : '';
     if (page !== shownPage && doc.activeElement !== pageField) pageField.value = shownPage = page;
     const count = pages.length ? t('viewer.pageCount', { count: pages.length.toLocaleString(options.locale) }) : '';
@@ -316,6 +503,9 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       format = opened;
       fixedPages = annotating;
       fitWhole = format === 'png' || format === 'jpeg' || format === 'webp' || format === 'svg' || format === 'svgz';
+      // Now that it is known whether this document can flow, the worker is told the width (or that there is none).
+      syncReflow(true);
+      loading.update(t('app.layingOut', { name: options.name }));
     },
     layout(update) {
       applyLayout(update);
@@ -323,6 +513,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     },
     done(count) {
       options.onOpened?.({ name: options.name, format, pages: count });
+      countWordsSoon();
       // The section a link named, once: a reload of the same file keeps the reader's place instead.
       if (heading) send({ kind: 'goToPlace', headings: [heading] });
       else caretToView();
@@ -659,6 +850,9 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     camera.dpr = camera.width / cssWidth;
     canvas.width = camera.width;
     canvas.height = camera.height;
+    // The page grid's columns follow the window's shape.
+    gridState.columns = 0;
+    if (grid()) arrange();
     if (pages.length && !userMoved) placeCamera();
     // Resizing clears the canvas: draw before this frame is shown.
     if (frame) win.cancelAnimationFrame(frame);
@@ -670,6 +864,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
 
   el.append(root);
   root.append(readerButton, bar, findBar, view);
+  if (footer) root.append(footer.el);
   bar.addEventListener('keydown', (e) => toolbarKeys(bar, e, focusView));
   resize.observe(canvas);
   canvas.addEventListener('pointerdown', onPointerDown);
@@ -710,15 +905,14 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     });
     query.setAttribute('aria-label', t('dialogs.find.findWhatLabel'));
     query.placeholder = t('viewer.find');
+    pageNav.append(tool(ICON_UP, t('viewer.previousPage'), () => goToPage(currentPage() - 1)), tool(ICON_DOWN, t('viewer.nextPage'), () => goToPage(currentPage() + 1)), pageField, pageCount);
     bar.append(
-      tool(ICON_UP, t('viewer.previousPage'), () => goToPage(currentPage() - 1)),
-      tool(ICON_DOWN, t('viewer.nextPage'), () => goToPage(currentPage() + 1)),
-      pageField,
-      pageCount,
+      pageNav,
       ...(options.title ? [h('span', { class: 'wm-viewer-title', text: options.title, title: options.title })] : []),
       h('span', { class: 'wm-viewer-spacer' }),
       tool(ICON_MINUS, t('viewer.zoomOut'), () => zoomTo(stepZoom(camera.zoom, -1))),
-      zoomLabel,
+      // With a status bar the zoom is shown there, as in the editor.
+      ...(footer ? [] : [zoomLabel]),
       tool(ICON_PLUS, t('viewer.zoomIn'), () => zoomTo(stepZoom(camera.zoom, 1))),
       tool(ICON_FIND, t('viewer.find'), openFind),
       ...(options.onDownload ? [tool(ICON_DOWNLOAD, t('viewer.download'), options.onDownload)] : []),
@@ -749,8 +943,15 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     desk = readDesk(doc) ?? LIGHT_DESK;
     const source = sourceFromFile(options.name, bufferOf(options.bytes));
     if (!source) return fail(t('viewer.cannotOpen', { name: options.name }));
-    showStatus(t('viewer.opening', { name: options.name }));
+    loading.show(options.name, options.waited);
+    // A picture's size, for the status bar, before its bytes go to the worker.
+    if (footer && source.kind === 'image') {
+      const size = sniffImage(new Uint8Array(source.bytes));
+      picture = size && { width: size.width, height: size.height };
+    }
     worker.setLocale(locale);
+    // Flow from the start: the first layout is already the text reflowed (`opened` takes it back for a PDF or a picture).
+    syncReflow(true);
     // The default font nearly every document uses: its atlases are fetched now, not after the first layout.
     atlases!.warm(['calibri/regular.webp', 'calibri/bold.webp']);
     worker.openReadOnly(source, listener);
@@ -769,6 +970,8 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       if (destroyed) return;
       destroyed = true;
       if (frame) win.cancelAnimationFrame(frame);
+      win.clearTimeout(reflowTimer);
+      win.clearTimeout(wordsTimer);
       stopReaderMode();
       stopContrast();
       reader?.dispose();
@@ -779,6 +982,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       worker?.terminate();
       if (gl) {
         for (const page of pagesById.values()) page.dispose(gl);
+        shelf.clear();
         renderer?.images?.clear();
         gl.getExtension('WEBGL_lose_context')?.loseContext();
       }

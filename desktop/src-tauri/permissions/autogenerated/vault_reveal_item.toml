@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-vault-reveal-item"
+description = "Enables the vault_reveal_item command without any pre-configured scope."
+commands.allow = ["vault_reveal_item"]
+
+[[permission]]
+identifier = "deny-vault-reveal-item"
+description = "Denies the vault_reveal_item command without any pre-configured scope."
+commands.deny = ["vault_reveal_item"]

@@ -66,6 +66,38 @@ test('a folder’s public link shows its tree; links inside it open in the tab, 
   await stranger.close();
 });
 
+test('a folder\'s Share is in its right-click menu, both in File › Open and in the Files pane', async ({ browser }) => {
+  const owner = await newPerson(browser, 'owner');
+  const { page } = owner;
+  await page.goto('/?doc=welcome');
+  await owner.app.ready();
+  await project(page);
+
+  await owner.app.menu('File', 'Open…');
+  const card = page.locator('.wm-dashboard article.wm-folder', { hasText: 'Project' });
+  await card.click({ button: 'right' });
+  const items = page.getByRole('menu').getByRole('menuitem');
+  await expect(items.first()).toHaveText('Open folder');
+  await expect(items.nth(1)).toHaveText('Share…');
+  await page.getByRole('menuitem', { name: 'Share…' }).click();
+  const dialog = page.locator('dialog.wm-share');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Project');
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await page.keyboard.press('Escape');
+
+  // This person's context starts with the app's own default, where a wide window already shows the pane.
+  if (!(await page.locator('.wm-files').isVisible())) await owner.app.menu('View', 'Files Sidebar');
+  const row = page.locator('.wm-files .wm-files-folder', { hasText: 'Project' });
+  await row.click({ button: 'right' });
+  await expect(page.getByRole('menu').getByRole('menuitem').nth(1)).toHaveText('Share…');
+  await page.getByRole('menuitem', { name: 'Share…' }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Project');
+  await owner.context.close();
+});
+
 test('a person with a folder shared view-only opens it from Shared with me, and loses it when it is unshared', async ({ browser }) => {
   const owner = await newPerson(browser, 'owner');
   await owner.page.goto('/?doc=welcome');

@@ -448,6 +448,82 @@ pub fn vault_reveal(vault: State<'_, Vault>) -> Result<(), String> {
     std::process::Command::new(opener).arg(root).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// What "Show in Finder" points at for `relative` (a file or folder in the vault, "" for the vault itself): the item, or
+/// when it is not on disk yet (a document the sync has not written), the nearest folder above it that is.
+pub fn reveal_target(root: &Path, relative: &str) -> Result<PathBuf, String> {
+    if relative.is_empty() {
+        return Ok(root.to_path_buf());
+    }
+    let mut path = resolve(root, relative, false)?;
+    while path != root && !path.exists() {
+        if !path.pop() {
+            return Ok(root.to_path_buf());
+        }
+    }
+    Ok(path)
+}
+
+/// Shows one file or folder of the vault selected in the system's file manager (Finder, File Explorer, or the Linux file
+/// manager through its FileManager1 D-Bus service, else the folder it is in). "" shows the vault folder itself.
+#[tauri::command]
+pub fn vault_reveal_item(path: String, vault: State<'_, Vault>) -> Result<(), String> {
+    let root = vault.root()?;
+    let target = reveal_target(&root, &path)?;
+    if target == root {
+        return vault_reveal(vault);
+    }
+    show_selected(&target)
+}
+
+#[cfg(target_os = "macos")]
+fn show_selected(path: &Path) -> Result<(), String> {
+    std::process::Command::new("open").arg("-R").arg(path).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn show_selected(path: &Path) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    // Explorer reads `/select,"<path>"` itself: Rust's quoting of the whole argument (it has spaces) would hide the path from it.
+    std::process::Command::new("explorer").raw_arg(format!("/select,\"{}\"", path.display())).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn show_selected(path: &Path) -> Result<(), String> {
+    // Most Linux file managers (Files, Dolphin, Nemo, Caja, Thunar) select an item through FileManager1. Without one, the
+    // folder the item is in opens. The answer can take a moment, so it is waited for off the page's thread.
+    let uri = file_uri(path);
+    let parent = path.parent().map(Path::to_path_buf).unwrap_or_else(|| path.to_path_buf());
+    std::thread::spawn(move || {
+        let shown = std::process::Command::new("dbus-send")
+            .args(["--session", "--print-reply", "--reply-timeout=3000", "--dest=org.freedesktop.FileManager1", "--type=method_call", "/org/freedesktop/FileManager1", "org.freedesktop.FileManager1.ShowItems"])
+            .arg(format!("array:string:{uri}"))
+            .arg("string:")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success());
+        if !shown {
+            let _ = std::process::Command::new("xdg-open").arg(parent).spawn();
+        }
+    });
+    Ok(())
+}
+
+/// A `file://` URI for an absolute path, with every byte other than letters, digits, `-._~` and `/` percent-encoded.
+#[cfg_attr(any(target_os = "macos", target_os = "windows"), allow(dead_code))]
+fn file_uri(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    let mut uri = String::from("file://");
+    for byte in text.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'/') {
+            uri.push(byte as char);
+        } else {
+            uri.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    uri
+}
+
 #[tauri::command]
 pub fn vault_scan(vault: State<'_, Vault>) -> Result<Vec<Entry>, String> {
     let root = vault.root()?;
@@ -604,6 +680,28 @@ mod tests {
         assert!(fs::read_dir(dir.path()).unwrap().next().is_none(), "the probe file is removed");
         let message = check_access(&dir.path().join("gone")).unwrap_err();
         assert!(message.contains("missing"));
+    }
+
+    #[test]
+    fn reveal_points_at_the_nearest_thing_on_disk() {
+        let dir = vault();
+        let root = dir.path();
+        fs::create_dir_all(root.join("a/b")).unwrap();
+        fs::write(root.join("a/b/c.md"), b"").unwrap();
+        assert_eq!(reveal_target(root, "").unwrap(), root);
+        assert_eq!(reveal_target(root, "a/b/c.md").unwrap(), root.join("a/b/c.md"));
+        assert_eq!(reveal_target(root, "a/b").unwrap(), root.join("a/b"));
+        assert_eq!(reveal_target(root, "a/b/not yet.md").unwrap(), root.join("a/b"), "a file not written yet shows its folder");
+        assert_eq!(reveal_target(root, "x/y/z.md").unwrap(), root, "nothing on disk shows the vault");
+        for bad in ["../x", "/etc/passwd", ".golemdocs/state.json", "a\\b"] {
+            assert!(reveal_target(root, bad).is_err(), "{bad:?} should be refused");
+        }
+    }
+
+    #[test]
+    fn file_uris_are_percent_encoded() {
+        assert_eq!(file_uri(Path::new("/home/bob/Bob's Vault/a b.md")), "file:///home/bob/Bob%27s%20Vault/a%20b.md");
+        assert_eq!(file_uri(Path::new("/v/é")), "file:///v/%C3%A9");
     }
 
     #[test]

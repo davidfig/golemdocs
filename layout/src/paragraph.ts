@@ -112,6 +112,58 @@ export interface CachedParagraph {
   layout: ParagraphLayout;
 }
 
+/** How many lines of laid-out paragraphs a session keeps for reuse: a few hundred pages' worth. */
+export const PARAGRAPH_CACHE_LINES = 20_000;
+
+/**
+ * The paragraphs' last layouts, kept to save shaping them again when layout runs again over them (after an edit, up to where the
+ * new pages meet the old ones). Only the most recently used are kept, up to `maxLines` lines in all: a laid-out line costs a few
+ * kilobytes, so keeping every paragraph of a book of 30,000 pages ran a tab out of memory. Pages don't need it: they keep their own
+ * copy of what they draw.
+ */
+export class ParagraphCache {
+  private readonly entries = new Map<Paragraph, CachedParagraph>();
+  private lines = 0;
+
+  constructor(readonly maxLines = PARAGRAPH_CACHE_LINES) {}
+
+  /** Lines held now. */
+  get size(): number {
+    return this.lines;
+  }
+
+  get(paragraph: Paragraph): CachedParagraph | undefined {
+    const entry = this.entries.get(paragraph);
+    if (entry) {
+      // Most recently used last, so the oldest go first.
+      this.entries.delete(paragraph);
+      this.entries.set(paragraph, entry);
+    }
+    return entry;
+  }
+
+  set(paragraph: Paragraph, entry: CachedParagraph): void {
+    this.delete(paragraph);
+    this.entries.set(paragraph, entry);
+    this.lines += cost(entry);
+    // The newest always stays, however long it is.
+    for (const oldest of this.entries.keys()) {
+      if (this.lines <= this.maxLines || oldest === paragraph) break;
+      this.delete(oldest);
+    }
+  }
+
+  delete(paragraph: Paragraph): boolean {
+    const entry = this.entries.get(paragraph);
+    if (!entry) return false;
+    this.entries.delete(paragraph);
+    this.lines -= cost(entry);
+    return true;
+  }
+}
+
+const cost = (entry: CachedParagraph): number => Math.max(1, entry.layout.lines.length);
+
 function isBreakAfter(code: number, next: number): boolean {
   if (code === SPACE || code === 0x09 || code === 0x00ad) return true;
   // Hyphens and dashes allow a break after them when followed by more text.
@@ -127,6 +179,57 @@ function isWordChar(code: number): boolean {
 function isLower(code: number): boolean {
   const ch = String.fromCharCode(code);
   return ch !== ch.toUpperCase();
+}
+
+const EMPTY_F32 = new Float32Array(0);
+const EMPTY_U32 = new Uint32Array(0);
+const EMPTY_U16 = new Uint16Array(0);
+const EMPTY_U8 = new Uint8Array(0);
+
+/**
+ * A line's arrays as views on one buffer, filled widest type first (so each view is aligned): a buffer of its own per array cost a
+ * few hundred bytes each in a book's thousands of lines. Empty arrays are shared. A line's `stops` keep their own buffer, as pages
+ * hold on to them after the line itself is let go.
+ */
+class LinePacker {
+  private readonly buffer: ArrayBuffer;
+  private offset = 0;
+
+  constructor(bytes: number) {
+    this.buffer = new ArrayBuffer(bytes);
+  }
+
+  f32(values: number[]): Float32Array {
+    if (!values.length) return EMPTY_F32;
+    const view = new Float32Array(this.buffer, this.offset, values.length);
+    view.set(values);
+    this.offset += values.length * 4;
+    return view;
+  }
+
+  u32(values: number[]): Uint32Array {
+    if (!values.length) return EMPTY_U32;
+    const view = new Uint32Array(this.buffer, this.offset, values.length);
+    view.set(values);
+    this.offset += values.length * 4;
+    return view;
+  }
+
+  u16(values: number[]): Uint16Array {
+    if (!values.length) return EMPTY_U16;
+    const view = new Uint16Array(this.buffer, this.offset, values.length);
+    view.set(values);
+    this.offset += values.length * 2;
+    return view;
+  }
+
+  u8(values: number[]): Uint8Array {
+    if (!values.length) return EMPTY_U8;
+    const view = new Uint8Array(this.buffer, this.offset, values.length);
+    view.set(values);
+    this.offset += values.length;
+    return view;
+  }
 }
 
 /** Scratch buffers for building lines (reused across paragraphs). */
@@ -151,17 +254,24 @@ class LineBuilder {
   }
 
   finish(line: Omit<LineLayout, 'glyph' | 'x' | 'style' | 'size' | 'dy' | 'font' | 'rects' | 'rectColors' | 'rectLayers' | 'images' | 'stops'>, stops: Float32Array): LineLayout {
+    const packed = new LinePacker(
+      (this.x.length + this.size.length + this.dy.length + this.rects.length + this.rectColors.length) * 4 +
+        (this.glyph.length + this.style.length) * 2 +
+        this.font.length +
+        this.rectLayers.length,
+    );
     const out: LineLayout = {
       ...line,
-      glyph: Uint16Array.from(this.glyph),
-      x: Float32Array.from(this.x),
-      style: Uint16Array.from(this.style),
-      size: Float32Array.from(this.size),
-      dy: Float32Array.from(this.dy),
-      font: Uint8Array.from(this.font),
-      rects: Float32Array.from(this.rects),
-      rectColors: Uint32Array.from(this.rectColors),
-      rectLayers: Uint8Array.from(this.rectLayers),
+      // Widest first, so every view is aligned.
+      x: packed.f32(this.x),
+      size: packed.f32(this.size),
+      dy: packed.f32(this.dy),
+      rects: packed.f32(this.rects),
+      rectColors: packed.u32(this.rectColors),
+      glyph: packed.u16(this.glyph),
+      style: packed.u16(this.style),
+      font: packed.u8(this.font),
+      rectLayers: packed.u8(this.rectLayers),
       images: this.images,
       stops,
       ...(this.box && { box: this.box }),

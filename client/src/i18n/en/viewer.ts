@@ -1,7 +1,6 @@
 // The embeddable viewer (src/viewer/): a document shown read-only, with page, zoom and find controls.
 
 export const viewer = {
-  'viewer.opening': 'Opening {name}…',
   'viewer.cannotOpen': '{name} can\'t be shown: Golem Docs doesn\'t open this kind of file.',
   'viewer.document': 'Document',
   'viewer.previousPage': 'Previous Page',

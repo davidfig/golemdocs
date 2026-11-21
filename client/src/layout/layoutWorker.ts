@@ -646,8 +646,15 @@ class OpenDocument {
     const selection = this.selection();
     if (selection) transfer.push(selection.rects.buffer, selection.commentRects.buffer, ...(selection.spellMarks ? [selection.spellMarks.buffer] : []));
     const kept = this.keptView();
-    const update: LayoutUpdate = { faces, pages, overlays, order, drop, selection, ...(kept && { keep: kept }) };
+    const expected = this.expectedPages(display.length);
+    const update: LayoutUpdate = { faces, pages, overlays, order, drop, selection, ...(kept && { keep: kept }), ...(expected && { expected }) };
     post({ type: 'layout', doc: this.doc, ...update }, transfer);
+  }
+
+  /** While the document is first laid out, how many pages it will have (a PDF knows; a flowing document is estimated), if more than are shown. */
+  private expectedPages(shown: number): number | undefined {
+    const expected = this.session ? (this.firstLayoutDone ? null : this.session.estimatedPages) : (this.pdf?.view.pageCount ?? null);
+    return expected !== null && expected > shown ? expected : undefined;
   }
 
   /** Where the text that was at the top of the view is now, on the pages being sent (old ones still showing included), until they are all laid out. */
@@ -2166,6 +2173,16 @@ class OpenDocument {
   changes = 0;
   private settleTimer: ReturnType<typeof setTimeout> | undefined;
 
+  /** Where the pages in or near the view are in the page order (the `view` message), where squiggles are found; null until the page says, for every page. */
+  private viewPages: { from: number; to: number } | null = null;
+
+  setView(from: number, to: number): void {
+    if (this.viewPages?.from === from && this.viewPages.to === to) return;
+    this.viewPages = { from, to };
+    // The squiggles of pages that came into view.
+    if (this.firstLayoutDone && this.editor && !this.closed) this.sendSelection();
+  }
+
   /** The squiggles for the pages shown: red under misspelled words, green under grammar mistakes. */
   private spellMarks(editor: Editor): Float64Array {
     // Nothing can be corrected in a document opened read-only, so nothing is underlined (and no dictionary is fetched).
@@ -2178,6 +2195,8 @@ class OpenDocument {
     clearTimeout(this.settleTimer);
     if (settling) this.settleTimer = setTimeout(() => this.sendSelection(), SPELL_SETTLE_MS - sinceTyped + 20);
     const documentLang = documentLanguageOf(editor);
+    const viewPages = this.viewPages;
+    const pages = viewPages && this.session ? this.session.displayPages.slice(viewPages.from, viewPages.to) : undefined;
     const marks = editor.marks((paragraph) =>
       issuesOf(paragraph, documentLang, (language) => {
         // A dictionary is fetched the first time a paragraph in its language is checked.
@@ -2191,6 +2210,7 @@ class OpenDocument {
         // The word being typed isn't marked until the caret leaves it.
         .filter((i) => !(typing && typing.paragraph === paragraph && i.start < typing.offset && (typing.offset <= i.end || (settling && typing.offset - i.end <= SPELL_FINISHED_REACH))))
         .map((i) => ({ start: i.start, end: i.end, kind: i.kind === 'spelling' ? 0 : 1 })),
+      pages,
     );
     const out = new Float64Array(marks.length * 6);
     marks.forEach((m, i) => out.set([m.page.id, m.x, m.y, m.width, m.height, m.kind], i * 6));
@@ -3375,6 +3395,9 @@ function handle(message: Exclude<ToWorker, { type: 'open' }>): void {
       break;
     case 'ping':
       post({ type: 'pong', request: message.request });
+      break;
+    case 'view':
+      if (current?.doc === message.doc) current.setView(message.from, message.to);
       break;
     case 'linkAt':
       post({ type: 'linkAt', request: message.request, ...(current?.doc === message.doc ? current.linkAt(message.page, message.x, message.y) : { url: null, text: '', checkbox: false }) });

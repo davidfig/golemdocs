@@ -72,6 +72,7 @@ export const vault: Catalog = {
   'vault.agents.line': 'Golem Docs가 이 폴더를 관리하는 방식(동기화, 파일 형식, 나에게 노트를 열어 보여 주는 방법)은 .golemdocs/AGENTS.md에 있습니다. 여기 파일을 바꾸기 전에 읽어 주세요.',
   'vault.link.menu': '노트 링크 복사',
   'vault.link.menu.tip': '다른 앱에서 이 문서를 여는 golemdocs:// 링크를 커서가 있는 제목 위치로 복사합니다',
+  'vault.reveal.menu.tip': '이 문서의 파일을 보관 폴더에서 선택된 상태로 파일 관리자에 표시합니다',
   'vault.link.copied': '이 노트의 링크를 복사했습니다.',
   'vault.link.copiedHeading': '“{heading}”의 링크를 복사했습니다.',
   'vault.link.copyFailed': '링크를 복사할 수 없습니다.',

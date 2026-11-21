@@ -67,6 +67,16 @@ abstract class InstanceList {
     this.u32 = new Uint32Array(buffer);
   }
 
+  /**
+   * Lets go of the spare capacity (the buffer doubles as it grows, so it is up to twice what it holds). For a list about to be sent
+   * away: the page thread keeps a page's instances until it first draws it, so in a book of thousands of pages the spare room added
+   * up to gigabytes.
+   */
+  trim(): void {
+    const bytes = this.count * this.stride;
+    if (this.buffer.byteLength > bytes) this.adopt(this.buffer.slice(0, bytes), this.count);
+  }
+
   /** The instances, without spare capacity. */
   get bytes(): Uint8Array {
     return new Uint8Array(this.buffer, 0, this.count * this.stride);
@@ -228,6 +238,24 @@ export class PageLayout {
     this.foreground.append(other.foreground);
     this.images.push(...other.images);
     this.lines.push(...other.lines);
+  }
+
+  /**
+   * Moves the lines' caret stops into one buffer, each line keeping a view of its part. For a finished page: a buffer of its own for
+   * every line cost a few hundred bytes more than the stops themselves, a good part of what a book of tens of thousands of pages
+   * kept per page.
+   */
+  compactLines(): void {
+    if (this.lines.length < 2) return;
+    let length = 0;
+    for (const line of this.lines) length += line.stops.length;
+    const all = new Float32Array(length);
+    let at = 0;
+    for (const line of this.lines) {
+      all.set(line.stops, at);
+      line.stops = all.subarray(at, at + line.stops.length);
+      at += line.stops.length;
+    }
   }
 
   get glyphCount(): number {

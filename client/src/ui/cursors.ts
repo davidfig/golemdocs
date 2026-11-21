@@ -27,6 +27,11 @@ function drawn(body: string, hx: number, hy: number, fallback: string, fill = 'n
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") ${hx} ${hy}, ${fallback}`;
 }
 
+/** Between two pages, where a double click hides the space between them: arrows closing on the seam (as Word's). */
+export const SEAM_HIDE_CURSOR = drawn("<path d='M3 12h18M12 2v6M9 5l3 3 3-3M12 22v-6M9 19l3-3 3 3'/>", 12, 12, 'row-resize');
+/** On the seam of pages whose space is hidden, where a double click shows it again: arrows leaving the seam. */
+export const SEAM_SHOW_CURSOR = drawn("<path d='M3 12h18M12 9V2M9 5l3-3 3 3M12 15v7M9 19l3 3 3-3'/>", 12, 12, 'row-resize');
+
 export const MARKER_CURSOR = drawn("<path d='M4 20l2-5 9-9 4 4-9 9z'/><path d='M13 8l4 4M3 21h8'/>", 4, 20, 'crosshair', '#fff27a');
 export const ERASER_CURSOR = drawn("<path d='M8 20h11M5 15l8-9 6 5-6 7H8z'/><path d='M10 12l5 5'/>", 6, 19, 'crosshair', '#f4a6b7');
 export const EYEDROPPER_CURSOR = drawn("<path d='M3 21l1-4 8-8 3 3-8 8z'/><path d='M13 7l-1-1 2-2a2 2 0 0 1 4 4l-2 2-1-1'/>", 3, 21, 'crosshair', '#cfe0ff');

@@ -4,6 +4,7 @@
 
 import type { Action, ChromeHost, DocumentSync, SyncStatus } from './actions.ts';
 import { h, setAttr } from './dom.ts';
+import { showInFileManagerLabel } from '../desktop/bridge.ts';
 import { t } from '../i18n/index.ts';
 import { closePopup, openPopup, popupOpenFor } from './popup.ts';
 
@@ -22,12 +23,6 @@ function formatSavedAt(ms: number): string {
   const d = new Date(ms);
   const today = d.toDateString() === new Date().toDateString();
   return d.toLocaleString(undefined, today ? { timeStyle: 'short' } : { dateStyle: 'medium', timeStyle: 'short' });
-}
-
-/** What the system calls its file manager, for "Show in Finder". */
-function fileManagerName(): string {
-  const platform = navigator.platform;
-  return /Mac/.test(platform) ? 'Finder' : /Win/.test(platform) ? 'File Explorer' : 'Files';
 }
 
 export class SyncButton {
@@ -107,7 +102,7 @@ export class SyncButton {
     if (!vault) return;
     panel.append(h('hr'));
     if (vault.path) {
-      const link = h('button', { class: 'wm-sync-link', text: t('dialogs.sync.vault.reveal', { manager: fileManagerName() }), attrs: { type: 'button' } });
+      const link = h('button', { class: 'wm-sync-link', text: showInFileManagerLabel(), attrs: { type: 'button' } });
       link.addEventListener('click', () => {
         closePopup();
         vault.reveal();

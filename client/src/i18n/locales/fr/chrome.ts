@@ -37,7 +37,7 @@ export const chrome: Partial<Messages> = {
   'chrome.view.filesPanel': 'Barre latérale des fic&hiers',
   'chrome.view.ruler': '&Règle',
   'chrome.view.collapsePages': 'Masquer l’espace entre les pages',
-  'chrome.view.collapsePages.tip': 'Masquer l’espace entre les pages. Vous pouvez aussi double-cliquer entre deux pages.',
+  'chrome.view.collapsePages.tip': 'Masquer les marges du haut et du bas et l’espace entre les pages. Vous pouvez aussi double-cliquer entre deux pages.',
   'chrome.view.footer': 'Barre d’éta&t',
   'chrome.view.formattingMarks': '&Marques de mise en forme',
   'chrome.view.markdownSource': 'Source Mar&kdown',

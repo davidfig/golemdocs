@@ -13,6 +13,7 @@ fn main() {
             "vault_use_default",
             "vault_forget",
             "vault_reveal",
+            "vault_reveal_item",
             "vault_check",
             "vault_open_privacy",
             "vault_scan",

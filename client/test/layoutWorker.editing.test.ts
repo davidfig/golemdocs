@@ -425,6 +425,22 @@ test('spellCheck underlines what is wrong, and stops when turned off', async () 
   assert.equal(off.spellMarks?.length ?? 0, 0);
 });
 
+test('with the view given, squiggles are found only on the pages in or near it', async () => {
+  // A misspelling on the first page and on the last of several.
+  const filler = 'These words are all spelled the way the dictionary has them, line after line. '.repeat(4);
+  const doc = await openMarkdown(['Qwibble first', ...Array.from({ length: 60 }, () => filler), 'last Zorptang'].join('\n\n') + '\n');
+  const on = await run(doc, { kind: 'spellCheck', spelling: true, grammar: false });
+  const pages = pageIds(doc);
+  const marked = (s: { spellMarks?: Float64Array }) => [...(s.spellMarks ?? [])].filter((_, i) => i % 6 === 0);
+  assert.ok(pages.length >= 2, `${pages.length} pages`);
+  assert.deepEqual(new Set(marked(on)), new Set([pages[0], pages.at(-1)]), 'every page, until the view is known');
+  // Only the last page is near the view.
+  const from = posted.length;
+  send({ type: 'view', doc, from: pages.length - 1, to: pages.length });
+  const update = await waitFor('selection', (m) => m.doc === doc, from);
+  assert.deepEqual(marked(update), [pages.at(-1)]);
+});
+
 test('spellCheck accepts the user\'s dictionary words', async () => {
   const doc = await openMarkdown('Flarnix word teh here\n');
   const on = await run(doc, { kind: 'spellCheck', spelling: true, grammar: false, words: ['Flarnix'] });

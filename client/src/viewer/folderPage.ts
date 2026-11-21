@@ -15,7 +15,8 @@ import { t } from '../i18n/index.ts';
 import { CHEVRON_ICON, h, iconButton } from '../ui/dom.ts';
 import { mountSignIn } from '../ui/signIn.ts';
 import { firstFile, folderTree, resolveFolderLink, type TreeFolder } from './folderLinks.ts';
-import { CHECK_MS, downloader, highContrast, PAGE_TITLE, PUBLIC_CHECK_MS, say, sayIn } from './page.ts';
+import { savedViewMode } from '../ui/viewMode.ts';
+import { CHECK_MS, downloader, downloading, highContrast, PAGE_TITLE, PUBLIC_CHECK_MS, say, sayIn } from './page.ts';
 import { checkOutcome } from './protocol.ts';
 import { mount, type Viewer } from './viewer.ts';
 
@@ -160,6 +161,9 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
   let opening = 0;
   const dark = matchMedia('(prefers-color-scheme: dark)').matches;
   const contrast = highContrast();
+  // Print Layout or Flow, as the person chose it in the editor; one picked here stays for the next file opened. The page grid is
+  // left when another file opens, as in the editor.
+  let view = savedViewMode();
 
   const close = (): void => {
     viewer?.destroy();
@@ -175,6 +179,9 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
     markCurrent();
     if (!tree.files.some((f) => f.path === path)) return void sayIn(docEl, tree.files.length ? t('viewer.fileGone') : t('viewer.folderEmpty'));
     let response: Response;
+    // The loading screen, from when the file is asked for until its last byte is in (a message put in its place takes it away).
+    docEl.replaceChildren();
+    const loaded = downloading(docEl, fileName(path));
     try {
       response = await fetch(`${api}/file?path=${encodeURIComponent(path)}`, { cache: 'no-store' });
       if (ticket !== opening) return;
@@ -190,6 +197,7 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
       return;
     }
     const bytes = await response.arrayBuffer().catch(() => null);
+    const waited = loaded();
     if (ticket !== opening || ended) return;
     if (!bytes) return void sayIn(docEl, t('app.openSharedFailed', { message: '' }));
     const name = fileName(path);
@@ -207,6 +215,12 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
       locale,
       title,
       contrast,
+      statusBar: true,
+      view,
+      onView: (picked) => {
+        if (picked !== 'grid') view = picked;
+      },
+      waited,
       heading: section || undefined,
       onError: (message) => console.error(message),
       onDownload: isPublic ? () => void (opened.stored && save(opened.stored, name)) : undefined,

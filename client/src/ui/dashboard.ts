@@ -25,10 +25,11 @@ import { renamedFileName } from '../documentName.ts';
 import { confirmDelete, deleteTitle } from './deleteDialog.ts';
 import { pickFolder } from './folderPicker.ts';
 import { ICONS, iconElement } from './icons.ts';
-import { showPopupMenu } from './popupMenu.ts';
+import { showPopupMenu, type PopupItem } from './popupMenu.ts';
+import { onContextMenu } from './contextMenu.ts';
 import { narrow } from './popup.ts';
 import { chooseVaultFolders, type VaultChoice } from './vaultFoldersDialog.ts';
-import { isTouchDevice } from '../desktop/bridge.ts';
+import { isTouchDevice, showInFileManagerLabel } from '../desktop/bridge.ts';
 import { lastNewKind, newKindIconElement, newKindItems, newKindLabel, newMenuItems } from './newKinds.ts';
 import type { DocumentKind } from './actions.ts';
 import './dashboard.css';
@@ -76,6 +77,9 @@ export interface DashboardHost {
   importIntoSharedFolder(share: SharedFolder, folderId: string): Promise<void>;
   /** Opens the sharing dialog for one of the user's own folders. */
   shareFolder?(folder: Folder): void;
+  /** Whether Show in Finder applies (the desktop app keeps a vault folder here), and showing a document's file or a folder in it. */
+  canShowInVault?(): boolean;
+  showInVault?(item: { doc: LibraryEntry } | { folder: Folder }): void;
   /** In the desktop app: whether the vault keeps a copy of a folder shared with the user, and turning that on or off. */
   vaultCopy?: { get(share: SharedFolder): VaultChoice; set(share: SharedFolder, choice: VaultChoice): void };
   /** Opens the trash (the account's deleted documents), which has its own dialog. */
@@ -166,6 +170,8 @@ export class Dashboard {
     this.thumbnails = new Thumbnails(this.scroller);
     // Right click on the screen: a new document (of the type chosen), or an import, in the folder shown.
     this.scroller.addEventListener('contextmenu', (e) => {
+      // A card's own menu was shown (cardMenu).
+      if (e.defaultPrevented) return;
       if (e.target instanceof Element && e.target.closest('input, textarea')) return;
       e.preventDefault();
       const folderId = this.folderId;
@@ -764,9 +770,11 @@ export class Dashboard {
     const sync = syncBadge(entry.state, this.host.account() !== null);
     if (sync) badges.append(h('span', { class: `wm-badge wm-badge-${sync.tone}`, text: sync.text }));
 
-    const actions = h('div', { class: 'wm-card-actions' }, this.deleteButton(() => ({ docs: [entry], folders: [] }), () => this.host.delete([entry]), 'trash', true));
+    const remove = this.deleteButton(() => ({ docs: [entry], folders: [] }), () => this.host.delete([entry]), 'trash', true);
+    const actions = h('div', { class: 'wm-card-actions' }, remove);
+    let share: HTMLButtonElement | null = null;
     if (entry.cloud) {
-      const share = this.iconButton('share', t('panels.dashboard.share'));
+      share = this.iconButton('share', t('panels.dashboard.share'));
       share.addEventListener('click', () => this.host.share(entry.cloud!.id, entry.cloud!.name));
       actions.prepend(share);
     }
@@ -780,6 +788,15 @@ export class Dashboard {
     });
     actions.prepend(rename);
     const card = h('article', { class: 'wm-card' }, open, badges, actions);
+    // The same commands, in the same order, as a document's menu in the Files pane (filesPanel.ts, fileItems).
+    this.cardMenu(card, () => [
+      { label: t('panels.files.openItem'), run: () => open.click() },
+      ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ doc: entry }) }] : []),
+      ...(share ? [{ label: t('panels.dashboard.share'), run: () => share!.click() }] : []),
+      { label: t('panels.dashboard.rename'), run: () => rename.click() },
+      { label: t('panels.dashboard.move'), run: () => move.click() },
+      { label: t('panels.dashboard.delete'), run: () => remove.click() },
+    ]);
     this.makeDraggable(card, { kind: 'doc', entry });
     this.makeSelectable(card, `doc:${entry.key}`, entry.name);
     return card;
@@ -820,14 +837,45 @@ export class Dashboard {
     move.addEventListener('click', () =>
       this.pickFolder(t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => this.relocate({ kind: 'folder', folder }, to)),
     );
-    const actions = h('div', { class: 'wm-card-actions' }, rename, move, this.deleteButton(() => ({ docs: [], folders: [folder] }), (before) => this.deleteFolderTrees(before, [folder]), 'trash', true, t('panels.dashboard.deleteFolder')));
+    const remove = this.deleteButton(() => ({ docs: [], folders: [folder] }), (before) => this.deleteFolderTrees(before, [folder]), 'trash', true, t('panels.dashboard.deleteFolder'));
+    const actions = h('div', { class: 'wm-card-actions' }, rename, move, remove);
     // A folder in the account can be shared, with what is in it (docs/folder-sharing.md).
+    let share: HTMLButtonElement | null = null;
     if (this.host.shareFolder && this.host.account()) {
-      const share = this.iconButton('share', t('panels.dashboard.shareFolder'));
+      share = this.iconButton('share', t('panels.dashboard.shareFolder'));
       share.addEventListener('click', () => this.host.shareFolder!(folder));
       actions.prepend(share);
     }
     const card = h('article', { class: 'wm-card wm-folder' }, open, actions);
+    // The same commands, in the same order, as a folder's menu in the Files pane (filesPanel.ts, folderItems).
+    this.cardMenu(card, () => [
+      { label: t('panels.files.openFolder'), run: () => open.click() },
+      ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ folder }) }] : []),
+      ...(share ? [{ label: t('panels.dashboard.share'), run: () => share!.click() }] : []),
+      { label: t('panels.dashboard.rename'), run: () => rename.click() },
+      { label: t('panels.dashboard.move'), run: () => move.click() },
+      { label: t('panels.dashboard.deleteFolder'), run: () => remove.click() },
+      'separator',
+      ...newMenuItems((kind) => {
+        this.hide();
+        this.host.newDocument(folder.id, kind);
+      }),
+      'separator',
+      { label: t('panels.dashboard.import'), run: () => this.host.importFile(folder.id) },
+      { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folder.id) },
+      {
+        label: t('panels.dashboard.newFolder'),
+        run: () =>
+          void this.run(async () => {
+            const made = await createFolder(this.host.account() !== null, t('panels.dashboard.newFolderName'), folder.id);
+            this.folders = [...this.folders, made];
+            this.search.value = '';
+            this.folderId = folder.id;
+            this.selected.clear();
+            this.renaming = made.id;
+          }, false),
+      },
+    ]);
     this.makeDraggable(card, { kind: 'folder', folder });
     this.makeDropTarget(card, folder.id);
     this.makeSelectable(card, `folder:${folder.id}`, folder.name);
@@ -1244,6 +1292,16 @@ export class Dashboard {
     button.removeAttribute('title');
     button.removeAttribute('aria-label');
     button.replaceChildren(...(icon ? [iconElement(icon)] : []), h('span', { text: label }));
+  }
+
+  /** A right click (or Shift+F10, or a long press) on a card: its commands as a menu, so they are reachable without the small icons. */
+  private cardMenu(card: HTMLElement, items: () => PopupItem[]): void {
+    onContextMenu(card, (e) => {
+      // A name being typed keeps the browser's own menu (copy, paste).
+      if (e.target instanceof Element && e.target.closest('input, textarea')) return false;
+      const before = document.activeElement;
+      showPopupMenu(items(), e.clientX, e.clientY, t('panels.files.label'), () => giveBack(before));
+    });
   }
 
   /** A card action shown as an icon, named by its tooltip and accessible label. */

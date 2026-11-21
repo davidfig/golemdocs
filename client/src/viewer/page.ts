@@ -3,6 +3,7 @@
 
 import { h } from '../ui/dom.ts';
 import { FORMATS, kindFromName } from '../ui/formats.ts';
+import { LoadingScreen } from '../ui/loadingScreen.ts';
 import { saveFile } from '../ui/saveFile.ts';
 import { ConvertWorker, startConvertWorker } from '../desktop/convertClient.ts';
 
@@ -20,6 +21,23 @@ export function sayIn(el: HTMLElement, text: string): HTMLElement {
   const status = h('div', { class: 'wm-viewer-status', attrs: { role: 'status' } }, h('div', {}, h('p', { text }), more));
   el.replaceChildren(h('div', { class: 'wm-viewer' }, h('div', { class: 'wm-viewer-view' }, status)));
   return more;
+}
+
+/** How long a load goes on before the loading screen's box shows (its delay in loadingScreen.css). */
+const LOADING_DELAY_MS = 400;
+
+/**
+ * The editor's loading screen over `el` while `name` downloads, before the viewer has it. The returned function takes it away and
+ * says whether the person has been kept waiting (the box was showing), so the viewer's own loading screen carries on at once.
+ */
+export function downloading(el: HTMLElement, name: string): () => boolean {
+  const screen = new LoadingScreen(el);
+  const started = performance.now();
+  screen.show(name);
+  return () => {
+    screen.hide();
+    return performance.now() - started >= LOADING_DELAY_MS;
+  };
 }
 
 /** A message in place of the whole page. */

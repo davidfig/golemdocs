@@ -94,7 +94,7 @@ async function dropWithListingMidDrag(page: Page, from: Locator, to: Locator): P
 
 for (const engine of ['chromium', 'webkit'] as const) {
   test.describe(engine, () => {
-    test('sidebar: a document and a folder dragged onto a folder go in it, stay after a reload, and a drag to the empty part takes one back to the top level', async ({ browser, baseURL }) => {
+    test('sidebar: a document and a folder dragged onto a folder go in it, stay after a reload, and a drag to the empty part takes one back to the top level', { tag: '@heavy' }, async ({ browser, baseURL }) => {
       const { page, app } = await start(engine, browser, baseURL, ['alpha.txt', 'beta.txt']);
       await newSidebarFolder(page, 'Target');
       await newSidebarFolder(page, 'Inner');

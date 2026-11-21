@@ -244,6 +244,8 @@ export type Action =
   | { kind: 'toggleFooter' }
   | { kind: 'toggleToolbars' }
   | { kind: 'toggleFormattingMarks' }
+  /** A Markdown document's text as its file has it, to edit as Markdown (and back). */
+  | { kind: 'toggleMarkdownSource' }
   /** A PDF shown as its pages: fill in its form, or edit the form itself. */
   | { kind: 'setFormMode'; mode: FormMode }
   // Character formatting
@@ -537,6 +539,8 @@ export interface ChromeState {
   /** The toolbars under the menu bar are showing (each can still be turned off on its own). */
   toolbars: boolean;
   formattingMarks: boolean;
+  /** A Markdown document is shown as its Markdown source, in the text editor. */
+  markdownSource: boolean;
   trackChanges: boolean;
   format: FormatState;
   /** A PDF shown as its pages: whether its form is being filled in or edited; null otherwise. */
@@ -596,6 +600,7 @@ export const DEFAULT_STATE: ChromeState = {
   footer: false,
   toolbars: true,
   formattingMarks: false,
+  markdownSource: false,
   trackChanges: false,
   format: {},
   formMode: null,

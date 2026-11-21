@@ -11,6 +11,7 @@ import {
   type CaseChange,
   type ChromeHost,
   type ChromeState,
+  type DocumentKind,
   type ImageOp,
   type Mark,
   type TableOp,
@@ -121,6 +122,9 @@ const languageItems = (): MenuItem[] =>
       });
     },
   }));
+
+/** The format of the document itself: a Markdown document shown as its source is still Markdown (the text editor shows it). */
+const documentKind = (s: ChromeState): DocumentKind => (s.markdownSource ? 'md' : s.kind);
 
 export class Chrome {
   readonly el: HTMLDivElement;
@@ -401,6 +405,12 @@ export class Chrome {
       mode('view.flow', t('chrome.view.flow'), 'flow'),
       // A radio with the others, but a toggle: choosing it again (or Alt+G) goes back to the view before it.
       a('view.grid', t('chrome.view.grid'), { kind: 'toggleGrid' }, { shortcut: 'Alt+G', checked: (s) => s.viewMode === 'grid', radio: true }),
+      a('view.markdownSource', t('chrome.view.markdownSource'), { kind: 'toggleMarkdownSource' }, {
+        shortcut: 'Mod+/',
+        tooltip: t('chrome.view.markdownSource.tip'),
+        checked: (s) => s.markdownSource,
+        visible: (s) => s.kind === 'md' || s.markdownSource,
+      }),
       a('view.fillForm', t('chrome.view.fillForm'), { kind: 'setFormMode', mode: 'fill' }, { checked: (s) => s.formMode === 'fill', radio: true, tooltip: t('chrome.view.fillForm.tip') }),
       a('view.editForm', t('chrome.view.editForm'), { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: t('chrome.view.editForm.tip') }),
       a('view.pagesPanel', t('chrome.view.pagesPanel'), { kind: 'togglePagesPanel' }, { shortcut: 'Alt+P', checked: (s) => s.pagesPanel }),
@@ -764,6 +774,7 @@ export class Chrome {
       cmd('view.print'),
       cmd('view.flow'),
       cmd('view.grid'),
+      cmd('view.markdownSource'),
       cmd('view.formattingMarks'),
       cmd('view.pageWidth'),
       cmd('view.darkMode'),
@@ -873,6 +884,7 @@ export class Chrome {
           cmd('view.print'),
           cmd('view.flow'),
           cmd('view.grid'),
+          cmd('view.markdownSource'),
           sep,
           sub(t('chrome.view.toolbars'), [cmd('view.toolbars'), sep, cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
           sub(t('chrome.view.colorScheme'), [...SCHEMES.map(({ id }) => cmd(`view.theme.${id}`)), sep, cmd('view.darkMode'), cmd('view.darkPages'), cmd('view.matchSystem')]),
@@ -1799,10 +1811,10 @@ export class Chrome {
           const kind = kindOf(label);
           return kind && t(`menus.format.group.${formatGroup(kind)}`);
         },
-        value: (s) => FORMATS[s.kind].label,
+        value: (s) => FORMATS[documentKind(s)].label,
         enabled: (s) => !this.converting && !s.nothingOpen,
         title: (s) =>
-          FORMATS[s.kind].editable ? t('chrome.formatBox.editableTip') : t('chrome.formatBox.readOnlyTip'),
+          FORMATS[documentKind(s)].editable ? t('chrome.formatBox.editableTip') : t('chrome.formatBox.readOnlyTip'),
         commit: (text) => {
           const to = kindOf(text);
           if (!to) return false;
@@ -1863,7 +1875,7 @@ export class Chrome {
 
   /** The switchable formats, plus the current one if it isn't switchable. */
   private formatKinds(): (keyof typeof FORMATS)[] {
-    return convertTargets(this.state.kind);
+    return convertTargets(documentKind(this.state));
   }
 
   /** Lists the formats (plus the current one if it isn't switchable) and shows the current one. */

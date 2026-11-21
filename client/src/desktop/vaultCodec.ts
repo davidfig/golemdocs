@@ -13,6 +13,9 @@
 // is also how a format the app reads but cannot write (`.doc`, GIF, BMP, HEIC) goes out until the app has saved it; after
 // that it is written as what the app edits it as (Word, PNG, JPEG), under the same name.
 //
+// A Markdown file changed on disk is merged into the document it was written from rather than read afresh, so the
+// document keeps what Markdown can't say (colours, fonts, pictures, comments' dates) wherever the edit didn't reach.
+//
 // A CSV or TSV file is kept as it is. One with a layout (column widths and the like) is kept in the container with it
 // (formats/wdocDelimited.ts): the vault gets the file, byte for byte, and a file changed on disk replaces the file and keeps the layout.
 //
@@ -98,7 +101,7 @@ export async function toVaultFile(stored: Uint8Array, name: string, fonts: Vault
 
 /**
  * The bytes for the account from a vault file named `name`. Throws if the name is not a format the vault keeps. `previous` is what
- * the account stores now, for a CSV or TSV file (`keepsLayout`): its layout stays with the new file.
+ * the account stores now (`keepsLayout`): a CSV or TSV file's layout stays with the new file, and a Markdown file is merged into it.
  */
 export async function fromVaultFile(file: Uint8Array, name: string, previous?: Uint8Array): Promise<Uint8Array> {
   const format = vaultFormat(name);
@@ -115,6 +118,14 @@ export async function fromVaultFile(file: Uint8Array, name: string, previous?: U
   if (format === 'xlsx') return file;
   // A PDF becomes its own original: what was done to the one before it is in the file now.
   if (format === 'pdf') return writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'pdf', origin: 'pdf', pagesCurrent: true }, document: null, original: file, extensions: {} });
+  // A Markdown file is merged into the document it was written from, so what Markdown can't hold (colours, fonts, pictures...)
+  // stays everywhere the edit didn't reach (formats/markdownMerge.ts).
+  if (format === 'md' && previous && isWdoc(previous)) {
+    // With the Markdown reader and writer, in their chunk.
+    const { mergeMarkdownWdoc } = await import('../formats/markdown.ts');
+    const merged = await mergeMarkdownWdoc(previous, file).catch(() => null);
+    if (merged) return merged;
+  }
   const { document, extensions } = await importDocument(format, file);
   return writeWdoc({ manifest: { version: WDOC_VERSION, lens: format, origin: format, pagesCurrent: false }, document: await document.write(), original: null, extensions });
 }

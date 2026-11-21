@@ -17,7 +17,7 @@ test('?doc=terms opens the terms of service', async ({ app, page }) => {
   expect(await app.text()).toContain('Golem Docs - Terms of Service');
 });
 
-test('?doc=changelog opens What’s New, at its own address', async ({ app, page }) => {
+test('?doc=changelog opens What’s New, at its own address', { tag: '@heavy' }, async ({ app, page }) => {
   await app.goto('?doc=changelog');
   await expect(page).toHaveTitle('What’s New in Golem Docs - Golem Docs');
   await expect.poll(() => new URL(page.url()).pathname).toBe('/changelog');

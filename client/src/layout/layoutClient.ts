@@ -376,11 +376,11 @@ export class LayoutClient {
    * the top of the view) where it is. False when that can't be done: open the document again instead. 'typed' when it was edited here
    * meanwhile: those edits win and nothing was put in.
    */
-  refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null, changes?: number): Promise<boolean | 'typed'> {
+  refresh(source: DocumentSource, view: { page: number; x: number; y: number } | null, changes?: number, undoable = false): Promise<boolean | 'typed'> {
     const request = this.nextRequest++;
     return new Promise((resolve) => {
       this.refreshRequests.set(request, resolve);
-      this.send({ type: 'refresh', doc: this.doc, request, source, view, ...(changes !== undefined && { changes }) });
+      this.send({ type: 'refresh', doc: this.doc, request, source, view, ...(changes !== undefined && { changes }), ...(undoable && { undoable }) });
     });
   }
 

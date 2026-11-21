@@ -33,6 +33,39 @@ test('Markdown goes into the account as a document and comes back out as the sam
   assert.equal(read(await toVaultFile(stored, 'Trip.md')), source);
 });
 
+test("a Markdown file edited on disk is merged into the document: what Markdown can't hold stays where the edit didn't reach", async () => {
+  const stored = await fromVaultFile(text('---\ntitle: Trip\n---\n\n# Plan\n\nPack light.\n\nBring a map.\n'), 'Trip.md');
+  // Coloured and centred in the app: things the .md file can't say.
+  const wdoc = await readWdoc(stored);
+  const doc = await WordDocument.read(wdoc.document!);
+  const [, pack, map] = doc.body.filter((b) => b.kind === 'paragraph');
+  if (pack.kind !== 'paragraph' || map.kind !== 'paragraph') throw new Error('paragraphs expected');
+  pack.properties.justification = 'center';
+  for (const inline of map.children) if (inline.kind === 'run') inline.properties.color = { val: 'FF0000' };
+  const dressed = await writeWdoc({ ...wdoc, document: await doc.write() });
+  // An agent edits the first paragraph and adds one; the front matter changes too.
+  const file = read(await toVaultFile(dressed, 'Trip.md')).replace('title: Trip', 'title: Trip 2').replace('Pack light.', 'Pack light, and a coat.').replace('Bring a map.\n', 'Bring a map.\n\nLeave early.\n');
+  const back = await readWdoc(await fromVaultFile(text(file), 'Trip.md', dressed));
+  assert.equal(back.extensions.md?.frontMatter, 'title: Trip 2');
+  const merged = await WordDocument.read(back.document!);
+  const paras = merged.body.filter((b) => b.kind === 'paragraph');
+  assert.equal(paras.length, 4);
+  const [, edited, kept] = paras;
+  assert.ok(edited.kind === 'paragraph' && kept.kind === 'paragraph');
+  assert.equal(edited.properties.justification, 'center', 'the edited paragraph keeps its alignment');
+  assert.ok(kept.children.some((inline) => inline.kind === 'run' && inline.properties.color?.val === 'FF0000'), 'the untouched paragraph keeps its colour');
+  assert.equal(read(await toVaultFile(await fromVaultFile(text(file), 'Trip.md', dressed), 'Trip.md')), file);
+});
+
+test('a document renamed to .md on disk is read afresh, not merged into what it was as another format', async () => {
+  const stored = await fromVaultFile(text('<p style="text-align:center">Hello</p>'), 'Note.html');
+  assert.equal((await readWdoc(stored)).manifest.lens, 'html');
+  const back = await readWdoc(await fromVaultFile(text('Hello there.\n'), 'Note.md', stored));
+  assert.equal(back.manifest.lens, 'md');
+  const p = (await WordDocument.read(back.document!)).body[0];
+  assert.ok(p.kind === 'paragraph' && p.properties.justification === undefined, 'nothing kept from the HTML document');
+});
+
 test('a plain text file keeps its lines', async () => {
   const source = 'first line\nsecond line\n\nthird after a blank\n';
   const stored = await fromVaultFile(text(source), 'todo.txt');

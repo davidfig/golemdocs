@@ -1,11 +1,27 @@
 # What’s New in Golem Docs
 
-## 0.42.0 - Unreleased
+## 0.43.0 - Unreleased
 
 ### Added
 
 - Share a whole folder: the Share button on a folder in File › Open shares everything in it, and everything added later, by email (to view or edit) or by a public link anyone can read. Links between its files work; links to anything outside it don’t. People you share it with find it under Shared with me. Editors change every file and add new files and folders, and can rename or delete only what they added. Someone who can view browses the folder’s files beside the document, and each file has its own address.
 - Desktop app: folders shared with you are kept in your vault folder too, under Shared, by the owner’s name, so ai apps and other programs can work on them. As an editor, changes you make there reach the owner; as a viewer, they are put back. In my vault… on the folder’s card in File › Open removes the copy and keeps the share, or chooses which of its folders to keep: a folder left out stays in the app, and the vault gets a file in its place listing what is in it. A very large shared folder keeps only its top level until you choose more.
+
+## 0.42.1 - 2026-11-21
+
+### Fixed
+
+- The desktop app's vault folder no longer stops syncing after the computer sleeps or changes networks: a request to the server that never gets an answer now gives up and is tried again, and a sync stuck for ten minutes is started over, instead of new and changed files going unnoticed until the app is restarted.
+
+## 0.42.0 - 2026-11-20
+
+### Added
+
+- View › Markdown Source (⌘/, Ctrl+/ on Windows and Linux) shows a Markdown document's file as text. Edit it, switch back, and the changes go into the document as one step you can undo, while alignment, colours, fonts and anything else Markdown can't hold stay wherever you didn't edit.
+
+### Changed
+
+- When an AI agent or another app edits a Markdown file in your vault folder, its changes are merged into the document instead of replacing it, so formatting Markdown can't hold is kept wherever the edit didn't reach.
 
 ## 0.41.0 - 2026-11-18
 

@@ -183,6 +183,11 @@ export interface AppHooks {
   altText(): void;
   /** Show or hide formatting marks (¶, spaces, tabs). */
   toggleFormattingMarks(): void;
+  /** Show a Markdown document as its Markdown source, or go back to it formatted (the source merged in). */
+  toggleMarkdownSource(): Promise<void>;
+  /** Whether a Markdown document's source is showing, and going back from it (before what needs the document itself). */
+  markdownSource(): boolean;
+  leaveMarkdownSource(): Promise<void>;
   /** Print layout (pages), Flow (the text reflowed to the window) or the page grid. */
   setViewMode(mode: ViewMode): void;
   /** The camera moved: stop auto-placing it, and redraw. */
@@ -192,6 +197,9 @@ export interface AppHooks {
 }
 
 /** Actions the app implements today, whatever the document. */
+/** Actions that need the document itself, not its Markdown source shown in the text editor (see `markdownSource`). */
+const LEAVES_SOURCE = new Set<ActionKind>(['print', 'printPreview', 'convert', 'share', 'viewMode', 'toggleGrid', 'copyLiveLink']);
+
 const SUPPORTED = new Set<ActionKind>([
   'sheet',
   'new',
@@ -239,6 +247,7 @@ const SUPPORTED = new Set<ActionKind>([
   'altText',
   'jump',
   'toggleFormattingMarks',
+  'toggleMarkdownSource',
   'insertText',
   'convert',
   'insertComment',
@@ -375,6 +384,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
     },
 
     async perform(action: Action): Promise<void> {
+      // What needs the document itself (printing, converting, sharing, another view of it) goes back from its Markdown source first.
+      if (LEAVES_SOURCE.has(action.kind) && app.markdownSource()) await app.leaveMarkdownSource();
       switch (action.kind) {
         case 'setFormMode':
           return app.setFormMode(action.mode);
@@ -513,6 +524,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         }
         case 'toggleFormattingMarks':
           return app.toggleFormattingMarks();
+        case 'toggleMarkdownSource':
+          return app.toggleMarkdownSource();
         case 'toggleGrid':
           return app.toggleGrid();
         case 'togglePagesPanel':

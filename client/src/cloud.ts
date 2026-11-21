@@ -54,12 +54,45 @@ const MAX_WAIT_SECONDS = 300;
 const MAX_RETRIES = 3;
 
 /**
- * `fetch`, but a 429 (the server's way of saying it is being used too fast: it did nothing with
- * the request) waits as long as it asked, then sends the request again.
+ * The longest a request may wait for the server's answer to start (an upload's body is sent within it, so it is generous).
+ * A connection that went dead under a sleeping computer or a changed network otherwise never settles, and whatever awaits
+ * it, such as the vault's sync, waits for ever.
+ */
+export const ANSWER_MS = 5 * 60_000;
+
+/**
+ * `fetch`, but one that gives up after `ms` without an answer: it rejects with a `TypeError`, as a request that could not
+ * reach the server does, so callers treat it as being offline. A caller's own `signal` still aborts it as before.
+ */
+export async function fetchWithin(input: string, init: RequestInit | undefined, ms: number = ANSWER_MS): Promise<Response> {
+  const controller = new AbortController();
+  const outer = init?.signal;
+  const forward = () => controller.abort(outer?.reason);
+  if (outer?.aborted) forward();
+  else outer?.addEventListener('abort', forward, { once: true });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, ms);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (timedOut) throw new TypeError(`no answer from the server in ${Math.round(ms / 1000)} seconds`);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    outer?.removeEventListener('abort', forward);
+  }
+}
+
+/**
+ * `fetch` (one that gives up when no answer comes, see `fetchWithin`), but a 429 (the server's way of saying it is being
+ * used too fast: it did nothing with the request) waits as long as it asked, then sends the request again.
  */
 export async function send(input: string, init?: RequestInit): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
-    const response = await fetch(input, init);
+    const response = await fetchWithin(input, init);
     if (response.status !== 429 || attempt === MAX_RETRIES) return response;
     const asked = Number(response.headers.get('retry-after'));
     const seconds = Math.min(Number.isFinite(asked) && asked > 0 ? asked : 5 * (attempt + 1), MAX_WAIT_SECONDS);

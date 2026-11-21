@@ -138,6 +138,10 @@ export const app: Partial<Messages> = {
   // Formats
   'app.outdatedPages': 'Estas são as páginas originais do PDF: suas edições de texto não aparecem nelas. Mude para Word para ver as edições; um PDF baixado tem o texto editado.',
   'app.switching': 'Mudando para {label}…',
+  'app.sourceWhileShared': 'O código-fonte Markdown não está disponível enquanto outras pessoas editam ou assistem a este documento.',
+  'app.sourceNotMerged': 'Suas alterações no Markdown não podem ser aplicadas enquanto outras pessoas editam este documento. Copie o que precisar: ao voltar novamente, elas serão descartadas.',
+  'app.sourceShown': 'Mostrando o código-fonte Markdown',
+  'app.sourceHidden': 'Mostrando o documento formatado',
   'app.switchedPdf': 'Agora exibido como PDF, que não pode ser editado. Volte para editar; nada foi perdido.',
   'app.switchedMd': 'Agora editando como {label}. O documento mantém todo o resto; somente ao baixar um arquivo {extension} ficam de fora fontes, cores, tamanhos, alinhamento e tudo o mais que o Markdown não consegue expressar.',
   'app.switchedTxt': 'Agora editando como {label}. O documento mantém todo o resto; somente ao baixar um arquivo {extension} ficam de fora toda a formatação, as tabelas e as imagens.',

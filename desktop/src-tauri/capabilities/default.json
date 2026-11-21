@@ -24,6 +24,7 @@
     "allow-vault-make-folder",
     "allow-vault-remove-folder",
     "allow-vault-set-times",
+    "allow-app-log",
     "allow-set-native-menu",
     "allow-print-open-pdf",
     "allow-update-check",

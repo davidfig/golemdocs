@@ -63,9 +63,9 @@ export interface VaultCloud {
 export interface VaultCodec {
   /** The vault file for stored bytes, or null if the vault does not keep this one. */
   toFile(stored: Uint8Array, name: string): Promise<Uint8Array | null>;
-  /** `previous`: what the account stores now, given only when `keepsLayout` says the file's layout is kept in it. */
+  /** `previous`: what the account stores now, given only when `keepsLayout` says it holds something to keep. */
   fromFile(file: Uint8Array, name: string, previous?: Uint8Array): Promise<Uint8Array>;
-  /** Whether what the account stores for this file holds something the file doesn't (a CSV's column widths) to keep when it changes on disk. */
+  /** Whether what the account stores for this file holds something the file doesn't (a CSV's column widths, a Markdown note's colours) to keep when it changes on disk. */
   keepsLayout?(name: string): boolean;
   /** Whether the vault keeps files with this name. */
   kept(name: string): boolean;

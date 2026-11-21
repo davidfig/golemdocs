@@ -138,6 +138,10 @@ export const app = {
   // Formats
   'app.outdatedPages': 'These are the original PDF’s pages: your text edits aren’t on them. Switch to Word to see the edits; a downloaded PDF has the edited text.',
   'app.switching': 'Switching to {label}…',
+  'app.sourceWhileShared': 'Markdown Source isn’t available while others are editing or watching this document.',
+  'app.sourceNotMerged': 'Your Markdown changes can’t be put in while others are editing this document. Copy what you need: switching back again leaves them out.',
+  'app.sourceShown': 'Showing the Markdown source',
+  'app.sourceHidden': 'Showing the formatted document',
   'app.switchedPdf': 'Now shown as PDF, which can’t be edited. Switch back to edit it; nothing was lost.',
   'app.switchedMd': 'Now editing as {label}. The document keeps everything else; only downloading a {extension} file leaves out fonts, colors, sizes, alignment and anything else Markdown can’t express.',
   'app.switchedTxt': 'Now editing as {label}. The document keeps everything else; only downloading a {extension} file leaves out all formatting, tables and images.',

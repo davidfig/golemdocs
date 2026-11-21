@@ -192,6 +192,7 @@ import { ScreenReaderSupport } from './screenReaderSupport.ts';
 import { cycleRegions, focusFirst, type Region } from './ui/focusRegions.ts';
 import { caretBlinks, caretPoints, forcedColors, onAccessibilityChange, rereadCaretOptions } from './ui/accessibilityOptions.ts';
 import { rereadScreenReader, screenReaderOn } from './ui/screenReader.ts';
+import { announce } from './ui/announce.ts';
 
 // Every string the UI builds goes through t(): the language has to be loaded first. Started here
 // and awaited once the worker is running, so it doesn't hold up starting the worker.
@@ -699,6 +700,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   cropLayer.cancel();
   leaveTextRoom();
   if (!options.keepRoom) leaveSheetRoom();
+  markdownSource = null; // its text was saved with the document just now
   textView.close();
   sheetView.close();
   drawLayer.cancel();
@@ -1123,6 +1125,8 @@ function roomStateChanged(state: RoomState): void {
   const was = doc.room;
   doc.room = state;
   if (state.mode === 'shared') doc.journal?.clear(); // the room holds the edits now
+  // Someone joined while the Markdown source shows: it goes back to the document now, before their edits arrive under it.
+  if (state.mode === 'shared' && markdownSource?.doc === doc) void leaveMarkdownSource();
   screenReader.room(state.people.filter((p) => !p.me).map((p) => p.name));
   const text = describeRoom(state);
   if (text !== lastRoomText) notify(text || t('app.editingAlone'));
@@ -2077,7 +2081,7 @@ function flushUploads(): Promise<void> {
 /** Joins the open document's room, unless it is in one or has asked: a text file's is its own (see joinTextRoom), a document's the layout worker's. */
 function joinRoomOf(doc: OpenDocument, cloudId: string): void {
   if (current !== doc || doc.roomRequested) return;
-  if (textView.active) return void joinTextRoom(doc, cloudId);
+  if (textView.active && !markdownSource) return void joinTextRoom(doc, cloudId);
   if (sheetView.active) return void joinSheetRoom(doc, cloudId);
   const room = networkRoom(cloudId);
   if (!room) return;
@@ -2458,6 +2462,8 @@ async function makeThumbnail(info: SavedInfo): Promise<void> {
   }
   const page = pages[0];
   const text = textView.active;
+  // A Markdown document's source is not what it looks like: its thumbnail is made once it is shown formatted again.
+  if (markdownSource) return;
   if (!text && (!page || !gl)) return;
   try {
     // A text file has no page: its first lines are drawn on one.
@@ -2499,9 +2505,11 @@ function saveInBrowser(): Promise<string | null> {
   const name = fileName();
   // Asked for now, while the worker (or the large-text editor) still has this document.
   const large = textView.active;
+  // A Markdown document shown as its source is saved as the document with the source merged in, never as the bare text.
+  const source = markdownSource?.doc === doc ? markdownSource : null;
   const sheetSave = sheetView.save();
   const marked = large || sheetSave ? null : worker.saveMarked();
-  const bytes = large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.stored) : marked!.then((saved) => saved.bytes);
+  const bytes = source ? sourceMerged(source, textView.snapshot()!) : large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.stored) : marked!.then((saved) => saved.bytes);
   bytes.catch(() => {}); // handled below, once earlier saves are written
   const done = saving.then(async () => {
     const created = !doc.localId;
@@ -4159,6 +4167,114 @@ async function openLarge(name: string, bytes: Uint8Array, options: { localId?: s
   if (cloudId) void accountKnown.then(() => joinTextRoom(opening, cloudId));
 }
 
+// --- Markdown source -------------------------------------------------------------------------------
+// View › Markdown Source: a Markdown document's text as its file has it, in the text editor over the document, which stays open
+// under it. Going back merges the text into the document (formats/markdownMerge.ts), so what Markdown can't hold (colours, fonts,
+// pictures) stays wherever the edit didn't reach, and puts the change in as one step that Undo takes back. While the source shows,
+// a save stores the document with the text merged in; the bare text is never saved over it.
+
+/**
+ * The source being shown: of which document, that document as it was then (what the text is merged into) and how many changes
+ * the layout worker had had then, the text then, where the view was, and whether putting the text in was refused once
+ * (edited together, with a change operations can't make: a second ask goes back without it).
+ */
+let markdownSource: { doc: OpenDocument; base: Uint8Array; changes: number; text: string; view: { x: number; y: number; zoom: number }; refused?: boolean } | null = null;
+/** Showing or leaving the source, which takes a moment: a second ask meanwhile is let go. */
+let sourceSwitching = false;
+
+/** The document `source` was opened over, with `text` merged in (the document as it was, if it has nothing to merge into). */
+async function sourceMerged(source: NonNullable<typeof markdownSource>, text: Uint8Array): Promise<Uint8Array> {
+  const { mergeMarkdownWdoc } = await import('./formats/markdown.ts');
+  return (await mergeMarkdownWdoc(source.base, text)) ?? source.base;
+}
+
+async function showMarkdownSource(): Promise<void> {
+  const doc = current;
+  if (sourceSwitching || markdownSource || textView.active || doc.kind !== 'md' || !loaded || current.none) return;
+  // Others' edits would arrive in the document under the text and be lost when it comes back.
+  if (doc.shared || doc.room?.mode === 'shared' || doc.room?.watching) return reportError(t('app.sourceWhileShared'));
+  sourceSwitching = true;
+  try {
+    const [, snapshot, file] = await Promise.all([textView.load(), worker.snapshot(), worker.convert('md')]);
+    if (current !== doc || textView.active || sharedLive()) return; // someone joined meanwhile
+    const name = fileName();
+    markdownSource = { doc, base: snapshot.bytes, changes: snapshot.changes, text: new TextDecoder().decode(file), view: { x: camera.x, y: camera.y, zoom: camera.zoom } };
+    textView.open(name, file, { encoding: 'utf-8', bom: false, original: null });
+    if (screenReaderOn()) announce(t('app.sourceShown'));
+  } catch (e) {
+    reportError((e as Error).message);
+  } finally {
+    sourceSwitching = false;
+  }
+  requestRender();
+  focusInput();
+}
+
+/** Back from the source to the document, with what was changed in it merged in. */
+async function leaveMarkdownSource(): Promise<void> {
+  const source = markdownSource;
+  if (!source || sourceSwitching) return;
+  sourceSwitching = true;
+  try {
+    const doc = source.doc;
+    // The merge takes a moment, and the text can still be typed in meanwhile: merged again until it has stopped changing.
+    let text = source.text;
+    let merged: Uint8Array | null = null;
+    for (;;) {
+      const bytes = textView.snapshot() ?? new Uint8Array(0);
+      const now = new TextDecoder().decode(bytes);
+      if (now === text) break;
+      text = now;
+      merged = now === source.text ? null : await sourceMerged(source, bytes);
+      if (current !== doc || markdownSource !== source) return;
+    }
+    // Put in as edits where it can be (one step for Undo, the view kept), from the document as it was when the source opened.
+    // Something else changed it since (another person's edit, a change from outside): merged into it as it is now instead.
+    let opened = merged && sourceFromFile(fileName(), merged.slice().buffer);
+    let done: boolean | 'typed' = !opened || source.refused === true;
+    for (let tries = 0; opened && done !== true && !source.refused && tries < 3; tries++) {
+      const base = tries === 0 ? source : { ...source, ...(await worker.snapshot().then((s) => ({ base: s.bytes, changes: s.changes }))) };
+      if (tries > 0) {
+        merged = await sourceMerged(base, new TextEncoder().encode(text));
+        opened = sourceFromFile(fileName(), merged.slice().buffer);
+        if (!opened) break;
+      }
+      done = await worker.refresh(opened, null, base.changes, true).catch(() => false);
+      if (current !== doc || markdownSource !== source) return;
+      if (done === false) break;
+    }
+    // Edited together, the document can't be opened again in its place: the text stays, and a second ask goes back without it.
+    if (done !== true && opened && sharedLive()) {
+      source.refused = true;
+      return reportError(t('app.sourceNotMerged'));
+    }
+    markdownSource = null;
+    textView.close();
+    camera.x = source.view.x;
+    camera.y = source.view.y;
+    camera.zoom = source.view.zoom;
+    arrange();
+    if (screenReaderOn()) announce(t('app.sourceHidden'));
+    if (done === true) {
+      if (merged) documentEdited();
+      return;
+    }
+    if (!opened) return;
+    // A change operations can't make (a picture added, say): the merged document is opened in its place, with nothing saved
+    // first, since what the worker has is the document without the text.
+    const cloudId = doc.localId ? library.local.find((d) => d.id === doc.localId)?.cloudId : undefined;
+    doc.unsavedSince = 0;
+    open(opened, { localId: doc.localId ?? undefined, cloudId });
+    documentEdited();
+  } catch (e) {
+    reportError((e as Error).message);
+  } finally {
+    sourceSwitching = false;
+    requestRender();
+    focusInput();
+  }
+}
+
 // --- Workbooks -------------------------------------------------------------------------------------
 // A workbook opens in the spreadsheet editor (docs/spreadsheets.md): its cells live in the editor's own worker and are drawn on the
 // canvas by it. The memory image kept with a saved workbook (storage/local.ts) opens it without reading the file again.
@@ -4215,6 +4331,10 @@ const MAX_SELECTION_BYTES = 5 * 1024 * 1024;
  * of the file (it is the same file: the editor shows it again when it is opened next). True when there is a document to go on with.
  */
 async function openAsDocument(): Promise<boolean> {
+  if (markdownSource) {
+    await leaveMarkdownSource();
+    return !textView.active;
+  }
   if (sheetView.active) {
     const saved = await sheetView.save();
     if (!saved) return false;
@@ -5073,6 +5193,7 @@ function render(): void {
     vector: vector ? vector.state(layersOpen) : { ...DEFAULT_STATE.vector, layers: layersOpen },
     inTable,
     formattingMarks,
+    markdownSource: markdownSource !== null,
     viewMode: grid ? 'grid' : viewMode,
   });
   formLayer.position();
@@ -6397,6 +6518,9 @@ const chromeHost = createChromeHost({
     }
     worker.setMarks(formattingMarks);
   },
+  toggleMarkdownSource: () => (markdownSource ? leaveMarkdownSource() : showMarkdownSource()),
+  markdownSource: () => markdownSource !== null,
+  leaveMarkdownSource,
   viewChanged: () => {
     userMoved = true;
     requestRender();

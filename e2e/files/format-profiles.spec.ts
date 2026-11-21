@@ -66,7 +66,7 @@ test('markup formats (LaTeX) keep structure and simple marks only', async ({ app
   expect(hasItem(await menuContents(app, 'File'), 'Page Setup', true)).toBe(false);
 });
 
-test('a picture document has the Picture menu and no text formatting', async ({ app }) => {
+test('a picture document has the Picture menu and no text formatting', { tag: '@heavy' }, async ({ app }) => {
   await app.goto('?doc=welcome');
   await importFile(app, { name: 'p.png', buffer: buildPng(30, 30) });
   expect(await menuContents(app, 'Format')).toBeNull();
@@ -78,7 +78,7 @@ test('a picture document has the Picture menu and no text formatting', async ({ 
   expect(hasItem(await menuContents(app, 'Picture'), 'Rotate Left')).toBe(true);
 });
 
-test('a PDF can only be marked up: a Format menu with characters only, annotation buttons, and no Table menu', async ({ app }) => {
+test('a PDF can only be marked up: a Format menu with characters only, annotation buttons, and no Table menu', { tag: '@heavy' }, async ({ app }) => {
   await blankWith(app, 'Some words');
   await convertTo(app, 'PDF (.pdf)', 'PDF');
   const file = await app.download(() => app.menu('File', 'Download'));
@@ -95,7 +95,7 @@ test('a PDF can only be marked up: a Format menu with characters only, annotatio
   await expect(exact(app, 'Highlight')).toBeVisible();
 });
 
-test('toolbar buttons follow the format too (no underline or highlight in plain text)', async ({ app }) => {
+test('toolbar buttons follow the format too (no underline or highlight in plain text)', { tag: '@heavy' }, async ({ app }) => {
   await app.goto('?doc=welcome');
   await importFile(app, text('a.txt', 'hello'));
   await expect(exact(app, 'Copy')).toBeVisible();

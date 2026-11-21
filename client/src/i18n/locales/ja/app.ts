@@ -132,6 +132,10 @@ export const app: Partial<Messages> = {
   // Formats
   'app.outdatedPages': 'これは元の PDF のページです。テキストの編集内容は反映されていません。編集内容を確認するには Word に切り替えてください。ダウンロードした PDF には編集後のテキストが含まれます。',
   'app.switching': '{label} に切り替えています…',
+  'app.sourceWhileShared': 'ほかの人がこの文書を編集または表示している間は、Markdown ソースを使用できません。',
+  'app.sourceNotMerged': 'ほかの人がこの文書を編集している間は、Markdown の変更を反映できません。必要な部分をコピーしてください。もう一度切り替えると、変更は破棄されます。',
+  'app.sourceShown': 'Markdown ソースを表示しています',
+  'app.sourceHidden': '書式付きの文書を表示しています',
   'app.switchedPdf': 'PDF として表示しています。PDF は編集できません。編集するには元の形式に戻してください。失われたものはありません。',
   'app.switchedMd': '{label} として編集しています。ドキュメントにはそれ以外の内容もすべて保持されます。{extension} ファイルとしてダウンロードした場合のみ、フォント、色、サイズ、配置など Markdown で表現できないものが省かれます。',
   'app.switchedTxt': '{label} として編集しています。ドキュメントにはそれ以外の内容もすべて保持されます。{extension} ファイルとしてダウンロードした場合のみ、すべての書式、表、画像が省かれます。',

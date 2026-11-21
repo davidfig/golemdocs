@@ -125,6 +125,7 @@ test('the shelf packs pages away from the view, leaves those near it, and brings
   assert.equal(pages[7].shelved, false);
   assert.equal(pages[8].shelved, false);
   assert.equal(pages[5].shelved, true);
+  assert.equal(pages[0].shelved, true, 'the pages the view left, never drawn, are packed once it has moved');
   assert.ok(redraws > 0, 'drawn again once the glyphs are back');
   // A picture of a far page brings it back too.
   await shelf.bring(pages[3]);

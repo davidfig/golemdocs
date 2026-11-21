@@ -169,13 +169,20 @@ export class PagesPanel {
   /** Every thumbnail is drawn again (a font or picture they use has arrived since they were drawn). */
   refresh(): void {
     for (const item of this.shown.values()) item.stale = true;
+    this.forgetSpare();
     this.schedule(REDRAW_DELAY);
   }
 
   /** Every thumbnail is drawn again at once in the new colors (Dark Pages turned on or off); items made later are drawn new anyway. */
   recolor(): void {
     for (const item of this.shown.values()) item.stale = true;
+    this.forgetSpare();
     this.drawSome(true);
+  }
+
+  /** Items kept for reuse would come back with pictures drawn before a change: they are let go. */
+  private forgetSpare(): void {
+    this.spare.length = 0;
   }
 
   /** The page in view. Scrolls the panel to it, unless the pointer is in the panel (where it is being scrolled by hand). */

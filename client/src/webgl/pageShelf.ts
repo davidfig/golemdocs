@@ -47,8 +47,16 @@ export class PageShelf {
 
   /** The pages in or near the view: their glyphs stay, or come back (and the view is drawn again once they have). */
   keep(pages: readonly GpuPage[]): void {
+    const before = this.near;
     this.near = new Set(pages);
     for (const page of pages) if (page.shelved) this.bring(page);
+    // Pages the view has just left may be packed now, if they were never drawn.
+    for (const page of before) {
+      if (!this.near.has(page) && this.fresh.has(page)) {
+        this.schedule();
+        break;
+      }
+    }
   }
 
   /** Unpacks a page's glyphs now (for a picture of the page, say); resolves once they are back. */
@@ -69,7 +77,16 @@ export class PageShelf {
   }
 
   private schedule(): void {
-    if (this.timer || this.sweeping || this.fresh.size === 0) return;
+    if (this.timer || this.sweeping) return;
+    // Only pages away from the view are packed: with none, nothing is to do until the view moves (see `keep`) or pages arrive.
+    let away = false;
+    for (const page of this.fresh) {
+      if (!this.near.has(page)) {
+        away = true;
+        break;
+      }
+    }
+    if (!away) return;
     this.timer = setTimeout(() => {
       this.timer = 0;
       void this.sweep();

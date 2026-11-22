@@ -2096,7 +2096,8 @@ class OpenDocument {
     if (!editor || !session || !document || this.annotator || this.readOnly) return;
     let pasted: Awaited<ReturnType<typeof htmlToPaste>> = null;
     try {
-      pasted = await htmlToPaste(html, document);
+      // The plain text says which of the HTML's non-breaking spaces were ordinary ones (paste.ts `spacesFromPlain`).
+      pasted = await htmlToPaste(html, document, text);
       // A live block pasted (Copy as Live Link) is filled in as it goes in; one whose source can't be read keeps what was copied.
       // One with no `by` (a link copied) is signed as the person's; someone else's stays theirs (live/owner.ts).
       if (pasted && findLiveIn(pasted.blocks).length) await (await import('../live/update.ts')).updateLiveIn(pasted.blocks, document, liveSource, { ...(liveOwner && { owner: liveOwner }), unsignedMine: true });

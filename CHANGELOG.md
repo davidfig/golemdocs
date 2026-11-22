@@ -14,6 +14,7 @@
 
 ### Fixed
 
+- Pasting text you copied or cut in Golem Docs no longer turns a space at its start or end, or the second of two spaces, into a non-breaking space.
 - Spelling: the suggestions that appear on hover now show only while the pointer is over the misspelled word itself, not anywhere to its right on the same line.
 
 ## 0.44.0 - 2026-11-22

@@ -52,3 +52,17 @@ test('fonts asked for by name are listed, tables come as tables, and nothing to 
   assert.equal(await htmlToPaste('', target), null);
   assert.equal(await htmlToPaste('<p></p><p> </p>', target), null, 'only empty lines');
 });
+
+test('spaces HTML had to write as non-breaking come back ordinary when the plain text has them; real ones stay', async () => {
+  const doc = await WordDocument.create();
+  const text = (pasted: Awaited<ReturnType<typeof htmlToPaste>>) => paragraphsIn(pasted!.blocks).map((p) => paragraphText(p)).join('\n');
+  // " two" cut from this app: the leading space is written as &nbsp; so HTML keeps it.
+  assert.equal(text(await htmlToPaste('<p>&nbsp;two</p>', doc, ' two')), ' two');
+  // Doubled spaces and one at the end, over two paragraphs.
+  assert.equal(text(await htmlToPaste('<p>a&nbsp; b&nbsp;</p><p>c</p>', doc, 'a  b \nc')), 'a  b \nc');
+  // A non-breaking space the plain text has too is a real one.
+  assert.equal(text(await htmlToPaste('<p>10&nbsp;km</p>', doc, '10 km')), '10 km');
+  // Without the plain text, or when it says something else, the HTML is taken as it is.
+  assert.equal(text(await htmlToPaste('<p>&nbsp;two</p>', doc)), ' two');
+  assert.equal(text(await htmlToPaste('<p>&nbsp;two</p>', doc, 'something else')), ' two');
+});

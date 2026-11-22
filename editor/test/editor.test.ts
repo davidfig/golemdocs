@@ -360,6 +360,18 @@ test('linkUnder finds the link whose text a page point is over', skip, async () 
   assert.equal(editor.linkUnder(page, line.x + line.width + 30, y), null, 'past the end of the line');
 });
 
+test('charUnder finds the character a page point is over, and nothing beside the end of a line', skip, async () => {
+  const { session, editor } = await setup(['One twoo']);
+  const page = session.displayPages[0];
+  const line = page.lines[0];
+  const y = line.y + line.height / 2;
+  const end = line.column + line.stops[line.stops.length - 1];
+  assert.equal(editor.charUnder(page, line.column + (line.stops[5] + line.stops[6]) / 2, y)?.offset, 5, 'over the w');
+  assert.equal(editor.charUnder(page, end - 0.5, y)?.offset, 7, 'over the last letter');
+  assert.equal(editor.charUnder(page, end + 1, y), null, 'just past the last letter');
+  assert.equal(editor.charUnder(page, end + 200, y), null, 'far along the line');
+});
+
 test('select puts the selection on a range of a paragraph', skip, async () => {
   const { editor, apply } = await setup(['One two', 'three four']);
   await apply({ kind: 'select', paragraph: 1, from: 6, to: 10 });

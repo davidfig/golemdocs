@@ -146,3 +146,18 @@ test('row heights: totals, which entry a row falls in, and changing one entry', 
   assert.equal(wrappedRows(81, 0, 80), 2);
   assert.equal(wrappedRows(70, 2, 80), 2);
 });
+
+test('a point past the end of a line is beside its last word, not over it (for the spelling hover)', async () => {
+  const { LineScene, CELL, LINE } = await import('../src/textEditor/scene.ts');
+  const index = await indexOf('one twoo\nthree\n');
+  const entries = { get count() { return index.count; }, lineOf: (e: number) => e, entryOf: (l: number) => l };
+  const scene = new LineScene(() => index, () => entries);
+  scene.rebuild();
+  const y = LINE / 2;
+  const on = scene.textLeft + 5.5 * CELL; // over "twoo"
+  const past = scene.textLeft + 20 * CELL; // far right of the line
+  assert.deepEqual(scene.pointAt(past, y), { line: 0, col: 8 }, 'the nearest place is the end of the line');
+  assert.equal(scene.over(0, 4, 8, on, y), true);
+  assert.equal(scene.over(0, 4, 8, past, y), false);
+  assert.equal(scene.over(0, 4, 8, on, y + LINE), false, 'the next line');
+});

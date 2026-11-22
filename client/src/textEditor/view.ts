@@ -500,6 +500,8 @@ export class TextEditorView {
     // The problem is a word (or phrase) that touches the click: the nearest place its text is.
     let from = -1;
     for (let at = text.indexOf(issue.text); at >= 0; at = text.indexOf(issue.text, at + 1)) if (at <= hit.col && hit.col <= at + issue.text.length) from = at;
+    // A hover only finds a mistake the pointer is over, not one at the end of the line it is beside.
+    if (!select && (from < 0 || !this.scene.over(hit.line, from, from + issue.text.length, point.x, point.y))) return null;
     if (select && from >= 0) this.setSelection({ anchor: { line: hit.line, col: from }, focus: { line: hit.line, col: from + issue.text.length } });
     return issue;
   }

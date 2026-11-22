@@ -2238,13 +2238,16 @@ class OpenDocument {
     const page = session.displayPages.find((p) => p.id === pageId);
     // The menu key asks about the caret (where a selection ends), not a point.
     const caret = atCaret ? editor.ordered()[1] : null;
-    const hit = caret ? { paragraph: caret.paragraph, offset: caret.offset } : page && editor.hitTest(page, x, y);
+    // A hover asks about the character under the pointer, so a point beside the text (past a line's end) finds nothing;
+    // a click takes the nearest place in the text, as the caret would.
+    const hover = !caret && !select;
+    const hit = caret ? { paragraph: caret.paragraph, offset: caret.offset } : page && (hover ? editor.charUnder(page, x, y) : editor.hitTest(page, x, y));
     const documentLang = documentLanguageOf(editor);
     const language = hit && check && paragraphLanguageOf(hit.paragraph, documentLang);
     const dictionary = language && language !== 'none' ? await loadDictionary(language) : null;
     this.spell = { issue: null, menu: true };
     if (hit && dictionary) {
-      const issue = issuesOf(hit.paragraph, documentLang, () => undefined).find((i) => i.start <= hit.offset && hit.offset <= i.end);
+      const issue = issuesOf(hit.paragraph, documentLang, () => undefined).find((i) => i.start <= hit.offset && (hover ? hit.offset < i.end : hit.offset <= i.end));
       if (issue) {
         this.spell = { issue: describeIssue(paragraphText(hit.paragraph), issue, dictionary), menu: true };
         if (select) editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: issue.start, to: issue.end });

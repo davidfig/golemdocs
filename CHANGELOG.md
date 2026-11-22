@@ -12,6 +12,10 @@
 
 - Files sidebar: Trash is pinned at the bottom, so it is always in view to drag onto, however many documents you have. Opening it shows what you deleted in place of your documents, with Empty Trash below and a back arrow (or Escape) to return.
 
+### Fixed
+
+- Spelling: the suggestions that appear on hover now show only while the pointer is over the misspelled word itself, not anywhere to its right on the same line.
+
 ## 0.44.0 - 2026-11-22
 
 ### Changed

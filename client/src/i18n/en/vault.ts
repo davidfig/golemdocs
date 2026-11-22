@@ -94,4 +94,7 @@ export const vault = {
   'vault.shared.index.empty': 'It has no files yet.',
   'vault.shared.index.more': '…and {count} more',
   'vault.shared.index.how': 'To keep this folder in your vault too, open File › Open in Golem Docs and choose In my vault… on the card of “{share}”. Golem Docs keeps this list up to date, so changes made to this file are not kept.',
+  'vault.encrypted.file': '{name} (encrypted)',
+  'vault.encrypted.title': '{name} (encrypted)',
+  'vault.encrypted.intro': 'The folder “{name}” is encrypted, so its files are not in this vault folder: they are never written to this folder, readable or not. Open it in Golem Docs and enter your encryption key to see them. Golem Docs keeps this note up to date, so changes made to it are not kept.',
 };

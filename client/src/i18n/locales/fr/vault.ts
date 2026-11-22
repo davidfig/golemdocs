@@ -96,4 +96,7 @@ export const vault: Catalog = {
   'vault.shared.index.empty': 'Il ne contient encore aucun fichier.',
   'vault.shared.index.more': '…et {count} de plus',
   'vault.shared.index.how': 'Pour garder aussi ce dossier dans ton coffre, ouvre Fichier › Ouvrir dans Golem Docs et choisis « Dans mon coffre… » sur la carte de « {share} ». Golem Docs tient cette liste à jour : les modifications faites dans ce fichier ne sont pas gardées.',
+  'vault.encrypted.file': '{name} (chiffré)',
+  'vault.encrypted.title': '{name} (chiffré)',
+  'vault.encrypted.intro': 'Le dossier « {name} » est chiffré : ses fichiers ne sont pas dans ce dossier coffre et ne sont jamais écrits dans ce dossier, ni lisibles ni chiffrés. Ouvrez-le dans Golem Docs et saisissez votre clé de chiffrement pour les voir. Golem Docs tient cette note à jour : les modifications que vous y faites ne sont pas conservées.',
 };

@@ -89,4 +89,7 @@ export const vault: Catalog = {
   'vault.shared.index.empty': '其中還沒有檔案。',
   'vault.shared.index.more': '……以及另外 {count} 個',
   'vault.shared.index.how': '要將此資料夾也保留在保管庫中，請在 Golem Docs 中開啟 檔案 › 開啟，然後在「{share}」的卡片上選擇「在我的保管庫…」。Golem Docs 會自動更新此清單，因此對此檔案的變更不會保留。',
+  'vault.encrypted.file': '{name}（已加密）',
+  'vault.encrypted.title': '{name}（已加密）',
+  'vault.encrypted.intro': '資料夾「{name}」已加密，因此它的檔案不在這個保管庫資料夾中：它們從不寫入這個資料夾，無論可讀或加密形式。請在 Golem Docs 中開啟它並輸入你的加密金鑰來查看。Golem Docs 會讓這則說明保持最新，對它的修改不會保留。',
 };

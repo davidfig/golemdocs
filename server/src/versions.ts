@@ -9,7 +9,7 @@
 import { CLOUD_LIMITS, byteBudget, shouldCheckpoint, versionsToDrop, type VersionStamp } from '@golemdocs/ops';
 import type { Env } from './cf.ts';
 import { deleteChunkList, isChunked, previousManifest, type Manifest } from './fileStore.ts';
-import { docxKey, historyKey, historyPrefix } from './keys.ts';
+import { DOCX, docxKey, historyKey, historyPrefix } from './keys.ts';
 import { perChunk } from './http.ts';
 import { roomForHistory } from './storage.ts';
 import type { UserDb } from './userDb.ts';
@@ -20,10 +20,12 @@ export interface VersionRow {
   size: number;
   name: string | null;
   chunked: number;
+  /** 1 for a version kept sealed: one of an encrypted document's (docs/encrypted-folders.md). */
+  sealed?: number | null;
 }
 
-/** What the client sees of one. */
-export const describeVersion = (row: VersionRow) => ({ version: row.version, size: row.size, name: row.name });
+/** What the client sees of one. `sealed` lets the browser finish converting a document whose versions were not all done. */
+export const describeVersion = (row: VersionRow) => ({ version: row.version, size: row.size, name: row.name, ...(row.sealed ? { sealed: true } : {}) });
 
 export { TRASH_MS } from '@golemdocs/ops';
 
@@ -33,6 +35,8 @@ export interface Live {
   r2_key: string;
   size: number;
   updated_at: number;
+  /** An encrypted document's versions are kept marked sealed. */
+  encrypted?: number | null;
 }
 
 /**
@@ -122,7 +126,7 @@ export async function checkpoint(env: Env, ownerId: string, db: UserDb, live: Li
       httpMetadata: object.httpMetadata ?? {},
       ...(object.customMetadata ? { customMetadata: object.customMetadata } : {}),
     });
-    await db.run('INSERT OR IGNORE INTO versions (doc_id, version, size, name, chunked) VALUES (?, ?, ?, ?, ?)', [live.id, live.updated_at, size, options.name ?? null, chunked ? 1 : 0]);
+    await db.run('INSERT OR IGNORE INTO versions (doc_id, version, size, name, chunked, sealed) VALUES (?, ?, ?, ?, ?, ?)', [live.id, live.updated_at, size, options.name ?? null, chunked ? 1 : 0, live.encrypted ? 1 : 0]);
     return true;
   } catch (error) {
     console.error('checkpoint failed', error);
@@ -163,6 +167,27 @@ export async function removeVersions(env: Env, ownerId: string, db: UserDb, docI
     if (live) for (const h of manifestHashes(live)) kept.add(h);
     await deleteChunkList(env, ownerId, docId, [...candidates].filter((h) => !kept.has(h)));
   }
+}
+
+/**
+ * Replaces a kept version's file in place, keeping its number and name: converting a document (docs/encrypted-folders.md) seals or opens
+ * each version. The new file is whole; chunks only the old one named are let go of.
+ */
+export async function replaceVersion(env: Env, ownerId: string, db: UserDb, docId: string, row: VersionRow, bytes: Uint8Array, sealed: boolean): Promise<VersionRow> {
+  const candidates = new Set<string>();
+  if (row.chunked) {
+    const manifest = await manifestAt(env, historyKey(ownerId, docId, row.version));
+    if (manifest) for (const h of manifestHashes(manifest)) candidates.add(h);
+  }
+  await env.FILES.put(historyKey(ownerId, docId, row.version), bytes, { httpMetadata: { contentType: DOCX } });
+  await db.run('UPDATE versions SET size = ?, chunked = 0, sealed = ? WHERE doc_id = ? AND version = ?', [bytes.byteLength, sealed ? 1 : 0, docId, row.version]);
+  if (candidates.size) {
+    const kept = await retainedChunks(env, ownerId, db, docId);
+    const live = await manifestAt(env, docxKey(ownerId, docId));
+    if (live) for (const h of manifestHashes(live)) kept.add(h);
+    await deleteChunkList(env, ownerId, docId, [...candidates].filter((h) => !kept.has(h)));
+  }
+  return { ...row, size: bytes.byteLength, chunked: 0, sealed: sealed ? 1 : 0 };
 }
 
 export async function versionsOf(db: UserDb, docId: string): Promise<VersionRow[]> {

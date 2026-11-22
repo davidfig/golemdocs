@@ -89,4 +89,7 @@ export const vault: Catalog = {
   'vault.shared.index.empty': 'まだファイルはありません。',
   'vault.shared.index.more': '…ほか {count} 件',
   'vault.shared.index.how': 'このフォルダも保管フォルダに置くには、Golem Docs で ファイル › 開く を開き、「{share}」のカードで「保管フォルダ…」を選びます。この一覧は Golem Docs が最新に保つため、このファイルへの変更は残りません。',
+  'vault.encrypted.file': '{name} (暗号化)',
+  'vault.encrypted.title': '{name} (暗号化)',
+  'vault.encrypted.intro': 'フォルダー「{name}」は暗号化されているため、そのファイルはこの Vault フォルダーにはありません。読める形でも暗号化された形でも、このフォルダーに書き込まれることはありません。見るには Golem Docs で開き、暗号化キーを入力してください。このメモは Golem Docs が最新に保つため、変更しても残りません。',
 };

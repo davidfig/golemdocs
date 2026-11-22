@@ -7,6 +7,8 @@ import { keepSyncedCopy } from '../library.ts';
 import type { DesktopBridge } from './bridge.ts';
 import { safeName } from './vaultPlan.ts';
 import { guestCloud } from './vaultGuest.ts';
+import { withoutEncrypted } from './vaultEncrypted.ts';
+import { sealFileWith } from '../encryption/session.ts';
 import type { SharedApi } from './vaultShared.ts';
 import { vaultMemory } from './vaultMemory.ts';
 import { GUEST_ACCOUNT, type VaultCloud, type VaultCodec, type VaultHost } from './vaultSync.ts';
@@ -27,6 +29,8 @@ export function accountCloud(keep: KeepCopy = async () => {}): VaultCloud {
   let folders: Folder[] = [];
   /** Each document's name and time in the account, from the last listing, for keeping a copy of what is downloaded. */
   const listed = new Map<string, { name: string; updatedAt: number }>();
+  /** The encrypted documents' keys, from the last listing: a file the vault still had for one is saved into it sealed. */
+  const sealedKeys = new Map<string, string>();
   // A copy of the bytes: the converter takes the ones it is given to its own thread.
   const kept = (cloud: { id: string; name: string; updatedAt: number }, bytes: Uint8Array) => keep(cloud, bytes.slice()).catch(() => {});
 
@@ -48,11 +52,16 @@ export function accountCloud(keep: KeepCopy = async () => {}): VaultCloud {
 
   return {
     async list() {
-      const [docs, theirs] = await Promise.all([listDocuments(), listFolders()]);
-      folders = theirs;
+      const [all, every] = await Promise.all([listDocuments(), listFolders()]);
+      // Encrypted documents and folders are never in the vault: their files would be decrypted on disk, outliving the session
+      // (vaultEncrypted.ts, docs/encrypted-folders.md).
+      const shown = withoutEncrypted(all, every);
+      folders = shown.folders;
       listed.clear();
-      for (const doc of docs) listed.set(doc.id, { name: doc.name, updatedAt: doc.updatedAt });
-      return { docs, folders: theirs };
+      sealedKeys.clear();
+      for (const doc of shown.docs) listed.set(doc.id, { name: doc.name, updatedAt: doc.updatedAt });
+      for (const doc of all) if (doc.encrypted && doc.wrappedKey) sealedKeys.set(doc.id, doc.wrappedKey);
+      return { docs: shown.docs, folders: shown.folders, encrypted: shown.encrypted, notes: shown.notes, encryptedPaths: shown.encryptedPaths };
     },
     async download(id) {
       const bytes = new Uint8Array(await downloadDocument(id));
@@ -61,8 +70,12 @@ export function accountCloud(keep: KeepCopy = async () => {}): VaultCloud {
       return bytes;
     },
     // No `base`: the file in the vault wins, and `keepVersion` has already kept what it replaces.
-    async replace(id, bytes) {
+    async replace(id, given) {
+      // An encrypted document's file goes sealed (the server refuses anything else); while it is locked, this fails and is tried later.
+      const key = sealedKeys.get(id);
+      const bytes = key ? await sealFileWith(key, given) : given;
       const { updatedAt } = await saveDocument(id, bytes);
+      if (key) return { updatedAt };
       const name = listed.get(id)?.name;
       if (name !== undefined) {
         listed.set(id, { name, updatedAt });

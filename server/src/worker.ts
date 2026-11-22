@@ -22,7 +22,8 @@ import { handleSite } from './site.ts';
 import { joinRoom, roomHeaders } from './roomGate.ts';
 import { withRenewedSession } from './session.ts';
 import { handlePolarWebhook, hasSync, startCheckout, startPortal, subscriptionFor, subscriptionRequired } from './subscriptions.ts';
-import { CloudflareError, cloudStorageConfigured } from './userDb.ts';
+import { CloudflareError, cloudStorageConfigured, userDb } from './userDb.ts';
+import { refuseEncrypted } from './sealed.ts';
 
 /**
  * The request's URL as the browser sees it. In development the client's Vite server proxies
@@ -113,6 +114,9 @@ const routes: ExportedHandler = {
         if (!access) throw new HttpError(404, 'not found');
         // The room saves into the owner's storage, so the owner must have sync (whoever is joining).
         await requireOwnerSync(env, userId, access.ownerId);
+        // A room reads the edits it orders, so an encrypted document never has one (docs/encrypted-folders.md).
+        const ownerDb = await userDb(env, access.ownerId);
+        refuseEncrypted(ownerDb && (await ownerDb.first<{ encrypted: number | null }>('SELECT encrypted FROM documents WHERE id = ?', [docId])), 'editing together');
         const headers = roomHeaders(request.headers, userId, access.role, access.ownerId, docId, roomMatch[2] ? null : await pictureOf(env, userId));
         return joinRoom(env, docId, headers, !!roomMatch[2]);
       }

@@ -7,6 +7,7 @@
 // Chunks belong to one document, so they are never shared and need no counting: a save removes the ones its manifest dropped,
 // and deleting the document removes the rest by prefix. A save that fails part way leaves chunks nobody uses; they go with the document.
 
+import { isSealed } from '@golemdocs/ops';
 import { sha256Hex } from '@golemdocs/docx';
 import type { Env } from './cf.ts';
 import { HttpError } from './http.ts';
@@ -205,10 +206,18 @@ export async function applyDelta(
   key: string,
   body: ArrayBuffer,
   previous: Manifest | null,
-  options: { maxBytes: number; etagMatches?: string },
+  options: { maxBytes: number; etagMatches?: string; sealed?: boolean },
 ): Promise<Delta> {
   const { manifest, supplied } = parse(body, options.maxBytes);
   const had = new Set(previous?.chunks.map((c) => c.h));
+  // An encrypted document's file must be sealed: its first chunk starts with the envelope. One the save does not bring was checked when
+  // it came, as the first chunk of the manifest before; one in another place there was not, so it is refused.
+  if (options.sealed) {
+    const first = manifest.chunks[0]?.h;
+    const firstBefore = previous?.chunks[0]?.h;
+    const bytes = first === undefined ? undefined : supplied.get(first);
+    if (first === undefined || (bytes ? !isSealed(bytes) : first !== firstBefore)) throw new HttpError(400, 'a file in an encrypted folder must be encrypted', 'not-sealed');
+  }
   const missing = [...new Set(manifest.chunks.map((c) => c.h))].filter((h) => !supplied.has(h) && !had.has(h));
   if (missing.length) {
     throw new HttpError(400, 'chunks are missing', 'missing-chunks');

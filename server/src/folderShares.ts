@@ -17,6 +17,8 @@ export interface FolderLink {
   name: string;
   parent_id: string | null;
   created_by?: string | null;
+  /** In an encrypted tree (sealed.ts): never inside a share, whatever folder above it is shared. */
+  encrypted?: number | null;
 }
 
 export interface FolderShare {
@@ -52,10 +54,14 @@ const toShare = (r: FolderShareRow): FolderShare => ({
 /** The owner's folders, from the catalogue cache when it is current (the same list and cache GET /api/folders uses). */
 export const listFolders = <T extends FolderLink>(db: UserDb): Promise<T[]> => db.cachedList<T>('folders', () => db.all<T>('SELECT * FROM folders ORDER BY name'));
 
-/** The folders from `folderId` up to the top level, nearest first (`folderId` itself included); empty for the top level. */
+/**
+ * The folders from `folderId` up to the top level, nearest first (`folderId` itself included); empty for the top level. Empty too for a
+ * folder in an encrypted tree: a share of a folder above it does not reach into it (docs/encrypted-folders.md).
+ */
 export function ancestry(folders: ReadonlyMap<string, FolderLink>, folderId: string | null): string[] {
   const chain: string[] = [];
   for (let at = folderId, depth = 0; at !== null && depth <= 64; depth++) {
+    if (folders.get(at)?.encrypted) return [];
     chain.push(at);
     at = folders.get(at)?.parent_id ?? null;
   }
@@ -72,7 +78,7 @@ export function subtree(folders: Iterable<FolderLink>, root: string): Set<string
   for (let grew = true; grew; ) {
     grew = false;
     for (const f of list) {
-      if (f.parent_id !== null && found.has(f.parent_id) && !found.has(f.id)) {
+      if (f.parent_id !== null && found.has(f.parent_id) && !found.has(f.id) && !f.encrypted) {
         found.add(f.id);
         grew = true;
       }

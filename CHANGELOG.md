@@ -2,6 +2,10 @@
 
 ## 0.44.1 - Unreleased
 
+### Added
+
+- Encryption: choose Encrypt… on any document or folder (in its right-click menu in the Files pane or File › Open, or File › Encrypt document… for the one that is open), and its contents, its name and its earlier versions are encrypted on your device with a key only you keep, so the server can’t read them. Encrypting a folder encrypts everything in it and anything you add later; the folder’s own name stays readable. The first time, you save the key in your password manager. Encrypted documents stay locked until you enter the key, and lock again when you reload, choose Lock encrypted documents, or leave the app alone for 15 minutes. Decrypt… turns any of it back. Encrypted documents can’t be shared or edited together, and aren’t copied to the desktop app’s vault folder: a file it already had is removed (an edit made to it there is kept, encrypted), and a note stands in for each encrypted folder.
+
 ### Changed
 
 - Files sidebar: Trash is pinned at the bottom, so it is always in view to drag onto, however many documents you have. Opening it shows what you deleted in place of your documents, with Empty Trash below and a back arrow (or Escape) to return.

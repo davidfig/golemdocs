@@ -2,6 +2,8 @@
 // the user's own database; documents point at theirs with `folder_id` (null: the top level).
 
 import { cleanName, failure, HttpError, ID, idList, json, MAX_BATCH } from './http.ts';
+import { encryptedInside, requireEncryptedInto, sealedName, wrappedKey } from './sealed.ts';
+import { isSealedName } from '@golemdocs/ops';
 import { subscriptionRequired } from './subscriptions.ts';
 import type { UserDb } from './userDb.ts';
 
@@ -13,10 +15,22 @@ export interface FolderRow {
   updated_at: number;
   /** Who added it, when that was not the owner (docs/folder-sharing.md). */
   created_by?: string | null;
+  /** 1 in an encrypted tree (docs/encrypted-folders.md, sealed.ts). */
+  encrypted?: number | null;
+  /** On the top of an encrypted tree: its folder key, wrapped by the person's own key. */
+  wrapped_key?: string | null;
 }
 
 export function describeFolder(row: FolderRow) {
-  return { id: row.id, name: row.name, parentId: row.parent_id, createdAt: row.created_at, updatedAt: row.updated_at };
+  return {
+    id: row.id,
+    name: row.name,
+    parentId: row.parent_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    ...(row.encrypted ? { encrypted: true } : {}),
+    ...(row.wrapped_key ? { wrappedKey: row.wrapped_key } : {}),
+  };
 }
 
 export const MAX_FOLDER_DEPTH = 32;
@@ -73,8 +87,12 @@ export async function handleFolders(request: Request, id: string | undefined, db
   throw new HttpError(405, 'method not allowed');
 }
 
-/** One folder of a PUT: `name` and `parentId` may be left out of an update to keep them. */
-export type FolderInput = { id?: unknown; name?: unknown; parentId?: unknown };
+/**
+ * One folder of a PUT: `name` and `parentId` may be left out of an update to keep them. `encrypted` (with `wrappedKey`, the folder's own
+ * key) turns encryption on for what goes into it, or (false) off again; inside an encrypted folder a folder is always encrypted and its name
+ * sealed (docs/encrypted-folders.md). A new `wrappedKey` on an encrypted folder replaces its key: the person changed theirs.
+ */
+export type FolderInput = { id?: unknown; name?: unknown; parentId?: unknown; encrypted?: unknown; wrappedKey?: unknown };
 
 /** An item that did not go through, and why (`failure` turns it into what the client sees). */
 export interface Refused {
@@ -99,9 +117,18 @@ export async function putFolders(db: UserDb, items: FolderInput[]): Promise<{ ok
     try {
       if (!ID.test(id)) throw new HttpError(400, 'expected an id');
       const existing = folders.get(id);
-      const name = item.name === undefined && existing ? existing.name : typeof item.name === 'string' ? cleanName(item.name) : null;
       const parentId = item.parentId === undefined ? (existing?.parent_id ?? null) : item.parentId;
-      if (!name || (parentId !== null && typeof parentId !== 'string')) throw new HttpError(400, 'expected { name, parentId }');
+      if (parentId !== null && typeof parentId !== 'string') throw new HttpError(400, 'expected { name, parentId }');
+      // Encryption (sealed.ts): an encrypted folder has its own key; inside one, every folder is encrypted and its name sealed.
+      if (item.encrypted !== undefined && typeof item.encrypted !== 'boolean') throw new HttpError(400, 'expected { encrypted: true | false }');
+      const into = parentId !== null && (encryptedInside(folders.values()).get(parentId) ?? false);
+      const encrypted = (item.encrypted as boolean | undefined) ?? (existing ? !!existing.encrypted : into);
+      requireEncryptedInto(into, { encrypted: encrypted ? 1 : 0 });
+      const wrapped = encrypted ? wrappedKey(item.wrappedKey ?? existing?.wrapped_key) : null;
+      const given = item.name === undefined && existing ? existing.name : item.name;
+      const name = into || (typeof given === 'string' && isSealedName(given)) ? sealedName(given) : typeof given === 'string' ? cleanName(given) : null;
+      if (!name) throw new HttpError(400, 'expected { name, parentId }');
+      if (!encrypted && isSealedName(name)) throw new HttpError(400, 'a folder that is not encrypted has a readable name', 'sealed');
       // The parent must exist, and must not be this folder or inside it.
       let at: string | null = parentId;
       for (let depth = 0; at !== null; depth++) {
@@ -110,13 +137,18 @@ export async function putFolders(db: UserDb, items: FolderInput[]): Promise<{ ok
         if (!parent) throw new HttpError(400, 'no such folder');
         at = parent.parent_id;
       }
-      const row: FolderRow = { id, name, parent_id: parentId, created_at: existing?.created_at ?? now, updated_at: now };
+      const row: FolderRow = { id, name, parent_id: parentId, created_at: existing?.created_at ?? now, updated_at: now, encrypted: encrypted ? 1 : 0, wrapped_key: wrapped };
       folders.set(id, row);
       // Only what this request changes: another in flight (a rename just as it is moved) read the table before this wrote, and the other way round.
-      const changed = [...(item.name !== undefined ? ['name = excluded.name'] : []), ...(item.parentId !== undefined ? ['parent_id = excluded.parent_id'] : []), 'updated_at = excluded.updated_at'];
+      const changed = [
+        ...(item.name !== undefined ? ['name = excluded.name'] : []),
+        ...(item.parentId !== undefined ? ['parent_id = excluded.parent_id'] : []),
+        ...(item.encrypted !== undefined || item.wrappedKey !== undefined ? ['encrypted = excluded.encrypted', 'wrapped_key = excluded.wrapped_key'] : []),
+        'updated_at = excluded.updated_at',
+      ];
       statements.push({
-        sql: `INSERT INTO folders (id, name, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET ${changed.join(', ')}`,
-        params: [id, name, parentId, now, now],
+        sql: `INSERT INTO folders (id, name, parent_id, created_at, updated_at, encrypted, wrapped_key) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET ${changed.join(', ')}`,
+        params: [id, name, parentId, now, now, encrypted ? 1 : 0, wrapped],
       });
       ok.push({ folder: describeFolder(row), created: !existing });
     } catch (error) {
@@ -167,9 +199,15 @@ export async function removeFolders(db: UserDb, ids: string[]): Promise<{ ok: st
   return { ok, failed };
 }
 
-/** Checks a move's destination: a folder of the owner's, or null for the top level. */
-export async function checkFolder(db: UserDb, folderId: unknown): Promise<string | null> {
+/**
+ * Checks a move of documents: the destination is a folder of the owner's (or null, the top level), and an encrypted folder takes only
+ * encrypted documents (sealed.ts). One read of the folders table either way. Returns the destination.
+ */
+export async function checkMove(db: UserDb, from: readonly { encrypted?: number | null }[], folderId: unknown): Promise<string | null> {
   if (folderId !== null && typeof folderId !== 'string') throw new HttpError(400, 'expected { folderId }');
-  if (folderId !== null && !(await db.first('SELECT 1 FROM folders WHERE id = ?', [folderId]))) throw new HttpError(400, 'no such folder');
+  const all = await db.all<FolderRow>('SELECT id, parent_id, encrypted, wrapped_key FROM folders');
+  if (folderId !== null && !all.some((f) => f.id === folderId)) throw new HttpError(400, 'no such folder');
+  const into = folderId !== null && (encryptedInside(all).get(folderId) ?? false);
+  for (const doc of from) requireEncryptedInto(into, doc);
   return folderId;
 }

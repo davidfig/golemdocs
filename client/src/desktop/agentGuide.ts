@@ -66,6 +66,8 @@ share the document with, within seconds. There is no special API: read and write
   app's version is kept in the document's history first, so nothing is lost.
 - **Earlier versions are kept** before each burst of changes, and every ten minutes while changes go on.
 - **Moving or renaming a file** keeps it the same document, with its history. Folders here are folders in the app.
+- **Encrypted documents and folders are not here.** The person keeps them locked with a key of their own, and they never
+  come to this folder, so you can't read or change what is in them.
 - **Deleting a file** sends the document to the trash for 30 days.
 - **If ten or more files vanish at once**, the sync stops and asks the person, because that is usually a drive that isn't
   there. Don't delete or move many files at once without telling them.

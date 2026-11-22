@@ -6,14 +6,14 @@
 // old form; `finishVersions` completes them the next time the document is opened with its key.
 
 import { isSealed } from '@golemdocs/ops';
-import { convertCloudDocument, downloadCloudVersion, listCloudVersions, putFolders, replaceCloudVersion, throwIfFailed, type CloudDocument } from '../cloud.ts';
+import { convertCloudDocument, downloadCloudVersion, listCloudVersions, listDocuments, listFolders, listTrash, putFolders, replaceCloudVersion, throwIfFailed, type CloudDocument } from '../cloud.ts';
 import type { Folder } from '../folders.ts';
 import { openFromCloud } from '../library.ts';
-import { convertLocalVersions, getSaved, listSaved, saveFromCloud, saveSaved, updateLocalFolder, type SavedInfo } from '../storage/local.ts';
+import { convertLocalVersions, deleteSearchIndexes, getSaved, listLocalFolders, listSaved, listTrashedSaved, saveFromCloud, saveSaved, updateLocalFolder, type SavedInfo } from '../storage/local.ts';
 import type { LibraryEntry } from '../sync.ts';
 import { addFoldersToCatalogue, putDocInCatalogue } from '../sync.ts';
 import { opensFromCloud } from '../ui/dashboardFormat.ts';
-import { isEncryptedFolder, newKey, noteFolder, openSealedFile, openSealedName, sealFileWith, sealNameWith } from './session.ts';
+import { isEncryptedFolder, isUnlocked, knowDocuments, knowFolders, knowKey, newKey, noteFolder, openSealedFile, openSealedName, sealFileWith, sealNameWith } from './session.ts';
 
 /** What a conversion needs from the app. */
 export interface ConvertHost {
@@ -61,6 +61,8 @@ export async function encryptDocument(entry: LibraryEntry, host: ConvertHost): P
     bytes: await sealFileWith(key, old),
     name: versionName === null ? null : await sealNameWith(key, versionName),
   }));
+  // Its search index holds its text: the copy's went with the save above; one kept under the account's id goes too.
+  await deleteSearchIndexes([...new Set([entry.key, ...(cloudId ? [cloudId] : [])])]);
   return key;
 }
 
@@ -116,6 +118,57 @@ export async function finishVersions(cloudId: string, key: string | null): Promi
     const name = v.name === null ? undefined : key ? await sealNameWith(key, v.name) : await openSealedName(v.name);
     await replaceCloudVersion(cloudId, v.version, bytes, name);
   }
+}
+
+/**
+ * Conversions one at a time (docs/encrypted-folders.md): what the person asks for and finishing one cut short (`finishEncrypting`) would
+ * otherwise convert the same document twice.
+ */
+let queue: Promise<unknown> = Promise.resolve();
+let queued = 0;
+export function exclusive<T>(work: () => Promise<T>): Promise<T> {
+  queued++;
+  const run = queue.then(work).finally(() => queued--);
+  queue = run.catch(() => undefined);
+  return run;
+}
+
+/**
+ * Finishes encrypting folders whose encryption was cut short (a tab closed, the network lost): an encrypted folder is marked first, then
+ * what is in it is converted one at a time, so anything left readable in one is encrypted now, and the folders inside it too. Only while
+ * unlocked (the server refuses readable saves to what is left meanwhile). Answers whether it did anything. `folders` and `entries` are the
+ * library as shown.
+ */
+export async function finishEncrypting(folders: readonly Folder[], entries: readonly LibraryEntry[], host: ConvertHost): Promise<boolean> {
+  if (!isUnlocked() || queued > 0) return false;
+  const readable = (e: LibraryEntry) => !e.encrypted && !e.locked && !e.local?.encrypted && !e.cloud?.encrypted;
+  const unfinished = folders.filter(
+    (top) => top.encrypted && !top.locked && !isEncryptedFolder(top.parentId) && (foldersUnder(folders, top.id).some((f) => !f.encrypted) || entriesIn(top, folders, entries).some(readable)),
+  );
+  if (!unfinished.length) return false;
+  await exclusive(async () => {
+    for (const top of unfinished) await encryptFolder(top, folders, entries, host);
+  });
+  return true;
+}
+
+/**
+ * Learns, for certain, what the person has encrypted: the account's documents, folders and trash (signed in with sync), and this browser's
+ * copies, folders and trash. Before a key is made or first used to encrypt with (`ensureKey`, ui.ts), so a second key is never made beside
+ * the first because the library had not been listed. Throws when the account can't be reached.
+ */
+export async function learnEncrypted(host: ConvertHost): Promise<void> {
+  const [saved, trashed] = await Promise.all([listSaved(), listTrashedSaved()]);
+  for (const t of trashed) knowKey(t.info.wrappedKey);
+  for (const s of saved) knowKey(s.wrappedKey);
+  if (!host.cloud) {
+    knowFolders(await listLocalFolders());
+    return;
+  }
+  const [docs, folders, trash] = await Promise.all([listDocuments(), listFolders(), listTrash()]);
+  knowDocuments(docs);
+  knowFolders(folders);
+  for (const t of trash) knowKey(t.wrappedKey);
 }
 
 /** The folders under `root` (not itself), parents before children. */

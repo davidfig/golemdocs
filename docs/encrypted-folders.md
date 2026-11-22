@@ -42,11 +42,18 @@ many versions history keeps, and the shape of the folder tree.
   wrapped (AES-KW) by the personal key next to it: on the server for an account's, in IndexedDB for a guest's. Items move freely, between
   folders and into the account at sign-in, with nothing to convert. Changing the personal key rewraps item keys and re-encrypts nothing.
 - **Lost key, lost documents.** No recovery and no reset. Setup does not finish until the key has been pasted back.
+- **One key, never a second by accident.** New item keys are made only with a personal key known to be the person's (`verified`,
+  `session.ts`): one made here, or one seen to open something they encrypted. Before a key is set up or first used to encrypt, what they
+  have encrypted is asked of the account (`learnEncrypted`, `convert.ts`), not taken from the library as last listed; offline, setup is
+  refused rather than risk a second key. A key typed in while nothing encrypted is known unlocks, but encrypts nothing until confirmed.
 - **Locked until unlocked.** A locked encrypted document shows in its folder as "Encrypted document" with a padlock, a subfolder of an
   encrypted folder as "Encrypted folder"; opening either asks for the key. Unlocking opens everything that key encrypted.
 - **Unlocked only for the session.** A session ends when the page reloads, the tab closes or the app quits; on Lock; after 15 minutes with
   nothing done (to be set in Options). Locking saves the open encrypted document, closes it, and forgets every decrypted thing.
 - **Signed in or not**, the same.
+- **Encrypting ends sharing.** Encrypting a document removes its shares and public link (and a folder's, its folder shares and link), ends
+  its room (which forgets the edits it kept), and deletes its thumbnail and search index, in the account and in this browser (with its
+  memory image and merge base). Decrypting it later gives nobody access back.
 - **Never shared, never in a room, never in the vault.** An encrypted document or folder cannot be shared or have a public link, and a share
   of an ordinary folder does not reach the encrypted ones in it. It never joins a room (two of the person's own devices editing it at once
   merge as offline edits do). It is left out of the desktop vault, whose guide for agents says so: a file the vault had for a document
@@ -103,7 +110,9 @@ vault folder… in its menu, in the desktop app only, while it has a vault folde
 
 - **Schema** (user database): `documents.encrypted` and `documents.wrapped_key`; `folders.encrypted` (its contents are encrypted) and
   `folders.wrapped_key` (its own name is sealed); the trash row keeps both of a document's; `versions.sealed` marks a version kept sealed.
-- **What it checks:** an encrypted document's saves, names and versions must be sealed; anything created in or moved into an encrypted
+- **What it checks:** an encrypted document's saves, names and versions must be sealed, a whole file with the document's own key (the key id
+  in its header), and only its owner saves it; an ordinary document left in an encrypted folder (its folder's encryption cut short) takes
+  no readable save, only `?encrypt=`; anything created in or moved into an encrypted
   folder must be encrypted (a document with its key; a folder with a sealed name and key). It never reads either.
 - **Converting** a document is a save with `?encrypt=<wrappedKey>` (sealed bytes and name) or `?decrypt=1` (readable ones), and no
   checkpoint of what it replaces (that would keep a readable copy). Each kept version is then replaced in place, sealed or opened
@@ -120,7 +129,13 @@ vault folder… in its menu, in the desktop app only, while it has a vault folde
 - **The cloud client** sends every name of an encrypted document or folder sealed, and a new one's `wrappedKey`.
 - **The library** (`encryption/present.ts`) shows names opened while unlocked, placeholders with a padlock while locked.
 - **Conversion** (`encryption/convert.ts`): a document's file, name and every version, here and in the account; a folder's subfolders and
-  documents, one at a time, with progress.
+  documents, one at a time, with progress. Conversions run one at a time (`exclusive`). A folder's encryption cut short is finished while
+  unlocked, a moment after the library lists it (`finishEncrypting`, from `main.ts`); until then, uploads of what is left readable in it wait
+  in this browser (`sendToCloud`, `library.ts`).
+- **Sealing checks, not shapes:** `sealFileWith` and `sealNameWith` keep something as it is only if it is sealed with that item's key and
+  opens with it (while locked, if it names the key); a readable file starting `GDE1`, or a name starting `gde1.`, is sealed like any other.
+- **A readable copy of a document encrypted elsewhere** that has changes of its own (another device, offline) is encrypted here with a key
+  of its own and sent as an encrypted conflicted copy (`keepEncrypted`, `library.ts`); while locked it stays here, unsent.
 
 ## Status
 
@@ -128,7 +143,7 @@ vault folder… in its menu, in the desktop app only, while it has a vault folde
 
 - Code: `client/src/encryption/` (`crypto.ts`, `session.ts`, `present.ts`, `convert.ts`, `ui.ts`), `storage/local.ts`, `cloud.ts`,
   `library.ts`, `folderOps.ts`, the Files pane and File › Open; `server/src/sealed.ts`, `documents.ts`, `folders.ts`, `versions.ts`.
-- Tests: `client/test/encryption.test.ts`, `client/test/encryptedFolders.test.ts`, `client/test/vaultEncrypted.test.ts`, `client/test/vaultLocation.test.ts`, `server/test/encryption.test.ts`, `e2e/shell/vault-decrypt.spec.ts`,
+- Tests: `client/test/encryption.test.ts`, `client/test/encryptedFolders.test.ts`, `client/test/encryptionKeys.test.ts`, `client/test/vaultEncrypted.test.ts`, `client/test/vaultLocation.test.ts`, `server/test/encryption.test.ts`, `e2e/shell/vault-decrypt.spec.ts`,
   `e2e/collab/encrypted-folders.spec.ts`, `e2e/accessibility/encrypted-folders.spec.ts`.
 
 **Not done yet:** large documents are sealed whole and then chunked, so every save sends every chunk (deterministic encrypted chunks

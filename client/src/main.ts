@@ -22,7 +22,7 @@ import { adoptGuestFolders, createFolder, renameEntry, setLinkKeeper } from './f
 import { encryptedDocumentKey, foldersInVault, isEncryptedFolder, isSealedCopy, isUnlocked, knowKey, onBeforeLock, onSessionChange, onVaultChange, openSealedName, setDecryptedInVault, touch as touchEncryption } from './encryption/session.ts';
 import { isSealedName } from '@golemdocs/ops';
 import { setEncryptionHost, showUnlock } from './encryption/ui.ts';
-import { finishVersions } from './encryption/convert.ts';
+import { finishEncrypting, finishVersions } from './encryption/convert.ts';
 import { conflictCopyName, keepAsConflictCopy, openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud, type MergeHost } from './library.ts';
 import {
   adoptGuestDocuments,
@@ -3048,6 +3048,22 @@ setEncryptionHost({
     // The vault takes what was encrypted out, or what was decrypted in, now rather than at its next look at the account.
     void vaultService?.syncAfterCurrent();
   },
+});
+// An encrypted folder whose encryption was cut short (a tab closed, the network lost) is finished while unlocked, a moment after the
+// library lists it: what was left readable in it is encrypted now (convert.ts `finishEncrypting`).
+let finishTimer: number | undefined;
+library.subscribe(() => {
+  if (!isUnlocked()) return;
+  window.clearTimeout(finishTimer);
+  finishTimer = window.setTimeout(() => {
+    void finishEncrypting(library.folders, library.entries, { owner: account?.id, cloud: !!account })
+      .then((did) => {
+        if (!did) return;
+        void library.refresh();
+        void vaultService?.syncAfterCurrent();
+      })
+      .catch((error) => console.error('finishing encryption', error));
+  }, 2000);
 });
 // Anything done in the app keeps the session from locking for being idle.
 for (const type of ['pointerdown', 'keydown', 'wheel'] as const) window.addEventListener(type, () => touchEncryption(), { capture: true, passive: true });

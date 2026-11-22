@@ -5,15 +5,15 @@
 
 import { documentIndex } from './docIndex.ts';
 import { DELTA, applyDelta, deleteChunkList, deleteChunks, deltaSize, documentResponse, isChunked, previousManifest, readDocument } from './fileStore.ts';
-import { DOCX, docxKey, historyKey, thumbKey } from './keys.ts';
+import { DOCX, docxKey, historyKey, indexKey, thumbKey } from './keys.ts';
 import type { Env } from './cf.ts';
 import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, perChunk, type Failure } from './http.ts';
 import { checkMove, type FolderRow } from './folders.ts';
-import { folderEncrypts, refuseEncrypted, requireOpen, requireSealed, sealedName, wrappedKey } from './sealed.ts';
+import { folderEncrypts, refuseEncrypted, requireOpen, requireSealedWith, sealedName, wrappedKey } from './sealed.ts';
 import { describeTrashed, purge, purgeExpired, PURGING, trashStatements, type TrashRow } from './trash.ts';
 import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, replaceVersion, retainedChunks, storedSize, versionsOf, type VersionRow } from './versions.ts';
 import { editableFolder, forgetFolders } from './folderShares.ts';
-import { accessFor, canWrite, dropPublicLink, forgetDocuments, makePublicLink, person, publicLinkOf, publicShare, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
+import { accessFor, canWrite, dropPublicLink, dropSharing, forgetDocuments, makePublicLink, person, publicLinkOf, publicShare, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
 import { endRooms, kickFromRoom, rejoinRoom, roomAllowsSave, roomSaved } from './roomGate.ts';
 import { requireRoom } from './storage.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
@@ -461,7 +461,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     const key = encrypted ? wrappedKey(url.searchParams.get('key')) : null;
     const delta = isDelta(request);
     const bytes = delta ? await readBody(request, MAX_DELTA_BYTES, 'document') : await readDocx(request);
-    if (encrypted && !delta) requireSealed(bytes);
+    if (encrypted && !delta) requireSealedWith(bytes, key);
     const docId = crypto.randomUUID();
     const name = encrypted ? sealedName(url.searchParams.get('name')) : (cleanName(url.searchParams.get('name')) ?? 'Untitled.docx');
     await requireRoom(env, owner, db, delta ? deltaSize(bytes, MAX_DELTA_BYTES) : bytes.byteLength, { own: owner === userId });
@@ -702,7 +702,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
         if (role !== 'owner') throw new HttpError(403, 'only the owner can encrypt or decrypt this document');
         requireStorage();
         const bytes = new Uint8Array(await readDocx(request));
-        if (row.encrypted) requireSealed(bytes);
+        if (row.encrypted) requireSealedWith(bytes, row.wrapped_key);
         else requireOpen(bytes);
         const given = url.searchParams.get('name');
         const name = given === null ? kept.name : row.encrypted ? sealedName(given) : cleanName(given);
@@ -814,7 +814,14 @@ export async function handleDocuments(request: Request, env: Env, userId: string
       if (decrypting && !row.encrypted) throw new HttpError(409, 'it is not encrypted');
       if (decrypting && (await folderEncrypts(db, row.folder_id))) throw new HttpError(409, 'everything in an encrypted folder is encrypted: move it out first', 'encrypted');
     }
+    // Only its owner saves an encrypted document: nobody else can have its key, and a share of one is ended when it is encrypted.
+    if (row.encrypted && role !== 'owner') throw new HttpError(403, 'only the owner can save an encrypted document');
     const encrypted = encrypting !== null || (!!row.encrypted && !decrypting);
+    // An ordinary document left in an encrypted folder (its folder's encryption was cut short) takes no readable save: it is encrypted
+    // first (`?encrypt=`), which the browser finishes when it is next unlocked (docs/encrypted-folders.md).
+    if (!encrypted && !decrypting && row.folder_id !== null && (await folderEncrypts(db, row.folder_id))) {
+      throw new HttpError(409, 'everything in an encrypted folder is encrypted: encrypt it first', 'encrypted');
+    }
     const key = encrypting !== null ? wrappedKey(encrypting) : encrypted ? (row.wrapped_key ?? null) : null;
     // Someone editing a shared folder renames only what they added (docs/folder-sharing.md); their saves keep the name.
     const given = url.searchParams.get('name');
@@ -823,7 +830,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     if (renaming !== null && renaming !== row.name && access.folder && row.created_by !== userId) throw new HttpError(403, 'only the owner can rename this document');
     const delta = isDelta(request);
     const body = delta ? await readBody(request, MAX_DELTA_BYTES, 'document') : await readDocx(request);
-    if (encrypted && !delta) requireSealed(body);
+    if (encrypted && !delta) requireSealedWith(body, key);
     if (decrypting) requireOpen(body);
     const name = renaming ?? row.name;
     const nextSize = delta ? deltaSize(body, MAX_DELTA_BYTES) : body.byteLength;
@@ -856,7 +863,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     // base it also has to be the version the save started from; and the row may be gone (deleted
     // meanwhile), which RETURNING tells apart from success.
     const updated = await db.run<{ updated_at: number }>(
-      `UPDATE documents SET name = ?, size = ?, encrypted = ?, wrapped_key = ?, updated_at = MAX(?, updated_at + 1) WHERE id = ?${base !== null ? ' AND updated_at = ?' : ''} RETURNING updated_at`,
+      `UPDATE documents SET name = ?, size = ?, encrypted = ?, wrapped_key = ?, thumb_at = ${encrypting !== null ? 'NULL' : 'thumb_at'}, updated_at = MAX(?, updated_at + 1) WHERE id = ?${base !== null ? ' AND updated_at = ?' : ''} RETURNING updated_at`,
       [name, size, encrypted ? 1 : 0, key, Date.now(), id, ...(base !== null ? [row.updated_at] : [])],
     );
     if (!updated[0]) {
@@ -872,6 +879,14 @@ export async function handleDocuments(request: Request, env: Env, userId: string
       }
       throw new HttpError(404, 'not found');
     }
+    // Encrypted now (docs/encrypted-folders.md): nothing readable made from it stays, and nobody else keeps a way in. Its thumbnail and
+    // search index (its text) go; its shares and public link end, so decrypting it later gives no access back; a room it had is ended,
+    // which forgets the edits it kept.
+    if (encrypting !== null) {
+      await env.FILES.delete([thumbKey(ownerId, id), indexKey(ownerId, id)]);
+      await dropSharing(env, id);
+      await endRooms(env, [id]);
+    }
     // The save is in: what it replaced is cleanup, which can wait until after the response.
     // Chunks a checkpoint still names stay; then the checkpoints the rules no longer keep go.
     const cleanup = (async () => {
@@ -884,7 +899,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     await roomSaved(env, id, updated[0].updated_at).catch((error) => console.error('telling the room failed', error));
     if (defer) defer(cleanup);
     else await cleanup;
-    return json(describe({ ...row, name, size, encrypted: encrypted ? 1 : 0, wrapped_key: key, updated_at: updated[0].updated_at }, role));
+    return json(describe({ ...row, name, size, encrypted: encrypted ? 1 : 0, wrapped_key: key, ...(encrypting !== null ? { thumb_at: null } : {}), updated_at: updated[0].updated_at }, role));
   }
 
   // PATCH /api/documents/:id { folderId?, name? }: moves it to a folder (null: the top level),

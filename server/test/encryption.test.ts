@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, test } from 'node:test';
-import { SEALED_MAGIC } from '@golemdocs/ops';
+import { fromBase64Url, SEALED_MAGIC, toBase64Url } from '@golemdocs/ops';
 import { DELTA } from '../src/fileStore.ts';
 import { DOCX, ORIGIN, world, type World } from './harness.ts';
 
@@ -31,17 +31,24 @@ const MIN = 60_000;
 const uuid = () => crypto.randomUUID();
 const json = (value: unknown) => ({ body: JSON.stringify(value), type: 'application/json' });
 const call = (method: string, path: string, init: { body?: BodyInit; type?: string; headers?: Record<string, string> } = {}, as = OWNER) => w.call(as, method, path, init);
-/** Something shaped like a sealed file (the server only looks at the shape). */
-const sealed = (fill = 9, length = 100) => {
+/** Something shaped like a sealed file (the server only looks at the shape, and at which key it names: `k`'s, when given). */
+const sealed = (fill = 9, length = 100, k?: string) => {
   const out = new Uint8Array(length).fill(fill);
   out.set(SEALED_MAGIC, 0);
+  return k ? stamp(out, k) : out;
+};
+/** Sealed bytes made to name the key `k` (a wrapped key's first 16 bytes are its id), as the browser's are. */
+const stamp = (bytes: Uint8Array, k: string) => {
+  const out = bytes.slice();
+  const id = fromBase64Url(k);
+  if (out[0] === SEALED_MAGIC[0] && id && id.byteLength >= 16) out.set(id.subarray(0, 16), 4);
   return out;
 };
 const plain = (fill = 1) => new Uint8Array(3000).fill(fill);
 let counter = 0;
 const sealedName = () => `gde1.${'A'.repeat(40)}${(counter++).toString(36)}`;
-/** Something shaped like a wrapped item key: 75 base64url characters. */
-const key = () => `${'k'.repeat(70)}${(10000 + counter++).toString(36).padStart(5, '0')}`.slice(-75);
+/** Something shaped like a wrapped item key: 56 random bytes in base64url (75 characters), the first 16 its id. */
+const key = () => toBase64Url(crypto.getRandomValues(new Uint8Array(56)));
 
 const folder = async (name: string, parentId: string | null = null, extra: Record<string, unknown> = {}) => {
   const id = uuid();
@@ -49,7 +56,7 @@ const folder = async (name: string, parentId: string | null = null, extra: Recor
   return { status: response.status, id };
 };
 const create = (bytes: Uint8Array, name: string, options: { folder?: string; key?: string } = {}) =>
-  call('POST', `/api/documents?name=${encodeURIComponent(name)}${options.folder ? `&folder=${options.folder}` : ''}${options.key ? `&key=${options.key}` : ''}`, { body: bytes as BodyInit, type: DOCX });
+  call('POST', `/api/documents?name=${encodeURIComponent(name)}${options.folder ? `&folder=${options.folder}` : ''}${options.key ? `&key=${options.key}` : ''}`, { body: (options.key ? stamp(bytes, options.key) : bytes) as BodyInit, type: DOCX });
 async function encryptedDoc(folderId?: string): Promise<any> {
   const response = await create(sealed(), sealedName(), { key: key(), ...(folderId ? { folder: folderId } : {}) });
   assert.equal(response.status, 201, await response.clone().text());
@@ -69,11 +76,11 @@ test('a document is encrypted when it is made with its key: sealed file and name
   assert.equal(made.encrypted, true);
   assert.equal(made.wrappedKey, k);
   assert.equal((await docs()).find((d) => d.id === made.id).wrappedKey, k, 'listed with its key');
-  assert.deepEqual(new Uint8Array(await (await call('GET', `/api/documents/${made.id}`)).arrayBuffer()), sealed());
+  assert.deepEqual(new Uint8Array(await (await call('GET', `/api/documents/${made.id}`)).arrayBuffer()), sealed(9, 100, k));
   // Saves and renames stay sealed.
   assert.equal((await call('PUT', `/api/documents/${made.id}`, { body: plain() as BodyInit, type: DOCX })).status, 400);
   assert.equal((await call('PATCH', `/api/documents/${made.id}`, json({ name: 'Visible.docx' }))).status, 400);
-  assert.equal((await call('PUT', `/api/documents/${made.id}?base=${made.updatedAt}`, { body: sealed(3) as BodyInit, type: DOCX })).status, 200);
+  assert.equal((await call('PUT', `/api/documents/${made.id}?base=${made.updatedAt}`, { body: sealed(3, 100, k) as BodyInit, type: DOCX })).status, 200);
   // Moved anywhere: it carries its own key.
   const elsewhere = (await folder('Elsewhere')).id;
   assert.equal((await call('PATCH', `/api/documents/${made.id}`, json({ folderId: elsewhere }))).status, 200);
@@ -93,8 +100,8 @@ test('converting a document: its file and name, then each kept version in place,
   // Encrypt: the readable copy it replaces is not kept as a version.
   assert.equal((await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${name}&base=${doc.updatedAt}`, { body: plain(5) as BodyInit, type: DOCX })).status, 400, 'sealed bytes only');
   assert.equal((await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=Plan.docx&base=${doc.updatedAt}`, { body: sealed() as BodyInit, type: DOCX })).status, 400, 'a sealed name only');
-  assert.equal((await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${name}&base=${doc.updatedAt}`, { body: sealed() as BodyInit, type: DOCX }, ALICE)).status, 404, 'the owner’s call');
-  const converted = await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${name}&base=${doc.updatedAt}`, { body: sealed() as BodyInit, type: DOCX });
+  assert.equal((await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${name}&base=${doc.updatedAt}`, { body: sealed(9, 100, k) as BodyInit, type: DOCX }, ALICE)).status, 404, 'the owner’s call');
+  const converted = await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${name}&base=${doc.updatedAt}`, { body: sealed(9, 100, k) as BodyInit, type: DOCX });
   assert.equal(converted.status, 200);
   const after = (await converted.json()) as any;
   assert.equal(after.encrypted, true);
@@ -104,17 +111,17 @@ test('converting a document: its file and name, then each kept version in place,
   const first = before[0]!;
   assert.equal((await call('PUT', `/api/documents/${doc.id}/versions/${first.version}`, { body: plain() as BodyInit, type: DOCX })).status, 400);
   for (const v of before) {
-    const response = await call('PUT', `/api/documents/${doc.id}/versions/${v.version}${v.name ? `?name=${sealedName()}` : ''}`, { body: sealed(v.version % 200) as BodyInit, type: DOCX });
+    const response = await call('PUT', `/api/documents/${doc.id}/versions/${v.version}${v.name ? `?name=${sealedName()}` : ''}`, { body: sealed(v.version % 200, 100, k) as BodyInit, type: DOCX });
     assert.equal(response.status, 200);
   }
   const resealed = await versions(doc.id);
   assert.deepEqual(resealed.map((v) => v.version), before.map((v) => v.version));
   assert.ok(resealed.every((v) => v.sealed));
   assert.ok(resealed.every((v) => v.name === null || v.name.startsWith('gde1.')));
-  assert.deepEqual(new Uint8Array(await (await call('GET', `/api/documents/${doc.id}/versions/${first.version}`)).arrayBuffer()), sealed(first.version % 200));
+  assert.deepEqual(new Uint8Array(await (await call('GET', `/api/documents/${doc.id}/versions/${first.version}`)).arrayBuffer()), sealed(first.version % 200, 100, k));
   // A save of the encrypted document keeps a sealed version.
   clock += 30 * MIN;
-  const saved = (await (await call('PUT', `/api/documents/${doc.id}?base=${after.updatedAt}`, { body: sealed(7) as BodyInit, type: DOCX })).json()) as any;
+  const saved = (await (await call('PUT', `/api/documents/${doc.id}?base=${after.updatedAt}`, { body: sealed(7, 100, k) as BodyInit, type: DOCX })).json()) as any;
   assert.ok((await versions(doc.id)).find((v) => v.version === after.updatedAt)?.sealed);
   // Decrypt: readable file and name, and versions back one by one.
   assert.equal((await call('PUT', `/api/documents/${doc.id}?decrypt=1&name=Plan.docx&base=${saved.updatedAt}`, { body: sealed() as BodyInit, type: DOCX })).status, 400);
@@ -226,4 +233,57 @@ test('a share of an ordinary folder reaches neither the encrypted documents in i
   const tree = JSON.stringify(await (await call('GET', `/api/shared-folders/${ownerId}/${projects}/tree`, {}, ALICE)).json());
   assert.ok(tree.includes(open));
   assert.ok(!tree.includes(vault) && !tree.includes(loose.id) && !tree.includes(inside.id));
+});
+
+test('encrypting a document drops what was made readable from it, and ends its shares, its link and its room for good', async () => {
+  const doc = (await (await create(plain(), 'Plan.docx')).json()) as any;
+  const ownerKey = [...w.objects.keys()].find((k) => k.endsWith(`/${doc.id}.docx`))!.split('/')[0];
+  assert.equal((await call('PUT', `/api/documents/${doc.id}/thumbnail`, { body: new Uint8Array([1, 2]) as BodyInit, type: 'image/webp' })).status, 200);
+  assert.equal((await call('GET', `/api/documents/${doc.id}/index`)).status, 200);
+  assert.ok(w.objects.has(`${ownerKey}/${doc.id}.thumb`) && w.objects.has(`${ownerKey}/${doc.id}.idx`));
+  assert.equal((await call('PUT', `/api/documents/${doc.id}/shares`, json({ email: ALICE, role: 'editor' }))).status, 200);
+  const link = ((await (await call('PUT', `/api/documents/${doc.id}/link`)).json()) as any).token;
+  assert.ok(link);
+  const k = key();
+  const current = (await docs()).find((d) => d.id === doc.id);
+  const converted = await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${sealedName()}&base=${current.updatedAt}`, { body: sealed(9, 100, k) as BodyInit, type: DOCX });
+  assert.equal(converted.status, 200);
+  assert.equal(((await converted.json()) as any).thumbAt, null);
+  assert.ok(!w.objects.has(`${ownerKey}/${doc.id}.thumb`), 'the thumbnail shows its first page');
+  assert.ok(!w.objects.has(`${ownerKey}/${doc.id}.idx`), 'the search index holds its text');
+  assert.ok(w.roomCalls.some((c) => c.doc === doc.id && c.path === '/end'), 'its room forgets the edits it kept');
+  assert.equal((await call('GET', `/api/documents/${doc.id}`, {}, ALICE)).status, 404);
+  // Decrypted again, nobody it was shared with is let back in.
+  const encrypted = (await docs()).find((d) => d.id === doc.id);
+  assert.equal((await call('PUT', `/api/documents/${doc.id}?decrypt=1&name=Plan.docx&base=${encrypted.updatedAt}`, { body: plain(2) as BodyInit, type: DOCX })).status, 200);
+  assert.equal((await call('GET', `/api/documents/${doc.id}`, {}, ALICE)).status, 404);
+  assert.equal(((await (await call('GET', `/api/documents/${doc.id}/link`)).json()) as any).token, null);
+});
+
+test('encrypting a folder ends its shares and its public link', async () => {
+  const projects = (await folder('Projects')).id;
+  const inside = ((await (await create(plain(), 'Open.docx', { folder: projects })).json()) as any).id;
+  assert.equal((await call('PUT', `/api/folders/${projects}/shares`, json({ email: ALICE, role: 'editor' }))).status, 200);
+  assert.equal((await call('PUT', `/api/folders/${projects}/link`)).status, 200);
+  assert.equal((await call('PUT', `/api/folders/${projects}`, json({ encrypted: true, wrappedKey: key() }))).status, 200);
+  assert.equal((await call('PUT', `/api/folders/${projects}`, json({ encrypted: false }))).status, 200);
+  assert.equal((await call('GET', `/api/documents/${inside}`, {}, ALICE)).status, 404, 'decrypted again, the share does not come back');
+  assert.equal(((await (await call('GET', `/api/folders/${projects}/link`)).json()) as any).token ?? null, null);
+});
+
+test('an encrypted document is saved only sealed with its own key; one left readable in an encrypted folder only by being encrypted', async () => {
+  const k = key();
+  const doc = (await (await create(sealed(), sealedName(), { key: k })).json()) as any;
+  assert.equal((await call('PUT', `/api/documents/${doc.id}?base=${doc.updatedAt}`, { body: sealed(4, 100, key()) as BodyInit, type: DOCX })).status, 400, 'sealed with another key');
+  assert.equal((await call('PUT', `/api/documents/${doc.id}?base=${doc.updatedAt}`, { body: sealed(4) as BodyInit, type: DOCX })).status, 400, 'only shaped like a sealed file');
+  assert.equal((await call('PUT', `/api/documents/${doc.id}?base=${doc.updatedAt}`, { body: sealed(4, 100, k) as BodyInit, type: DOCX })).status, 200);
+  // A folder encrypted while a document in it was not yet (its encryption cut short): that document takes no readable save.
+  const taxes = (await folder('Taxes')).id;
+  const left = (await (await create(plain(), 'Left.docx', { folder: taxes })).json()) as any;
+  assert.equal((await call('PUT', `/api/folders/${taxes}`, json({ encrypted: true, wrappedKey: key() }))).status, 200);
+  const refused = await call('PUT', `/api/documents/${left.id}?base=${left.updatedAt}`, { body: plain(3) as BodyInit, type: DOCX });
+  assert.equal(refused.status, 409);
+  assert.equal(await codeOf(refused), 'encrypted');
+  const k2 = key();
+  assert.equal((await call('PUT', `/api/documents/${left.id}?encrypt=${k2}&name=${sealedName()}&base=${left.updatedAt}`, { body: sealed(9, 100, k2) as BodyInit, type: DOCX })).status, 200);
 });

@@ -13,9 +13,9 @@ import { announce } from '../ui/announce.ts';
 import { h } from '../ui/dom.ts';
 import { dialogTitleBar, showChoice, showDialog } from '../ui/popup.ts';
 import type { PopupItem } from '../ui/popupMenu.ts';
-import { decryptDocument, decryptFolder, encryptDocument, encryptFolder, entriesIn, type ConvertHost } from './convert.ts';
+import { decryptDocument, decryptFolder, encryptDocument, encryptFolder, entriesIn, exclusive, learnEncrypted, type ConvertHost } from './convert.ts';
 import { KeyError } from './crypto.ts';
-import { createKey, decryptedInVault, hasEncrypted, isEncryptedFolder, isUnlocked, lock, lockSession, setDecryptedInVault, unlock } from './session.ts';
+import { confirmKeys, createKey, currentKey, decryptedInVault, hasEncrypted, isEncryptedFolder, isUnlocked, lock, lockSession, setDecryptedInVault, unlock } from './session.ts';
 import { syncedService } from '../desktop/vaultLocation.ts';
 
 /** A modal form with the shared dialog parts: resolves with what `submit` returns, or null for Cancel, Escape or the close button. */
@@ -119,10 +119,24 @@ export async function showSetup(): Promise<boolean> {
   return done === true;
 }
 
-/** Makes sure a key is unlocked to encrypt with: the person's, if they have encrypted anything, else a new one set up now. */
+/**
+ * Makes sure a key is unlocked to encrypt with: the person's, if they have encrypted anything, else a new one set up now. What they have
+ * encrypted is checked with the account first, not taken from the library as last listed: offline, or before it is listed, it would look
+ * like nothing, and a second key would be made (or a mistyped one used) beside the one their documents need.
+ */
 export async function ensureKey(): Promise<boolean> {
-  if (isUnlocked()) return true;
-  return hasEncrypted() ? showUnlock() : showSetup();
+  if (!host) return false;
+  // A key made here or seen to open what they encrypted needs no check.
+  if (currentKey()) return true;
+  try {
+    await learnEncrypted(host.convert());
+  } catch {
+    showDialog(t('encryption.setupTitle'), h('p', { text: t('encryption.checkFailed') }));
+    return false;
+  }
+  if (isUnlocked() && (await confirmKeys())) return true;
+  if (!hasEncrypted()) return showSetup();
+  return (await showUnlock()) && confirmKeys();
 }
 
 /** Locks everything now (after saving what is open, if it is encrypted). */
@@ -172,7 +186,7 @@ async function converting(title: string, word: 'encrypt' | 'decrypt', entries: r
   let failed: unknown = null;
   try {
     await host.before(entries);
-    await work((done, total) => shown.update(t(word === 'encrypt' ? 'encryption.progress' : 'encryption.progressDecrypt', { done, total })));
+    await exclusive(() => work((done, total) => shown.update(t(word === 'encrypt' ? 'encryption.progress' : 'encryption.progressDecrypt', { done, total }))));
   } catch (error) {
     failed = error;
   } finally {

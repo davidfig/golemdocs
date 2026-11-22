@@ -66,8 +66,12 @@ share the document with, within seconds. There is no special API: read and write
   app's version is kept in the document's history first, so nothing is lost.
 - **Earlier versions are kept** before each burst of changes, and every ten minutes while changes go on.
 - **Moving or renaming a file** keeps it the same document, with its history. Folders here are folders in the app.
-- **Encrypted documents and folders are not here.** The person keeps them locked with a key of their own, and they never
-  come to this folder, so you can't read or change what is in them.
+- **Encrypted documents and folders are not here**, unless the person decrypts an encrypted folder into this one for a while,
+  for you to work on. Its files are then here like any other, and what you change, add, rename or delete in it is encrypted
+  before it leaves this computer. A document moved into it is encrypted; one moved out of it stays encrypted. When the person
+  locks Golem Docs everything in it disappears, files that aren't documents included, so finish what you are doing in it
+  first and keep no working files of your own there (names starting with a dot are not cleaned up, so never put any there).
+  A file named \`<name> (encrypted).md\` stands in for an encrypted folder that isn't here.
 - **Deleting a file** sends the document to the trash for 30 days.
 - **If ten or more files vanish at once**, the sync stops and asks the person, because that is usually a drive that isn't
   there. Don't delete or move many files at once without telling them.

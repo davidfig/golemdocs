@@ -47,7 +47,7 @@ export interface VaultCloud {
    * the vault still has for one is taken out; `notes` are written in place of encrypted folders; `encryptedPaths` are where those folders
    * would be, so a folder of that name on disk is not made in the account.
    */
-  list(): Promise<{ docs: CloudDoc[]; folders: CloudFolder[]; encrypted?: string[]; notes?: { path: string; text: string }[]; encryptedPaths?: string[] }>;
+  list(): Promise<{ docs: CloudDoc[]; folders: CloudFolder[]; encrypted?: string[]; notes?: { path: string; text: string }[]; encryptedPaths?: string[]; decryptedPaths?: string[] }>;
   download(id: string): Promise<Uint8Array>;
   /** Replaces a document's bytes, whatever the account has now. */
   replace(id: string, bytes: Uint8Array): Promise<{ updatedAt: number }>;
@@ -107,6 +107,11 @@ interface State {
   mirrored?: boolean;
   /** The notes written in place of encrypted folders (see `VaultCloud.list`), so one no longer wanted is removed. */
   notes?: string[];
+  /**
+   * The encrypted folders decrypted into the vault at the last sync (their vault paths): when one no longer is, whatever is left under it
+   * (files the vault doesn't sync) is removed, here or at the first sync after a quit or a crash.
+   */
+  decrypted?: string[];
 }
 
 /** Where a running sync is, for the dialog: the step, and for the last one how many of the changes are done and which file is being worked on. */
@@ -265,8 +270,22 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
     outOfPlan.add(path);
   }
   state.notes = written.length ? written : undefined;
-  local = local.filter((f) => !outOfPlan.has(f.path));
   const encryptedPaths = listing.encryptedPaths ?? [];
+  const under = (path: string, dirs: readonly string[]) => dirs.some((dir) => path.startsWith(`${dir}/`));
+  // A file under an encrypted folder that isn't decrypted into the vault is never made a readable document: it is left out of the plan
+  // (one made there just before a quit is taken in, encrypted, the next time the folder is decrypted into the vault).
+  for (const file of local) if (under(file.path, encryptedPaths)) outOfPlan.add(file.path);
+  // A folder no longer decrypted into the vault: the files left under it that the vault doesn't sync (no document holds them) are
+  // readable too, and go. Documents' files went above, or are held until their changes can be saved.
+  const decryptedNow = listing.decryptedPaths ?? [];
+  const ended = (state.decrypted ?? []).filter((dir) => !decryptedNow.includes(dir));
+  for (const file of scanned) {
+    if (!under(file.path, ended) || notes.has(file.path) || codec.kept(baseName(file.path))) continue;
+    await disk.remove(file.path).catch(() => undefined);
+    report.deletedHere++;
+  }
+  state.decrypted = decryptedNow.length ? decryptedNow : undefined;
+  local = local.filter((f) => !outOfPlan.has(f.path));
   const localByPath = new Map(local.map((f) => [f.path, f]));
 
   tell({ phase: 'compare', accountDocs: report.accountDocs, folderFiles: report.folderFiles });

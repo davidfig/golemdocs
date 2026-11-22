@@ -321,6 +321,20 @@ export class VaultService {
     }
   }
 
+  /**
+   * Runs a sync once the one running (if any) is done: for a change that has to be seen now, such as an encrypted folder decrypted into the
+   * vault or no longer (docs/encrypted-folders.md), which a sync already under way listed before.
+   */
+  async syncAfterCurrent(): Promise<void> {
+    while (this.running) await new Promise((resolve) => setTimeout(resolve, 200));
+    await this.syncNow();
+  }
+
+  /** The vault folder's path, or null while there is none (or the folder is fixed, as a phone's iCloud Drive one is). */
+  get desktopRoot(): string | null {
+    return this.bridge.fixed ? null : this.status.root;
+  }
+
   /** Runs one sync now. `allowMassDelete` is for after the person confirmed a plan that was held back. */
   async syncNow(options: { allowMassDelete?: boolean } = {}): Promise<void> {
     const root = this.status.root;

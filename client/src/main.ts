@@ -19,7 +19,7 @@ import { SEAM_HIDE_CURSOR, SEAM_SHOW_CURSOR } from './ui/cursors.ts';
 import { blankSource, lastNewKind, rememberNewKind } from './ui/newKinds.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
 import { adoptGuestFolders, createFolder, renameEntry, setLinkKeeper } from './folderOps.ts';
-import { encryptedDocumentKey, isEncryptedFolder, isSealedCopy, isUnlocked, knowKey, onBeforeLock, onSessionChange, openSealedName, touch as touchEncryption } from './encryption/session.ts';
+import { encryptedDocumentKey, foldersInVault, isEncryptedFolder, isSealedCopy, isUnlocked, knowKey, onBeforeLock, onSessionChange, onVaultChange, openSealedName, setDecryptedInVault, touch as touchEncryption } from './encryption/session.ts';
 import { isSealedName } from '@golemdocs/ops';
 import { setEncryptionHost, showUnlock } from './encryption/ui.ts';
 import { finishVersions } from './encryption/convert.ts';
@@ -2991,6 +2991,30 @@ setLinkKeeper(keepLinks);
 onBeforeLock(async () => {
   if (current.encrypted) await saveNow();
 });
+/**
+ * Ends encrypted folders' time in the vault folder (Stop decrypting in vault folder, Lock, the idle timer): the vault syncs while they are
+ * still decrypted into it, so a file changed or made there just now reaches its document, encrypted; then they stop, and it syncs again,
+ * which removes their files. Not waited on for ever: what a sync can't finish is left for the next one, which removes what was not changed
+ * even while locked.
+ */
+async function endInVault(ids: readonly string[]): Promise<void> {
+  if (!ids.length) return;
+  const settled = async () => {
+    await vaultService?.syncAfterCurrent();
+    ending = true;
+    for (const id of ids) setDecryptedInVault(id, false);
+    ending = false;
+    await vaultService?.syncAfterCurrent();
+  };
+  await Promise.race([settled(), new Promise((resolve) => setTimeout(resolve, 60_000))]);
+}
+let ending = false;
+// Before the keys go.
+onBeforeLock(() => endInVault(foldersInVault()));
+// Starting syncs the vault now, rather than at its next look (stopping syncs in `endInVault`).
+onVaultChange(() => {
+  if (!ending) void vaultService?.syncAfterCurrent();
+});
 onSessionChange((open) => {
   if (!open && current.encrypted && !current.none) openSource('none', 'replace');
   // File › Unlock and Lock show by the session's state; the library lists again to hide or show what is inside.
@@ -3001,6 +3025,8 @@ onSessionChange((open) => {
 // converted, and opened again after.
 let reopenAfterConvert: string | null = null;
 setEncryptionHost({
+  vaultRoot: () => vaultService?.desktopRoot ?? null,
+  stopInVault: (folderId) => endInVault(foldersInVault().filter((id) => id === folderId)),
   convert: () => ({ owner: account?.id, cloud: !!account }),
   folders: () => library.folders,
   entries: () => library.entries,
@@ -3019,6 +3045,8 @@ setEncryptionHost({
     const entry = key ? library.entries.find((e) => e.key === key) : undefined;
     if (entry) libraryHost.open(entry);
     chrome.refresh();
+    // The vault takes what was encrypted out, or what was decrypted in, now rather than at its next look at the account.
+    void vaultService?.syncAfterCurrent();
   },
 });
 // Anything done in the app keeps the session from locking for being idle.

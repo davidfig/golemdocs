@@ -137,6 +137,7 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-22 | `e2e/files/persistence.spec.ts` › an address with ?doc=local:… opens that saved document, and › Clear Local Data asks first… | Failed one after the other on the same worker (16 s, then 5 s) in pass one of the 0.43.2 release run, while side runs of other specs loaded the machine; alone, the first passed four times and the second three |
 | 2026-11-22 | `e2e/collab/signin.spec.ts` › a sign-in that runs out › while the page is open, the note shows when the account refuses a save | Failed at 32 s in pass one of the 0.43.2 release run, with side runs going; alone, passed three times |
 | 2026-11-22 | `e2e/shell/help-dialogs.spec.ts` › Send Feedback › typing in the dialog does not edit the document behind it | Failed at 3 s in pass one of the 0.43.2 release run, with side runs going; alone, passed three times. Quick to fail for load: if it turns up again, look for a key reaching the document before the dialog has the focus |
+| 2026-11-22 | `e2e/shell/vault-decrypt.spec.ts` › an encrypted folder decrypted into the vault: readable there, changes reach the account encrypted, and Lock takes it out | In a run of all of `e2e/shell` with three workers, a new file in the vault did not reach the account within 30 s, twice; alone, passed four times in about 6 s. Its wait for the account is 60 s now |
 
 ## Performance traces (`golem:*`)
 

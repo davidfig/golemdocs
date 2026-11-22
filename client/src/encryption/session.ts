@@ -91,6 +91,71 @@ export function isEncryptedFolder(folderId: string | null | undefined): boolean 
   return false;
 }
 
+/** The encrypted folder a folder's encryption comes from: the one that was encrypted, at the top of its tree (null for an ordinary one). */
+export function encryptedTopOf(folderId: string | null | undefined): string | null {
+  let top: string | null = null;
+  for (let at = folderId ?? null, depth = 0; at !== null && depth < 64; depth++) {
+    const folder = folders.get(at);
+    if (!folder) break;
+    if (folder.encrypted) top = folder.id;
+    at = folder.parentId;
+  }
+  return top;
+}
+
+// --- Decrypted into the vault folder ------------------------------------------------------------------------------------------------
+// An encrypted folder the person chose to have decrypted into the desktop vault for this session, for ai and other programs to work on
+// (docs/encrypted-folders.md): its files are written there readable while the session lasts, and taken out when it ends. Only in memory,
+// so a new session starts with none.
+
+const inVault = new Set<string>();
+const inVaultListeners = new Set<() => void>();
+/**
+ * The encrypted documents written to the vault this session, by the folder they were decrypted with: one moved out of that folder in the
+ * vault stays encrypted in the account and keeps its file in the vault until that folder's session ends.
+ */
+const vaultDocs = new Map<string, string>();
+
+/** Notes that these documents were written to the vault, decrypted with the folder `top`. */
+export function rememberInVault(ids: readonly { id: string; top: string }[]): void {
+  for (const { id, top } of ids) vaultDocs.set(id, top);
+}
+
+/** Whether an encrypted document is decrypted into the vault now, wherever it is (see `rememberInVault`). */
+export const documentInVault = (id: string): boolean => {
+  const top = vaultDocs.get(id);
+  return top !== undefined && inVault.has(top);
+};
+
+/** Whether the encrypted folder at the top of this folder's tree is decrypted into the vault now. */
+export const decryptedInVault = (folderId: string | null | undefined): boolean => {
+  const top = encryptedTopOf(folderId);
+  return top !== null && inVault.has(top);
+};
+
+/** The encrypted folders decrypted into the vault now. */
+export const foldersInVault = (): string[] => [...inVault];
+
+/** Decrypts an encrypted folder (the top of its tree) into the vault for this session, or stops. */
+export function setDecryptedInVault(folderId: string, on: boolean): void {
+  const top = encryptedTopOf(folderId) ?? folderId;
+  if (on === inVault.has(top)) return;
+  if (on) {
+    if (!isUnlocked()) throw new LockedError();
+    inVault.add(top);
+  } else {
+    inVault.delete(top);
+    for (const [id, from] of vaultDocs) if (from === top) vaultDocs.delete(id);
+  }
+  for (const listener of [...inVaultListeners]) listener();
+}
+
+/** Called when a folder starts or stops being decrypted into the vault (the vault syncs, to write or take out its files). */
+export function onVaultChange(listener: () => void): () => void {
+  inVaultListeners.add(listener);
+  return () => inVaultListeners.delete(listener);
+}
+
 /** Whether anything is encrypted at all, and whether the session is unlocked. */
 export const hasEncrypted = (): boolean => wrapped.size > 0 || [...folders.values()].some((f) => f.encrypted);
 export const isUnlocked = (): boolean => personal.length > 0;
@@ -196,6 +261,8 @@ export function lock(): void {
   unlocked.clear();
   foreign.clear();
   names.clear();
+  inVault.clear();
+  vaultDocs.clear();
   clearTimeout(idleTimer);
   emit();
 }

@@ -10,6 +10,45 @@ import { syncVault, type VaultCloud, type VaultCodec, type VaultDisk, type Vault
 const text = (s: string) => new TextEncoder().encode(s);
 const read = (b: Uint8Array) => new TextDecoder().decode(b);
 
+test('an encrypted folder decrypted into the vault stays in the listing, folders and documents, with no note', () => {
+  const folders = [
+    { id: 'taxes', name: 'Taxes', parentId: null, encrypted: true },
+    { id: 'y2027', name: 'gde1.sealed', parentId: 'taxes', encrypted: true },
+    { id: 'other', name: 'Other', parentId: null, encrypted: true },
+  ];
+  const docs = [
+    { id: 'in', name: 'gde1.a', folderId: 'y2027', encrypted: true },
+    { id: 'away', name: 'gde1.b', folderId: 'other', encrypted: true },
+    { id: 'loose', name: 'gde1.c', folderId: null, encrypted: true },
+  ];
+  const shown = withoutEncrypted(docs, folders, (top) => top === 'taxes');
+  assert.deepEqual(shown.folders.map((f) => f.id), ['taxes', 'y2027']);
+  assert.deepEqual(shown.docs.map((d) => d.id), ['in']);
+  assert.deepEqual(shown.encrypted.sort(), ['away', 'loose'], 'a document encrypted on its own is never decrypted into the vault');
+  assert.deepEqual(shown.notes.map((n) => n.path), ['Other (encrypted).md']);
+  assert.deepEqual(shown.encryptedPaths, ['Other']);
+});
+
+test('a document decrypted into the vault with its folder stays in when moved out of it; the listing says which paths are decrypted', () => {
+  const folders = [
+    { id: 'taxes', name: 'Taxes', parentId: null, encrypted: true },
+    { id: 'plain', name: 'Plain', parentId: null },
+  ];
+  const docs = [
+    { id: 'in', name: 'gde1.a', folderId: 'taxes', encrypted: true },
+    { id: 'movedOut', name: 'gde1.b', folderId: 'plain', encrypted: true },
+    { id: 'other', name: 'gde1.c', folderId: null, encrypted: true },
+  ];
+  const shown = withoutEncrypted(docs, folders, (top) => top === 'taxes', (id) => id === 'movedOut');
+  assert.deepEqual(shown.docs.map((d) => d.id), ['in', 'movedOut']);
+  assert.deepEqual(shown.encrypted, ['other']);
+  assert.deepEqual(shown.decryptedPaths, ['Taxes']);
+  assert.deepEqual(shown.decryptedDocs, [{ id: 'in', top: 'taxes' }]);
+  const later = withoutEncrypted(docs, folders);
+  assert.deepEqual(later.decryptedPaths, []);
+  assert.deepEqual(later.encrypted.sort(), ['in', 'movedOut', 'other'], 'once the session ends, all of them are left out again');
+});
+
 test('the listing leaves encrypted documents and folders out, and says where the notes go', () => {
   const folders = [
     { id: 'work', name: 'Work', parentId: null },
@@ -38,16 +77,19 @@ function world() {
   const docs = new Map<string, { id: string; name: string; bytes: Uint8Array; updatedAt: number; encrypted?: boolean }>();
   const calls: string[] = [];
   let locked = false;
+  /** Whether the encrypted documents are decrypted into the vault (as an encrypted folder decrypted into it for the session is). */
+  let shown = false;
   let notes: { path: string; text: string }[] = [];
+  let paths: { encryptedPaths: string[]; decryptedPaths: string[] } = { encryptedPaths: [], decryptedPaths: [] };
   const cloud: VaultCloud = {
     async list() {
       const all = [...docs.values()];
       return {
-        docs: all.filter((d) => !d.encrypted).map((d) => ({ id: d.id, name: d.name, folderId: null, createdAt: 1, updatedAt: d.updatedAt })),
+        docs: all.filter((d) => !d.encrypted || shown).map((d) => ({ id: d.id, name: d.name, folderId: null, createdAt: 1, updatedAt: d.updatedAt })),
         folders: [],
-        encrypted: all.filter((d) => d.encrypted).map((d) => d.id),
+        encrypted: all.filter((d) => d.encrypted && !shown).map((d) => d.id),
         notes,
-        encryptedPaths: [],
+        ...paths,
       };
     },
     download: async (id) => docs.get(id)!.bytes,
@@ -89,7 +131,7 @@ function world() {
     },
     remove: async (path) => void files.delete(path),
   };
-  const codec: VaultCodec = { toFile: async (stored) => stored, fromFile: async (file) => file, kept: () => true };
+  const codec: VaultCodec = { toFile: async (stored) => stored, fromFile: async (file) => file, kept: (name) => !name.endsWith('.zip') };
   let memory: string | null = null;
   const host: VaultHost = {
     disk,
@@ -112,7 +154,9 @@ function world() {
     sync: (allowMassDelete = false) => syncVault(host, { allowMassDelete }),
     encrypt: (id: string) => void (docs.get(id)!.encrypted = true),
     setLocked: (value: boolean) => void (locked = value),
+    setShown: (value: boolean) => void (shown = value),
     setNotes: (next: { path: string; text: string }[]) => void (notes = next),
+    setPaths: (next: { encryptedPaths: string[]; decryptedPaths: string[] }) => void (paths = next),
     put: (path: string, content: string) => void files.set(path, { bytes: text(content), mtimeMs: ++diskClock }),
     paths: () => [...files.keys()].filter((p) => !p.startsWith('.')).sort(),
   };
@@ -192,4 +236,46 @@ test('a note stands in for an encrypted folder: written, kept up to date, remove
   w.setNotes([{ path: 'Taxes (encrypted).md', text: 'note' }]);
   await w.sync();
   assert.equal(read(w.files.get('Taxes (encrypted).md')!.bytes), 'mine');
+});
+
+test('decrypted into the vault: the file is there, changes made to it go back (sealed by the host), and stopping takes it out', async () => {
+  const w = world();
+  const id = w.add('Diary.md', 'dear diary');
+  w.encrypt(id);
+  await w.sync();
+  assert.deepEqual(w.paths(), [], 'not there while it is not decrypted into the vault');
+  w.setShown(true);
+  await w.sync();
+  assert.deepEqual(w.paths(), ['Diary.md']);
+  assert.equal(read(w.files.get('Diary.md')!.bytes), 'dear diary');
+  w.put('Diary.md', 'an agent wrote this');
+  await w.sync();
+  assert.deepEqual(w.calls, [`replace ${id} an agent wrote this`]);
+  // An edit made just before it stops is saved before the file is taken out.
+  w.put('Diary.md', 'one more line');
+  w.setShown(false);
+  await w.sync();
+  assert.deepEqual(w.calls, [`replace ${id} an agent wrote this`, `replace ${id} one more line`]);
+  assert.deepEqual(w.paths(), []);
+  assert.ok(!w.calls.some((c) => c.startsWith('create') || c.startsWith('trash')));
+});
+
+test('when a folder stops being decrypted into the vault, files the vault does not sync go too; a new file there is never made readable', async () => {
+  const w = world();
+  w.add('Kept.md', 'kept');
+  w.setPaths({ encryptedPaths: [], decryptedPaths: ['Taxes'] });
+  await w.sync();
+  // An agent leaves a file the vault doesn't sync, and makes a document after the last sync, just before the session ends.
+  w.put('Taxes/data.zip', 'binary');
+  w.put('Taxes/Late.md', 'written just before locking');
+  w.setPaths({ encryptedPaths: ['Taxes'], decryptedPaths: [] });
+  await w.sync();
+  assert.deepEqual(w.paths(), ['Kept.md', 'Taxes/Late.md'], 'the zip is removed; the document is kept (not lost), not uploaded');
+  assert.ok(!w.calls.some((c) => c.startsWith('create')), 'nothing under an encrypted folder is made a readable document');
+  await w.sync();
+  assert.ok(!w.calls.some((c) => c.startsWith('create')));
+  // When the folder is decrypted into the vault again, it is taken in (encrypted, by the host).
+  w.setPaths({ encryptedPaths: [], decryptedPaths: ['Taxes'] });
+  await w.sync();
+  assert.deepEqual(w.calls.filter((c) => c.startsWith('create')), ['create Taxes/Late.md']);
 });

@@ -4,6 +4,7 @@
 
 import { expect, test } from '../fixtures';
 import { cloudDocs, newPerson } from './helpers';
+import { moveTo } from '../files/helpers';
 
 test('encrypt a folder you made: set up a key, lock, unlock with the key (not a mistyped one), decrypt again', { tag: '@heavy' }, async ({ browser }) => {
   const person = await newPerson(browser, 'encrypted');
@@ -109,5 +110,56 @@ test('encrypt a single document from the File menu, and lock it', { tag: '@heavy
   // Locked, it shows in the Files pane as an encrypted document.
   await app.menu('File', 'Lock encrypted documents');
   await expect(page.locator('.wm-files-file', { hasText: 'Encrypted document' })).toHaveCount(1);
+  await person.context.close();
+});
+
+test('moving a document out of an encrypted folder in the app asks, then decrypts it; Cancel leaves it encrypted where it was', { tag: '@heavy' }, async ({ browser }) => {
+  const person = await newPerson(browser, 'encrypted-move');
+  const { page, app } = person;
+  await app.goto('?doc=welcome');
+  await app.menu('File', 'Open…');
+  const dashboard = page.locator('.wm-dashboard');
+  await dashboard.getByRole('button', { name: 'New folder', exact: true }).click();
+  const field = dashboard.getByRole('textbox', { name: 'Folder name' });
+  await field.fill('Taxes');
+  await field.press('Enter');
+  await dashboard.locator('article.wm-folder').filter({ hasText: 'Taxes' }).getByRole('button', { name: /Taxes/ }).click();
+  await dashboard.getByRole('button', { name: 'New document', exact: true }).first().click();
+  await app.type('moving out');
+  await expect.poll(async () => (await cloudDocs(page)).length, { timeout: 30_000 }).toBe(1);
+  await expect(page.locator('.wm-sync')).toHaveAttribute('data-state', 'saved', { timeout: 30_000 });
+
+  const folderRow = page.locator('.wm-files-folder', { hasText: 'Taxes' });
+  await folderRow.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Encrypt folder…' }).click();
+  await page.getByRole('dialog', { name: 'Encrypt “Taxes”?' }).getByRole('button', { name: 'Encrypt' }).click();
+  const setup = page.getByRole('dialog', { name: 'Your Encryption Key' });
+  await setup.getByLabel('Paste the key again to confirm you saved it').fill((await setup.locator('.wm-encryption-key').textContent())!);
+  await setup.getByRole('button', { name: 'I saved it' }).click();
+  await expect.poll(async () => (await cloudDocs(page))[0]?.name.startsWith('gde1.'), { timeout: 30_000 }).toBe(true);
+  const [doc] = await cloudDocs(page);
+  const folderOf = async () => ((await cloudDocs(page)).find((d) => d.id === doc!.id) as { folderId?: string | null } | undefined)?.folderId;
+  const inFolder = await folderOf();
+  expect(inFolder).toBeTruthy();
+
+  // Move… to the top level: asked first; Cancel leaves it encrypted, where it was.
+  const moveOut = async () => {
+    if (!(await page.locator('.wm-files-file').first().isVisible())) await folderRow.click();
+    await page.locator('.wm-files-file').first().click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Move…' }).click();
+    await moveTo(page, 'Documents');
+    return page.getByRole('dialog', { name: /out of the encrypted folder\?$/ });
+  };
+  await (await moveOut()).getByRole('button', { name: 'Cancel' }).click();
+  await page.waitForTimeout(2000);
+  expect(await folderOf()).toBe(inFolder);
+  expect((await cloudDocs(page))[0]!.name.startsWith('gde1.')).toBe(true);
+
+  // Decrypt and move: moved to the top level, and readable again.
+  await (await moveOut()).getByRole('button', { name: 'Decrypt and move' }).click();
+  await expect.poll(async () => (await cloudDocs(page))[0]?.name.startsWith('gde1.'), { timeout: 30_000 }).toBe(false);
+  expect(await folderOf()).toBeNull();
+  const file = Buffer.from(await (await page.request.get(`/api/documents/${doc!.id}`)).body());
+  expect(file.subarray(0, 4).toString()).not.toBe('GDE1');
   await person.context.close();
 });

@@ -15,7 +15,8 @@ import { dialogTitleBar, showChoice, showDialog } from '../ui/popup.ts';
 import type { PopupItem } from '../ui/popupMenu.ts';
 import { decryptDocument, decryptFolder, encryptDocument, encryptFolder, entriesIn, type ConvertHost } from './convert.ts';
 import { KeyError } from './crypto.ts';
-import { createKey, hasEncrypted, isEncryptedFolder, isUnlocked, lock, lockSession, unlock } from './session.ts';
+import { createKey, decryptedInVault, hasEncrypted, isEncryptedFolder, isUnlocked, lock, lockSession, setDecryptedInVault, unlock } from './session.ts';
+import { syncedService } from '../desktop/vaultLocation.ts';
 
 /** A modal form with the shared dialog parts: resolves with what `submit` returns, or null for Cancel, Escape or the close button. */
 function formDialog<T>(title: string, body: Node[], action: string, submit: (show: (message: string) => void) => Promise<T | null>): Promise<T | null> {
@@ -143,6 +144,10 @@ export interface EncryptionHost {
   /** Lists the library again, and opens again what `before` closed. */
   refresh(): Promise<void>;
   after(): void;
+  /** The desktop vault folder's path, where an encrypted folder can be decrypted into for a session; null where there is none (a browser, a phone). */
+  vaultRoot?(): string | null;
+  /** Ends an encrypted folder's time in the vault: what changed there is saved, encrypted, then its files are removed. */
+  stopInVault?(folderId: string): Promise<void>;
 }
 
 let host: EncryptionHost | null = null;
@@ -197,10 +202,10 @@ export async function encryptDocuments(entries: readonly LibraryEntry[], ask = t
 }
 
 /** Decrypt…: asks, unlocks if need be, and decrypts the documents. */
-export async function decryptDocuments(entries: readonly LibraryEntry[]): Promise<boolean> {
+export async function decryptDocuments(entries: readonly LibraryEntry[], ask = true): Promise<boolean> {
   if (!host || !entries.length) return false;
   const title = entries.length === 1 ? t('encryption.decryptTitle', { name: entries[0]!.name }) : t('encryption.decryptManyTitle', { count: entries.length });
-  if (!(await showChoice(title, h('p', { text: t('encryption.decryptIntro') }), [{ label: t('encryption.decryptButton'), value: true, primary: true }]))) return false;
+  if (ask && !(await showChoice(title, h('p', { text: t('encryption.decryptIntro') }), [{ label: t('encryption.decryptButton'), value: true, primary: true }]))) return false;
   if (!isUnlocked() && !(await showUnlock())) return false;
   const convert = host.convert();
   const done = await converting(title, 'decrypt', entries, async (progress) => {
@@ -226,10 +231,10 @@ export async function encryptFolderNow(folder: Folder, ask = true): Promise<bool
 }
 
 /** Decrypt folder…: asks, unlocks if need be, and decrypts the folder and everything in it. */
-export async function decryptFolderNow(folder: Folder): Promise<boolean> {
+export async function decryptFolderNow(folder: Folder, ask = true): Promise<boolean> {
   if (!host) return false;
   const title = t('encryption.decryptTitle', { name: folder.name });
-  if (!(await showChoice(title, h('p', { text: t('encryption.decryptFolderIntro') }), [{ label: t('encryption.decryptButton'), value: true, primary: true }]))) return false;
+  if (ask && !(await showChoice(title, h('p', { text: t('encryption.decryptFolderIntro') }), [{ label: t('encryption.decryptButton'), value: true, primary: true }]))) return false;
   if (!isUnlocked() && !(await showUnlock())) return false;
   const { convert, folders, entries } = { convert: host.convert(), folders: host.folders(), entries: host.entries() };
   const done = await converting(title, 'decrypt', entriesIn(folder, folders, entries), (progress) => decryptFolder(folder, folders, entries, convert, progress));
@@ -247,6 +252,36 @@ export async function encryptForMove(item: { kind: 'doc'; entry: LibraryEntry } 
   return item.folder.encrypted ? true : encryptFolderNow(item.folder, false);
 }
 
+/** Whether moving `item` to `to` takes something encrypted out of an encrypted folder, into an ordinary place. */
+function leavesEncryption(item: { kind: 'doc'; entry: LibraryEntry } | { kind: 'folder'; folder: Folder }, to: string | null): boolean {
+  if (isEncryptedFolder(to)) return false;
+  if (item.kind === 'doc') return isEncryptedFolder(item.entry.folderId) && !!(item.entry.encrypted || item.entry.local?.encrypted || item.entry.cloud?.encrypted);
+  return isEncryptedFolder(item.folder.parentId) && !!item.folder.encrypted;
+}
+
+/**
+ * A move in the app (dragged, or Move…) across the edge of an encrypted folder (docs/encrypted-folders.md). Into one, what isn't encrypted
+ * is encrypted first. Out of one, into an ordinary place, it is decrypted, after asking: it is moved first (the server decrypts nothing
+ * while it is inside an encrypted folder), then decrypted, file, name and versions. Cancel leaves it where it was. `move` makes the move.
+ * (Moves made in the vault folder never decrypt: nobody is there to ask, so a document moved out there stays encrypted.)
+ */
+export async function moveAcrossEncryption(item: { kind: 'doc'; entry: LibraryEntry } | { kind: 'folder'; folder: Folder }, to: string | null, move: () => Promise<void>): Promise<void> {
+  if (!(await encryptForMove(item, to))) return;
+  if (!leavesEncryption(item, to)) return move();
+  const name = item.kind === 'doc' ? item.entry.name : item.folder.name;
+  const asked = await showChoice(t('encryption.moveOutTitle', { name }), h('p', { text: t(item.kind === 'doc' ? 'encryption.moveOutIntro' : 'encryption.moveOutFolderIntro') }), [{ label: t('encryption.moveOutButton'), value: true, primary: true }]);
+  if (!asked) return;
+  if (!isUnlocked() && !(await showUnlock())) return;
+  await move();
+  if (item.kind === 'doc') await decryptDocuments([item.entry], false);
+  else await decryptFolderNow(item.folder, false);
+}
+
+/** Whether moving these to `to` crosses the edge of an encrypted folder, either way (each is then moved on its own, through `moveAcrossEncryption`). */
+export function crossesEncryption(items: readonly ({ kind: 'doc'; entry: LibraryEntry } | { kind: 'folder'; folder: Folder })[], to: string | null): boolean {
+  return items.some((item) => leavesEncryption(item, to) || (isEncryptedFolder(to) && (item.kind === 'doc' ? !(item.entry.encrypted || item.entry.local?.encrypted || item.entry.cloud?.encrypted) : !item.folder.encrypted)));
+}
+
 // --- Menu entries --------------------------------------------------------------------------------------------------------------------
 
 /** A document's entries, the same in the Files pane and File › Open: Unlock… while locked, else Encrypt… or Decrypt…. */
@@ -259,10 +294,50 @@ export function documentItems(entry: LibraryEntry): PopupItem[] {
   return [{ label: t('encryption.encrypt'), run: () => void encryptDocuments([entry]) }];
 }
 
-/** A folder's entries, likewise: Unlock… while locked, Encrypt folder… or Decrypt folder… (only the folder that was encrypted), and Lock. */
+/**
+ * A folder's entries, likewise: Unlock… while locked; on the folder that was encrypted, Decrypt folder…, Decrypt into vault folder… (or Stop
+ * decrypting in vault folder) in the desktop app, and Lock; on an ordinary one, Encrypt folder….
+ */
 export function folderItems(folder: Folder): PopupItem[] {
   if (folder.locked) return [{ label: t('encryption.unlock'), run: () => void showUnlock() }];
   if (isEncryptedFolder(folder.parentId)) return [];
-  if (folder.encrypted) return [{ label: t('encryption.decryptFolder'), run: () => void decryptFolderNow(folder) }, { label: t('encryption.lock'), run: () => void lockNow() }];
-  return [{ label: t('encryption.encryptFolder'), run: () => void encryptFolderNow(folder) }];
+  if (!folder.encrypted) return [{ label: t('encryption.encryptFolder'), run: () => void encryptFolderNow(folder) }];
+  const vault = host?.vaultRoot?.() ? [decryptedInVault(folder.id) ? { label: t('encryption.vaultStop'), run: () => void stopInVault(folder) } : { label: t('encryption.vaultDecrypt'), run: () => void decryptIntoVault(folder) }] : [];
+  return [{ label: t('encryption.decryptFolder'), run: () => void decryptFolderNow(folder) }, ...vault, { label: t('encryption.lock'), run: () => void lockNow() }];
+}
+
+// --- Decrypted into the vault folder ------------------------------------------------------------------------------------------------
+
+/**
+ * Decrypt into vault folder…: an unlocked encrypted folder's documents written readable to the desktop vault for this session, for ai and
+ * other programs to work on, after the risks are said. The server still gets only sealed files (vaultHost.ts seals what comes back). Not
+ * where the vault is in a folder another service syncs: it would upload the readable files.
+ */
+export async function decryptIntoVault(folder: Folder): Promise<boolean> {
+  const root = host?.vaultRoot?.();
+  if (!root || !folder.encrypted || folder.locked) return false;
+  const service = syncedService(root);
+  if (service) {
+    showDialog(t('encryption.vaultSyncedTitle'), h('p', { text: t('encryption.vaultSynced', { service }) }));
+    return false;
+  }
+  const body = h(
+    'div',
+    {},
+    h('p', { text: t('encryption.vaultIntro') }),
+    h('ul', {}, ...[t('encryption.vaultRiskSync'), t('encryption.vaultRiskBackup'), t('encryption.vaultRiskAi')].map((risk) => h('li', { text: risk }))),
+    h('p', { text: t('encryption.vaultEnd') }),
+  );
+  if (!(await showChoice(t('encryption.vaultTitle', { name: folder.name }), body, [{ label: t('encryption.vaultButton'), value: true, primary: true }]))) return false;
+  if (!isUnlocked() && !(await showUnlock())) return false;
+  setDecryptedInVault(folder.id, true);
+  announce(t('encryption.vaultStarted', { name: folder.name }));
+  return true;
+}
+
+/** Stop decrypting in vault folder: its files are taken out of the vault (any change made there is saved first, sealed). */
+export async function stopInVault(folder: Folder): Promise<void> {
+  announce(t('encryption.vaultStopped'));
+  if (host?.stopInVault) await host.stopInVault(folder.id);
+  else setDecryptedInVault(folder.id, false);
 }

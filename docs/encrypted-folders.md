@@ -30,6 +30,11 @@ many versions history keeps, and the shape of the folder tree.
 - **Encrypting a document** seals its file and name, and reseals every version its history keeps, here and in the account, so no readable
   copy is left in either. Copies made before (downloads, the desktop vault, other devices) are not reached: the person is told.
 - **Decrypting** does the same the other way, after asking: the server can read the document again.
+- **Moving across the edge, in the app** (dragged, or Move…; `moveAcrossEncryption`, `encryption/ui.ts`): into an encrypted folder, what
+  isn't encrypted is encrypted on the way; out of one into an ordinary place, it is decrypted, after asking ("Decrypt and move"), moved
+  first and then decrypted (the server decrypts nothing inside an encrypted folder). A subfolder moved out is decrypted with everything in
+  it. Cancel leaves it where it was. Moves made in the vault folder never decrypt (nobody is there to ask; see *Decrypted into the vault
+  folder*).
 - **The key is random and the person keeps it.** A 256-bit **personal key**, generated in the browser, shown once to save in a password
   manager. The server never has it, so there is no passphrase to guess offline. It is never stored on a device either: it is pasted in to
   unlock, held in memory, and gone when the session ends. One key opens everything the person encrypted.
@@ -48,6 +53,40 @@ many versions history keeps, and the shape of the folder tree.
   encrypted since is removed (an edit made to it there is saved into the document first, sealed), and a note, `<name> (encrypted).md`,
   stands in for each encrypted folder.
 - **WebCrypto only.** No dependency.
+
+## Decrypted into the vault folder, for a session
+
+For working on an encrypted folder with ai on this computer. An unlocked encrypted folder (the one that was encrypted) has Decrypt into
+vault folder… in its menu, in the desktop app only, while it has a vault folder (not a phone, whose vault is in iCloud Drive).
+
+- **Refused where the vault folder syncs.** A vault inside iCloud Drive, Dropbox, OneDrive, Google Drive or Box (`syncedService`,
+  `desktop/vaultLocation.ts`, from the path) would upload the readable files; the app says so and does nothing. macOS's Desktop & Documents
+  in iCloud syncs `~/Documents` without changing its path, so the warning names that case too.
+- **Asked first,** naming the risks: a vault in a synced folder, backups and search indexing (Time Machine, Spotlight) keeping copies while
+  the files are there, and the ai app sending what it reads to its own servers.
+- **For this session only** (`setDecryptedInVault`, `encryption/session.ts`, in memory). While it lasts, the vault's listing keeps that
+  folder's tree with names opened (`withoutEncrypted`'s `shown`, `openNames`), its documents are written opened (`vaultHost.ts`), and what
+  comes back is sealed with each document's key: a changed file, a new one (a new key, in the encrypted folder), a new folder (its own key
+  and a sealed name), a rename (the name sealed). The server keeps refusing anything readable for these documents, so a bug can't change
+  that. No copy is kept in this browser from the vault's side.
+- **Moving in and out, in the vault.** An ordinary document moved into the folder is encrypted first, file, name and versions
+  (`encryptAccountDocument`, or `encryptDocument` signed out), then moved. One moved out stays encrypted in the account (moving a file never
+  decrypts anything on the server); its file stays in the vault where it was put while the folder's session lasts
+  (`rememberInVault`/`documentInVault`, session.ts), and goes with the rest when it ends.
+- **Taken out when it ends:** Stop decrypting in vault folder, Lock, or the idle timer (`endInVault` in `main.ts`, before the keys go) sync
+  the vault while the folder is still decrypted into it, so a file changed or made just now reaches its document, encrypted; then the folder
+  stops and the vault syncs again, which saves any change into its document, sealed, and removes every document's file (the same path as for
+  a document encrypted since, `syncVault`). Files the vault doesn't sync that are left under the folder go too (`State.decrypted`).
+  Starting and any conversion sync the vault at once (`VaultService.syncAfterCurrent`).
+- **Never a readable document from an encrypted folder's path:** a file under an encrypted folder that isn't decrypted into the vault is
+  left out of the plan, so it is never uploaded as an ordinary document; one made there after the last sync is taken in, encrypted, the
+  next time the folder is decrypted into the vault.
+- **After a quit or a crash** the files are still there (the shell doesn't let the page finish first). The next start's sync, locked,
+  removes the documents' files that were not changed and the files the vault doesn't sync; a changed document is kept (not lost, not
+  uploaded readable) until the key is entered, then saved and removed, and a document made just before is kept until the folder is
+  decrypted into the vault again.
+- **Limits:** a document encrypted on its own (not in an encrypted folder) is never decrypted into the vault; the folder scan doesn't see
+  names starting with a dot, so a file named so in the folder is left on disk (the agent guide says never to put one there).
 
 ## Keys and formats (`@golemdocs/ops` `sealed.ts`, `client/src/encryption/crypto.ts`)
 
@@ -89,12 +128,8 @@ many versions history keeps, and the shape of the folder tree.
 
 - Code: `client/src/encryption/` (`crypto.ts`, `session.ts`, `present.ts`, `convert.ts`, `ui.ts`), `storage/local.ts`, `cloud.ts`,
   `library.ts`, `folderOps.ts`, the Files pane and File › Open; `server/src/sealed.ts`, `documents.ts`, `folders.ts`, `versions.ts`.
-- Tests: `client/test/encryption.test.ts`, `client/test/encryptedFolders.test.ts`, `client/test/vaultEncrypted.test.ts`, `server/test/encryption.test.ts`,
+- Tests: `client/test/encryption.test.ts`, `client/test/encryptedFolders.test.ts`, `client/test/vaultEncrypted.test.ts`, `client/test/vaultLocation.test.ts`, `server/test/encryption.test.ts`, `e2e/shell/vault-decrypt.spec.ts`,
   `e2e/collab/encrypted-folders.spec.ts`, `e2e/accessibility/encrypted-folders.spec.ts`.
-
-**Next, agreed in outline:** working on an encrypted folder with ai on this computer: a per-folder, per-session choice to decrypt it into
-the vault (desktop only, refused when the vault is in a synced folder such as iCloud Drive or Dropbox), edits sealed before they reach the
-account, the decrypted files removed on Lock, idle, quit and after a crash.
 
 **Not done yet:** large documents are sealed whole and then chunked, so every save sends every chunk (deterministic encrypted chunks
 fix this); Version History and Trash show an encrypted document's sealed name and do not open its versions; the idle time is not in Options;

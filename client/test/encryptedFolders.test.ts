@@ -244,3 +244,33 @@ test('the library shows encrypted things where they are: names opened while unlo
   assert.equal(unlocked.entries[0]!.cloud!.name, 'Return.pdf');
   assert.deepEqual(unlocked.folders!.map((f) => [f.name, f.locked ?? false]), [['Taxes', false], ['2027', false], ['Plain', false]]);
 });
+
+test('decrypting into the vault: only while unlocked, by the folder that was encrypted, and forgotten when the session locks', async () => {
+  const personal = await newPersonalKey();
+  const { wrapped: topKey } = await newItemKey(personal);
+  const { wrapped: subKey } = await newItemKey(personal);
+  const top = folder(uuid(), { name: 'Taxes', encrypted: true, wrappedKey: topKey });
+  const sub = folder(uuid(), { name: 'gde1.x', parentId: top.id, encrypted: true, wrappedKey: subKey });
+  const plain = folder(uuid(), { name: 'Plain' });
+  session.knowFolders([top, sub, plain]);
+  assert.equal(session.encryptedTopOf(sub.id), top.id);
+  assert.equal(session.encryptedTopOf(plain.id), null);
+  assert.throws(() => session.setDecryptedInVault(top.id, true), session.LockedError);
+  await session.unlock(personal.text);
+  let changes = 0;
+  const stop = session.onVaultChange(() => changes++);
+  session.setDecryptedInVault(sub.id, true);
+  assert.deepEqual(session.foldersInVault(), [top.id], 'a subfolder stands for the folder that was encrypted');
+  assert.equal(session.decryptedInVault(sub.id), true);
+  assert.equal(session.decryptedInVault(plain.id), false);
+  // A document written to the vault with that folder stays in it wherever it moves, until the folder stops.
+  session.rememberInVault([{ id: 'doc', top: top.id }]);
+  assert.equal(session.documentInVault('doc'), true);
+  session.setDecryptedInVault(top.id, false);
+  assert.equal(session.documentInVault('doc'), false);
+  session.setDecryptedInVault(top.id, true);
+  session.lock();
+  assert.deepEqual(session.foldersInVault(), []);
+  stop();
+  assert.equal(changes, 3);
+});

@@ -7,7 +7,7 @@
 import { takeDropped, type Dropped } from '../storage/droppedFiles.ts';
 import { warmOnHover } from './warmOnHover.ts';
 import { canDrop, createFolder, moveEntries, outOfReach, removeFolderTree, updateFolder, withMoved, withoutDeleted, type Dragged } from '../folderOps.ts';
-import { documentItems, encryptForMove, folderItems as encryptionFolderItems, showUnlock } from '../encryption/ui.ts';
+import { documentItems, folderItems as encryptionFolderItems, moveAcrossEncryption, showUnlock } from '../encryption/ui.ts';
 import { isEncryptedFolder } from '../encryption/session.ts';
 import { deletionList, folderOf, isInside, treeRows, type Folder, type TreeRow } from '../folders.ts';
 import { t } from '../i18n/index.ts';
@@ -605,18 +605,19 @@ export class FilesPanel {
     this.folders = this.folders.map((f) => (f.id === next.id ? next : f));
   }
 
-  private async relocate(item: Dragged, to: string | null): Promise<void> {
-    // Into an encrypted folder, what isn't encrypted is encrypted first (docs/encrypted-folders.md).
-    if (!(await encryptForMove(item, to))) return;
-    return this.run(async () => {
-      if (item.kind === 'folder') await this.changeFolder(item.folder, { parentId: to });
-      else {
-        this.entries = withMoved(this.entries, [item.entry], to);
-        this.render();
-        await moveEntries([item.entry], to);
-      }
-      if (to !== null) this.toggleFolder(to, true);
-    });
+  private relocate(item: Dragged, to: string | null): Promise<void> {
+    // Into an encrypted folder, what isn't encrypted is encrypted first; out of one, it is decrypted, after asking (docs/encrypted-folders.md).
+    return moveAcrossEncryption(item, to, () =>
+      this.run(async () => {
+        if (item.kind === 'folder') await this.changeFolder(item.folder, { parentId: to });
+        else {
+          this.entries = withMoved(this.entries, [item.entry], to);
+          this.render();
+          await moveEntries([item.entry], to);
+        }
+        if (to !== null) this.toggleFolder(to, true);
+      }),
+    );
   }
 
   private canDrop(item: Dragged, to: string | null): boolean {

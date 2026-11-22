@@ -19,8 +19,8 @@ declare global {
   }
 }
 
-/** Signs the page in as a new account and installs the shell before the page loads, with `files` (path to text) in the vault. Returns the account's email. */
-export async function vaultShell(page: Page, files: Record<string, string>): Promise<string> {
+/** Signs the page in as a new account and installs the shell before the page loads, with `files` (path to text) in the vault (at `root`, if given). Returns the account's email. */
+export async function vaultShell(page: Page, files: Record<string, string>, options: { root?: string } = {}): Promise<string> {
   const email = uniqueEmail('vault');
   await signInAs(page.context(), email);
   await page.addInitScript(
@@ -73,7 +73,7 @@ export async function vaultShell(page: Page, files: Record<string, string>): Pro
       };
       (window as unknown as { __TAURI__: unknown }).__TAURI__ = { core: { invoke } };
     },
-    { root: VAULT_ROOT, files },
+    { root: options.root ?? VAULT_ROOT, files },
   );
   return email;
 }

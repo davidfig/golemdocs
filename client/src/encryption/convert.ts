@@ -6,10 +6,10 @@
 // old form; `finishVersions` completes them the next time the document is opened with its key.
 
 import { isSealed } from '@golemdocs/ops';
-import { convertCloudDocument, downloadCloudVersion, listCloudVersions, putFolders, replaceCloudVersion, throwIfFailed } from '../cloud.ts';
+import { convertCloudDocument, downloadCloudVersion, listCloudVersions, putFolders, replaceCloudVersion, throwIfFailed, type CloudDocument } from '../cloud.ts';
 import type { Folder } from '../folders.ts';
 import { openFromCloud } from '../library.ts';
-import { convertLocalVersions, getSaved, saveFromCloud, saveSaved, updateLocalFolder, type SavedInfo } from '../storage/local.ts';
+import { convertLocalVersions, getSaved, listSaved, saveFromCloud, saveSaved, updateLocalFolder, type SavedInfo } from '../storage/local.ts';
 import type { LibraryEntry } from '../sync.ts';
 import { addFoldersToCatalogue, putDocInCatalogue } from '../sync.ts';
 import { opensFromCloud } from '../ui/dashboardFormat.ts';
@@ -36,9 +36,9 @@ async function current(entry: LibraryEntry, host: ConvertHost): Promise<{ info: 
 
 const cloudIdOf = (entry: LibraryEntry, info: SavedInfo): string | undefined => entry.cloud?.id ?? info.cloudId;
 
-/** Encrypts a document: its file, name and every version, in the account and here. */
-export async function encryptDocument(entry: LibraryEntry, host: ConvertHost): Promise<void> {
-  if (entry.encrypted || entry.local?.encrypted || entry.cloud?.encrypted) return;
+/** Encrypts a document: its file, name and every version, in the account and here. Returns its new key (null if it was encrypted already). */
+export async function encryptDocument(entry: LibraryEntry, host: ConvertHost): Promise<string | null> {
+  if (entry.encrypted || entry.local?.encrypted || entry.cloud?.encrypted) return null;
   const { info, bytes, base } = await current(entry, host);
   const key = await newKey();
   const name = info.name;
@@ -61,6 +61,20 @@ export async function encryptDocument(entry: LibraryEntry, host: ConvertHost): P
     bytes: await sealFileWith(key, old),
     name: versionName === null ? null : await sealNameWith(key, versionName),
   }));
+  return key;
+}
+
+/**
+ * Encrypts an account document known only from a listing, as `encryptDocument` does (with this browser's copy, if it has one): the vault
+ * moving an ordinary document into an encrypted folder decrypted into it. Returns its new key.
+ */
+export async function encryptAccountDocument(cloud: CloudDocument, owner: string): Promise<string> {
+  const local = (await listSaved()).find((d) => d.cloudId === cloud.id && (d.owner === undefined || d.owner === owner)) ?? null;
+  // Read from the account (or this browser's copy, if it has changes the account hasn't yet), then converted in the account first.
+  const entry: LibraryEntry = { key: local?.id ?? cloud.id, name: cloud.name, size: cloud.size, updatedAt: cloud.updatedAt, local, cloud, state: 'cloud-ahead', folderId: cloud.folderId ?? null };
+  const key = await encryptDocument(entry, { owner, cloud: true });
+  if (!key) throw new Error('it is encrypted already');
+  return key;
 }
 
 /** Decrypts a document: its file, name and every version, in the account and here. The server can read it again. */

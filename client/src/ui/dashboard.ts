@@ -9,7 +9,7 @@
 
 import { deleteSharedDocument, deleteSharedSubfolder, leaveSharedFolder, putSharedSubfolder, removeShare, renameCloudDocument, sharedFolderTree, type CloudDocument, type SharedFolder, type SharedFolderDocument, type SharedFolderTree } from '../cloud.ts';
 import { canDrop, createFolder, moveEntries, outOfReach, removeFolderTree, updateFolders, withMoved, withoutDeleted, type Dragged } from '../folderOps.ts';
-import { documentItems, encryptForMove, folderItems as encryptionFolderItems, showUnlock } from '../encryption/ui.ts';
+import { crossesEncryption, documentItems, folderItems as encryptionFolderItems, moveAcrossEncryption, showUnlock } from '../encryption/ui.ts';
 import { isEncryptedFolder } from '../encryption/session.ts';
 import { childFolders, deletionList, folderContents, folderOf, folderPath, isInside, itemsIn, outermost, type Folder } from '../folders.ts';
 import { setDocumentDrag } from './documentDrag.ts';
@@ -1157,13 +1157,20 @@ export class Dashboard {
     // A folder can't go into itself or anything inside it.
     const excluded = (id: string | null) =>
       folders.some((f) => isInside(this.folders, id, f.id) || outOfReach(this.folders, { kind: 'folder', folder: f }, id)) || docs.some((entry) => outOfReach(this.folders, { kind: 'doc', entry }, id));
-    this.pickFolder(t('panels.dashboard.moveSelectedTitle', { count }), excluded, undefined, (to) =>
-      this.run(async () => {
+    this.pickFolder(t('panels.dashboard.moveSelectedTitle', { count }), excluded, undefined, async (to) => {
+      // Across the edge of an encrypted folder, each goes on its own, encrypted or decrypted (asked) on the way.
+      const items: Dragged[] = [...docs.map((entry) => ({ kind: 'doc' as const, entry })), ...folders.map((folder) => ({ kind: 'folder' as const, folder }))];
+      if (crossesEncryption(items, to)) {
+        for (const item of items) if (item.kind === 'doc' ? folderOf(item.entry, this.folders) !== to : item.folder.parentId !== to) await this.relocate(item, to);
+        this.selected.clear();
+        return;
+      }
+      return this.run(async () => {
         await this.relocateEntries(docs.filter((entry) => folderOf(entry, this.folders) !== to), to);
         await this.changeFolders(folders.filter((folder) => folder.parentId !== to).map((folder) => ({ folder, parentId: to })));
         this.selected.clear();
-      }),
-    );
+      });
+    });
   }
 
   /** Deletes what was ticked when Delete was confirmed (the screen, and so the selection, has already lost them). */
@@ -1255,11 +1262,10 @@ export class Dashboard {
     await this.host.rename(entry, name);
   }
 
-  private async relocate(item: Dragged, to: string | null): Promise<void> {
-    // Into an encrypted folder, what isn't encrypted is encrypted first (docs/encrypted-folders.md).
-    if (!(await encryptForMove(item, to))) return;
-    return this.run(
-      item.kind === 'doc' ? () => this.relocateEntries([item.entry], to) : () => this.changeFolders([{ folder: item.folder, parentId: to }]),
+  private relocate(item: Dragged, to: string | null): Promise<void> {
+    // Into an encrypted folder, what isn't encrypted is encrypted first; out of one, it is decrypted, after asking (docs/encrypted-folders.md).
+    return moveAcrossEncryption(item, to, () =>
+      this.run(item.kind === 'doc' ? () => this.relocateEntries([item.entry], to) : () => this.changeFolders([{ folder: item.folder, parentId: to }])),
     );
   }
 

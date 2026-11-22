@@ -5,6 +5,7 @@ import { listFolders, moveDocuments, putFolders, renameCloudDocument, throwIfFai
 import { folderContents, folderOf, folderPath, isInside, parentsFirst, type Folder } from './folders.ts';
 import { deleteLocalFolder, listLocalFolders, putLocalFolder, removeLocalFolderRecord, setSavedFolder, setSavedName, updateLocalFolder } from './storage/local.ts';
 import type { LibraryChange } from './linkRename.ts';
+import { isEncryptedFolder, newKey, sealNameWith } from './encryption/session.ts';
 import { addFoldersToCatalogue, moveDocsInCatalogue, putDocInCatalogue, updateFoldersInCatalogue, type LibraryEntry } from './sync.ts';
 
 /** Folders that were not saved by a batch call (the cloud's answer for each), as an error naming the first reason. */
@@ -25,15 +26,36 @@ function saved<T extends { id: string }>(result: BatchResult<T>): T[] {
 /** New folders, each in its `parentId` (null: the top level); in order, so one may go inside another made earlier in the list. */
 export async function createFolders(cloud: boolean, wanted: readonly { name: string; parentId: string | null; id?: string }[]): Promise<Folder[]> {
   const now = Date.now();
-  const folders: Folder[] = wanted.map((w) => ({ id: w.id ?? crypto.randomUUID(), name: w.name, parentId: w.parentId, createdAt: now, updatedAt: now }));
+  // Inside an encrypted folder a new folder is encrypted too, with a key of its own and its name sealed (docs/encrypted-folders.md).
+  const folders: Folder[] = await Promise.all(
+    wanted.map(async (w) => ({
+      id: w.id ?? crypto.randomUUID(),
+      name: w.name,
+      parentId: w.parentId,
+      createdAt: now,
+      updatedAt: now,
+      ...(isEncryptedFolder(w.parentId) ? { encrypted: true, wrappedKey: await newKey() } : {}),
+    })),
+  );
   if (cloud) {
     // The Files panel lists from the cached catalogue first: without the folders, they (and what is put in them) would vanish until the account answers.
     const done = saved(await putFolders(folders));
     addFoldersToCatalogue(done);
-    return done;
+    return shownAs(done, folders);
   }
-  for (const folder of folders) await putLocalFolder(folder);
+  for (const folder of folders) await putLocalFolder(folder.wrappedKey ? { ...folder, name: await sealNameWith(folder.wrappedKey, folder.name) } : folder);
   return folders;
+}
+
+/**
+ * Folders as the account answered, with the names they were given: the account keeps an encrypted folder's name sealed (and so does
+ * the catalogue), and the person sees the name they typed.
+ */
+function shownAs(done: Folder[], sent: readonly { id: string; name?: string }[]): Folder[] {
+  return done.map((f) => {
+    const name = sent.find((s) => s.id === f.id)?.name;
+    return name !== undefined ? { ...f, name } : f;
+  });
 }
 
 /** A new folder, in `parentId` (null: the top level). */
@@ -50,10 +72,12 @@ export async function updateFolders(cloud: boolean, changes: readonly { folder: 
   const now = Date.now();
   const linksAfter = linkKeeper?.({ kind: 'folders', changes: changes.map(({ folder, name, parentId }) => ({ id: folder.id, name, parentId })) });
   if (cloud) {
-    const done = saved(await putFolders(changes.map(({ folder, name, parentId }) => ({ id: folder.id, name, parentId }))));
+    // Moved into an encrypted folder, a folder's name goes sealed (cloud.ts seals it): it is sent, whether or not it changed.
+    const sent = changes.map(({ folder, name, parentId }) => ({ id: folder.id, name: name ?? (parentId !== undefined && isEncryptedFolder(parentId) ? folder.name : undefined), parentId }));
+    const done = saved(await putFolders(sent));
     updateFoldersInCatalogue(done);
     linksAfter?.();
-    return done;
+    return shownAs(done, changes.map(({ folder, name }) => ({ id: folder.id, name: name ?? folder.name })));
   }
   const next: Folder[] = [];
   for (const { folder, ...change } of changes) next.push((await updateLocalFolder(folder.id, change, now)) ?? { ...folder, ...change, updatedAt: now });
@@ -102,8 +126,26 @@ export type Dragged = { kind: 'doc'; entry: LibraryEntry } | { kind: 'folder'; f
 
 /** Whether `item` can be dropped in folder `to` (null: the top level): somewhere it isn't already, and a folder never inside itself. */
 export function canDrop(folders: readonly Folder[], item: Dragged, to: string | null): boolean {
+  if (outOfReach(folders, item, to)) return false;
   if (item.kind === 'doc') return folderOf(item.entry, folders) !== to;
   return item.folder.parentId !== to && to !== item.folder.id && !isInside(folders, to, item.folder.id);
+}
+
+/**
+ * Whether `to` is somewhere `item` can never be moved to, for encryption's sake (docs/encrypted-folders.md): into a locked folder, or
+ * across the edge of an encrypted one (that is a conversion, not a move). The top of an encrypted folder moves among ordinary folders.
+ */
+export function outOfReach(folders: readonly Folder[], item: Dragged, to: string | null): boolean {
+  // Into a locked folder nothing goes; into an encrypted one, what goes is encrypted on the way (see `needsEncrypting`).
+  if (to !== null && folders.find((f) => f.id === to)?.locked) return true;
+  // Something locked can't be encrypted or moved anywhere it would need to be.
+  return (item.kind === 'doc' ? !!item.entry.locked : !!item.folder.locked) && needsEncrypting(item, to);
+}
+
+/** Whether moving `item` into `to` encrypts it first (docs/encrypted-folders.md): it goes into an encrypted folder and isn't encrypted. */
+export function needsEncrypting(item: Dragged, to: string | null): boolean {
+  if (!isEncryptedFolder(to)) return false;
+  return item.kind === 'doc' ? !item.entry.encrypted && !item.entry.local?.encrypted && !item.entry.cloud?.encrypted : !item.folder.encrypted;
 }
 
 /**

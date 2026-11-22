@@ -40,6 +40,7 @@ import { kickFromRoom, rejoinRoom } from './roomGate.ts';
 import { person, userByEmail } from './sharing.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
 import { existingUserDb, type UserDb } from './userDb.ts';
+import { refuseEncrypted } from './sealed.ts';
 
 type DocumentRow = Parameters<typeof describe>[0] & { created_by?: string | null };
 
@@ -47,7 +48,7 @@ type DocumentRow = Parameters<typeof describe>[0] & { created_by?: string | null
 async function contents(env: Env, ownerId: string, db: UserDb, root: string, folders?: Map<string, FolderLink>) {
   const all = folders ?? new Map((await listFolders<FolderRow>(db)).map((f) => [f.id, f]));
   const inside = subtree(all.values(), root);
-  const documents = (await listDocuments(env, ownerId, db)).filter((row) => row.folder_id !== null && inside.has(row.folder_id)) as DocumentRow[];
+  const documents = (await listDocuments(env, ownerId, db)).filter((row) => row.folder_id !== null && inside.has(row.folder_id) && !row.encrypted) as DocumentRow[];
   return { folders: [...inside].map((id) => all.get(id)!).filter(Boolean), documents, all };
 }
 
@@ -69,6 +70,8 @@ export async function handleFolderLinkOrShares(request: Request, env: Env, userI
   const { syncing, ownDb } = await ownStorage(env, userId, 'GET');
   const folder = ownDb && (await ownDb.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [folderId]));
   if (!ownDb || !folder) throw new HttpError(404, 'not found');
+  // An encrypted folder is never shared (docs/encrypted-folders.md); who it is shared with is still answered: nobody.
+  if (request.method === 'PUT' || request.method === 'POST') refuseEncrypted(folder, 'sharing');
   const requireSync = () => {
     if (!syncing) throw subscriptionRequired();
   };

@@ -43,7 +43,7 @@ Database `word`, version 9. Object stores:
 
 | Store | Key -> value |
 | --- | --- |
-| `meta` | document id -> `SavedInfo` (name, size, `updatedAt`, `owner`, `cloudId`, `cloudSyncedAt`, `cloudUpdatedAt`, `folderId`, `releasedFrom`) |
+| `meta` | document id -> `SavedInfo` (name, size, `updatedAt`, `owner`, `cloudId`, `cloudSyncedAt`, `cloudUpdatedAt`, `folderId`, `releasedFrom`, `encrypted`, `wrappedKey`) |
 | `bytes` | id -> the whole file (documents under 2 MiB: `CHUNK_MIN_FILE` in `chunker.ts`) |
 | `manifests`, `chunks`, `chunkRefs` | for documents of 2 MiB or more: id -> `StoredManifest` (chunk hashes, lengths, `syncedHashes`), hash -> bytes, hash -> reference count (a chunk is deleted when the last document lets go). Details in [Chunked storage](../chunked-storage.md) |
 | `history`, `historyData` | a document's earlier versions: id -> its versions' details (small), `<id>/<version>` -> a small version's bytes or a chunked one's manifest (a hold on its chunks through `chunkRefs`). See [Version history](../history.md) |
@@ -56,6 +56,10 @@ Database `word`, version 9. Object stores:
 | `undo`, `undoData` | id -> what a document's kept undo steps take, the save they belong to (`forUpdatedAt`) and when last used; id -> the steps as JSON (`History.saved`). Written with the bytes, dropped by any write without them, trimmed least recently used first past 50 MB (20 MB on a phone). Per device, never uploaded. See [undo-history.md](../undo-history.md) |
 
 Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/shared/folder lists as last listed, for an instant dashboard; `sync.ts`), `golem.account` (last signed-in user, so offline still shows their documents; `auth.ts`), `golem.account.lapsed` (the account whose sign-in ran out here, for the note saying so; `auth.ts`), `golem.settingsSync` (settings baseline), `golemdocs.views` (per-document scroll, zoom, caret and selection, `viewMemory.ts`, capped at 200), `golemdocs.reading` (where each book is being read, `reading.ts`, capped at 500).
+
+## Encrypted documents
+
+An encrypted document ([encrypted-folders.md](../encrypted-folders.md)) is kept sealed here exactly as in the account, with its own item key (`SavedInfo.wrappedKey`): every write seals its bytes and name (`sealed` in `local.ts`, keys from `encryption/session.ts`), so the copy here is what is uploaded (`getSaved(id, { sealed: true })`) and a locked device holds only ciphertext. A new document saved into an encrypted folder gets its key on that save; an ordinary one is encrypted only by a conversion (`encryption/convert.ts`), which rewrites the copy with `noVersion` and reseals its kept versions (`convertLocalVersions`). `getSaved` opens a sealed copy, or throws `LockedError` while its key is locked. Sealed bytes from the account are stored as they came. The library is listed sealed and opened last (`encryption/present.ts`, called by `loadLibrary` and `loadLocalLibrary`): locked documents show as "Encrypted document", and their copies are left out of `local` and `cloud`. No thumbnail, undo steps, search index or edit journal is kept for one, and it never joins a room.
 
 ## Ownership rules for local copies
 

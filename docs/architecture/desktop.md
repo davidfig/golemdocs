@@ -37,6 +37,8 @@ Whatever is done to the folder is what the account becomes. That is safe because
 | File edited here (bytes differ, not just the time) | `upload`, even if the account changed too (then the account's bytes are kept as a version first) |
 | New file | `create` |
 | File deleted here | `deleteCloud` (account trash) |
+
+Encrypted documents and folders ([encrypted-folders.md](../encrypted-folders.md)) are never in the vault, signed in or not: both hosts' `list` leaves them out (`withoutEncrypted`, `desktop/vaultEncrypted.ts`), because their files would be readable on disk and outlive the session that unlocked them. The listing names the encrypted documents, so a file the vault had for one that was encrypted since is taken out before the plan (`syncVault`): an edit made to it since the last sync is saved into the document first, sealed by the host, and while that can't be done (locked) the file and its entry are held, out of the plan, so it is never read as a new readable document nor counted toward the mass-delete stop. A note (`<name> (encrypted).md`, remembered in the vault state's `notes`) stands in for each encrypted folder whose parent is not encrypted, and a folder on disk where one would be is not made in the account.
 | File moved or renamed here (same bytes, one candidate) | `renameCloud`; the document and its history stay one |
 | Moved or renamed in the account, file untouched | `moveLocal` |
 | Deleted in the account, file untouched | `deleteLocal` |

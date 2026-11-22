@@ -6,15 +6,13 @@
 // differ. See "Consistent UI" in AGENTS.md.
 
 import { t } from '../i18n/index.ts';
-import { CHEVRON_ICON, CLOSE_ICON, h, iconButton } from './dom.ts';
+import { CHEVRON_ICON, CLOSE_ICON, h, iconButton, PADLOCK, PADLOCK_OPEN } from './dom.ts';
 import { showPopupMenu } from './popupMenu.ts';
 import type { PopupItem } from './popupMenu.ts';
 import './layersPanel.css';
 
 const EYE = 'M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6zM6 4.5a1.5 1.5 0 1 0 0.01 0';
 const EYE_CLOSED = 'M1 6s2-3.5 5-3.5S11 6 11 6s-2 3.5-5 3.5S1 6 1 6zM2 10L10 2';
-const LOCK = 'M3 5.5h6V10H3zM4 5.5V4a2 2 0 0 1 4 0v1.5';
-const UNLOCK = 'M3 5.5h6V10H3zM4 5.5V4a2 2 0 0 1 3.9-.6';
 
 /** Icons for the buttons at the bottom of a panel (the editors pass the ones they need). */
 export const LAYER_ICONS = {
@@ -280,7 +278,7 @@ export class LayerTree {
     }
     const name = h('span', { class: 'wm-layers-name', text: row.name });
     const eye = iconButton('wm-layers-eye', row.hidden ? EYE_CLOSED : EYE, t(row.hidden ? 'vector.layerShow' : 'vector.layerHide'));
-    const lock = iconButton('wm-layers-lock', row.locked ? LOCK : UNLOCK, t(row.locked ? 'vector.layerUnlock' : 'vector.layerLock'));
+    const lock = iconButton('wm-layers-lock', row.locked ? PADLOCK : PADLOCK_OPEN, t(row.locked ? 'vector.layerUnlock' : 'vector.layerLock'));
     eye.addEventListener('click', (e) => {
       e.stopPropagation();
       adapter.setHidden(row.id, !row.hidden);

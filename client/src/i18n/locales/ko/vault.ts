@@ -89,4 +89,7 @@ export const vault: Catalog = {
   'vault.shared.index.empty': '아직 파일이 없습니다.',
   'vault.shared.index.more': '…외 {count}개',
   'vault.shared.index.how': '이 폴더도 보관 폴더에 두려면 Golem Docs에서 파일 › 열기를 열고 “{share}” 카드에서 “내 보관 폴더…”를 선택하세요. 이 목록은 Golem Docs가 최신으로 유지하므로 이 파일에 한 변경은 남지 않습니다.',
+  'vault.encrypted.file': '{name} (암호화됨)',
+  'vault.encrypted.title': '{name} (암호화됨)',
+  'vault.encrypted.intro': '“{name}” 폴더는 암호화되어 있어서 파일이 이 보관함 폴더에 없습니다. 읽을 수 있는 형태로도, 암호화된 형태로도 이 폴더에 기록되지 않습니다. 보려면 Golem Docs에서 열고 암호화 키를 입력하세요. 이 메모는 Golem Docs가 최신으로 유지하므로 여기에 한 변경은 남지 않습니다.',
 };

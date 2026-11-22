@@ -5,6 +5,7 @@
 // A document replaced by the folder first gets a version in this browser's history, and one deleted from the folder goes to
 // this browser's trash (30 days), like the account's.
 
+import { withoutEncrypted } from './vaultEncrypted.ts';
 import type { Folder } from '../folders.ts';
 import { deleteLocalFolder, getSaved, keepVersion, listLocalFolders, listSaved, ownedBy, putLocalFolder, saveSaved, setSavedFolder, trashSaved } from '../storage/local.ts';
 import { safeName } from './vaultPlan.ts';
@@ -37,10 +38,12 @@ export function guestCloud(): VaultCloud {
 
   return {
     async list() {
-      folders = await listLocalFolders();
-      const docs = ownedBy(await listSaved(), null);
+      // Encrypted documents and folders are never in the vault (vaultEncrypted.ts, docs/encrypted-folders.md).
+      const shown = withoutEncrypted(ownedBy(await listSaved(), null), await listLocalFolders());
+      folders = shown.folders;
       // This browser keeps no creation time; with all equal, documents are ordered by id, which never changes.
-      return { docs: docs.map((d) => ({ id: d.id, name: d.name, folderId: d.folderId ?? null, createdAt: 0, updatedAt: d.updatedAt })), folders };
+      const docs = shown.docs.map((d) => ({ id: d.id, name: d.name, folderId: d.folderId ?? null, createdAt: 0, updatedAt: d.updatedAt }));
+      return { docs, folders, encrypted: shown.encrypted, notes: shown.notes, encryptedPaths: shown.encryptedPaths };
     },
     download: async (id) => new Uint8Array((await stored(id)).bytes),
     async replace(id, bytes) {

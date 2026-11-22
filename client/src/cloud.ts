@@ -3,6 +3,7 @@
 import { decodeIndex, type DocIndex } from '@golemdocs/docx';
 import { ACCOUNT_STORAGE_GB } from '@golemdocs/ops';
 import type { Folder } from './folders.ts';
+import { encryptedDocumentKey, folderInfo, isEncryptedFolder, sealNameWith } from './encryption/session.ts';
 import { t } from './i18n/index.ts';
 import type { Manifest } from './storage/chunker.ts';
 
@@ -22,6 +23,18 @@ export interface CloudDocument {
   viewToken?: string;
   /** Who shared it (documents shared with this user). */
   owner?: { name: string | null; email: string | null };
+  /** Encrypted (docs/encrypted-folders.md): its file and name are sealed, with the item key `wrappedKey` (the owner's only). */
+  encrypted?: boolean;
+  wrappedKey?: string;
+}
+
+/**
+ * The name to send for a document: sealed, for one in an encrypted folder (the server refuses any other), whether the caller had it
+ * open or sealed already. `folderId` for a new one, the document's id for one the account has.
+ */
+async function nameToSend(name: string, where: { key?: string | null; id?: string }): Promise<string> {
+  const key = where.key ?? (where.id ? encryptedDocumentKey(where.id) : null);
+  return key ? sealNameWith(key, name) : name;
 }
 
 export type ShareRole = 'editor' | 'viewer';
@@ -193,9 +206,11 @@ export async function listDocuments(): Promise<CloudDocument[]> {
   return docs.filter((d) => !isDeletedDocument(d));
 }
 
-export async function createDocument(name: string, bytes: Uint8Array, folderId?: string): Promise<CloudDocument> {
+/** A new document; an encrypted one (`key`, its wrapped item key) comes sealed, file and name. */
+export async function createDocument(given: string, bytes: Uint8Array, folderId?: string, key?: string): Promise<CloudDocument> {
   const folder = folderId ? `&folder=${encodeURIComponent(folderId)}` : '';
-  const response = await send(`/api/documents?name=${encodeURIComponent(name)}${folder}`, {
+  const name = await nameToSend(given, { key });
+  const response = await send(`/api/documents?name=${encodeURIComponent(name)}${folder}${key ? `&key=${key}` : ''}`, {
     method: 'POST',
     headers: { 'content-type': DOCX },
     body: bytes as Uint8Array<ArrayBuffer>,
@@ -236,15 +251,16 @@ async function sendChunked(method: 'POST' | 'PUT', url: string, manifest: Manife
 }
 
 /** A new document from its chunks (all of them are sent). */
-export function createChunked(name: string, manifest: Manifest, source: ChunkSource, folderId?: string): Promise<CloudDocument> {
+export async function createChunked(given: string, manifest: Manifest, source: ChunkSource, folderId?: string, key?: string): Promise<CloudDocument> {
   const folder = folderId ? `&folder=${encodeURIComponent(folderId)}` : '';
-  return sendChunked('POST', `/api/documents?name=${encodeURIComponent(name)}${folder}`, manifest, source, new Set());
+  const name = await nameToSend(given, { key });
+  return sendChunked('POST', `/api/documents?name=${encodeURIComponent(name)}${folder}${key ? `&key=${key}` : ''}`, manifest, source, new Set());
 }
 
 /** Replaces a document's bytes with its chunks, sending those not in `known` (see `saveDocument` for `base`). */
-export function saveChunked(id: string, manifest: Manifest, source: ChunkSource, known: ReadonlySet<string>, name?: string, base?: number): Promise<CloudDocument> {
+export async function saveChunked(id: string, manifest: Manifest, source: ChunkSource, known: ReadonlySet<string>, name?: string, base?: number): Promise<CloudDocument> {
   const params = new URLSearchParams();
-  if (name) params.set('name', name);
+  if (name) params.set('name', await nameToSend(name, { id }));
   if (base !== undefined) params.set('base', String(base));
   return sendChunked('PUT', `/api/documents/${id}${params.size ? `?${params}` : ''}`, manifest, source, known);
 }
@@ -288,7 +304,7 @@ export async function createDocuments(documents: readonly NewDocument[]): Promis
  */
 export async function saveDocument(id: string, bytes: Uint8Array, name?: string, base?: number): Promise<CloudDocument> {
   const params = new URLSearchParams();
-  if (name) params.set('name', name);
+  if (name) params.set('name', await nameToSend(name, { id }));
   if (base !== undefined) params.set('base', String(base));
   const query = params.size ? `?${params}` : '';
   const response = await send(`/api/documents/${id}${query}`, {
@@ -299,8 +315,29 @@ export async function saveDocument(id: string, bytes: Uint8Array, name?: string,
   return (await check(response)).json();
 }
 
+/**
+ * Converts a document (docs/encrypted-folders.md): `encrypt` (its new wrapped item key) with its sealed file and name, or `decrypt` with
+ * readable ones. What it replaces is not kept as a version; each version is converted after, with `replaceCloudVersion`.
+ */
+export async function convertCloudDocument(id: string, bytes: Uint8Array, change: { encrypt: string; name: string } | { decrypt: true; name: string }, base?: number): Promise<CloudDocument> {
+  const params = new URLSearchParams({ name: change.name });
+  if ('encrypt' in change) params.set('encrypt', change.encrypt);
+  else params.set('decrypt', '1');
+  if (base !== undefined) params.set('base', String(base));
+  const response = await send(`/api/documents/${id}?${params}`, { method: 'PUT', headers: { 'content-type': DOCX }, body: bytes as Uint8Array<ArrayBuffer> });
+  return (await check(response)).json();
+}
+
+/** Replaces a kept version's file in place, sealed or readable as its document now is (converting it); its name too, if given. */
+export async function replaceCloudVersion(id: string, version: number, bytes: Uint8Array, name?: string | null): Promise<CloudVersion> {
+  const query = typeof name === 'string' ? `?${new URLSearchParams({ name })}` : '';
+  const response = await send(`/api/documents/${id}/versions/${version}${query}`, { method: 'PUT', headers: { 'content-type': DOCX }, body: bytes as Uint8Array<ArrayBuffer> });
+  return (await check(response)).json();
+}
+
 /** Renames a document in the account on its own: unlike a save, it works while several people are editing it. */
-export async function renameCloudDocument(id: string, name: string): Promise<CloudDocument> {
+export async function renameCloudDocument(id: string, given: string): Promise<CloudDocument> {
+  const name = await nameToSend(given, { id });
   return (await check(await send(`/api/documents/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) }))).json();
 }
 
@@ -371,8 +408,17 @@ export async function listFolders(): Promise<Folder[]> {
  * are made in order, so a folder may go inside one earlier in the list. An update may leave out
  * the name or the parent, to keep it.
  */
-export function putFolders(folders: readonly { id: string; name?: string; parentId?: string | null }[]): Promise<BatchResult<Folder>> {
-  const wanted = folders.map(({ id, name, parentId }) => ({ id, name, parentId }));
+export async function putFolders(folders: readonly { id: string; name?: string; parentId?: string | null; encrypted?: boolean; wrappedKey?: string }[]): Promise<BatchResult<Folder>> {
+  // Inside an encrypted folder a folder's name is sealed, with its own key (docs/encrypted-folders.md): where it goes, or where it is.
+  const wanted = await Promise.all(
+    folders.map(async ({ id, name, parentId, encrypted, wrappedKey }) => {
+      const known = folderInfo(id);
+      const inside = isEncryptedFolder(parentId !== undefined ? parentId : (known?.parentId ?? null));
+      const key = wrappedKey ?? known?.wrappedKey;
+      const sent = name !== undefined && inside && key ? await sealNameWith(key, name) : name;
+      return { id, name: sent, parentId, ...(encrypted !== undefined ? { encrypted } : {}), ...(wrappedKey ? { wrappedKey } : {}) };
+    }),
+  );
   return chunked(wanted, (chunk) => batch<Folder>('PUT', '/api/folders', { folders: chunk }));
 }
 
@@ -538,6 +584,8 @@ export interface CloudVersion {
   version: number;
   size: number;
   name: string | null;
+  /** Kept sealed: one of an encrypted document's (docs/encrypted-folders.md). */
+  sealed?: boolean;
 }
 
 const JSON_HEADERS = { 'content-type': 'application/json' };
@@ -548,7 +596,8 @@ export async function listCloudVersions(id: string): Promise<CloudVersion[]> {
 }
 
 /** Keeps the document as it is now; with a `name`, as a named version (kept longer). Anyone who can edit it may. */
-export async function saveCloudVersion(id: string, name?: string): Promise<CloudVersion> {
+export async function saveCloudVersion(id: string, given?: string): Promise<CloudVersion> {
+  const name = given ? await nameToSend(given, { id }) : given;
   return (await check(await send(`/api/documents/${id}/versions`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(name ? { name } : {}) }))).json();
 }
 
@@ -558,7 +607,8 @@ export async function downloadCloudVersion(id: string, version: number): Promise
 }
 
 /** Names a version, or (null) lets it be thinned like the others. */
-export async function nameCloudVersion(id: string, version: number, name: string | null): Promise<CloudVersion> {
+export async function nameCloudVersion(id: string, version: number, given: string | null): Promise<CloudVersion> {
+  const name = given ? await nameToSend(given, { id }) : given;
   return (await check(await send(`/api/documents/${id}/versions/${version}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ name }) }))).json();
 }
 
@@ -567,7 +617,8 @@ export async function deleteCloudVersion(id: string, version: number): Promise<v
 }
 
 /** Makes a new document (the caller's own) from a version, leaving the document as it is. */
-export async function restoreCloudVersion(id: string, version: number, name?: string): Promise<CloudDocument> {
+export async function restoreCloudVersion(id: string, version: number, given?: string): Promise<CloudDocument> {
+  const name = given ? await nameToSend(given, { id }) : given;
   const query = name ? `?${new URLSearchParams({ name })}` : '';
   return (await check(await send(`/api/documents/${id}/versions/${version}/restore${query}`, { method: 'POST' }))).json();
 }

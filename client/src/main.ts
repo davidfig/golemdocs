@@ -19,6 +19,9 @@ import { SEAM_HIDE_CURSOR, SEAM_SHOW_CURSOR } from './ui/cursors.ts';
 import { blankSource, lastNewKind, rememberNewKind } from './ui/newKinds.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
 import { adoptGuestFolders, createFolder, renameEntry, setLinkKeeper } from './folderOps.ts';
+import { encryptedDocumentKey, isEncryptedFolder, isSealedCopy, isUnlocked, onBeforeLock, onSessionChange, touch as touchEncryption } from './encryption/session.ts';
+import { setEncryptionHost, showUnlock } from './encryption/ui.ts';
+import { finishVersions } from './encryption/convert.ts';
 import { conflictCopyName, keepAsConflictCopy, openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud, type MergeHost } from './library.ts';
 import {
   adoptGuestDocuments,
@@ -708,9 +711,11 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   }
   // A picture that was changed comes back as the same document, so its undo history goes on; any other opening starts afresh.
   if (!options.pictureEdit) pictureHistory = { undo: [], redo: [] };
+  const encrypted = isEncryptedFolder(options.localId ? null : newDocumentFolder) || (!!options.localId && isSealedCopy(options.localId));
   current = {
     localId: options.localId ?? null,
-    journal: !options.shared && !options.detour && journalsSupported() ? new EditJournal(localStorage, crypto.randomUUID(), pageId) : null,
+    journal: !options.shared && !options.detour && !encrypted && journalsSupported() ? new EditJournal(localStorage, crypto.randomUUID(), pageId) : null,
+    ...(encrypted && { encrypted: true }),
     unsavedSince: 0,
     builtIn: !!options.none || source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'changelog' || source.kind === 'fonts',
     room: null,
@@ -1286,7 +1291,8 @@ const guestName = (): string => t('app.guestName', { number: guestNumber });
 
 /** The multiplayer server's room for a cloud document, when signed in (else the document is edited on its own). */
 function networkRoom(cloudId: string | undefined): RoomOptions | undefined {
-  if (!cloudId || !account) return undefined;
+  // An encrypted document never has a room: the server would read the edits it orders (docs/encrypted-folders.md).
+  if (!cloudId || !account || encryptedDocumentKey(cloudId) || current.encrypted) return undefined;
   return { docId: cloudId, user: account.name ?? account.email ?? guestName(), color: userColor };
 }
 
@@ -1601,6 +1607,11 @@ interface OpenDocument {
   absorbing?: string[];
   /** A merge with the account's copy is being put into it (see `mergeHost`): its saves wait for it, or they would save over the merge. */
   merging?: Promise<void>;
+  /**
+   * In an encrypted folder (docs/encrypted-folders.md): saved sealed, never in a room, with no edit journal (it would keep the edits
+   * readable in this browser), and closed when the session locks.
+   */
+  encrypted?: boolean;
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
@@ -2971,6 +2982,45 @@ async function updateLinksIn(entry: LibraryEntry, renames: ReadonlyMap<string, s
 }
 
 setLinkKeeper(keepLinks);
+
+// --- Encrypted folders (docs/encrypted-folders.md) --------------------------------------------
+// The session's keys live in encryption/session.ts. Locking (Lock, or the idle timer) saves the open encrypted document while the keys
+// are still here, then closes it; the library is listed again either way, to hide or show what is inside.
+onBeforeLock(async () => {
+  if (current.encrypted) await saveNow();
+});
+onSessionChange((open) => {
+  if (!open && current.encrypted && !current.none) openSource('none', 'replace');
+  // File › Unlock and Lock show by the session's state; the library lists again to hide or show what is inside.
+  chrome.refresh();
+  void library.refresh().then(() => chrome.refresh());
+});
+// Encrypting and decrypting documents and folders (encryption/convert.ts): the open document among them is saved and closed while it is
+// converted, and opened again after.
+let reopenAfterConvert: string | null = null;
+setEncryptionHost({
+  convert: () => ({ owner: account?.id, cloud: !!account }),
+  folders: () => library.folders,
+  entries: () => library.entries,
+  before: async (entries) => {
+    const ids = openDocumentIds();
+    const open = entries.find((e) => (ids.localId !== null && e.local?.id === ids.localId) || (ids.cloudId !== null && e.cloud?.id === ids.cloudId));
+    if (!open) return;
+    await saveNow();
+    reopenAfterConvert = open.key;
+    openSource('none', 'replace');
+  },
+  refresh: () => library.refresh(),
+  after: () => {
+    const key = reopenAfterConvert;
+    reopenAfterConvert = null;
+    const entry = key ? library.entries.find((e) => e.key === key) : undefined;
+    if (entry) libraryHost.open(entry);
+    chrome.refresh();
+  },
+});
+// Anything done in the app keeps the session from locking for being idle.
+for (const type of ['pointerdown', 'keydown', 'wheel'] as const) window.addEventListener(type, () => touchEncryption(), { capture: true, passive: true });
 
 // --- Keeping live blocks up to date ----------------------------------------------------------
 // A live block (docs/live-blocks.md) shows a part of another document (a workbook's range, a drawing) and is kept up to date:
@@ -6381,6 +6431,10 @@ const chromeHost = createChromeHost({
   copyNoteLink: () => void copyNoteLink(),
   canShowInVault,
   showInVault: () => showInVault('open'),
+  openEntry: () => {
+    const ids = openDocumentIds();
+    return library.entries.find((e) => (ids.localId !== null && e.local?.id === ids.localId) || (ids.cloudId !== null && e.cloud?.id === ids.cloudId)) ?? null;
+  },
   vaultFolder: () => {
     const service = vaultService;
     if (!service) return null;
@@ -7044,9 +7098,19 @@ const libraryHost = {
   canShowInVault,
   showInVault: (item: { doc: LibraryEntry } | { folder: Folder }) => void showInVault(item),
   open: (entry: LibraryEntry) => {
+    // A locked encrypted document opens by being unlocked first (docs/encrypted-folders.md).
+    if (entry.locked) {
+      void showUnlock().then((unlocked) => {
+        const fresh = unlocked ? library.entries.find((e) => e.key === entry.key) : undefined;
+        if (fresh && !fresh.locked) libraryHost.open(fresh);
+      });
+      return;
+    }
     newDocumentFolder = null;
     showLoading(entry.name);
     openSource(sourceOf(entry));
+    // Its versions finish converting, if that was cut short.
+    if (entry.encrypted && entry.cloud?.wrappedKey && isUnlocked()) void finishVersions(entry.cloud.id, entry.cloud.wrappedKey).catch(() => undefined);
   },
   warm: (entry: LibraryEntry) => {
     if (entry.cloud && opensFromCloud(entry)) prefetchFromCloud({ id: entry.cloud.id, updatedAt: entry.cloud.updatedAt });

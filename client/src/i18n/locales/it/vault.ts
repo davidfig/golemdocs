@@ -96,4 +96,7 @@ export const vault: Catalog = {
   'vault.shared.index.empty': 'Non contiene ancora file.',
   'vault.shared.index.more': '…e altri {count}',
   'vault.shared.index.how': 'Per tenere anche questa cartella nel tuo caveau, apri File › Apri in Golem Docs e scegli «Nel mio caveau…» sulla scheda di «{share}». Golem Docs mantiene aggiornato questo elenco, quindi le modifiche a questo file non vengono conservate.',
+  'vault.encrypted.file': '{name} (crittografata)',
+  'vault.encrypted.title': '{name} (crittografata)',
+  'vault.encrypted.intro': 'La cartella “{name}” è crittografata, quindi i suoi file non sono in questa cartella del vault: non vengono mai scritti in questa cartella, né leggibili né crittografati. Aprila in Golem Docs e inserisci la tua chiave di crittografia per vederli. Golem Docs mantiene aggiornata questa nota, quindi le modifiche che le apporti non vengono conservate.',
 };

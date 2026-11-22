@@ -35,6 +35,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [spreadsheets.md](spreadsheets.md) | Plan for `.xlsx`: column-major model, memory-image cache, formula engine, hashed tile pyramid zoomable to under 1% |
 | [live-blocks.md](live-blocks.md) | Plan: computed blocks kept up to date across the vault, in every document type: sources, hosts, the vault graph, where updates run |
 | [folder-sharing.md](folder-sharing.md) | Plan: sharing a folder to view or edit, by email or public link, with links working inside it and copies in the recipient's vault |
+| [encrypted-folders.md](encrypted-folders.md) | Encrypting documents and folders you have: sealed in the browser with per-item keys, synced as blobs, unlocked per session with a key the person keeps |
 | [localization.md](localization.md) | Strings, languages, spelling dictionaries, adding a language |
 | [../server/AUTH.md](../server/AUTH.md) | Sign-in provider setup |
 | [self-hosting.md](self-hosting.md) | Running your own server on your own Cloudflare account: setup, settings (`SINGLE_DATABASE`, `ALLOWED_EMAILS`, `LINK_*`), updates, limits |

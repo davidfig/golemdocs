@@ -4,13 +4,15 @@
 
 import { takeDropped, type Dropped } from '../storage/droppedFiles.ts';
 import { warmOnHover } from './warmOnHover.ts';
-import { canDrop, createFolder, moveEntries, removeFolderTree, updateFolder, withMoved, withoutDeleted, type Dragged } from '../folderOps.ts';
+import { canDrop, createFolder, moveEntries, outOfReach, removeFolderTree, updateFolder, withMoved, withoutDeleted, type Dragged } from '../folderOps.ts';
+import { documentItems, encryptForMove, folderItems as encryptionFolderItems, showUnlock } from '../encryption/ui.ts';
+import { isEncryptedFolder } from '../encryption/session.ts';
 import { deletionList, folderOf, isInside, treeRows, type Folder, type TreeRow } from '../folders.ts';
 import { t } from '../i18n/index.ts';
 import type { LibraryStore } from '../libraryStore.ts';
 import type { LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
-import { CLOSE_ICON, h, iconButton, isFileDrag, toggleClass } from './dom.ts';
+import { CLOSE_ICON, h, iconButton, isFileDrag, PADLOCK, PADLOCK_OPEN, smallIcon, toggleClass } from './dom.ts';
 import { setDocumentDrag } from './documentDrag.ts';
 import { fileIcon, setFileName, splitExtension } from './fileIcons.ts';
 import { renamedFileName } from '../documentName.ts';
@@ -62,6 +64,12 @@ export interface FilesPanelHost {
 const OPEN_KEY = 'word.filesOpen';
 /** Set once the tip about dropping files here is dismissed, kept in this browser. */
 const TIP_KEY = 'word.filesDropTipDismissed';
+
+/** The padlock of an encrypted folder or document: shut while locked, open while unlocked (none for anything else). */
+function lockOf(item: { encrypted?: boolean; locked?: boolean }): HTMLElement[] {
+  if (!item.encrypted) return [];
+  return [smallIcon(item.locked ? 'wm-files-lock' : 'wm-files-lock wm-files-unlocked', item.locked ? PADLOCK : PADLOCK_OPEN)];
+}
 
 export class FilesPanel {
   readonly el = h('aside', { class: 'wm-files', attrs: { 'aria-label': t('panels.files.label') } });
@@ -248,6 +256,8 @@ export class FilesPanel {
       // A file's icon sits in the column of its sibling folders' chevrons, so the indent shows the hierarchy.
       folder ? h('span', { class: 'wm-files-twist', text: row.open ? '▾' : '▸' }) : fileIcon(name),
       label,
+      // Encrypted: a padlock, shut while locked (when the name also says so, so the padlock is not the only sign), open while unlocked.
+      ...(lockOf(folder ? row.folder : row.item)),
     );
     if (renaming) {
       el.style.paddingLeft = `${6 + row.depth * 18}px`;
@@ -278,7 +288,9 @@ export class FilesPanel {
         this.menuAt(e.clientX, e.clientY, folder ? this.folderItems(row.folder, row.open) : this.fileItems(row.item));
         return;
       }
-      if (folder) this.toggleFolder(row.folder.id);
+      // A locked encrypted folder opens by being unlocked (a locked document does, through `open`).
+      if (folder && row.folder.locked) void showUnlock();
+      else if (folder) this.toggleFolder(row.folder.id);
       else this.host.open(row.item);
     });
     onContextMenu(el, (e) => {
@@ -333,22 +345,28 @@ export class FilesPanel {
     const items: PopupItem[] = [
       { label: t('panels.files.openItem'), run: () => this.host.open(entry) },
       ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ doc: entry }) }] : []),
-      ...(entry.cloud ? [{ label: t('panels.dashboard.share'), run: () => this.host.share(entry.cloud!.id, entry.cloud!.name) }] : []),
-      { label: t('panels.dashboard.rename'), run: () => this.startRename(`doc:${entry.key}`) },
-      { label: t('panels.dashboard.move'), run: () => pickFolder(this.folders, t('panels.dashboard.moveTitle', { name: entry.name }), () => false, folderOf(entry, this.folders), (to) => void this.relocate({ kind: 'doc', entry }, to)) },
+      ...(entry.cloud && !entry.encrypted ? [{ label: t('panels.dashboard.share'), run: () => this.host.share(entry.cloud!.id, entry.cloud!.name) }] : []),
+      ...(entry.locked ? [] : [{ label: t('panels.dashboard.rename'), run: () => this.startRename(`doc:${entry.key}`) }]),
+      { label: t('panels.dashboard.move'), run: () => pickFolder(this.folders, t('panels.dashboard.moveTitle', { name: entry.name }), (id) => outOfReach(this.folders, { kind: 'doc', entry }, id), folderOf(entry, this.folders), (to) => void this.relocate({ kind: 'doc', entry }, to)) },
+      // Encrypt… or Decrypt… (a locked document opens by being unlocked, so Open stands for Unlock…).
+      ...(entry.locked ? [] : documentItems(entry)),
       { label: t('panels.dashboard.delete'), run: () => void this.ask([], [entry], () => this.host.delete([entry])) },
     ];
     return items;
   }
 
   private folderItems(folder: Folder, open: boolean): PopupItem[] {
+    const deleteFolder: PopupItem = { label: t('panels.dashboard.deleteFolder'), run: () => void this.ask([folder], [], (before) => removeFolderTree(before.folders, before.entries, [folder], (entries, folderIds) => this.host.delete(entries, folderIds))) };
+    // A locked folder inside an encrypted one can be unlocked or deleted, nothing else (docs/encrypted-folders.md).
+    if (folder.locked && isEncryptedFolder(folder.parentId)) return [...encryptionFolderItems(folder), deleteFolder];
     return [
       { label: open ? t('panels.files.closeFolder') : t('panels.files.openFolder'), run: () => this.toggleFolder(folder.id) },
-      ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ folder }) }] : []),
-      ...(this.host.shareFolder && this.host.account() ? [{ label: t('panels.dashboard.share'), run: () => this.host.shareFolder!(folder) }] : []),
+      ...(this.host.canShowInVault?.() && !folder.encrypted ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ folder }) }] : []),
+      ...(this.host.shareFolder && this.host.account() && !folder.encrypted ? [{ label: t('panels.dashboard.share'), run: () => this.host.shareFolder!(folder) }] : []),
       { label: t('panels.dashboard.rename'), run: () => this.startRename(folder.id) },
-      { label: t('panels.dashboard.move'), run: () => pickFolder(this.folders, t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => void this.relocate({ kind: 'folder', folder }, to)) },
-      { label: t('panels.dashboard.deleteFolder'), run: () => void this.ask([folder], [], (before) => removeFolderTree(before.folders, before.entries, [folder], (entries, folderIds) => this.host.delete(entries, folderIds))) },
+      { label: t('panels.dashboard.move'), run: () => pickFolder(this.folders, t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id) || outOfReach(this.folders, { kind: 'folder', folder }, id), folder.parentId, (to) => void this.relocate({ kind: 'folder', folder }, to)) },
+      ...encryptionFolderItems(folder),
+      deleteFolder,
       'separator',
       ...newMenuItems((kind) => this.host.newDocument(folder.id, kind)),
       'separator',
@@ -438,7 +456,9 @@ export class FilesPanel {
     this.folders = this.folders.map((f) => (f.id === next.id ? next : f));
   }
 
-  private relocate(item: Dragged, to: string | null): Promise<void> {
+  private async relocate(item: Dragged, to: string | null): Promise<void> {
+    // Into an encrypted folder, what isn't encrypted is encrypted first (docs/encrypted-folders.md).
+    if (!(await encryptForMove(item, to))) return;
     return this.run(async () => {
       if (item.kind === 'folder') await this.changeFolder(item.folder, { parentId: to });
       else {

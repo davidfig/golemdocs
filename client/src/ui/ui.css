@@ -3782,3 +3782,68 @@ body.wm-fullscreen .wm-keys {
     outline-offset: -2px;
   }
 }
+
+/* Encrypted folders (encryption/ui.ts, docs/encrypted-folders.md): the setup and unlock dialogs, and the padlock on a locked folder. */
+.wm-encryption-dialog {
+  width: min(460px, calc(100vw - 32px));
+}
+.wm-encryption-dialog p {
+  margin: 0 0 10px;
+}
+.wm-encryption-field {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.wm-encryption-field[hidden] {
+  display: none;
+}
+.wm-encryption-field .wm-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.wm-encryption-key {
+  display: block;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--wm-field-border);
+  border-radius: var(--wm-radius);
+  background: var(--wm-field-bg);
+  color: var(--wm-text);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.wm-encryption-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.wm-encryption-copied {
+  color: var(--wm-muted);
+}
+.wm-files-lock,
+.wm-folder-lock {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+}
+.wm-files-lock {
+  margin-left: 6px;
+  color: var(--wm-muted);
+}
+.wm-folder-lock {
+  grid-column: 1 / -1;
+  align-self: center;
+  justify-self: center;
+  width: 40%;
+  height: auto;
+  color: #6b5520;
+}
+@media (forced-colors: active) {
+  .wm-files-lock,
+  .wm-folder-lock {
+    stroke: CanvasText;
+  }
+}

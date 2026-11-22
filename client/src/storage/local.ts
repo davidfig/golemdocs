@@ -2,10 +2,11 @@
 // nothing leaves the device. Signed in, the account is where documents live and these are its
 // cache: each is marked with the account it belongs to and linked to its cloud copy (../library.ts).
 import type { DocIndex } from '@golemdocs/docx';
-import { HISTORY_SNAPSHOT_MAX, LOCAL_LIMITS, TRASH_MS, byteBudget, shouldCheckpoint, versionsToDrop, type VersionStamp } from '@golemdocs/ops';
+import { HISTORY_SNAPSHOT_MAX, isSealed, LOCAL_LIMITS, sealedKeyId, TRASH_MS, byteBudget, shouldCheckpoint, versionsToDrop, type VersionStamp } from '@golemdocs/ops';
 import type { Folder } from '../folders.ts';
 import { t } from '../i18n/index.ts';
 import { traced } from '../quietRunner.ts';
+import { isEncryptedFolder, knowKey, markSealedCopy, newKey, openSealedFile, openSealedName, sealFileWith, sealNameWith, wrappedFor } from '../encryption/session.ts';
 import { CHUNK_ALGO, CHUNK_MIN_FILE, assemble, chunkBytes } from './chunker.ts';
 import type { Chunked } from './chunker.ts';
 import type { JournalMarker } from './editJournal.ts';
@@ -29,6 +30,12 @@ export interface SavedInfo {
   folderId?: string;
   /** The account it was a copy for, until that account lost sync (see `releaseToGuest`); its cloud link is that account's. */
   releasedFrom?: string;
+  /**
+   * Encrypted (docs/encrypted-folders.md): its bytes, name and version names are kept sealed with its item key (`wrappedKey`), here as in
+   * the account, and `getSaved` opens them only while that key is unlocked. No thumbnail, undo steps or search index is kept for it.
+   */
+  encrypted?: true;
+  wrappedKey?: string;
 }
 
 /** A first-page thumbnail, and which save of the document it shows. */
@@ -143,10 +150,33 @@ function finished(tx: IDBTransaction): Promise<void> {
 export async function listSaved(): Promise<SavedInfo[]> {
   const db = await openDb();
   const all = await done(db.transaction(META).objectStore(META).getAll() as IDBRequest<SavedInfo[]>);
+  for (const info of all) if (info.encrypted) seen(info);
   return all.sort((a, b) => b.updatedAt - a.updatedAt || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
 
-export async function getSaved(id: string): Promise<{ info: SavedInfo; bytes: ArrayBuffer } | null> {
+/**
+ * A saved document. One in an encrypted folder is opened (its bytes and name) and so needs its folder unlocked: else this throws
+ * `LockedError`. `sealed` reads it as stored, sealed, which is what is uploaded.
+ */
+export async function getSaved(id: string, options: { sealed?: boolean } = {}): Promise<{ info: SavedInfo; bytes: ArrayBuffer } | null> {
+  const stored = await getStored(id);
+  if (stored?.info.encrypted) seen(stored.info);
+  if (!stored || options.sealed || !stored.info.encrypted) return stored;
+  return { info: await openInfo(stored.info), bytes: (await openSealedFile(new Uint8Array(stored.bytes))).slice().buffer as ArrayBuffer };
+}
+
+/** An encrypted copy has been read: the session learns it is one, and its key. */
+function seen(info: SavedInfo): void {
+  markSealedCopy(info.id);
+  knowKey(info.wrappedKey);
+}
+
+/** An encrypted document's record with its name opened (see `getSaved`). */
+export async function openInfo(info: SavedInfo): Promise<SavedInfo> {
+  return info.encrypted ? { ...info, name: await openSealedName(info.name) } : info;
+}
+
+async function getStored(id: string): Promise<{ info: SavedInfo; bytes: ArrayBuffer } | null> {
   const db = await openDb();
   const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS]);
   const [info, bytes, manifest] = await Promise.all([
@@ -194,6 +224,41 @@ interface WriteInput {
   undo?: string;
   /** Only over a copy of the same cloud document with nothing unsent (see `keepSyncedCopy` in ../library.ts): otherwise nothing is written. */
   onlyIfSent?: boolean;
+  /** An encrypted document's wrapped item key: from the account, or a conversion's new one. */
+  wrappedKey?: string;
+  /** A conversion to an ordinary document: the bytes and name are readable, and the copy stops being encrypted. */
+  decrypt?: true;
+  /** No version is kept of what this save replaces (a conversion: it would be the copy in the other form). */
+  noVersion?: true;
+  /** Set by `sealed`: whether the bytes and name are sealed. */
+  encrypted?: boolean;
+}
+
+/**
+ * What a save stores, for an encrypted document (docs/encrypted-folders.md): its bytes and name sealed with its item key, and no undo
+ * steps. A new document saved into an encrypted folder gets its key here. Bytes that come sealed (from the account) are stored as they are,
+ * so a copy is recognised as encrypted from its file. An ordinary document is not encrypted by being saved or moved: that is a conversion.
+ */
+async function sealed(db: IDBDatabase, input: WriteInput, view: Uint8Array): Promise<{ input: WriteInput; view: Uint8Array }> {
+  if (input.decrypt) {
+    if (isSealed(view)) throw new Error('a decrypted document’s file is readable');
+    return { input: { ...input, encrypted: false }, view };
+  }
+  const existing = input.id ? ((await done(db.transaction(META).objectStore(META).get(input.id))) as SavedInfo | undefined) : undefined;
+  const folderId = input.folderId ?? existing?.folderId;
+  let key = input.wrappedKey ?? (existing?.encrypted ? existing.wrappedKey : undefined) ?? (isSealed(view) ? (wrappedFor(sealedKeyId(view)) ?? undefined) : undefined);
+  if (!key && isEncryptedFolder(folderId)) {
+    if (existing && input.folderId !== undefined && input.folderId !== existing.folderId) throw new Error('an ordinary document is encrypted before it goes into an encrypted folder');
+    // A new document in an encrypted folder is encrypted from the start; one that was there before the folder was is converted (convert.ts).
+    if (!existing) key = await newKey();
+  }
+  if (!key) {
+    if (isSealed(view)) throw new Error('a sealed file whose key is not known');
+    return { input, view };
+  }
+  const bytes = await sealFileWith(key, view);
+  const name = await sealNameWith(key, input.name);
+  return { input: { ...input, name, undo: undefined, encrypted: true, wrappedKey: key }, view: bytes };
 }
 
 /** A copy of bytes that owns its buffer exactly (a view of a bigger buffer would take all of it into the database). */
@@ -214,9 +279,9 @@ async function write(input: WriteInput, cloud?: { id: string; updatedAt?: number
 }
 
 /** `write`, except that with `onlyIfSent` it writes nothing (and is null) over a copy that has changes the cloud hasn't got. */
-async function writeUnlessUnsent(input: WriteInput, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo | null> {
+async function writeUnlessUnsent(given: WriteInput, cloud?: { id: string; updatedAt?: number }): Promise<SavedInfo | null> {
   const db = await openDb();
-  const view = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes);
+  const { input, view } = await sealed(db, given, given.bytes instanceof Uint8Array ? given.bytes : new Uint8Array(given.bytes));
   const id = input.id ?? crypto.randomUUID();
   // Chunking is done before the transaction (it is not database work, and a transaction ends when it waits for anything else).
   let plan: Chunked | null = null;
@@ -225,7 +290,7 @@ async function writeUnlessUnsent(input: WriteInput, cloud?: { id: string; update
     plan = await traced('chunkBytes', () => chunkBytes(view, new Set(before?.hashes)));
   }
   // Does this save replace a version worth keeping? Decided before, while it can still be read (see "History").
-  const previous = input.id ? await versionDue(db, input.id, view.length) : null;
+  const previous = input.id && !input.noVersion ? await versionDue(db, input.id, view.length) : null;
   for (;;) {
     const info = await commit(db, id, input, view, plan, cloud, previous);
     if (info === 'unsent') return null;
@@ -329,6 +394,14 @@ async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint
   };
   if (input.journal) info.journal = input.journal;
   else delete info.journal;
+  if (input.encrypted) {
+    info.encrypted = true;
+    if (input.wrappedKey) info.wrappedKey = input.wrappedKey;
+    seen(info);
+  } else if (input.encrypted === false) {
+    delete info.encrypted;
+    delete info.wrappedKey;
+  }
   if (cloud) {
     info.cloudId = cloud.id;
     info.cloudSyncedAt = info.updatedAt;
@@ -390,18 +463,24 @@ export async function setSavedFolder(id: string, folderId: string | null): Promi
   const tx = db.transaction(META, 'readwrite');
   const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
   if (info) {
+    if (!info.encrypted && isEncryptedFolder(folderId)) {
+      await finished(tx);
+      throw new Error('an ordinary document is encrypted before it goes into an encrypted folder');
+    }
     const { folderId: _was, ...rest } = info;
     tx.objectStore(META).put(folderId === null ? rest : { ...rest, folderId });
   }
   await finished(tx);
 }
 
-/** Gives a saved copy a new name, leaving its contents (and when they were saved) as they are. */
+/** Gives a saved copy a new name, leaving its contents (and when they were saved) as they are. An encrypted one's is sealed. */
 export async function setSavedName(id: string, name: string): Promise<void> {
   const db = await openDb();
+  const before = (await done(db.transaction(META).objectStore(META).get(id))) as SavedInfo | undefined;
+  const stored = before?.encrypted && before.wrappedKey ? await sealNameWith(before.wrappedKey, name) : name;
   const tx = db.transaction(META, 'readwrite');
   const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
-  if (info) tx.objectStore(META).put({ ...info, name });
+  if (info) tx.objectStore(META).put({ ...info, name: stored });
   await finished(tx);
 }
 
@@ -423,13 +502,19 @@ export async function putLocalFolder(folder: Folder): Promise<void> {
  * Renames and/or moves a folder kept in this browser, keeping what is stored for whatever `change`
  * leaves out (a list shown elsewhere may be behind it). Returns the folder as saved, or null if it is gone.
  */
-export async function updateLocalFolder(id: string, change: { name?: string; parentId?: string | null }, updatedAt: number): Promise<Folder | null> {
+export async function updateLocalFolder(id: string, change: { name?: string; parentId?: string | null; encrypted?: boolean; wrappedKey?: string }, updatedAt: number): Promise<Folder | null> {
   const db = await openDb();
   const tx = db.transaction(FOLDERS, 'readwrite');
   const store = tx.objectStore(FOLDERS);
   const stored = (await done(store.get(id))) as Folder | undefined;
   if (!stored) return null;
   const next: Folder = { ...stored, name: change.name ?? stored.name, parentId: change.parentId === undefined ? stored.parentId : change.parentId, updatedAt };
+  // Encrypted (docs/encrypted-folders.md), or not any more.
+  if (change.encrypted === true) Object.assign(next, { encrypted: true, wrappedKey: change.wrappedKey ?? stored.wrappedKey });
+  if (change.encrypted === false) {
+    delete next.encrypted;
+    delete next.wrappedKey;
+  }
   store.put(next);
   await finished(tx);
   return next;
@@ -552,8 +637,9 @@ export async function deleteSavedIfUnchanged(seen: SavedInfo): Promise<boolean> 
 export async function saveThumbnail(id: string, blob: Blob, forUpdatedAt: number): Promise<void> {
   const db = await openDb();
   const tx = db.transaction([META, THUMBS], 'readwrite');
-  // A document deleted while its thumbnail was being made must not leave an orphan behind.
-  if ((await done(tx.objectStore(META).get(id))) !== undefined) tx.objectStore(THUMBS).put({ blob, forUpdatedAt } satisfies Thumbnail, id);
+  // A document deleted while its thumbnail was being made must not leave an orphan behind; an encrypted one has none (it would show its page).
+  const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
+  if (info && !info.encrypted) tx.objectStore(THUMBS).put({ blob, forUpdatedAt } satisfies Thumbnail, id);
   await finished(tx);
 }
 
@@ -810,8 +896,13 @@ export async function listVersions(id: string): Promise<LocalVersion[]> {
   return list ? [...list].sort((a, b) => b.version - a.version) : [];
 }
 
-/** The bytes of a kept version (null if it is gone, or a chunk of it is). */
+/** The bytes of a kept version (null if it is gone, or a chunk of it is); an encrypted document's, opened (`LockedError` while locked). */
 export async function getVersion(id: string, version: number): Promise<ArrayBuffer | null> {
+  const bytes = await getStoredVersion(id, version);
+  return bytes && isSealed(new Uint8Array(bytes)) ? ((await openSealedFile(new Uint8Array(bytes))).slice().buffer as ArrayBuffer) : bytes;
+}
+
+async function getStoredVersion(id: string, version: number): Promise<ArrayBuffer | null> {
   const db = await openDb();
   const tx = db.transaction([HISTORY_DATA, CHUNKS, HISTORY]);
   const data = (await done(tx.objectStore(HISTORY_DATA).get(dataKey(id, version)))) as ArrayBuffer | HeldManifest | undefined;
@@ -827,8 +918,9 @@ export async function getVersion(id: string, version: number): Promise<ArrayBuff
 }
 
 /** Keeps the document as it is now as a version (named if `name` is given), whatever the rules say. Null if there is no such document. */
-export async function keepVersion(id: string, name: string | null = null): Promise<LocalVersion | null> {
+export async function keepVersion(id: string, given: string | null = null): Promise<LocalVersion | null> {
   const db = await openDb();
+  const name = await versionName(db, id, given);
   const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA], 'readwrite');
   const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
   if (!info) {
@@ -860,12 +952,49 @@ export async function keepVersion(id: string, name: string | null = null): Promi
 }
 
 /** Names a kept version, or (null) lets it be thinned like the others. */
-export async function nameVersion(id: string, version: number, name: string | null): Promise<void> {
+export async function nameVersion(id: string, version: number, given: string | null): Promise<void> {
   const db = await openDb();
+  const name = await versionName(db, id, given);
   const tx = db.transaction(HISTORY, 'readwrite');
   const list = (await done(tx.objectStore(HISTORY).get(id))) as LocalVersion[] | undefined;
   if (list) tx.objectStore(HISTORY).put(list.map((v) => (v.version === version ? { ...v, name } : v)), id);
   await finished(tx);
+}
+
+/**
+ * Converts every version this browser keeps of a document (docs/encrypted-folders.md): `change` gets each one's bytes and name as stored and
+ * gives them back the other way, sealed or opened. They are kept whole afterwards (a chunked one lets go of its chunks).
+ */
+export async function convertLocalVersions(id: string, change: (bytes: Uint8Array, name: string | null) => Promise<{ bytes: Uint8Array; name: string | null }>): Promise<void> {
+  const db = await openDb();
+  const list = ((await done(db.transaction(HISTORY).objectStore(HISTORY).get(id))) as LocalVersion[] | undefined) ?? [];
+  const next: { entry: LocalVersion; bytes: Uint8Array }[] = [];
+  for (const v of list) {
+    const bytes = await getStoredVersion(id, v.version);
+    if (!bytes) continue;
+    const turned = await change(new Uint8Array(bytes), v.name);
+    next.push({ entry: { ...v, name: turned.name, size: turned.bytes.byteLength, chunked: false }, bytes: turned.bytes });
+  }
+  const tx = db.transaction([HISTORY, HISTORY_DATA, CHUNK_REFS, CHUNKS], 'readwrite');
+  const now = ((await done(tx.objectStore(HISTORY).get(id))) as LocalVersion[] | undefined) ?? [];
+  for (const { entry, bytes } of next) {
+    const old = now.find((v) => v.version === entry.version);
+    if (!old) continue; // let go of meanwhile
+    await dropData(tx, id, old);
+    tx.objectStore(HISTORY_DATA).put(own(bytes), dataKey(id, entry.version));
+  }
+  tx.objectStore(HISTORY).put(
+    now.map((v) => next.find((n) => n.entry.version === v.version)?.entry ?? v),
+    id,
+  );
+  await finished(tx);
+}
+
+/** A version's name as it is kept: sealed, for an encrypted document. */
+async function versionName(db: IDBDatabase, id: string, name: string | null): Promise<string | null> {
+  if (name === null) return null;
+  const info = (await done(db.transaction(META).objectStore(META).get(id))) as SavedInfo | undefined;
+  return info?.encrypted && info.wrappedKey ? sealNameWith(info.wrappedKey, name) : name;
 }
 
 /** Removes a kept version. */

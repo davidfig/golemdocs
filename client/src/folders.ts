@@ -9,6 +9,11 @@ export interface Folder {
   parentId: string | null;
   createdAt: number;
   updatedAt: number;
+  /** Encrypted (docs/encrypted-folders.md): what goes into it is encrypted, and it has its own item key (inside another, its name is sealed). */
+  encrypted?: boolean;
+  wrappedKey?: string;
+  /** Shown, not stored: encrypted and locked, with a padlock (see encryption/present.ts). */
+  locked?: boolean;
 }
 
 /** What says where a document is: the cloud's record when it has one, else this browser's. */

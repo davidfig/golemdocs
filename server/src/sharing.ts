@@ -45,9 +45,10 @@ async function folderShareAbove(env: Env, userId: string, ownerId: string, docId
   if (!shares.length) return null;
   const db = await existingUserDb(env, ownerId);
   if (!db) return null;
-  const cached = (await db.peekList<{ id: string; folder_id: string | null }>('documents'))?.find((r) => r.id === docId);
-  const row = cached ?? (await db.first<{ folder_id: string | null }>('SELECT folder_id FROM documents WHERE id = ?', [docId]));
-  if (!row?.folder_id) return null;
+  const cached = (await db.peekList<{ id: string; folder_id: string | null; encrypted?: number | null }>('documents'))?.find((r) => r.id === docId);
+  const row = cached ?? (await db.first<{ folder_id: string | null; encrypted?: number | null }>('SELECT folder_id, encrypted FROM documents WHERE id = ?', [docId]));
+  // An encrypted document is never shared, by a folder above it either (docs/encrypted-folders.md).
+  if (!row?.folder_id || row.encrypted) return null;
   const folders = new Map((await listFolders<FolderLink>(db)).map((f) => [f.id, f]));
   return bestFolderShare(shares, folders, row.folder_id);
 }

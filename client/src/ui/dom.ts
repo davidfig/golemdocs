@@ -35,6 +35,24 @@ export function keepAboveFooter(el: HTMLElement): void {
 }
 
 /** A small button showing `path` (drawn on a 12 × 12 grid) rather than a character, so the icon is centered the same whatever the font does. Style the stroke in CSS. */
+/** A padlock, shut and open (12 by 12): the layers panels' lock, and an encrypted folder's (docs/encrypted-folders.md). */
+export const PADLOCK = 'M3 5.5h6V10H3zM4 5.5V4a2 2 0 0 1 4 0v1.5';
+export const PADLOCK_OPEN = 'M3 5.5h6V10H3zM4 5.5V4a2 2 0 0 1 3.9-.6';
+
+/** A small drawn icon (12 by 12) that is only decoration: what it means is said in words beside it. */
+export function smallIcon(className: string, path: string): HTMLElement {
+  const icon = document.createElementNS(SVG, 'svg');
+  icon.setAttribute('viewBox', '0 0 12 12');
+  icon.setAttribute('width', '12');
+  icon.setAttribute('height', '12');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.setAttribute('class', className);
+  const shape = document.createElementNS(SVG, 'path');
+  shape.setAttribute('d', path);
+  icon.append(shape);
+  return icon as unknown as HTMLElement;
+}
+
 export function iconButton(className: string, path: string, label: string): HTMLButtonElement {
   const icon = document.createElementNS(SVG, 'svg');
   icon.setAttribute('viewBox', '0 0 12 12');

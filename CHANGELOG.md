@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.43.2 - Unreleased
+
+### Added
+
+- Encryption: choose Encrypt… on any document or folder (in its right-click menu in the Files pane or File › Open, or File › Encrypt document… for the one that is open), and its contents, its name and its earlier versions are encrypted on your device with a key only you keep, so the server can’t read them. Encrypting a folder encrypts everything in it and anything you add later; the folder’s own name stays readable. The first time, you save the key in your password manager. Encrypted documents stay locked until you enter the key, and lock again when you reload, choose Lock encrypted documents, or leave the app alone for 15 minutes. Decrypt… turns any of it back. Encrypted documents can’t be shared or edited together, and aren’t copied to the desktop app’s vault folder: a file it already had is removed (an edit made to it there is kept, encrypted), and a note stands in for each encrypted folder.
+
 ## 0.43.1 - 2026-11-21
 
 ### Fixed

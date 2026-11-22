@@ -96,4 +96,7 @@ export const vault: Catalog = {
   'vault.shared.index.empty': 'Er enthält noch keine Dateien.',
   'vault.shared.index.more': '…und {count} weitere',
   'vault.shared.index.how': 'Um diesen Ordner auch in deinem Tresor zu behalten, öffne in Golem Docs Datei › Öffnen und wähle „Im Tresor…“ auf der Karte von „{share}“. Golem Docs hält diese Liste aktuell, Änderungen an dieser Datei werden daher nicht behalten.',
+  'vault.encrypted.file': '{name} (verschlüsselt)',
+  'vault.encrypted.title': '{name} (verschlüsselt)',
+  'vault.encrypted.intro': 'Der Ordner „{name}“ ist verschlüsselt, daher sind seine Dateien nicht in diesem Tresorordner: Sie werden nie in diesen Ordner geschrieben, weder lesbar noch verschlüsselt. Öffne ihn in Golem Docs und gib deinen Verschlüsselungsschlüssel ein, um sie zu sehen. Golem Docs hält diese Notiz aktuell, Änderungen daran werden nicht übernommen.',
 };

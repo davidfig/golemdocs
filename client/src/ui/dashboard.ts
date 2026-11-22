@@ -8,7 +8,9 @@
 // when its card scrolls into view.
 
 import { deleteSharedDocument, deleteSharedSubfolder, leaveSharedFolder, putSharedSubfolder, removeShare, renameCloudDocument, sharedFolderTree, type CloudDocument, type SharedFolder, type SharedFolderDocument, type SharedFolderTree } from '../cloud.ts';
-import { canDrop, createFolder, moveEntries, removeFolderTree, updateFolders, withMoved, withoutDeleted, type Dragged } from '../folderOps.ts';
+import { canDrop, createFolder, moveEntries, outOfReach, removeFolderTree, updateFolders, withMoved, withoutDeleted, type Dragged } from '../folderOps.ts';
+import { documentItems, encryptForMove, folderItems as encryptionFolderItems, showUnlock } from '../encryption/ui.ts';
+import { isEncryptedFolder } from '../encryption/session.ts';
 import { childFolders, deletionList, folderContents, folderOf, folderPath, isInside, itemsIn, outermost, type Folder } from '../folders.ts';
 import { setDocumentDrag } from './documentDrag.ts';
 import { warmOnHover } from './warmOnHover.ts';
@@ -18,7 +20,7 @@ import type { User } from '../auth.ts';
 import { formatSize, matchesSearch, relativeTime, syncBadge } from './dashboardFormat.ts';
 import { t } from '../i18n/index.ts';
 import { Thumbnails } from './dashboardThumbnails.ts';
-import { h, isFileDrag } from './dom.ts';
+import { h, isFileDrag, PADLOCK, PADLOCK_OPEN, smallIcon } from './dom.ts';
 import { takeDropped, type Dropped } from '../storage/droppedFiles.ts';
 import { fileIcon, setFileName, splitExtension } from './fileIcons.ts';
 import { renamedFileName } from '../documentName.ts';
@@ -197,6 +199,8 @@ export class Dashboard {
           'separator',
           { label: t('panels.dashboard.import'), run: () => this.host.importFile(folderId) },
           { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folderId) },
+          // As the Files pane's menu has them (filesPanel.ts, rootItems and folderItems).
+          { label: t('panels.dashboard.newFolder'), run: () => this.newFolderButton.click() },
         ],
         e.clientX,
         e.clientY,
@@ -769,32 +773,36 @@ export class Dashboard {
     const badges = h('div', { class: 'wm-badges' });
     const sync = syncBadge(entry.state, this.host.account() !== null);
     if (sync) badges.append(h('span', { class: `wm-badge wm-badge-${sync.tone}`, text: sync.text }));
+    // Encrypted (docs/encrypted-folders.md): a padlock, shut while locked (when its name says so too), open while unlocked.
+    if (entry.encrypted) badges.append(smallIcon('wm-folder-lock wm-doc-lock', entry.locked ? PADLOCK : PADLOCK_OPEN));
 
     const remove = this.deleteButton(() => ({ docs: [entry], folders: [] }), () => this.host.delete([entry]), 'trash', true);
     const actions = h('div', { class: 'wm-card-actions' }, remove);
     let share: HTMLButtonElement | null = null;
-    if (entry.cloud) {
+    if (entry.cloud && !entry.encrypted) {
       share = this.iconButton('share', t('panels.dashboard.share'));
       share.addEventListener('click', () => this.host.share(entry.cloud!.id, entry.cloud!.name));
       actions.prepend(share);
     }
     const move = this.iconButton('moveToFolder', t('panels.dashboard.move'));
-    move.addEventListener('click', () => this.pickFolder(t('panels.dashboard.moveTitle', { name: entry.name }), () => false, folderOf(entry, this.folders), (to) => this.relocate({ kind: 'doc', entry }, to)));
+    move.addEventListener('click', () => this.pickFolder(t('panels.dashboard.moveTitle', { name: entry.name }), (id) => outOfReach(this.folders, { kind: 'doc', entry }, id), folderOf(entry, this.folders), (to) => this.relocate({ kind: 'doc', entry }, to)));
     actions.prepend(move);
     const rename = this.iconButton('rename', t('panels.dashboard.rename'));
     rename.addEventListener('click', () => {
       this.renaming = id;
       this.render();
     });
-    actions.prepend(rename);
+    if (!entry.locked) actions.prepend(rename);
     const card = h('article', { class: 'wm-card' }, open, badges, actions);
     // The same commands, in the same order, as a document's menu in the Files pane (filesPanel.ts, fileItems).
     this.cardMenu(card, () => [
       { label: t('panels.files.openItem'), run: () => open.click() },
       ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ doc: entry }) }] : []),
       ...(share ? [{ label: t('panels.dashboard.share'), run: () => share!.click() }] : []),
-      { label: t('panels.dashboard.rename'), run: () => rename.click() },
+      ...(entry.locked ? [] : [{ label: t('panels.dashboard.rename'), run: () => rename.click() }]),
       { label: t('panels.dashboard.move'), run: () => move.click() },
+      // Encrypt… or Decrypt… (a locked document opens by being unlocked, so Open stands for Unlock…).
+      ...(entry.locked ? [] : documentItems(entry)),
       { label: t('panels.dashboard.delete'), run: () => remove.click() },
     ]);
     this.makeDraggable(card, { kind: 'doc', entry });
@@ -808,7 +816,7 @@ export class Dashboard {
     const minis = itemsIn(this.entries, this.folders, folder.id)
       .slice(0, 4)
       .map((entry) => this.thumbnails.forEntry(entry, `mini:${entry.key}`, 'wm-thumb wm-folder-mini'));
-    const art = h('div', { class: 'wm-thumb wm-folder-art' }, h('div', { class: 'wm-folder-shape', attrs: { 'aria-hidden': 'true' } }, ...minis));
+    const art = h('div', { class: 'wm-thumb wm-folder-art' }, h('div', { class: 'wm-folder-shape', attrs: { 'aria-hidden': 'true' } }, ...minis, ...(folder.encrypted ? [smallIcon('wm-folder-lock', folder.locked ? PADLOCK : PADLOCK_OPEN)] : [])));
     let open: HTMLElement;
     if (this.renaming === folder.id) {
       const input = this.nameField(folder.id, folder.name, t('panels.dashboard.folderName'), 255, (typed) => {
@@ -820,6 +828,8 @@ export class Dashboard {
       const count = itemsIn(this.entries, this.folders, folder.id).length + childFolders(this.folders, folder.id).length;
       open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.openFolder', { name: folder.name }) } }, art, h('span', { class: 'wm-card-name', title: folder.name }, h('span', { class: 'wm-card-title', text: folder.name })), h('span', { class: 'wm-card-meta', text: t('panels.dashboard.items', { count }) }));
       open.addEventListener('click', () => {
+        // A locked encrypted folder opens by being unlocked (docs/encrypted-folders.md).
+        if (folder.locked) return void showUnlock();
         this.search.value = '';
         this.folderId = folder.id;
         this.selected.clear();
@@ -835,26 +845,30 @@ export class Dashboard {
     });
     const move = this.iconButton('moveToFolder', t('panels.dashboard.move'));
     move.addEventListener('click', () =>
-      this.pickFolder(t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id), folder.parentId, (to) => this.relocate({ kind: 'folder', folder }, to)),
+      this.pickFolder(t('panels.dashboard.moveTitle', { name: folder.name }), (id) => isInside(this.folders, id, folder.id) || outOfReach(this.folders, { kind: 'folder', folder }, id), folder.parentId, (to) => this.relocate({ kind: 'folder', folder }, to)),
     );
     const remove = this.deleteButton(() => ({ docs: [], folders: [folder] }), (before) => this.deleteFolderTrees(before, [folder]), 'trash', true, t('panels.dashboard.deleteFolder'));
-    const actions = h('div', { class: 'wm-card-actions' }, rename, move, remove);
-    // A folder in the account can be shared, with what is in it (docs/folder-sharing.md).
+    // A locked folder inside an encrypted one (its name sealed) can only be unlocked or deleted.
+    const sealedAway = !!folder.locked && isEncryptedFolder(folder.parentId);
+    const actions = h('div', { class: 'wm-card-actions' }, ...(sealedAway ? [] : [rename, move]), remove);
+    // A folder in the account can be shared, with what is in it (docs/folder-sharing.md); an encrypted one never is.
     let share: HTMLButtonElement | null = null;
-    if (this.host.shareFolder && this.host.account()) {
+    if (this.host.shareFolder && this.host.account() && !folder.encrypted) {
       share = this.iconButton('share', t('panels.dashboard.shareFolder'));
       share.addEventListener('click', () => this.host.shareFolder!(folder));
       actions.prepend(share);
     }
     const card = h('article', { class: 'wm-card wm-folder' }, open, actions);
     // The same commands, in the same order, as a folder's menu in the Files pane (filesPanel.ts, folderItems).
-    this.cardMenu(card, () => [
+    const deleteFolder: PopupItem = { label: t('panels.dashboard.deleteFolder'), run: () => remove.click() };
+    this.cardMenu(card, () => sealedAway ? [...encryptionFolderItems(folder), deleteFolder] : [
       { label: t('panels.files.openFolder'), run: () => open.click() },
-      ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ folder }) }] : []),
+      ...(this.host.canShowInVault?.() && !folder.encrypted ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ folder }) }] : []),
       ...(share ? [{ label: t('panels.dashboard.share'), run: () => share!.click() }] : []),
       { label: t('panels.dashboard.rename'), run: () => rename.click() },
       { label: t('panels.dashboard.move'), run: () => move.click() },
-      { label: t('panels.dashboard.deleteFolder'), run: () => remove.click() },
+      ...encryptionFolderItems(folder),
+      deleteFolder,
       'separator',
       ...newMenuItems((kind) => {
         this.hide();
@@ -1033,7 +1047,8 @@ export class Dashboard {
     const { folders, items: docs } = outermost(this.folders, { folders: selected.folders, items: selected.docs });
     if (!count) return;
     // A folder can't go into itself or anything inside it.
-    const excluded = (id: string) => folders.some((f) => isInside(this.folders, id, f.id));
+    const excluded = (id: string | null) =>
+      folders.some((f) => isInside(this.folders, id, f.id) || outOfReach(this.folders, { kind: 'folder', folder: f }, id)) || docs.some((entry) => outOfReach(this.folders, { kind: 'doc', entry }, id));
     this.pickFolder(t('panels.dashboard.moveSelectedTitle', { count }), excluded, undefined, (to) =>
       this.run(async () => {
         await this.relocateEntries(docs.filter((entry) => folderOf(entry, this.folders) !== to), to);
@@ -1062,7 +1077,8 @@ export class Dashboard {
   private renderCrumbs(searching: boolean): void {
     if (this.sharedAt) return this.renderSharedCrumbs();
     this.crumbs.hidden = searching || this.folderId === null;
-    if (this.crumbs.hidden) return;
+    // Emptied, not only hidden: a folder's name must not stay in the page once it is gone (or locked: docs/encrypted-folders.md).
+    if (this.crumbs.hidden) return void this.crumbs.replaceChildren();
     const path = folderPath(this.folders, this.folderId);
     const stops: { id: string | null; name: string }[] = [{ id: null, name: t('panels.dashboard.title') }, ...path.map((f) => ({ id: f.id, name: f.name }))];
     const parts: HTMLElement[] = [];
@@ -1131,7 +1147,9 @@ export class Dashboard {
     await this.host.rename(entry, name);
   }
 
-  private relocate(item: Dragged, to: string | null): Promise<void> {
+  private async relocate(item: Dragged, to: string | null): Promise<void> {
+    // Into an encrypted folder, what isn't encrypted is encrypted first (docs/encrypted-folders.md).
+    if (!(await encryptForMove(item, to))) return;
     return this.run(
       item.kind === 'doc' ? () => this.relocateEntries([item.entry], to) : () => this.changeFolders([{ folder: item.folder, parentId: to }]),
     );
@@ -1227,7 +1245,7 @@ export class Dashboard {
     if (drop) this.host.dropFile(drop, folderId);
   }
 
-  private pickFolder(title: string, excluded: (id: string) => boolean, current: string | null | undefined, pick: (id: string | null) => void): void {
+  private pickFolder(title: string, excluded: (id: string | null) => boolean, current: string | null | undefined, pick: (id: string | null) => void): void {
     pickFolder(this.folders, title, excluded, current, pick);
   }
 

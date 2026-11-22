@@ -19,6 +19,7 @@ import { handleLiveMarker } from './liveMarker.ts';
 import { handleReading } from './reading.ts';
 import { Room } from './room.ts';
 import { handleSite } from './site.ts';
+import { sharePreview } from './sharePreview.ts';
 import { joinRoom, roomHeaders } from './roomGate.ts';
 import { withRenewedSession } from './session.ts';
 import { handlePolarWebhook, hasSync, startCheckout, startPortal, subscriptionFor, subscriptionRequired } from './subscriptions.ts';
@@ -58,6 +59,10 @@ const routes: ExportedHandler = {
         return new Response(null, { status: 308, headers: { location: url.href } });
       }
 
+      // The shared-document page, with a public link's name and picture for link previews (sharePreview.ts).
+      // Only production serves pages (env.ASSETS); in development Vite does.
+      if (env.ASSETS && path === '/view') return await sharePreview(request, env, url);
+
       // Dev only: this port serves just /api (see assets in wrangler.jsonc); the page is Vite's.
       if (env.ENVIRONMENT !== 'production' && !path.startsWith('/api/')) {
         const page = new URL(url.pathname + url.search, 'http://localhost:5173');
@@ -71,9 +76,9 @@ const routes: ExportedHandler = {
       // The desktop app's installers are public: they are downloaded before there is an account (downloads.ts).
       if (path === '/api/downloads' || path.startsWith('/api/downloads/')) return await handleDownloads(request, env, path);
 
-      // GET /api/public/:token[/file]: a document's public link, for anyone (see handlePublic).
-      const publicMatch = /^\/api\/public\/([^/]+)(\/file)?$/.exec(path);
-      if (publicMatch) return await handlePublic(request, env, publicMatch[1]!, !!publicMatch[2]);
+      // GET /api/public/:token[/file|/thumbnail]: a document's public link, for anyone (see handlePublic).
+      const publicMatch = /^\/api\/public\/([^/]+)(?:\/(file|thumbnail))?$/.exec(path);
+      if (publicMatch) return await handlePublic(request, env, publicMatch[1]!, publicMatch[2] as 'file' | 'thumbnail' | undefined);
 
       // GET /api/folder-public/:token[/file?path=…]: a folder's public link, for anyone (see handleFolderView).
       const folderPublicMatch = /^\/api\/folder-public\/([^/]+)(\/file)?$/.exec(path);

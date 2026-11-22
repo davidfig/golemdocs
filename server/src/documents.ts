@@ -300,16 +300,37 @@ export async function handleView(request: Request, env: Env, userId: string, tok
  * `handleView`. A dropped or reset link, a deleted document and an owner whose sync ended all get 404, so a link says
  * nothing about why it stopped. Browsers may keep an answer for a minute, which is how long a dropped link can still show.
  */
-export async function handlePublic(request: Request, env: Env, token: string, file: boolean): Promise<Response> {
-  if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
+/** The document a public link opens, while its owner has sync; null for an unknown, dropped or lapsed link. */
+export async function publicDocument(env: Env, token: string): Promise<{ ownerId: string; docId: string; row: DocumentRow } | null> {
   const link = await publicShare(env, token);
-  if (!link || !(await hasSync(env, link.ownerId))) throw new HttpError(404, 'not found');
+  if (!link || !(await hasSync(env, link.ownerId))) return null;
   const db = await userDb(env, link.ownerId);
   const row = db && (await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [link.docId]));
-  if (!row) throw new HttpError(404, 'not found');
+  return row ? { ...link, row } : null;
+}
+
+/** GET /api/public/:token, /file and /thumbnail: a document's public link, for anyone. */
+export async function handlePublic(request: Request, env: Env, token: string, part: 'file' | 'thumbnail' | undefined): Promise<Response> {
+  if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
+  const found = await publicDocument(env, token);
+  if (!found) throw new HttpError(404, 'not found');
+  const { ownerId, docId, row } = found;
   const cache = 'public, max-age=60';
-  if (!file) return json({ name: row.name, updatedAt: row.updated_at }, 200, { 'cache-control': cache });
-  const response = await documentResponse(env, row.r2_key, link.ownerId, link.docId, DOCX, request.headers.get('if-none-match'));
+  if (part === 'thumbnail') {
+    // Link previews (sharePreview.ts) ask for it by the version in its address, so it may be kept a while.
+    const object = row.thumb_at == null ? null : await env.FILES.get(thumbKey(ownerId, docId));
+    if (!object) throw new HttpError(404, 'not found');
+    return new Response(object.body, {
+      headers: {
+        'content-type': object.httpMetadata?.contentType ?? 'image/webp',
+        'content-length': String(object.size),
+        'cache-control': 'public, max-age=3600',
+        'x-content-type-options': 'nosniff',
+      },
+    });
+  }
+  if (!part) return json({ name: row.name, updatedAt: row.updated_at }, 200, { 'cache-control': cache });
+  const response = await documentResponse(env, row.r2_key, ownerId, docId, DOCX, request.headers.get('if-none-match'));
   if (!response) throw new HttpError(404, 'not found');
   const headers = new Headers(response.headers);
   headers.set('cache-control', cache);

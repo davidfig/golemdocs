@@ -88,6 +88,8 @@ export interface Env {
   FILES: R2Bucket;
   /** One collaboration room per cloud document (see room.ts). */
   ROOMS: DurableObjectNamespace;
+  /** The built client (wrangler.jsonc's assets), in production only: the Worker serves /view through it (sharePreview.ts). */
+  ASSETS?: { fetch(request: Request | string): Promise<Response> };
   CF_ACCOUNT_ID: string;
   CF_API_TOKEN: string;
   /** `production`, `dev` or `local` (see wrangler.jsonc). */

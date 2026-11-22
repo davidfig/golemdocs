@@ -19,6 +19,18 @@ test.describe('Status Bar, by default', () => {
 });
 
 test.describe('Status Bar', () => {
+  test('is emptied when File › Close leaves nothing open', async ({ app, page }) => {
+    await app.blank();
+    await app.type('one two three');
+    await app.menu('View', 'Status Bar');
+    const bar = page.locator('#footer');
+    await expect(bar.getByRole('button', { name: '3 words' })).toBeVisible();
+    await app.run('file.close');
+    await expect(page.locator('.wm-nothing-open')).toBeVisible();
+    await expect(bar.locator('.wm-footer-item')).toHaveCount(0);
+    await expect(bar.getByRole('group', { name: 'Views' })).toBeHidden();
+  });
+
   test('the page opens Go To, the word count Word Count, and the zoom the list of sizes', async ({ app, page }) => {
     await app.blank();
     await app.type('one two three');

@@ -7,10 +7,10 @@
 // a great many small squares (a code), count as art.
 
 import { el, type XmlElement } from '@golemdocs/docx';
-import { encodePng, type DisplayClip, type DisplayPaint, type DisplayPath } from '@golemdocs/pdf';
+import { encodePng, imageBytes, type DisplayClip, type DisplayImage, type DisplayPaint, type DisplayPath, type PdfDocument } from '@golemdocs/pdf';
 import { encodeCanvas, makeCanvas } from './imageCodec.ts';
 import { serializeTransform } from '../vector/matrix.ts';
-import { emptyScene, type GroupNode, type Matrix, type PathCommand, type PathNode, type Scene, type SceneNode } from '../vector/model.ts';
+import { emptyScene, type GroupNode, type ImageNode, type Matrix, type PathCommand, type PathNode, type Scene, type SceneNode } from '../vector/model.ts';
 import { paintScene } from '../vector/paint.ts';
 import { serializePath } from '../vector/pathData.ts';
 import { colorText } from '../vector/style.ts';
@@ -165,11 +165,31 @@ const color = (rgb: number): string => colorText([(rgb >> 16) & 255, (rgb >> 8) 
 /** A transform with the picture's corner taken off (a drawing's coordinates start at its own top-left). */
 const shifted = (m: Matrix, dx: number, dy: number): Matrix => [m[0], m[1], m[2], m[3], m[4] - dx, m[5] - dy];
 
+const round = (v: number): number => Math.round(v * 100) / 100;
+
+/** An image of the page, placed as it is drawn: the page's matrix for the image's unit square, its rows from the top. */
+export function imageNode(doc: PdfDocument, image: DisplayImage): ImageNode | null {
+  const found = imageBytes(doc, image.stream, image.maskColor !== undefined ? { maskColor: image.maskColor } : {});
+  if (!found || !image.pixelWidth || !image.pixelHeight) return null;
+  // Where the unit square lands (y down), and the image's own size: a turned one says, an upright one is its box and mirrors.
+  const [a, b, c, d, e, f]: Matrix = image.matrix ?? [image.flipX ? -image.w : image.w, 0, 0, image.flipY ? image.h : -image.h, image.flipX ? image.x + image.w : image.x, image.flipY ? image.y : image.y + image.h];
+  // A PDF image's first row is at the top of its unit square (y = 1); an SVG image's is at y = 0.
+  const pw = image.pixelWidth;
+  const ph = image.pixelHeight;
+  const transform: Matrix = [a / pw, b / pw, -c / ph, -d / ph, c + e, d + f];
+  let binary = '';
+  for (let i = 0; i < found.bytes.length; i += 0x8000) binary += String.fromCharCode(...found.bytes.subarray(i, i + 0x8000));
+  return { kind: 'image', x: 0, y: 0, width: pw, height: ph, href: `data:${found.mime};base64,${btoa(binary)}`, transform, style: image.alpha < 1 ? { opacity: String(round(image.alpha)) } : {}, attrs: {} };
+}
+
 /** The clips, gradients and patterns the shapes of one drawing refer to, as the definitions of its scene. */
 export class Definitions {
   readonly elements: XmlElement[] = [];
   private readonly ids = new Map<object, string>();
   private count = 0;
+
+  /** `doc`: where a pattern's images are read from (without it, a pattern keeps only its shapes). */
+  constructor(private readonly doc?: PdfDocument) {}
 
   private id(prefix: string): string {
     return `${prefix}${++this.count}`;
@@ -192,7 +212,11 @@ export class Definitions {
     this.ids.set(p, id);
     if (p.kind === 'tiling') {
       const [bx, by] = p.bbox;
-      const cell = writeFragment(nodesOf(p.paths, 0, 0, this));
+      // Its shapes and images in the order the cell paints them.
+      const doc = this.doc;
+      const images = doc ? (p.images ?? []) : [];
+      const items = [...p.paths.map((path) => ({ order: path.order, nodes: () => nodesOf([path], 0, 0, this) })), ...images.map((image) => ({ order: image.order, nodes: () => [imageNode(doc!, image)].filter((n): n is ImageNode => !!n) }))];
+      const cell = writeFragment(items.sort((a, b) => a.order - b.order).flatMap((item) => item.nodes()));
       const box = `${bx} ${by} ${p.xstep} ${p.ystep}`;
       this.elements.push(el('pattern', { id, patternUnits: 'userSpaceOnUse', x: String(bx), y: String(by), width: String(p.xstep), height: String(p.ystep), viewBox: box, patternTransform: serializeTransform(shifted(p.matrix, dx, dy)) }, cell));
       return id;
@@ -278,18 +302,18 @@ export function nodesOf(paths: readonly DisplayPath[], dx: number, dy: number, d
 }
 
 /** The group as a scene of the drawing editor, sized in points. */
-export function drawingScene(group: DrawingGroup): Scene {
+export function drawingScene(group: DrawingGroup, doc?: PdfDocument): Scene {
   const { frame } = group;
   const scene = emptyScene(Math.round(frame.width * 100) / 100, Math.round(frame.height * 100) / 100);
-  const defs = new Definitions();
+  const defs = new Definitions(doc);
   scene.children = nodesOf(group.paths, frame.x, frame.y, defs);
   scene.defs = defs.elements;
   return scene;
 }
 
 /** The group as SVG text. */
-export function drawingSvg(group: DrawingGroup): string {
-  return writeSvg(drawingScene(group));
+export function drawingSvg(group: DrawingGroup, doc?: PdfDocument): string {
+  return writeSvg(drawingScene(group, doc));
 }
 
 /**

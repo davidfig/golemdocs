@@ -201,6 +201,22 @@ test('a deleted document is in the trash with its history, and restoring it brin
   assert.equal((await versions(doc.id)).length, 1, 'its history came with it');
 });
 
+test('a trashed document can be read by its owner, to look at before restoring it, and by nobody else', async () => {
+  const doc = await create(bytes(1));
+  await save(doc, bytes(2), MIN);
+  await share(doc.id, EDITOR, 'editor');
+  assert.equal((await call(OWNER, 'GET', `/api/trash/${doc.id}/file`)).status, 404, 'not in the trash yet');
+  await call(OWNER, 'DELETE', `/api/documents/${doc.id}`);
+  const file = await call(OWNER, 'GET', `/api/trash/${doc.id}/file`);
+  assert.equal(file.status, 200);
+  assert.deepEqual(new Set(await bytesOf(file)), new Set([2]));
+  assert.equal((await call(EDITOR, 'GET', `/api/trash/${doc.id}/file`)).status, 404);
+  assert.equal((await call(OWNER, 'GET', `/api/documents/${doc.id}/file`)).status, 404, 'only the trash has `file`');
+  assert.equal((await call(OWNER, 'GET', `/api/trash/${doc.id}/file/x`)).status, 404);
+  assert.equal((await call(OWNER, 'DELETE', `/api/trash/${doc.id}`)).status, 204);
+  assert.equal((await call(OWNER, 'GET', `/api/trash/${doc.id}/file`)).status, 404, 'gone for good');
+});
+
 test('a restored document is no longer shared, and one deleted with a folder that is gone comes back at the top', async () => {
   const folder = (await (await call(OWNER, 'PUT', `/api/folders/${crypto.randomUUID()}`, json({ name: 'F', parentId: null }))).json()) as any;
   const doc = (await (await call(OWNER, 'POST', `/api/documents?name=A.docx&folder=${folder.id}`, { body: bytes(1), type: DOCX })).json()) as any;
@@ -227,6 +243,51 @@ test('the trash is emptied after 30 days, when it is next looked at, and by hand
   assert.equal((await call(OWNER, 'POST', `/api/trash/${handled.id}/restore`)).status, 404);
   assert.equal((await call(OWNER, 'DELETE', '/api/trash')).status, 204);
   assert.equal(w.objects.size, 0);
+});
+
+test('deleting a document for good deletes its history too: the checkpoints’ files and rows, named ones included', async () => {
+  const doc = await create(bytes(1));
+  await call(OWNER, 'POST', `/api/documents/${doc.id}/versions`, json({ name: 'Keep' }));
+  let at = doc;
+  for (let i = 2; i <= 5; i++) at = await save(at, bytes(i), 30 * MIN);
+  const kept = await versions(doc.id);
+  assert.ok(kept.length >= 3 && kept.some((v) => v.name === 'Keep'), `it has history (${kept.length})`);
+  const historyFiles = () => [...w.objects.keys()].filter((k) => k.includes(`${doc.id}.history/`));
+  const ownerId = await (await import('../src/auth.ts')).userIdFor(OWNER);
+  const historyRows = () => w.userDatabase(ownerId).prepare('SELECT COUNT(*) AS n FROM versions WHERE doc_id = ?').get(doc.id)!.n;
+  assert.equal(historyFiles().length, kept.length);
+
+  assert.equal((await call(OWNER, 'DELETE', `/api/documents/${doc.id}`)).status, 204);
+  assert.equal(historyFiles().length, kept.length, 'kept in the trash, for a restore');
+  assert.equal((await call(OWNER, 'DELETE', `/api/trash/${doc.id}`)).status, 204);
+  assert.deepEqual(historyFiles(), []);
+  assert.equal(historyRows(), 0);
+  assert.equal(w.objects.size, 0, 'nothing of it is left at all');
+});
+
+test('a purge cut short is finished by the next one, and what it started on can no longer be seen or restored', async () => {
+  const doc = await create(bytes(1));
+  let at = doc;
+  for (let i = 2; i <= 4; i++) at = await save(at, bytes(i), 30 * MIN);
+  assert.ok((await versions(doc.id)).length >= 2);
+  assert.equal((await call(OWNER, 'DELETE', `/api/documents/${doc.id}`)).status, 204);
+  // Storage fails while the history is being deleted.
+  const files = w.env.FILES as any;
+  const remove = files.delete;
+  files.delete = async (keys: string | string[]) => {
+    if ([keys].flat().some((k) => k.includes('.history/'))) throw new Error('R2 is down');
+    return remove.call(files, keys);
+  };
+  assert.notEqual((await call(OWNER, 'DELETE', `/api/trash/${doc.id}`)).status, 204);
+  files.delete = remove;
+  assert.ok([...w.objects.keys()].some((k) => k.includes('.history/')), 'some of it was left');
+  assert.equal((await call(OWNER, 'POST', `/api/trash/${doc.id}/restore`)).status, 404, 'not restored half-deleted');
+  // Looking at the trash purges what is due, the half-purged one included, and does not list it.
+  assert.deepEqual(await (await call(OWNER, 'GET', '/api/trash')).json(), []);
+  assert.equal(w.objects.size, 0);
+  const ownerId = await (await import('../src/auth.ts')).userIdFor(OWNER);
+  assert.equal(w.userDatabase(ownerId).prepare('SELECT COUNT(*) AS n FROM versions').get()!.n, 0);
+  assert.equal(w.userDatabase(ownerId).prepare('SELECT COUNT(*) AS n FROM trash').get()!.n, 0);
 });
 
 test('only the owner has a trash', async () => {

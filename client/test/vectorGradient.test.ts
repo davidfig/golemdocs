@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { colorAt, createGradient, editableGradient, gradientHandles, gradientInLocal, ownGradient, readStops, referenceCount, setGradientPoint, uniqueId, writeStops } from '../src/vector/gradientEdit.ts';
 import { readGradient } from '../src/vector/gradients.ts';
 import { parseColor } from '../src/vector/style.ts';
+import { loadImages } from '../src/vector/paint.ts';
 import { readSvg } from '../src/vector/svgRead.ts';
 import { writeSvg } from '../src/vector/svgWrite.ts';
 
@@ -98,4 +99,16 @@ test('writing stops tells where each one went, even when its offset is rounded o
   first.offset = 0.9;
   assert.equal(writeStops(element, moved).indexOf(first), 1);
   assert.deepEqual(readStops(element).map((x) => x.color), ['#0f0', '#f00', '#00f']);
+});
+
+test('pictures inside a pattern are loaded with the rest, so the pattern can paint them', async () => {
+  const href = 'data:image/png;base64,iVBORw0KGgo=';
+  const scene = readSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><defs><pattern id="p" width="10" height="10" patternUnits="userSpaceOnUse"><image href="${href}" width="10" height="10"/></pattern></defs><rect width="10" height="10" fill="url(#p)"/></svg>`);
+  const seen: string[] = [];
+  const cache = await loadImages(scene, async (_bytes, mime) => {
+    seen.push(mime);
+    return {} as CanvasImageSource;
+  });
+  assert.deepEqual(seen, ['image/png']);
+  assert.ok(cache.has(href));
 });

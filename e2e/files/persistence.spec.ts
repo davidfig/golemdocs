@@ -120,7 +120,7 @@ test('an address with an unknown document name opens the fonts sample', async ({
   await expect(page).toHaveTitle('Fonts - Golem Docs');
 });
 
-test('an address with ?doc=local:… opens that saved document', async ({ app, page }) => {
+test('an address with ?doc=local:… opens that saved document', { tag: '@heavy' }, async ({ app, page }) => {
   await blankWith(app, 'addressable');
   await waitForSaved(page);
   const address = page.url();
@@ -133,7 +133,7 @@ test('an address with ?doc=local:… opens that saved document', async ({ app, p
 
 // --- Clear Local Data ---------------------------------------------------------------------------
 
-test('Clear Local Data asks first, saying what will go, and Cancel keeps everything', async ({ app, page }) => {
+test('Clear Local Data asks first, saying what will go, and Cancel keeps everything', { tag: '@heavy' }, async ({ app, page }) => {
   await app.goto('?doc=welcome');
   await app.menu('File', 'Clear Local Data…');
   await expect(dialog(page)).toBeVisible();

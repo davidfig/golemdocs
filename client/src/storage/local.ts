@@ -147,13 +147,24 @@ export async function listSaved(): Promise<SavedInfo[]> {
 }
 
 export async function getSaved(id: string): Promise<{ info: SavedInfo; bytes: ArrayBuffer } | null> {
+  return readStored(id, META, (record) => record as SavedInfo | undefined);
+}
+
+/** A document in this browser's trash, with its bytes: to look at before bringing it back. Null if it isn't there (or is damaged). */
+export async function getTrashedSaved(id: string): Promise<{ info: SavedInfo; bytes: ArrayBuffer } | null> {
+  return readStored(id, TRASH, (record) => (record as TrashedSaved | undefined)?.info);
+}
+
+/** A document's info, from `infoStore` (the saved documents, or the trash), and its bytes, whole or put back together from its chunks. */
+async function readStored(id: string, infoStore: string, infoOf: (record: unknown) => SavedInfo | undefined): Promise<{ info: SavedInfo; bytes: ArrayBuffer } | null> {
   const db = await openDb();
-  const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS]);
-  const [info, bytes, manifest] = await Promise.all([
-    done(tx.objectStore(META).get(id) as IDBRequest<SavedInfo | undefined>),
+  const tx = db.transaction([infoStore, BYTES, MANIFESTS, CHUNKS]);
+  const [record, bytes, manifest] = await Promise.all([
+    done(tx.objectStore(infoStore).get(id) as IDBRequest<unknown>),
     done(tx.objectStore(BYTES).get(id) as IDBRequest<ArrayBuffer | undefined>),
     done(tx.objectStore(MANIFESTS).get(id) as IDBRequest<StoredManifest | undefined>),
   ]);
+  const info = infoOf(record);
   if (!info) return null;
   if (!manifest) return bytes ? { info, bytes } : null;
   // Kept as chunks: put back together (a missing chunk means the copy is damaged, which reads as no copy).

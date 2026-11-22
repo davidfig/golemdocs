@@ -23,18 +23,32 @@ export interface Progress {
   finish(): void;
 }
 
+/** The bar on its own, for a dialog that shows progress inside itself: the same look and role as the card's. */
+export function progressBar(label: string): { element: HTMLElement; set(fraction: number): void } {
+  const bar = h('div', { class: 'wm-progress-bar' });
+  const element = h('div', { class: 'wm-progress-track', attrs: { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-label': label } }, bar);
+  return {
+    element,
+    set(fraction) {
+      const percent = Math.round(Math.max(0, Math.min(1, fraction)) * 100);
+      bar.style.width = `${percent}%`;
+      element.setAttribute('aria-valuenow', String(percent));
+    },
+  };
+}
+
 /** Shows the card with `title` and returns what drives it. A second card stacks above the first. Work that can't be stopped half way passes `cancellable: false`, which leaves out the button. */
 export function showProgress(title: string, cancellable = true): Progress {
   const abort = new AbortController();
   const detail = h('div', { class: 'wm-progress-detail' });
-  const bar = h('div', { class: 'wm-progress-bar' });
+  const track = progressBar(title);
   const cancel = h('button', { class: 'wm-progress-cancel', text: t('menus.dialog.cancel'), attrs: { type: 'button' } });
   const card = h(
     'div',
     { class: 'wm-progress', attrs: { role: 'status', 'aria-live': 'polite' } },
     h('div', { class: 'wm-progress-title', text: title }),
     detail,
-    h('div', { class: 'wm-progress-track', attrs: { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100' } }, bar),
+    track.element,
     ...(cancellable ? [cancel] : []),
   );
   cancel.addEventListener('click', () => {
@@ -43,7 +57,6 @@ export function showProgress(title: string, cancellable = true): Progress {
   });
   const stack = (document.querySelector('.wm-progress-stack') as HTMLElement | null) ?? document.body.appendChild(h('div', { class: 'wm-progress-stack' }));
   stack.append(card);
-  const track = bar.parentElement!;
   let furthest = 0;
   let lastTotal = 0;
   let timer: { at: number; fraction: number } | null = null;
@@ -51,9 +64,7 @@ export function showProgress(title: string, cancellable = true): Progress {
     // Never moves back: the bar only goes forward, whatever order the steps report in.
     const fraction = Math.max(furthest, total > 0 ? Math.min(1, done / total) : 0);
     furthest = fraction;
-    const percent = Math.round(fraction * 100);
-    bar.style.width = `${percent}%`;
-    track.setAttribute('aria-valuenow', String(percent));
+    track.set(fraction);
     lastTotal = total || lastTotal;
     const base = text ?? t('app.importProgress', { done, total });
     const seconds = timer ? estimateSeconds(fraction, timer.fraction, performance.now() - timer.at) : null;

@@ -3488,7 +3488,50 @@ body.wm-fullscreen .wm-keys {
   outline-offset: 1px;
 }
 
-/* --- Version History and Trash (see versionHistoryDialog.ts, trashDialog.ts) ------------------------------------------------- */
+/* --- A document in the trash, shown read-only (trashPreview.ts) ---------------------------------------------------------------- */
+
+.wm-dialog.wm-trash-preview {
+  width: min(960px, calc(100vw - 32px));
+  max-width: none;
+  height: min(900px, calc(100vh - 32px));
+}
+
+.wm-dialog.wm-trash-preview[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.wm-trash-preview-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.wm-trash-preview-meta,
+.wm-trash-preview-status {
+  margin: 0;
+  color: var(--wm-muted);
+}
+
+.wm-trash-preview-status[hidden] {
+  display: none;
+}
+
+.wm-trash-preview-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 1px solid var(--wm-border);
+}
+
+.wm-trash-preview-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* --- Version History (see versionHistoryDialog.ts) ------------------------------------------------------------------------------ */
 
 .wm-dialog.wm-history {
   width: 580px;

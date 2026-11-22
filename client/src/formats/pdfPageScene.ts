@@ -7,30 +7,15 @@
 // or as text in a like font where it embeds none (the standard fonts, Type 3). Shapes and images painted over text come
 // after the text. Like the viewer, a glyph run is set upright at its size: text the page turns or stretches is not.
 
-import { imageBytes, interpretPage, type DisplayImage, type GlyphRun, type PdfPage } from '@golemdocs/pdf';
+import { interpretPage, type GlyphRun, type PdfPage } from '@golemdocs/pdf';
 import { FontProgram, type Outline } from '@golemdocs/pdf/fontProgram';
 import { colorText } from '../vector/style.ts';
-import { emptyScene, type ImageNode, type Matrix, type PathCommand, type Scene, type SceneNode, type TextNode } from '../vector/model.ts';
-import { Definitions, nodesOf } from './pdfDrawings.ts';
+import { emptyScene, type PathCommand, type Scene, type SceneNode, type TextNode } from '../vector/model.ts';
+import { Definitions, imageNode, nodesOf } from './pdfDrawings.ts';
 import { writeSvg } from '../vector/svgWrite.ts';
 
 const color = (rgb: number): string => colorText([(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 1]);
 const round = (v: number): number => Math.round(v * 100) / 100;
-
-/** An image of the page, placed as it is drawn: the page's matrix for the image's unit square, its rows from the top. */
-function imageNode(page: PdfPage, image: DisplayImage): ImageNode | null {
-  const found = imageBytes(page.doc, image.stream, image.maskColor !== undefined ? { maskColor: image.maskColor } : {});
-  if (!found || !image.pixelWidth || !image.pixelHeight) return null;
-  // Where the unit square lands (y down), and the image's own size: a turned one says, an upright one is its box and mirrors.
-  const [a, b, c, d, e, f]: Matrix = image.matrix ?? [image.flipX ? -image.w : image.w, 0, 0, image.flipY ? image.h : -image.h, image.flipX ? image.x + image.w : image.x, image.flipY ? image.y : image.y + image.h];
-  // A PDF image's first row is at the top of its unit square (y = 1); an SVG image's is at y = 0.
-  const pw = image.pixelWidth;
-  const ph = image.pixelHeight;
-  const transform: Matrix = [a / pw, b / pw, -c / ph, -d / ph, c + e, d + f];
-  let binary = '';
-  for (let i = 0; i < found.bytes.length; i += 0x8000) binary += String.fromCharCode(...found.bytes.subarray(i, i + 0x8000));
-  return { kind: 'image', x: 0, y: 0, width: pw, height: ph, href: `data:${found.mime};base64,${btoa(binary)}`, transform, style: image.alpha < 1 ? { opacity: String(round(image.alpha)) } : {}, attrs: {} };
-}
 
 /** A glyph's outline (ems, y up) as commands at its place on the page (points, y down). */
 function glyphCommands(outline: Outline, x: number, y: number, size: number, out: PathCommand[]): void {
@@ -77,9 +62,9 @@ function runNodes(page: PdfPage, run: GlyphRun, programs: Map<object, FontProgra
 export function pageScene(page: PdfPage): Scene {
   const display = interpretPage(page, { paths: true });
   const scene = emptyScene(round(display.width), round(display.height));
-  const defs = new Definitions();
+  const defs = new Definitions(page.doc);
   const programs = new Map<object, FontProgram | null>();
-  const images = (over: boolean): SceneNode[] => display.images.filter((i) => i.over === over).flatMap((i) => imageNode(page, i) ?? []);
+  const images = (over: boolean): SceneNode[] => display.images.filter((i) => i.over === over).flatMap((i) => imageNode(page.doc, i) ?? []);
   scene.children = [
     { kind: 'rect', x: 0, y: 0, width: scene.width, height: scene.height, rx: 0, ry: 0, style: { fill: '#ffffff' }, attrs: {} },
     ...nodesOf(

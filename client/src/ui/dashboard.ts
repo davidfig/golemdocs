@@ -32,6 +32,8 @@ import { chooseVaultFolders, type VaultChoice } from './vaultFoldersDialog.ts';
 import { isTouchDevice, showInFileManagerLabel } from '../desktop/bridge.ts';
 import { lastNewKind, newKindIconElement, newKindItems, newKindLabel, newMenuItems } from './newKinds.ts';
 import type { DocumentKind } from './actions.ts';
+import type { TrashActions } from './trashActions.ts';
+import { trashKey, type TrashItem } from '../trash.ts';
 import './dashboard.css';
 
 const SIZE_KEY = 'golemdocs.dashboardIconSize';
@@ -82,8 +84,8 @@ export interface DashboardHost {
   showInVault?(item: { doc: LibraryEntry } | { folder: Folder }): void;
   /** In the desktop app: whether the vault keeps a copy of a folder shared with the user, and turning that on or off. */
   vaultCopy?: { get(share: SharedFolder): VaultChoice; set(share: SharedFolder, choice: VaultChoice): void };
-  /** Opens the trash (the account's deleted documents), which has its own dialog. */
-  showTrash(): void;
+  /** The trash, which Trash opens as a folder. */
+  trash: TrashActions;
   /** The dashboard was closed without opening anything: give the editor back the keyboard. */
   closed(): void;
   /** The keys of the documents (library entries, and shared documents by id) with the search's words or #tags in them. */
@@ -118,6 +120,9 @@ export class Dashboard {
   /** New: makes a document of the type used last, whose picture it shows. */
   private readonly newButton: HTMLButtonElement;
   private readonly trashButton: HTMLButtonElement;
+  private readonly emptyTrashButton: HTMLButtonElement;
+  /** Looking in the trash rather than a folder. */
+  private inTrash = false;
   /** Documents (`doc:<key>`) and folders (`folder:<id>`) ticked for a bulk Move or Delete. */
   private readonly selected = new Set<string>();
   /** Where a Shift-click range starts: the card ticked last. */
@@ -152,6 +157,9 @@ export class Dashboard {
     private readonly host: DashboardHost,
     private readonly library: LibraryStore,
   ) {
+    host.trash.store.subscribe(() => {
+      if (this.visible && this.inTrash && !this.dragged) this.render();
+    });
     library.subscribe(() => {
       if (!this.visible) return;
       this.notice.textContent = library.problem ?? '';
@@ -176,6 +184,10 @@ export class Dashboard {
       e.preventDefault();
       const folderId = this.folderId;
       const before = document.activeElement;
+      if (this.inTrash) {
+        showPopupMenu([this.host.trash.emptyItem()], e.clientX, e.clientY, t('trash.title'), () => giveBack(before));
+        return;
+      }
       if (this.sharedAt) {
         const at = this.sharedAt;
         if (at.share.role !== 'editor') return;
@@ -232,7 +244,29 @@ export class Dashboard {
         this.renaming = folder.id;
       }, false);
     });
-    this.trashButton = action('trash', t('trash.title'), t('trash.title'), () => this.host.showTrash());
+    this.trashButton = action('trash', t('trash.title'), t('trash.title'), () => this.showTrash());
+    // A document or folder dragged onto Trash is deleted, as its Delete would (asking first).
+    this.trashButton.addEventListener('dragover', (e) => {
+      if (!this.dragged) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      this.trashButton.classList.add('wm-drop');
+    });
+    this.trashButton.addEventListener('dragleave', () => this.trashButton.classList.remove('wm-drop'));
+    this.trashButton.addEventListener('drop', (e) => {
+      this.trashButton.classList.remove('wm-drop');
+      const item = this.dragged;
+      this.dragged = null;
+      if (!item) return;
+      e.preventDefault();
+      // Dragging one of the ticked ones takes them all, as Delete in the selection bar would.
+      const key = item.kind === 'doc' ? `doc:${item.entry.key}` : `folder:${item.folder.id}`;
+      const items = this.selected.has(key) ? this.selectedItems() : item.kind === 'doc' ? { docs: [item.entry], folders: [] } : { docs: [], folders: [item.folder] };
+      void this.deleteItems(items, (before, chosen) => this.deleteSelection(before, chosen));
+    });
+    this.emptyTrashButton = action('trash', t('trash.emptyTrash'), t('trash.emptyTrash'), () => void this.host.trash.emptyAll());
+    this.emptyTrashButton.classList.add('wm-danger');
+    this.emptyTrashButton.hidden = true;
     const moveSelected = action('moveToFolder', t('panels.dashboard.move'), t('panels.dashboard.moveSelected'), () => this.moveSelection());
     const deleteSelected = this.deleteButton(() => this.selectedItems(), (before, items) => this.deleteSelection(before, items), 'trash');
     const clearSelection = action('close', t('panels.dashboard.clearSelection'), t('panels.dashboard.clearSelection'), () => this.setSelection([]));
@@ -261,7 +295,7 @@ export class Dashboard {
     });
     const newSplit = h('span', { class: 'wm-dash-split' }, blank, typeButton);
     this.newSplit = newSplit;
-    const actions = h('div', { class: 'wm-dash-actions' }, newSplit, importButton, importFolderButton, this.newFolderButton, this.trashButton, this.selectionBar);
+    const actions = h('div', { class: 'wm-dash-actions' }, newSplit, importButton, importFolderButton, this.newFolderButton, this.trashButton, this.emptyTrashButton, this.selectionBar);
     const size = this.sizeSlider();
     this.root = h(
       'section',
@@ -338,6 +372,7 @@ export class Dashboard {
     this.search.value = '';
     this.folderId = null;
     this.sharedAt = null;
+    this.inTrash = false;
     this.renaming = null;
     this.selected.clear();
     // What the library has shows at once; the listing brings it up to date.
@@ -354,6 +389,27 @@ export class Dashboard {
     }
     await this.host.settleThumbnail?.();
     await this.refresh();
+  }
+
+  /** Opens Trash, as a folder of what was deleted (showing the dashboard first, if it isn't). */
+  showTrash(): void {
+    if (!this.visible) void this.show();
+    this.search.value = '';
+    this.inTrash = true;
+    this.sharedAt = null;
+    this.renaming = null;
+    this.selected.clear();
+    this.render();
+    this.scroller.scrollTop = 0;
+    void this.host.trash.store.refresh();
+  }
+
+  /** Back from Trash to the documents, at the top level. */
+  private leaveTrash(): void {
+    this.inTrash = false;
+    this.folderId = null;
+    this.search.value = '';
+    this.render();
   }
 
   /** Shows on New the picture of the type it makes (the one used last), and names the type in its tooltip. */
@@ -440,6 +496,7 @@ export class Dashboard {
     // The cards are redrawn, so a pending "confirm" goes, and so must its timer (it would reset the next one early).
     this.resetConfirm();
     this.showActions();
+    if (this.inTrash) return this.renderTrash();
     if (this.sharedAt) return this.renderSharedFolder();
     // Searching looks in every folder at once; otherwise this folder's own folders and documents.
     const searching = this.search.value.trim() !== '';
@@ -483,9 +540,60 @@ export class Dashboard {
   private showActions(): void {
     const at = this.sharedAt;
     const editor = !at || at.share.role === 'editor';
-    this.newSplit.hidden = this.importButton.hidden = !editor;
-    this.importFolderButton.hidden = this.trashButton.hidden = !!at;
-    this.newFolderButton.hidden = !editor || this.search.value.trim() !== '';
+    this.newSplit.hidden = this.importButton.hidden = !editor || this.inTrash;
+    this.importFolderButton.hidden = this.trashButton.hidden = !!at || this.inTrash;
+    this.newFolderButton.hidden = !editor || this.inTrash || this.search.value.trim() !== '';
+    const store = this.host.trash.store;
+    this.emptyTrashButton.hidden = !this.inTrash;
+    this.emptyTrashButton.disabled = !store.items.length || store.emptying !== null;
+  }
+
+  // --- Trash -------------------------------------------------------------------------------
+
+  /** Trash: a card for each deleted document, newest first, under "Documents › Trash". */
+  private renderTrash(): void {
+    const trash = this.host.trash;
+    const store = trash.store;
+    const searching = this.search.value.trim() !== '';
+    this.crumbs.hidden = false;
+    const home = h('button', { class: 'wm-crumb', text: t('panels.dashboard.title'), attrs: { type: 'button' } });
+    home.addEventListener('click', () => this.leaveTrash());
+    this.crumbs.replaceChildren(home, h('span', { class: 'wm-crumb-sep', text: '›', attrs: { 'aria-hidden': 'true' } }), h('button', { class: 'wm-crumb', text: t('trash.title'), attrs: { type: 'button', 'aria-current': 'page', disabled: '' } }));
+    this.notice.textContent = store.accountError !== null ? t('trash.accountFailed', { message: store.accountError }) : (this.library.problem ?? '');
+    const shown = store.items.filter((item) => matchesSearch(item, this.search.value));
+    const children: HTMLElement[] = [h('p', { class: 'wm-dash-empty', text: t('trash.note') })];
+    if (!store.loaded) children.push(h('p', { class: 'wm-dash-empty', text: t('trash.loading') }));
+    else if (!shown.length) children.push(h('p', { class: 'wm-dash-empty', text: searching ? t('panels.dashboard.noMatches') : t('trash.empty') }));
+    children.push(...shown.map((item) => this.trashCard(item)));
+    this.rebuilding = true;
+    this.grid.replaceChildren(...children);
+    this.rebuilding = false;
+    this.sharedTitle.hidden = this.sharedGrid.hidden = true;
+    this.thumbnails.watch();
+  }
+
+  /** A deleted document: open it (read-only), restore it, or delete it for good. The same commands as under Trash in the Files pane. */
+  private trashCard(item: TrashItem): HTMLElement {
+    const trash = this.host.trash;
+    const art = h('div', { class: 'wm-thumb wm-trash-thumb' }, fileIcon(item.name));
+    const open = h(
+      'button',
+      { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: item.name }) } },
+      art,
+      h('span', { class: 'wm-card-name', title: item.name }, fileIcon(item.name), setFileName(h('span', { class: 'wm-card-title' }), item.name)),
+      h('span', { class: 'wm-card-meta', text: trash.meta(item) }),
+    );
+    open.addEventListener('click', () => trash.open(item));
+    const badges = h('div', { class: 'wm-badges' }, h('span', { class: 'wm-badge', text: trash.source(item) }));
+    const restore = this.iconButton('undo', t('trash.restore'));
+    restore.addEventListener('click', () => void trash.restore(item));
+    const forever = this.iconButton('trash', t('trash.deleteForever'));
+    forever.addEventListener('click', () => void trash.deleteForever(item));
+    const going = trash.store.going.has(trashKey(item));
+    restore.disabled = forever.disabled = going;
+    const card = h('article', { class: `wm-card${going ? ' wm-card-going' : ''}` }, open, badges, h('div', { class: 'wm-card-actions' }, restore, forever));
+    this.cardMenu(card, () => trash.menu(item));
+    return card;
   }
 
   /** A folder someone shared with the user: open it, or leave it. */
@@ -1260,25 +1368,29 @@ export class Dashboard {
   private deleteButton(what: () => { docs: LibraryEntry[]; folders: Folder[] }, run: (before: Listed, items: { docs: LibraryEntry[]; folders: Folder[] }) => Promise<void>, icon?: string, iconOnly = false, label = t('panels.dashboard.delete')): HTMLButtonElement {
     const button = h('button', { class: 'wm-button wm-danger', attrs: { type: 'button' } });
     this.setLabel(button, label, icon, iconOnly);
-    button.addEventListener('click', async () => {
+    button.addEventListener('click', () => {
       this.resetConfirm();
-      const { docs, folders } = what();
-      const lines = deletionList(this.folders, this.entries, folders, docs);
-      if (!(await confirmDelete(deleteTitle(folders, docs, lines), lines))) return;
-      // Gone from the screen at once; if it fails, the refresh below brings it back with the reason.
-      const before = { folders: this.folders, entries: this.entries };
-      // (A listing already on its way was asked for before the delete: the library drops it.)
-      const left = withoutDeleted(before.folders, before.entries, folders, docs);
-      this.library.update({ folders: left.folders, entries: left.entries });
-      run(before, { docs, folders }).then(
-        () => this.refresh(),
-        (error) => {
-          this.notice.textContent = t('panels.dashboard.failed', { reason: error instanceof Error ? error.message : String(error) });
-          void this.refresh();
-        },
-      );
+      void this.deleteItems(what(), run);
     });
     return button;
+  }
+
+  /** Asks, in a dialog listing all that would go, whether to delete these; if so, takes them off the screen and runs `run`. */
+  private async deleteItems({ docs, folders }: { docs: LibraryEntry[]; folders: Folder[] }, run: (before: Listed, items: { docs: LibraryEntry[]; folders: Folder[] }) => Promise<void>): Promise<void> {
+    const lines = deletionList(this.folders, this.entries, folders, docs);
+    if (!(await confirmDelete(deleteTitle(folders, docs, lines), lines))) return;
+    // Gone from the screen at once; if it fails, the refresh below brings it back with the reason.
+    const before = { folders: this.folders, entries: this.entries };
+    // (A listing already on its way was asked for before the delete: the library drops it.)
+    const left = withoutDeleted(before.folders, before.entries, folders, docs);
+    this.library.update({ folders: left.folders, entries: left.entries });
+    await run(before, { docs, folders }).then(
+      () => this.refresh(),
+      (error) => {
+        this.notice.textContent = t('panels.dashboard.failed', { reason: error instanceof Error ? error.message : String(error) });
+        void this.refresh();
+      },
+    );
   }
 
   /** A button's text, with its icon in front when it has one. */

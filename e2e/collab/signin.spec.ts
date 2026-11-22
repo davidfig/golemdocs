@@ -380,7 +380,7 @@ test.describe('a sign-in that runs out', () => {
     await person.context.close();
   });
 
-  test('while the page is open, the note shows when the account refuses a save', async ({ browser }) => {
+  test('while the page is open, the note shows when the account refuses a save', { tag: '@heavy' }, async ({ browser }) => {
     const person = await newPerson(browser, 'lapsed-open');
     await person.app.blank();
     await person.app.type('first');

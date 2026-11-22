@@ -502,6 +502,12 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
   display: inline-flex;
 }
 
+/* An action that doesn't apply here (in Trash, or a folder shared with you): its display above would otherwise show it. */
+.wm-dash-action[hidden],
+.wm-dash-split[hidden] {
+  display: none;
+}
+
 .wm-dash-split .wm-dash-action:first-child {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
@@ -534,4 +540,15 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
 
 .wm-vault-folders li {
   margin-top: 4px;
+}
+
+/* A deleted document in Trash: its file type's picture, as there is no thumbnail of it. */
+.wm-trash-thumb .wm-file-icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+/* Being deleted for good: shown until it is gone. */
+.wm-card-going {
+  opacity: 0.5;
 }

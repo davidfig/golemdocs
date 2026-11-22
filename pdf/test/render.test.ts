@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { inflateSync } from 'node:zlib';
 import { N, PageDrawing, PdfDict, PdfDocument, PdfStream, PdfString, describeFont, encodePng, imageBytes, interpretPage, type PageDisplay } from '../src/index.ts';
+import { paintColor, paintColorAt } from '../src/render/shading.ts';
 import { fixture, load } from './helpers.ts';
 
 const ascii = (s: string) => Uint8Array.from(s, (c) => c.charCodeAt(0));
@@ -402,4 +403,89 @@ test('TeX fonts are told apart by the style code in their names', () => {
   // Names that only look like TeX codes are left alone.
   assert.equal(style('SFProText-Regular'), '----');
   assert.equal(style('SFNS'), '----');
+});
+
+/** A one-page document with a red-to-blue axial gradient pattern `/G` (left to right across 0..200) and Helvetica as `/F1`. */
+function withGradient(content: string, extra?: (doc: PdfDocument, res: PdfDict) => void): { doc: PdfDocument; page: ReturnType<PdfDocument['addPage']> } {
+  const doc = PdfDocument.create();
+  const page = doc.addPage([200, 100]);
+  page.addResource('Font', doc.standardFont('Helvetica').ref, 'F');
+  const res = page.resources;
+  const fonts = doc.dict(res.get('Font'))!;
+  fonts.set('F1', fonts.get('F1') ?? [...fonts][0][1]);
+  const shading = new PdfDict({ ShadingType: 2, ColorSpace: N('DeviceRGB'), Coords: [0, 0, 200, 0], Function: new PdfDict({ FunctionType: 2, Domain: [0, 1], C0: [1, 0, 0], C1: [0, 0, 1], N: 1 }), Extend: [true, true] });
+  res.set('Pattern', new PdfDict({ G: new PdfDict({ PatternType: 2, Shading: shading }) }));
+  extra?.(doc, res);
+  page.setContent(ascii(content));
+  return { doc, page };
+}
+
+test('strips: false leaves curves and gradients to the caller, in painting order with the images', () => {
+  const ellipse = '100 50 m 100 77.6 77.6 100 50 100 c 22.4 100 0 77.6 0 50 c 0 22.4 22.4 0 50 0 c 77.6 0 100 22.4 100 50 c f';
+  const content = [`0 0 1 rg ${ellipse}`, '0 1 0 rg 120 10 30 30 re f', '/Pattern cs /G scn 150 60 40 30 re f', 'q 20 0 0 20 160 10 cm /Im Do Q', '0 g 1 w 0 0 m 200 100 l S'].join('\n');
+  const setup = (doc: PdfDocument, res: PdfDict) => {
+    const img = new PdfStream(new PdfDict({ Type: N('XObject'), Subtype: N('Image'), Width: 1, Height: 1, ColorSpace: N('DeviceRGB'), BitsPerComponent: 8 }), new Uint8Array([255, 0, 0]));
+    res.set('XObject', new PdfDict({ Im: doc.add(img) }));
+  };
+  const { page } = withGradient(content, setup);
+  // As before: the ellipse and the slanted line in strips; the gradient was never in them.
+  const strips = interpretPage(page, { paths: true });
+  assert.ok(strips.rects.length > 10);
+  assert.deepEqual(strips.paths.map((p) => !!p.vectorOnly), [false, false, true, false]);
+  const display = interpretPage(page, { paths: true, strips: false });
+  const [curve, box, gradient, line] = display.paths;
+  assert.ok(curve.vectorOnly && gradient.vectorOnly && line.vectorOnly);
+  assert.ok(!box.vectorOnly);
+  assert.equal(gradient.fill?.paint?.kind, 'axial');
+  // Only the green box is still a rectangle.
+  assert.equal(display.rects.length, 1);
+  assert.equal(display.rects[0].color, 0x00ff00);
+  // One painting order across paths and images: the image comes after the gradient and before the line.
+  const [image] = display.images;
+  assert.deepEqual([curve.order, box.order, gradient.order, image.order, line.order], [0, 1, 2, 3, 4]);
+  assert.ok(!display.warnings.some((w) => w.includes('pattern')));
+});
+
+test('text painted with a gradient: each glyph in the gradient\'s color where it stands', () => {
+  const { page } = withGradient('/Pattern cs /G scn BT /F1 20 Tf 10 40 Td (MMMMMMMMMMMMM) Tj ET');
+  const [run] = interpretPage(page, { paths: true }).glyphRuns;
+  const first = run.glyphs[0].color!;
+  const last = run.glyphs[run.glyphs.length - 1].color!;
+  // Red on the left, blue on the right, each glyph between.
+  assert.ok(first >> 16 > 200 && (first & 255) < 60, first.toString(16));
+  assert.ok(last >> 16 < 60 && (last & 255) > 200, last.toString(16));
+  // The run as a whole: the gradient's middle.
+  assert.equal(run.color, 0x800080);
+});
+
+test('a tiling pattern whose cell is an image keeps the image', () => {
+  const { page } = withGradient('/Pattern cs /T scn 10 10 m 190 10 l 100 90 l h f', (doc, res) => {
+    const img = new PdfStream(new PdfDict({ Type: N('XObject'), Subtype: N('Image'), Width: 2, Height: 1, ColorSpace: N('DeviceRGB'), BitsPerComponent: 8 }), new Uint8Array([255, 0, 0, 0, 0, 255]));
+    const cell = new PdfStream(new PdfDict({ PatternType: 1, PaintType: 1, TilingType: 1, BBox: [0, 0, 200, 100], XStep: 202, YStep: 102, Resources: new PdfDict({ XObject: new PdfDict({ X: doc.add(img) }) }) }), ascii('q 200 0 0 100 0 0 cm /X Do Q'));
+    (doc.dict(res.get('Pattern')) as PdfDict).set('T', doc.add(cell));
+  });
+  const display = interpretPage(page, { paths: true, strips: false });
+  const [shape] = display.paths;
+  const paint = shape.fill?.paint;
+  assert.equal(paint?.kind, 'tiling');
+  assert.equal(paint.kind === 'tiling' && paint.images?.length, 1);
+  assert.ok(shape.vectorOnly);
+  assert.deepEqual(display.warnings, []);
+});
+
+test('a paint\'s color at a point: along an axial gradient, out from a radial one', () => {
+  const stops = [
+    { offset: 0, color: 0xff0000 },
+    { offset: 1, color: 0x0000ff },
+  ];
+  const axial = { kind: 'axial' as const, matrix: [1, 0, 0, 1, 0, 0] as [number, number, number, number, number, number], x0: 0, y0: 0, x1: 100, y1: 0, stops, extend: [true, true] as [boolean, boolean] };
+  assert.equal(paintColorAt(axial, 0, 50), 0xff0000);
+  assert.equal(paintColorAt(axial, 50, 0), 0x800080);
+  assert.equal(paintColorAt(axial, 500, 0), 0x0000ff);
+  // Placed by its matrix: here moved 100 right.
+  assert.equal(paintColorAt({ ...axial, matrix: [1, 0, 0, 1, 100, 0] }, 100, 0), 0xff0000);
+  const radial = { kind: 'radial' as const, matrix: axial.matrix, x0: 50, y0: 50, r0: 0, x1: 50, y1: 50, r1: 50, stops, extend: axial.extend };
+  assert.equal(paintColorAt(radial, 50, 50), 0xff0000);
+  assert.equal(paintColorAt(radial, 100, 50), 0x0000ff);
+  assert.equal(paintColor(radial), 0x800080);
 });

@@ -115,3 +115,20 @@ test('a picture drawn turned and mirrored is placed turned and mirrored', async 
   const sizes = pictures.map((d) => [Math.round(d.width / 12700), Math.round(d.height / 12700)]);
   assert.ok(sizes.some(([w, h]) => w === 100 && h === 60), JSON.stringify(sizes));
 });
+
+test('a pattern whose cell is an image (how Chromium fills a shape with a picture) keeps the image in its cell', async () => {
+  const pdf = PdfDocument.create();
+  const img = pdf.add(new PdfStream(new PdfDict({ Type: N('XObject'), Subtype: N('Image'), Width: 2, Height: 1, ColorSpace: N('DeviceRGB'), BitsPerComponent: 8 }), Uint8Array.of(255, 0, 0, 0, 0, 255)));
+  const cell = new PdfStream(new PdfDict({ PatternType: 1, PaintType: 1, TilingType: 1, BBox: [0, 0, 200, 200], XStep: 202, YStep: 202, Resources: new PdfDict({ XObject: new PdfDict({ X: img }) }) }), new TextEncoder().encode('q 200 0 0 200 0 0 cm /X Do Q'));
+  const page = pdf.addPage([200, 200]);
+  const name = page.addResource('Pattern', pdf.add(cell), 'P');
+  const draw = page.draw({ origin: 'top-left' });
+  draw.op('cs', N('Pattern')).op('scn', N(name)).ellipsePath(100, 100, 80, 60).fill();
+  draw.finish();
+  const saved = PdfDocument.load(await pdf.save());
+  const display = interpretPage(saved.pages[0], { paths: true });
+  const [group] = drawingGroups(display.paths, display);
+  // With the document to read it from, the image is in the cell; without, the cell has only its shapes.
+  assert.match(compact(drawingSvg(group, saved)), /<pattern id="p\d+"[^>]*><image [^>]*href="data:image\/png;base64,[^"]+"[^>]*\/><\/pattern>/);
+  assert.doesNotMatch(drawingSvg(group), /<image/);
+});

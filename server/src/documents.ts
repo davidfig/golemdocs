@@ -9,7 +9,7 @@ import { DOCX, docxKey, historyKey, thumbKey } from './keys.ts';
 import type { Env } from './cf.ts';
 import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, perChunk, type Failure } from './http.ts';
 import { checkFolder, type FolderRow } from './folders.ts';
-import { describeTrashed, purge, purgeExpired, trashStatements, type TrashRow } from './trash.ts';
+import { describeTrashed, purge, purgeExpired, PURGING, trashStatements, type TrashRow } from './trash.ts';
 import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, retainedChunks, storedSize, versionsOf, type VersionRow } from './versions.ts';
 import { editableFolder, forgetFolders } from './folderShares.ts';
 import { accessFor, canWrite, dropPublicLink, forgetDocuments, makePublicLink, person, publicLinkOf, publicShare, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
@@ -246,8 +246,8 @@ export interface DocumentRoute {
   sub?: 'thumbnail' | 'index' | 'shares' | 'versions' | 'link';
   /** Whose share a DELETE /api/documents/:id/shares/:userId removes, or which version /api/documents/:id/versions/:version is. */
   granteeId?: string;
-  /** `restore` for /api/documents/:id/versions/:version/restore and /api/trash/:id/restore. */
-  action?: 'restore';
+  /** `restore` for /api/documents/:id/versions/:version/restore and /api/trash/:id/restore; `file` for /api/trash/:id/file. */
+  action?: 'restore' | 'file';
 }
 
 /** The user's own storage: whether they sync, and their database if they have one (or get one now). */
@@ -380,7 +380,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     if (!id) {
       if (request.method === 'GET') {
         await purgeExpired(env, userId, ownDb);
-        return json((await ownDb.all<TrashRow>('SELECT * FROM trash ORDER BY deleted_at DESC')).map(describeTrashed));
+        return json((await ownDb.all<TrashRow>(`SELECT * FROM trash WHERE deleted_at <> ${PURGING} ORDER BY deleted_at DESC`)).map(describeTrashed));
       }
       // DELETE /api/trash: empty it.
       if (request.method === 'DELETE') {
@@ -391,12 +391,20 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     }
     const trashed = await ownDb.first<TrashRow>('SELECT * FROM trash WHERE id = ?', [id]);
     if (!trashed) throw new HttpError(404, 'not found');
+    // GET /api/trash/:id/file: the trashed document's bytes, to look at before restoring it. Only its owner reaches this (`ownDb`).
+    if (request.method === 'GET' && action === 'file') {
+      if (trashed.deleted_at === PURGING) throw new HttpError(404, 'not found');
+      const response = await documentResponse(env, trashed.r2_key, userId, id, DOCX, request.headers.get('if-none-match'));
+      if (!response) throw new HttpError(404, 'document file is missing');
+      return response;
+    }
     if (request.method === 'DELETE' && !action) {
       await purge(env, userId, ownDb, [trashed]);
       return new Response(null, { status: 204 });
     }
     if (request.method === 'POST' && action === 'restore') {
       if (!syncing) throw subscriptionRequired();
+      if (trashed.deleted_at === PURGING) throw new HttpError(404, 'not found');
       // Its folder may have been deleted since: then it comes back at the top level.
       const folderId = trashed.folder_id !== null && (await ownDb.first('SELECT 1 FROM folders WHERE id = ?', [trashed.folder_id])) ? trashed.folder_id : null;
       await ownDb.runAll([
@@ -799,8 +807,8 @@ export async function handleDocuments(request: Request, env: Env, userId: string
         throw new HttpError(409, 'changed elsewhere');
       }
       // Deleted while this save was on its way. In the trash, the file is its (restorable) file, bytes just written and all; if the row is
-      // gone altogether (emptied meanwhile), the bytes belong to nothing.
-      if (!(await db.first('SELECT 1 FROM trash WHERE id = ?', [id]))) {
+      // gone altogether (emptied meanwhile) or being purged, the bytes belong to nothing.
+      if (!(await db.first(`SELECT 1 FROM trash WHERE id = ? AND deleted_at <> ${PURGING}`, [id]))) {
         await env.FILES.delete(row.r2_key);
         await deleteChunks(env, ownerId, id).catch((error) => console.error('removing chunks failed', error));
       }

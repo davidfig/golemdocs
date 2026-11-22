@@ -135,6 +135,10 @@ test('what the account has ignored in the open document is kept when something m
   await expect.poll(() => new URL(page.url()).searchParams.get('doc'), { timeout: 15_000 }).toMatch(/^local:/);
   const doc = new URL(page.url()).searchParams.get('doc')!;
   await expect.poll(() => page.evaluate(() => localStorage.getItem('golem.settingsSync')), { timeout: 15_000 }).not.toBeNull();
+  // The open document's own (empty) list has gone up first: sent later, as the page reloads, it would land on top of the one put in the account below.
+  await expect
+    .poll(() => page.evaluate(() => (JSON.parse(localStorage.getItem('golem.settingsSync')!).base['word.spelling.ignored.v1'] ?? null) === localStorage.getItem('word.spelling.ignored.v1')), { timeout: 15_000 })
+    .toBe(true);
   await setInAccount(page, { 'word.spelling.ignored.v1': JSON.stringify({ [doc]: { words: ['recieve'], rules: [] } }) });
 
   // The document has opened by the time the settings arrive, as it usually has.

@@ -175,3 +175,33 @@ test('the CJK language of a PDF font: by its name as PDFs write it, else by its 
   assert.equal(cjkLangOf(fontSet, 'Unknown', [0x3042]), 'ja');
   assert.equal(cjkLangOf({ defaultCjkLang: 'zh-Hans' } as FontSet, 'Unknown', [0x4e00]), 'zh-Hans');
 });
+
+test('curves and gradients are drawn as SVG pictures, in painting order among the images', skip, async () => {
+  const doc = PdfDocument.create();
+  const page = doc.addPage([300, 200]);
+  const d = new PageDrawing(page, { origin: 'top-left' });
+  d.ellipse(50, 50, 40, 30, { fill: [1, 0, 0] });
+  d.image(doc.embedImage(fixture('img-rgb.jpg')), 100, 20, 40, 30);
+  d.save().rectPath(150, 100, 100, 50);
+  d.gradient({ type: 'linear', coords: [150, 0, 250, 0], stops: [{ offset: 0, color: [1, 0, 0] }, { offset: 1, color: [0, 0, 1] }] });
+  d.restore();
+  d.rect(10, 150, 60, 20, { fill: [0, 1, 0] });
+  d.image(doc.embedImage(fixture('img-rgba.png')), 200, 20, 32, 32);
+  d.finish();
+  const view = await openPdfView(await doc.save(), fonts!);
+  const layout = view.layoutPage(0);
+  // The ellipse, the first image, the gradient, the second image; the green box stays a rectangle.
+  assert.deepEqual(
+    layout.images.map((i) => (i.svg ? 'svg' : 'image')),
+    ['svg', 'image', 'svg', 'image'],
+  );
+  assert.equal(layout.background.count, 1);
+  const [ellipse, , gradient] = layout.images;
+  assert.deepEqual([ellipse.x, ellipse.y, ellipse.width, ellipse.height], [10, 20, 80, 60]);
+  // Until its SVG is drawn, a picture shows a transparent pixel; the SVG is written when first asked for.
+  const blank = await view.media(ellipse.part);
+  assert.ok(blank && blank[0] === 0x89);
+  const svg = new TextDecoder().decode((await view.media(gradient.svg!))!);
+  assert.match(svg, /<linearGradient [^>]*><stop offset="0" stop-color="#ff0000"\/>/);
+  assert.match(new TextDecoder().decode((await view.media(ellipse.svg!))!), /fill="#ff0000"/);
+});

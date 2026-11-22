@@ -6,7 +6,7 @@ import { deskColor, onThemeChange, pagesDark, rereadTheme } from './ui/theme.ts'
 import { FrameMonitor, debugFlags, onDebugFlagsChange } from './debug.ts';
 import { currentUser, forgetLapsedAccount, lapsedAccount, remembered, signOut as signOutOfCloud, type User } from './auth.ts';
 import { createChromeHost } from './chromeHost.ts';
-import { CloudError, createInSharedFolder, deleteDocuments, documentUrl, downloadDocument, downloadIndex, folderViewUrl, listDocuments, listFolders, listShared, listSharedFolders, listTrash, purgeTrash, renameCloudDocument, restoreFromTrash, saveChunked, saveDocument, sharedFolderTree, type CloudDocument, type SharedFolder, type SharedFolderDocument } from './cloud.ts';
+import { CloudError, createInSharedFolder, deleteDocuments, documentUrl, downloadDocument, downloadIndex, folderViewUrl, listDocuments, listFolders, listShared, listSharedFolders, listTrash, downloadTrashed, purgeTrash, renameCloudDocument, restoreFromTrash, saveChunked, saveDocument, sharedFolderTree, type CloudDocument, type SharedFolder, type SharedFolderDocument } from './cloud.ts';
 import { CHUNK_MIN_FILE, chunkBytes } from './storage/chunker.ts';
 import { archiveFiles, zipDocuments } from './storage/archive.ts';
 import { ConvertWorker, startConvertWorker } from './desktop/convertClient.ts';
@@ -40,6 +40,7 @@ import {
   listSearchIndexes,
   listTrashedSaved,
   purgeTrashedSaved,
+  getTrashedSaved,
   restoreTrashedSaved,
   trashSaved,
   putSearchIndex,
@@ -127,7 +128,7 @@ import { showPasteSpecialDialog } from './ui/pasteSpecialDialog.ts';
 import { attachTextInput, editKey, focusTextInput, type EditKey } from './ui/textInput.ts';
 import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
-import { TrashDialog } from './ui/trashDialog.ts';
+import { TrashActions } from './ui/trashActions.ts';
 import { VaultDialog } from './ui/vaultDialog.ts';
 import { copyText, desktopBridge, desktopUpdater, isDesktopApp, isTouchDevice, linkBridge, macPrinter, ShellTooOldError } from './desktop/bridge.ts';
 import { vaultMemory } from './desktop/vaultMemory.ts';
@@ -138,7 +139,7 @@ import { excludedFolders, keepsCopy, setExcludedFolders, setKeepsCopy } from './
 import { UpdateService } from './desktop/updateService.ts';
 import { UpdateDialog } from './ui/updateDialog.ts';
 import { VersionHistoryDialog } from './ui/versionHistoryDialog.ts';
-import { type TrashDeps, type TrashItem } from './trash.ts';
+import { TrashStore, type TrashDeps, type TrashItem } from './trash.ts';
 import { TRASH_MS } from '@golemdocs/ops';
 import { deviceVersionBytes, restoreFromAccount, restoredName, type HistoryEntry, type HistoryTarget } from './history.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
@@ -6376,7 +6377,7 @@ const chromeHost = createChromeHost({
     saveIfEdited();
     void saving.then(() => versionHistoryDialog.open());
   },
-  showTrash: () => trashDialog.open(),
+  showTrash,
   showVault: () => vaultDialog.open(),
   copyNoteLink: () => void copyNoteLink(),
   canShowInVault,
@@ -6682,10 +6683,25 @@ const trashDeps: TrashDeps = {
     if (account) scheduleUpload(info.id);
   },
   async purge(item) {
-    if (!item || item.source === 'device') await purgeTrashedSaved(item?.id);
-    if (account && (!item || item.source === 'account')) await purgeTrash(item?.id);
+    if (item.source === 'device') await purgeTrashedSaved(item.id);
+    else await purgeTrash(item.id);
+  },
+  async read(item) {
+    if (item.source === 'account') return downloadTrashed(item.id);
+    const found = await getTrashedSaved(item.id);
+    if (!found) throw new Error(t('trash.gone'));
+    return found.bytes;
   },
 };
+const trashStore = new TrashStore(trashDeps);
+// Trash in the Files sidebar and in File › Open: one list, the same commands.
+const trashActions = new TrashActions({ store: trashStore, restored: () => void refreshLibrary(), tell: say });
+
+/** File › Trash: Trash in the Files sidebar while it shows (and File › Open doesn't), otherwise in File › Open. */
+function showTrash(): void {
+  if (filesPanel.visible && !dashboard.visible) filesPanel.showTrash();
+  else dashboard.showTrash();
+}
 // File ▸ Vault Folder (the desktop app only): a folder on this computer that keeps a copy of the account's documents. The sync
 // code is about 11 kB, too small to be worth a chunk of its own (see AGENTS.md); it only runs in the desktop app.
 let vaultService: VaultService | null = null;
@@ -6779,7 +6795,6 @@ async function connectVault(): Promise<void> {
   vaultDialog.open();
 }
 
-const trashDialog = new TrashDialog({ deps: trashDeps, restored: () => void refreshLibrary(), tell: say, focusEditor: focusInput });
 
 // Tools ▸ Word Count.
 const wordCountDialog = new WordCountDialog({ send, focusEditor: focusInput });
@@ -7057,7 +7072,12 @@ const libraryHost = {
   importFile: (folderId: string | null) => void chromeHost.perform({ kind: 'import', folderId }),
   importFolder: (folderId: string | null) => void chromeHost.perform({ kind: 'importFolder', folderId }),
   dropFile,
-  delete: deleteEverywhere,
+  // What was deleted is in the trash now: a trash that has been looked at is listed again.
+  delete: (entries: LibraryEntry[], folderIds?: string[]) =>
+    deleteEverywhere(entries, folderIds).finally(() => {
+      if (trashStore.loaded) void trashStore.refresh();
+    }),
+  trash: trashActions,
   share: (id: string, name: string) => {
     const entry = library.entries.find((e) => e.cloud?.id === id);
     showShareDialog({ name, people: { id }, ...(entry && { liveSources: liveKeeper.tableSources(entry.key).catch(() => []) }) });
@@ -7109,7 +7129,6 @@ const dashboard = new Dashboard(document.body, {
       }
     : undefined,
   closed: focusInput,
-  showTrash: () => trashDialog.open(),
   contentMatches: async (query) => {
     const docs = await searchableNow();
     // Copies kept here are indexed in the background a few seconds after a change; a search doesn't wait for that.
@@ -7877,6 +7896,11 @@ function updateFooter(): void {
   const visible = footerOn;
   footer.setVisible(visible);
   if (!visible) return;
+  if (current.none) {
+    // Nothing open: no page, words or zoom to tell, and no views to switch between.
+    footer.update({ kind: current.kind, page: null, zoom: camera.zoom, words: null, selection: null, picture: null, view: 'print', canFlow: false, text: null, none: true });
+    return;
+  }
   if (textView.active) {
     footer.update({ kind: current.kind, page: null, zoom: camera.zoom, words: null, selection: null, picture: null, view: 'print', canFlow: false, text: textView.footerInfo() });
     return;

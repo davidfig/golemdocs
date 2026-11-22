@@ -6,7 +6,8 @@
 // @golemdocs/pdf annotations), which are drawn from the appearance streams they're given.
 
 import { FontSet, PageLayout, isCjk, type GlyphList, isHangul, langOfFontName, packColor, type CjkLang, type FaceMetrics, type ManifestFace, type ResolvedFont } from '@golemdocs/layout';
-import { PdfDocument, applyAnnotations, applyEdits, applyFields, blockFromRuns, collectCharacters, collectFonts, findBlocks, imageBytes, interpretPage, readAnnotations, readFields, scanPage, type Annotation, type ApplyResult, type Box, type FormField, type DisplayImage, type FontStyle, type GlyphRun, type PageObject, type PdfEdit, type TextBlock, type TextRun } from '@golemdocs/pdf';
+import { PdfDocument, applyAnnotations, applyEdits, applyFields, blockFromRuns, collectCharacters, collectFonts, encodePng, findBlocks, imageBytes, interpretPage, readAnnotations, readFields, scanPage, type Annotation, type ApplyResult, type Box, type FormField, type DisplayImage, type DisplayPath, type FontStyle, type PageDisplay, type GlyphRun, type PageObject, type PdfEdit, type TextBlock, type TextRun } from '@golemdocs/pdf';
+import { drawingSvg, type DrawingGroup } from './pdfDrawings.ts';
 import { PdfFaces } from './pdfFaces.ts';
 import { pageCharacters, type PdfCharacter } from './pdfText.ts';
 import type { EditFonts } from './pdfFonts.ts';
@@ -56,6 +57,40 @@ export interface PdfView {
 
 const MAX_WARNINGS = 200;
 const IMAGE_PART = 'pdf-image:';
+/** A page's curves, slants and gradients between two images (or the ends of the page), drawn as one SVG picture. */
+const VECTOR_PART = 'pdf-vector:';
+/** What shows until a vector picture is drawn: nothing (a transparent pixel). */
+const BLANK_PART = 'pdf-blank';
+
+type Picture = { kind: 'image'; image: DisplayImage } | { kind: 'shapes'; group: DrawingGroup };
+
+/**
+ * A page's images and the shapes only a picture can draw (curves, slants, gradients: `vectorOnly`), in the order
+ * the page paints them: the shapes between two images make one picture, framed to what they cover.
+ */
+export function pictures(display: PageDisplay): Picture[] {
+  const out: Picture[] = [];
+  let shapes: DisplayPath[] = [];
+  const flush = () => {
+    if (!shapes.length) return;
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const p of shapes) [x0, y0, x1, y1] = [Math.min(x0, p.x0), Math.min(y0, p.y0), Math.max(x1, p.x1), Math.max(y1, p.y1)];
+    [x0, y0, x1, y1] = [Math.max(0, Math.floor(x0)), Math.max(0, Math.floor(y0)), Math.min(display.width, Math.ceil(x1)), Math.min(display.height, Math.ceil(y1))];
+    if (x1 > x0 && y1 > y0) out.push({ kind: 'shapes', group: { frame: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }, paths: shapes, behind: true } });
+    shapes = [];
+  };
+  const painted: (DisplayImage | DisplayPath)[] = [...display.images, ...display.paths.filter((p) => p.vectorOnly)].sort((a, b) => a.order - b.order);
+  for (const item of painted) {
+    if ('subpaths' in item) {
+      shapes.push(item);
+      continue;
+    }
+    flush();
+    out.push({ kind: 'image', image: item });
+  }
+  flush();
+  return out;
+}
 
 const LIGATURES: Record<string, string> = { ff: 'ﬀ', fi: 'ﬁ', fl: 'ﬂ', ffi: 'ﬃ', ffl: 'ﬄ', st: 'ﬆ' };
 
@@ -229,6 +264,24 @@ export async function openPdfView(
   const images = new Map<string, DisplayImage>();
   const partById = new Map<string, string>();
   const bytesByPart = new Map<string, Promise<Uint8Array | null>>();
+  /**
+   * Each vector picture's page and place among that page's pictures. Its shapes are read again from the page when it
+   * is first drawn, rather than kept: a long document of line art would hold hundreds of megabytes of them.
+   * A page laid out again gets new parts (its old ones are forgotten).
+   */
+  const vectors = new Map<string, { page: number; group: number }>();
+  const vectorParts = new Map<number, string[]>();
+  let nextVector = 0;
+  /** The last page whose vector pictures were read, kept while its pictures are drawn one after another. */
+  let lastShapes: { page: number; groups: DrawingGroup[] } | undefined;
+  const shapesOf = (index: number): DrawingGroup[] => {
+    if (lastShapes?.page !== index) {
+      const pdfPage = doc.pages[index];
+      const display = pdfPage && interpretPage(pdfPage, { hideFields: true, paths: true, strips: false });
+      lastShapes = { page: index, groups: display ? pictures(display).flatMap((item) => (item.kind === 'shapes' ? [item.group] : [])) : [] };
+    }
+    return lastShapes.groups;
+  };
 
   const pushRun = (page: PageLayout, run: GlyphRun): void => {
     const choice = choose(run);
@@ -237,8 +290,10 @@ export async function openPdfView(
     // Made when a glyph needs it: a run drawn wholly from its own font has no stand-in list.
     let standIn: GlyphList | undefined;
     const list = (): GlyphList => (standIn ??= page.glyphList(resolved, metrics!));
-    const color = packColor(run.color, run.alpha);
+    const runColor = packColor(run.color, run.alpha);
     for (const g of run.glyphs) {
+      // Text painted with a gradient: each glyph in its own color.
+      const color = g.color === undefined ? runColor : packColor(g.color, run.alpha);
       // The font's own glyph, where its program has it (null: a blank one).
       const own = embedded.glyph(run, g.glyph);
       if (own !== undefined) {
@@ -372,7 +427,7 @@ export async function openPdfView(
       if (!pdfPage) throw new RangeError(`no page ${index} (the document has ${doc.pageCount})`);
       let display;
       try {
-        display = interpretPage(pdfPage, { hideFields: true });
+        display = interpretPage(pdfPage, { hideFields: true, paths: true, strips: false });
       } catch (e) {
         warn(`page ${index + 1} could not be read (${(e as Error).message})`);
         return new PageLayout(id, 612, 792, 0, index + 1);
@@ -386,7 +441,23 @@ export async function openPdfView(
         warn(`page ${index + 1}: embedded fonts could not be drawn (${(e as Error).message})`);
       }
       for (const run of display.glyphRuns) pushRun(page, run);
-      for (const image of display.images) {
+      if (lastShapes?.page === index) lastShapes = undefined;
+      for (const part of vectorParts.get(index) ?? []) {
+        vectors.delete(part);
+        bytesByPart.delete(part);
+      }
+      const parts: string[] = [];
+      vectorParts.set(index, parts);
+      for (const item of pictures(display)) {
+        if (item.kind === 'shapes') {
+          const { frame } = item.group;
+          const part = `${VECTOR_PART}${nextVector++}`;
+          vectors.set(part, { page: index, group: parts.length });
+          parts.push(part);
+          page.images.push({ part: BLANK_PART, svg: part, x: frame.x, y: frame.y, width: frame.width, height: frame.height, behind: false });
+          continue;
+        }
+        const image = item.image;
         let part = partById.get(image.id);
         if (!part) {
           part = IMAGE_PART + partById.size;
@@ -400,6 +471,15 @@ export async function openPdfView(
 
     media(part: string): Promise<Uint8Array | null> {
       let cached = bytesByPart.get(part);
+      if (!cached && part === BLANK_PART) bytesByPart.set(part, (cached = Promise.resolve(encodePng(1, 1, 4, new Uint8Array(4)))));
+      if (!cached && part.startsWith(VECTOR_PART)) {
+        const at = vectors.get(part);
+        cached = Promise.resolve().then(() => {
+          const group = at && shapesOf(at.page)[at.group];
+          return group ? new TextEncoder().encode(drawingSvg(group, doc)) : null;
+        });
+        bytesByPart.set(part, cached);
+      }
       if (!cached) {
         const image = images.get(part);
         cached = Promise.resolve().then(() => {

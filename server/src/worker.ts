@@ -235,19 +235,19 @@ const routes: ExportedHandler = {
       }
 
       // The rest are the user's folders (folders.ts) and documents (documents.ts).
-      const match = /^\/api\/(documents|shared|folders|trash)(?:\/([^/]+)(?:\/(thumbnail|index|shares|versions|link|restore)(?:\/([^/]+)(?:\/(restore))?)?)?)?$/.exec(path);
+      const match = /^\/api\/(documents|shared|folders|trash)(?:\/([^/]+)(?:\/(thumbnail|index|shares|versions|link|restore|file)(?:\/([^/]+)(?:\/(restore))?)?)?)?$/.exec(path);
       if (!match) throw new HttpError(404, 'not found');
       const [, collection, id, sub0, granteeId, action0] = match;
-      // `/api/trash/:id/restore` has its action where the other collections have a sub-resource.
-      const sub = sub0 === 'restore' ? undefined : sub0;
-      const action = sub0 === 'restore' ? 'restore' : action0;
+      // `/api/trash/:id/restore` and `/api/trash/:id/file` have their action where the other collections have a sub-resource.
+      const sub = sub0 === 'restore' || sub0 === 'file' ? undefined : sub0;
+      const action = sub0 === 'restore' || sub0 === 'file' ? sub0 : action0;
       const batchUpload = collection === 'documents' && id === 'batch' && sub === undefined;
       if (id !== undefined && !batchUpload && !ID.test(id)) throw new HttpError(404, 'not found');
       if (collection === 'shared' && id !== undefined) throw new HttpError(404, 'not found');
       if (collection === 'folders' && (sub !== undefined || action !== undefined)) throw new HttpError(404, 'not found');
-      // Only a trashed document has `restore` right after its id; only a version has it after the version.
-      if (sub0 === 'restore' && collection !== 'trash') throw new HttpError(404, 'not found');
-      if (collection === 'trash' && sub !== undefined) throw new HttpError(404, 'not found');
+      // Only a trashed document has `restore` or `file` right after its id; only a version has `restore` after the version.
+      if ((sub0 === 'restore' || sub0 === 'file') && collection !== 'trash') throw new HttpError(404, 'not found');
+      if (collection === 'trash' && (sub !== undefined || granteeId !== undefined)) throw new HttpError(404, 'not found');
       if (action0 !== undefined && sub0 !== 'versions') throw new HttpError(404, 'not found');
 
       // Locally and on a self-hosted server, catalogues live in the directory database (see userDb.ts).

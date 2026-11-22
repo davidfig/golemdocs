@@ -54,3 +54,7 @@ test('footer: a book says its page and how much of it has been read, not its wor
   // In Flow there are no pages, but there is still how far in it is.
   assert.deepEqual(keys({ ...info, page: null }), ['panels.footer.progress', 'panels.footer.zoom']);
 });
+
+test('footer: says nothing when no document is open', () => {
+  assert.deepEqual(footerSegments({ ...base, none: true }), []);
+});

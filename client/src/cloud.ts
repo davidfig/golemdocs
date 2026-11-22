@@ -595,6 +595,11 @@ export async function restoreFromTrash(id: string): Promise<CloudDocument> {
   return document;
 }
 
+/** A trashed document's bytes, to look at before restoring it (only its owner may). */
+export async function downloadTrashed(id: string): Promise<ArrayBuffer> {
+  return (await check(await send(`/api/trash/${id}/file`))).arrayBuffer();
+}
+
 /** Deletes one trashed document for good, or (without an id) empties the trash. */
 export async function purgeTrash(id?: string): Promise<void> {
   await check(await send(id ? `/api/trash/${id}` : '/api/trash', { method: 'DELETE' }));

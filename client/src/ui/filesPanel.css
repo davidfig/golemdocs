@@ -164,3 +164,28 @@
   flex: 1;
   margin: 0;
 }
+
+/* Trash: the tree's last entry, set off from the documents above it. */
+.wm-files-trash {
+  margin-top: 4px;
+  border-top: 1px solid var(--wm-etch-dark);
+}
+
+.wm-files-trash .icon {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  justify-content: center;
+}
+
+/* What Trash says when it has nothing to list (or is being listed). */
+.wm-files-note {
+  padding: 3px 8px 3px 24px;
+  color: var(--wm-disabled);
+}
+
+/* Being deleted for good: shown until it is gone. */
+.wm-files-going {
+  opacity: 0.5;
+}

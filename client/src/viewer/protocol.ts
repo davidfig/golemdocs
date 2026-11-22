@@ -166,6 +166,30 @@ export function readToViewer(data: unknown): ToViewer | null {
   };
 }
 
+/** Reads a message from the viewer page, for a host (the app's trash preview), or null (anything else is ignored). */
+export function readFromViewer(data: unknown): FromViewer | null {
+  if (!data || typeof data !== 'object') return null;
+  const m = data as Record<string, unknown>;
+  switch (m.type) {
+    case 'golemdocs:ready':
+      return { type: m.type };
+    case 'golemdocs:opened':
+      return typeof m.name === 'string' && typeof m.format === 'string' && typeof m.pages === 'number' ? { type: m.type, name: m.name, format: m.format, pages: m.pages } : null;
+    case 'golemdocs:error':
+      return typeof m.message === 'string' ? { type: m.type, message: m.message } : null;
+    case 'golemdocs:link': {
+      const url = linkForHost(typeof m.url === 'string' ? m.url : null);
+      return url ? { type: m.type, url } : null;
+    }
+    case 'golemdocs:key':
+      return typeof m.key === 'string' && typeof m.code === 'string'
+        ? { type: m.type, key: m.key, code: m.code, shiftKey: m.shiftKey === true, ctrlKey: m.ctrlKey === true, altKey: m.altKey === true, metaKey: m.metaKey === true, repeat: m.repeat === true }
+        : null;
+    default:
+      return null;
+  }
+}
+
 /** Schemes of links handed to the host. Anything else (`javascript:`, `file:`, the app's own `doc:` and `tag:`, a bookmark in the document) is not. */
 const HOST_LINK = /^(https?|mailto|tel|ftp):/i;
 

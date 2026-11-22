@@ -29,6 +29,8 @@ export interface FooterInfo {
   canFlow: boolean;
   /** A plain text file in the text editor: what to say about it (already in the language), and whether long lines wrap. */
   text: { summary: string; position: string; progress: string; wrap: boolean } | null;
+  /** Nothing is open (after File › Close): the bar is left empty. */
+  none?: boolean;
 }
 
 // Drawn in the bar's text color, on a 16-unit grid.
@@ -74,6 +76,7 @@ export interface FooterSegment {
 /** What the status bar says about a document, left to right. */
 export function footerSegments(info: FooterInfo): FooterSegment[] {
   const out: FooterSegment[] = [];
+  if (info.none) return out;
   if (info.text) {
     for (const text of [info.text.summary, info.text.position, info.text.progress]) if (text) out.push({ key: null, text });
   } else if (PICTURE_KINDS.includes(info.kind) || VECTOR_KINDS.includes(info.kind)) {
@@ -145,8 +148,8 @@ export class Footer {
       if (params && 'count' in params) shown.count = params.count;
       return { text: t(key, { ...shown, n: numbers.format(params?.count ?? 0) }), action: (VECTOR_KINDS.includes(info.kind) ? DRAWING_SEGMENT_ACTIONS[key] : undefined) ?? SEGMENT_ACTIONS[key] };
     });
-    this.group.hidden = info.text !== null;
-    this.wrap.hidden = info.text === null;
+    this.group.hidden = info.text !== null || !!info.none;
+    this.wrap.hidden = info.text === null || !!info.none;
     if (info.text) setAttr(this.wrap, 'aria-pressed', String(info.text.wrap));
     for (const [view, button] of this.views) {
       setAttr(button, 'aria-pressed', String(view === info.view));

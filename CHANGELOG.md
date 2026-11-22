@@ -1,5 +1,20 @@
 # What’s New in Golem Docs
 
+## 0.44.0 - Unreleased
+
+### Changed
+
+- Trash is now a folder rather than a dialog: it is the last entry of the Files sidebar, and File › Open's Trash button opens it like any folder. Open a deleted document to read it before you bring it back, then Restore it or Delete Forever. Drag a document or folder onto Trash to delete it. File › Trash goes to Trash wherever you are.
+- Trash: Empty Trash shows its progress in a card, counting the documents off as they go, with a Cancel button, and each one leaves the trash as it is deleted.
+
+### Fixed
+
+- PDFs: shapes filled with a gradient, a pattern or a picture now show (such as the swooshes and banners of a flyer exported from a browser), and curves and slanted lines are drawn smoothly rather than in thin strips.
+- PDFs: text colored with a gradient shows in its colors instead of black, and text in Type 3 fonts (such as the bold a browser makes for a font that has none) shows in its own letterforms.
+- File › Close now empties the status bar, instead of leaving the closed document's page, word count and zoom on it.
+- Trash: deleting a document for good removes all of its version history, even if a first attempt is interrupted, and emptying a trash of more than 100 documents works. Before, an interrupted delete could leave its named versions counting against your storage.
+- File › Open: inside a folder someone shared with you, the buttons that don't apply there (Import folder and Trash, and New and Import if you can only view) are hidden, as they were meant to be.
+
 ## 0.43.1 - 2026-11-21
 
 ### Fixed

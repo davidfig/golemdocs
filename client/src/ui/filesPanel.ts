@@ -1,6 +1,8 @@
 // The files sidebar (View › Files Sidebar): the account's folders and documents as a tree to the
 // left of the document, so another document is one click away without the dashboard. Folders open
 // and close; a document opens in the editor. It lists what the dashboard does (see sync.ts).
+// Trash is always the last entry: it opens like a folder onto what was deleted (trashActions.ts),
+// and a document or folder dragged onto it is deleted.
 
 import { takeDropped, type Dropped } from '../storage/droppedFiles.ts';
 import { warmOnHover } from './warmOnHover.ts';
@@ -22,6 +24,9 @@ import { showInFileManagerLabel } from '../desktop/bridge.ts';
 import { newMenuItems } from './newKinds.ts';
 import type { DocumentKind } from './actions.ts';
 import { makeResizable } from './sidebarResize.ts';
+import { iconElement } from './icons.ts';
+import type { TrashActions } from './trashActions.ts';
+import { trashKey, type TrashItem } from '../trash.ts';
 import './filesPanel.css';
 
 export interface FilesPanelHost {
@@ -52,6 +57,8 @@ export interface FilesPanelHost {
   signedIn(): User | null;
   /** The open document's ids, to mark it. */
   current(): { localId: string | null; cloudId: string | null };
+  /** The trash, shown as the tree's last entry. */
+  trash: TrashActions;
   close(): void;
   focusEditor(): void;
 }
@@ -62,6 +69,8 @@ export interface FilesPanelHost {
 const OPEN_KEY = 'word.filesOpen';
 /** Set once the tip about dropping files here is dismissed, kept in this browser. */
 const TIP_KEY = 'word.filesDropTipDismissed';
+/** The Trash entry's id among the folders left open (no folder's id starts with #). */
+const TRASH_ID = '#trash';
 
 export class FilesPanel {
   readonly el = h('aside', { class: 'wm-files', attrs: { 'aria-label': t('panels.files.label') } });
@@ -90,6 +99,9 @@ export class FilesPanel {
       this.render();
       this.reveal();
     });
+    host.trash.store.subscribe(() => {
+      if (this.visible) this.render();
+    });
     this.el.hidden = true;
     try {
       for (const id of JSON.parse(localStorage.getItem(OPEN_KEY) ?? '[]')) if (typeof id === 'string') this.expanded.add(id);
@@ -101,7 +113,7 @@ export class FilesPanel {
     const close = iconButton('wm-files-close', CLOSE_ICON, t('panels.files.close'));
     close.addEventListener('click', () => host.close());
     collapse.addEventListener('click', () => this.collapseAll());
-    this.el.append(h('header', { class: 'wm-files-bar' }, h('h2', { text: t('panels.files.label') }), collapse, close), this.notice, this.tree, this.empty, this.dropTip());
+    this.el.append(h('header', { class: 'wm-files-bar' }, h('h2', { text: t('panels.files.label') }), collapse, close), this.notice, this.empty, this.tree, this.dropTip());
     this.notice.hidden = true;
     // Right click, or a long press on a touch screen.
     onContextMenu(this.el, (e) => {
@@ -153,7 +165,16 @@ export class FilesPanel {
       this.render();
       this.reveal();
       void this.refresh();
+      if (this.expanded.has(TRASH_ID)) void this.host.trash.store.refresh();
     }
+  }
+
+  /** File › Trash with the sidebar showing: opens Trash and puts the keyboard on it. */
+  showTrash(): void {
+    this.toggleFolder(TRASH_ID, true);
+    const row = this.tree.querySelector<HTMLElement>(`[data-row="f:${CSS.escape(TRASH_ID)}"]`);
+    row?.scrollIntoView({ block: 'nearest' });
+    row?.focus();
   }
 
   /** Lists everything again. */
@@ -225,7 +246,7 @@ export class FilesPanel {
     const focused = this.el.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.row : undefined;
     const here = this.host.current();
     const rows = treeRows(this.folders, this.entries, this.expanded);
-    this.tree.replaceChildren(...rows.map((row) => this.row(row, here)));
+    this.tree.replaceChildren(...rows.map((row) => this.row(row, here)), ...this.trashRows());
     this.empty.hidden = rows.length > 0;
     const stop =
       (this.tabStop && this.tree.querySelector<HTMLElement>(`[data-row="${CSS.escape(this.tabStop)}"]`)) ??
@@ -289,6 +310,98 @@ export class FilesPanel {
     // Dropped on a document, a thing goes in the folder that document is in.
     this.makeDropTarget(el, folder ? row.folder.id : folderOf(row.item, this.folders));
     return el;
+  }
+
+  /** Trash, and (while it is open) what is in it. */
+  private trashRows(): HTMLElement[] {
+    const trash = this.host.trash;
+    const store = trash.store;
+    const open = this.expanded.has(TRASH_ID);
+    const head = h(
+      'button',
+      { class: 'wm-files-row wm-files-trash', attrs: { type: 'button', role: 'treeitem', 'data-row': `f:${TRASH_ID}`, tabindex: '-1', 'aria-level': '1', 'aria-expanded': String(open) }, title: t('trash.note') },
+      h('span', { class: 'wm-files-twist', text: open ? '▾' : '▸' }),
+      iconElement('trash'),
+      h('span', { class: 'wm-files-name', text: t('trash.title') }),
+    );
+    head.addEventListener('click', (event) => {
+      const e = event as MouseEvent;
+      if (e.metaKey) {
+        e.preventDefault();
+        this.menuAt(e.clientX, e.clientY, this.trashItems(open), head);
+        return;
+      }
+      this.toggleFolder(TRASH_ID);
+    });
+    onContextMenu(head, (e) => {
+      head.focus({ preventScroll: true });
+      this.menuAt(e.clientX, e.clientY, this.trashItems(open), head);
+    });
+    this.makeTrashTarget(head);
+    if (!open) return [head];
+    const note = (text: string): HTMLElement => h('div', { class: 'wm-files-note', text, attrs: { role: 'treeitem', 'aria-level': '2', 'aria-disabled': 'true' } });
+    const rows: HTMLElement[] = [head];
+    if (store.accountError !== null) rows.push(note(t('trash.accountFailed', { message: store.accountError })));
+    if (!store.loaded) rows.push(note(t('trash.loading')));
+    else if (!store.items.length) rows.push(note(t('trash.empty')));
+    for (const item of store.items) rows.push(this.trashRow(item));
+    return rows;
+  }
+
+  /** A deleted document under Trash: opens read-only; its menu restores it or deletes it for good. */
+  private trashRow(item: TrashItem): HTMLElement {
+    const trash = this.host.trash;
+    const going = trash.store.going.has(trashKey(item));
+    const detail = `${trash.meta(item)} · ${trash.source(item)}`;
+    const el = h(
+      'button',
+      { class: 'wm-files-row wm-files-trashed', attrs: { type: 'button', role: 'treeitem', 'data-row': `t:${trashKey(item)}`, tabindex: '-1', 'aria-level': '2', 'aria-description': detail }, title: `${item.name}\n${detail}` },
+      fileIcon(item.name),
+      setFileName(h('span', { class: 'wm-files-name' }), item.name),
+    );
+    el.style.paddingLeft = `${6 + 18}px`;
+    toggleClass(el, 'wm-files-going', going);
+    el.addEventListener('click', (event) => {
+      const e = event as MouseEvent;
+      if (e.metaKey) {
+        e.preventDefault();
+        this.menuAt(e.clientX, e.clientY, trash.menu(item), el);
+        return;
+      }
+      trash.open(item);
+    });
+    onContextMenu(el, (e) => {
+      el.focus({ preventScroll: true });
+      this.menuAt(e.clientX, e.clientY, trash.menu(item), el);
+    });
+    return el;
+  }
+
+  /** Trash's menu: open or close it, and empty it. */
+  private trashItems(open: boolean): PopupItem[] {
+    return [{ label: open ? t('panels.files.closeFolder') : t('panels.files.openFolder'), run: () => this.toggleFolder(TRASH_ID) }, this.host.trash.emptyItem()];
+  }
+
+  /** Trash takes documents and folders dragged onto it: they are deleted, as Delete in their menus would (asking first). */
+  private makeTrashTarget(el: HTMLElement): void {
+    el.addEventListener('dragover', (e) => {
+      if (!this.dragged) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      el.classList.add('wm-drop');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('wm-drop'));
+    el.addEventListener('drop', (e) => {
+      el.classList.remove('wm-drop');
+      const item = this.dragged;
+      this.dragged = null;
+      if (!item) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (item.kind === 'doc') void this.ask([], [item.entry], () => this.host.delete([item.entry]));
+      else void this.ask([item.folder], [], (before) => removeFolderTree(before.folders, before.entries, [item.folder], (entries, folderIds) => this.host.delete(entries, folderIds)));
+    });
   }
 
   /** The field a folder's or document's name is typed in, in its row. A document's is typed without its extension, which stays. */
@@ -513,6 +626,8 @@ export class FilesPanel {
   }
 
   private toggleFolder(id: string, open = !this.expanded.has(id)): void {
+    // Opening Trash lists it again: something may have been deleted since.
+    if (id === TRASH_ID && open) void this.host.trash.store.refresh();
     if (open === this.expanded.has(id)) return;
     if (open) this.expanded.add(id);
     else this.expanded.delete(id);

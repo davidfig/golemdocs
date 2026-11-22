@@ -186,7 +186,7 @@ test('TrueType: a simple font finds glyphs through its cmap by glyph name', () =
   assert.ok(Math.abs(b[1]) < 0.001 && b[3] > 0.7 && b[3] < 0.76, `H bounds ${b}`);
 });
 
-test('fonts without a program they embed (standard fonts, Type 3) have none', () => {
+test('fonts without a program they embed (standard fonts, a Type 3 font with no glyph procedures) have none', () => {
   const doc = PdfDocument.create();
   assert.equal(FontProgram.load(doc, new PdfDict({ Type: N('Font'), Subtype: N('Type1'), BaseFont: N('Helvetica') })), null);
   assert.equal(FontProgram.load(doc, new PdfDict({ Type: N('Font'), Subtype: N('Type3') })), null);
@@ -222,4 +222,34 @@ test('glyph runs carry their font and each glyph’s code or CID', () => {
   const t = run.glyphs.find((g) => g.unicode === 'T')!;
   const h = run.glyphs.find((g) => g.unicode === 'h')!;
   assert.notEqual(t.glyph, h.glyph);
+});
+
+test('Type 3 fonts: a glyph procedure\'s filled shapes are its outline; one that strokes is left to a stand-in', () => {
+  const doc = PdfDocument.create();
+  const enc = new TextEncoder();
+  const proc = (s: string) => doc.add(new PdfStream(new PdfDict(), enc.encode(s)));
+  const font = new PdfDict({
+    Type: N('Font'),
+    Subtype: N('Type3'),
+    FontMatrix: [0.001, 0, 0, 0.001, 0, 0],
+    FontBBox: [0, 0, 1000, 1000],
+    FirstChar: 97,
+    LastChar: 99,
+    Widths: [1000, 1000, 1000],
+    Encoding: new PdfDict({ Differences: [97, N('box'), N('line'), N('blank')] }),
+    CharProcs: new PdfDict({
+      // A square with a square hole, moved by a cm, as Skia writes faux bold.
+      box: proc('1000 0 0 0 1000 1000 d1 q 1 0 0 1 100 0 cm 0 0 m 800 0 l 800 800 l 0 800 l h 200 200 m 200 600 l 600 600 l 600 200 l h f Q'),
+      line: proc('1000 0 d0 50 w 0 0 m 1000 1000 l S'),
+      blank: proc('500 0 0 0 0 0 d1'),
+    }),
+  });
+  const program = FontProgram.load(doc, font)!;
+  const box = program.outline(97)!;
+  assert.equal(box.length, 2);
+  assert.deepEqual(outlineBounds(box), [0.1, 0, 0.9, 0.8]);
+  assert.equal(program.outline(98), null);
+  assert.deepEqual(program.outline(99), []);
+  // A code the encoding doesn't name.
+  assert.equal(program.outline(65), null);
 });

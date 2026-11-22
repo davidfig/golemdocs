@@ -4,7 +4,7 @@
 // from its parents. Painting is best effort for what a canvas can't do (filters, masks,
 // per-group opacity): those parts of a file are left unpainted rather than wrongly painted.
 
-import { elements } from '@golemdocs/docx';
+import { elements, type XmlNode } from '@golemdocs/docx';
 import { makeCanvas } from '../formats/imageCodec.ts';
 import { readClip } from './clip.ts';
 import { findDefinition } from './gradients.ts';
@@ -351,22 +351,33 @@ export function paintScene(ctx: Context2D, scene: Scene, width = scene.width, he
 /** The pictures inside a scene (data: URIs), decoded so that `paintScene` can draw them. */
 export async function loadImages(scene: Scene, decode: (bytes: Uint8Array, mime: string) => Promise<CanvasImageSource>): Promise<ImageCache> {
   const cache = new Map<string, CanvasImageSource>();
+  const load = async (href: string): Promise<void> => {
+    if (cache.has(href)) return;
+    const m = /^data:([^;,]+)((?:;[^;,]+)*),(.*)$/s.exec(href);
+    if (!m || m[1] === 'image/svg+xml') return;
+    try {
+      const bytes = m[2].includes(';base64') ? Uint8Array.from(atob(m[3]), (c) => c.charCodeAt(0)) : new TextEncoder().encode(decodeURIComponent(m[3]));
+      cache.set(href, await decode(bytes, m[1]));
+    } catch {
+      // A picture that can't be decoded is left out.
+    }
+  };
   const visit = async (nodes: readonly SceneNode[]): Promise<void> => {
     for (const node of nodes) {
       if (node.kind === 'group') await visit(node.children);
-      else if (node.kind === 'image' && !cache.has(node.href)) {
-        const m = /^data:([^;,]+)((?:;[^;,]+)*),(.*)$/s.exec(node.href);
-        if (!m || m[1] === 'image/svg+xml') continue;
-        try {
-          const bytes = m[2].includes(';base64') ? Uint8Array.from(atob(m[3]), (c) => c.charCodeAt(0)) : new TextEncoder().encode(decodeURIComponent(m[3]));
-          cache.set(node.href, await decode(bytes, m[1]));
-        } catch {
-          // A picture that can't be decoded is left out.
-        }
-      }
+      else if (node.kind === 'image') await load(node.href);
+    }
+  };
+  // Pictures inside definitions (a pattern's cell), which are read only when painted.
+  const visitXml = async (nodes: readonly XmlNode[]): Promise<void> => {
+    for (const node of nodes) {
+      if (typeof node === 'string') continue;
+      if (node.name === 'image') await load(node.attrs.href ?? node.attrs['xlink:href'] ?? '');
+      await visitXml(node.children);
     }
   };
   await visit(scene.children);
   for (const node of Object.values(scene.defined)) await visit([node]);
+  await visitXml(scene.defs);
   return cache;
 }

@@ -6,7 +6,7 @@ import { test, expect } from '../fixtures';
 import { CLIENT_ORIGIN } from '../ports.ts';
 import { makeDocx, newPerson, signedOutContext, uploadDoc } from '../collab/helpers';
 
-test('the viewer’s status bar is reached with Tab, and its views and zoom work from the keyboard', async ({ browser }) => {
+test('the viewer’s status bar is reached with Tab, and its views and zoom work from the keyboard', { tag: '@heavy' }, async ({ browser }) => {
   const owner = await newPerson(browser, 'owner');
   const doc = await uploadDoc(owner.page, 'Plan.docx', await makeDocx(browser, ['the plan', 'and more of it']));
   const { token } = (await (await owner.page.request.put(`/api/documents/${doc.id}/link`, { headers: { origin: CLIENT_ORIGIN } })).json()) as { token: string };

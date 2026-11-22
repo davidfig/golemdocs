@@ -25,6 +25,9 @@ export interface TrashRow {
   deleted_at: number;
 }
 
+/** The `deleted_at` of a trashed document a purge has started on: it may be missing some of its files, so it is not shown or restored. */
+export const PURGING = 0;
+
 /** What the client sees of a document in the trash. */
 export const describeTrashed = (row: TrashRow) => ({
   id: row.id,
@@ -41,19 +44,28 @@ export function trashStatements(ids: readonly string[], now: number): { sql: str
   return perChunk(ids, (marks) => `INSERT OR REPLACE INTO trash (id, name, size, r2_key, created_at, updated_at, thumb_at, folder_id, deleted_at) SELECT id, name, size, r2_key, created_at, updated_at, thumb_at, folder_id, ? FROM documents WHERE id IN (${marks})`, [now]);
 }
 
-/** Deletes trashed documents for good: the rows, then their files, history and chunks. */
+/**
+ * Deletes trashed documents for good: their files, history and chunks, then their trash rows. The rows go last because they are what
+ * a later purge finds: if anything before fails, the next purge finishes the job. Meanwhile they are marked as going (`deleted_at` 0,
+ * see `PURGING`), which makes them expired for that purge and keeps them out of the trash listing and from being restored half-deleted.
+ */
 export async function purge(env: Env, ownerId: string, db: UserDb, rows: readonly Pick<TrashRow, 'id' | 'r2_key' | 'size'>[]): Promise<void> {
   if (!rows.length) return;
   const ids = rows.map((r) => r.id);
-  await db.runAll(perChunk(ids, (marks) => `DELETE FROM trash WHERE id IN (${marks})`));
+  await db.runAll(perChunk(ids, (marks) => `UPDATE trash SET deleted_at = ${PURGING} WHERE id IN (${marks})`));
   // R2 refuses an empty list and more than 1000 keys at once.
   const keys = rows.flatMap((row) => [row.r2_key, thumbKey(ownerId, row.id), indexKey(ownerId, row.id)]);
   for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
   for (const row of rows) await deleteMedia(env, ownerId, row.id);
   // Chunks: a document kept as chunks has some, and a checkpoint may still name some of a document that is whole now.
-  const chunkedVersions = new Set((await db.all<{ doc_id: string }>(`SELECT DISTINCT doc_id FROM versions WHERE chunked = 1 AND doc_id IN (${ids.map(() => '?').join(',')})`, ids)).map((r) => r.doc_id));
+  // Asked a few ids at a time: D1 takes at most 100 bound values in a statement.
+  const chunkedVersions = new Set<string>();
+  for (const { sql, params } of perChunk(ids, (marks) => `SELECT DISTINCT doc_id FROM versions WHERE chunked = 1 AND doc_id IN (${marks})`)) {
+    for (const r of await db.all<{ doc_id: string }>(sql, params)) chunkedVersions.add(r.doc_id);
+  }
   for (const row of rows) if (row.size >= CHUNKED_FROM || chunkedVersions.has(row.id)) await deleteChunks(env, ownerId, row.id);
   await deleteHistory(env, ownerId, db, ids);
+  await db.runAll(perChunk(ids, (marks) => `DELETE FROM trash WHERE id IN (${marks})`));
 }
 
 /** Purges what has been in the trash for 30 days. Failing is not the caller's problem (it will be tried again). */

@@ -47,7 +47,7 @@ Database `word`, version 9. Object stores:
 | `bytes` | id -> the whole file (documents under 2 MiB: `CHUNK_MIN_FILE` in `chunker.ts`) |
 | `manifests`, `chunks`, `chunkRefs` | for documents of 2 MiB or more: id -> `StoredManifest` (chunk hashes, lengths, `syncedHashes`), hash -> bytes, hash -> reference count (a chunk is deleted when the last document lets go). Details in [Chunked storage](../chunked-storage.md) |
 | `history`, `historyData` | a document's earlier versions: id -> its versions' details (small), `<id>/<version>` -> a small version's bytes or a chunked one's manifest (a hold on its chunks through `chunkRefs`). See [Version history](../history.md) |
-| `trash` | document id -> `{ info, deletedAt }`: the catalogue record of a document the person deleted, moved out of `meta` so every list stops showing it; its bytes, chunks, history and thumbnail stay. Restored or deleted for good by the trash dialog, or after 30 days. See [Version history](../history.md) |
+| `trash` | document id -> `{ info, deletedAt }`: the catalogue record of a document the person deleted, moved out of `meta` so every list stops showing it; its bytes, chunks, history and thumbnail stay. Read (`getTrashedSaved`, to look at it), restored or deleted for good from Trash, or after 30 days. See [Version history](../history.md) |
 | `thumbs` | id -> `{ blob, forUpdatedAt }`, the first-page thumbnail rendered by `thumbnail.ts` on every save (drawn after 3 s without edits, when the document is left, or when the dashboard opens) |
 | `bases` | id -> `{ cloudUpdatedAt, bytes }`: the last version this copy and its cloud copy agreed on, for merging a conflict (documents under 2 MiB only; see "Merging a conflict") |
 | `folders` | the guest (signed-out) folder hierarchy |
@@ -71,7 +71,7 @@ Also in `localStorage` (not IndexedDB): `wm.catalogue` (the account's document/s
 | Path | Role |
 | --- | --- |
 | `client/src/storage/local.ts` | IndexedDB access: save/get/list/delete, chunk assembly, thumbnails, folders, ownership transitions, `markSynced`, `saveFromCloud` |
-| `client/src/history.ts`, `client/src/trash.ts` | the one list of kept versions (this browser's and the account's) and the one list of deleted documents, with restore; `ui/versionHistoryDialog.ts` and `ui/trashDialog.ts` show them |
+| `client/src/history.ts`, `client/src/trash.ts` | the one list of kept versions (this browser's and the account's) and the one list of deleted documents, with restore; `ui/versionHistoryDialog.ts` shows the versions, and Trash in the Files sidebar and File › Open (`ui/trashActions.ts`) the deleted documents |
 | `client/src/storage/chunker.ts` | content-defined chunking (`cdc1`), `CHUNK_MIN_FILE`, `assemble` |
 | `client/src/storage/archive.ts`, `zipImport.ts`, `droppedFiles.ts`, `uniqueName.ts` | Download All as ZIP (each document as the file the vault would write, through `ConvertWorker`; one that can't be converted goes as a named `.wdoc`), ZIP/folder import into folders, name de-duplication |
 | `client/src/library.ts` | `uploadToCloud` (with `mergeWithCloud` and the `MergeHost` the page gives it), `uploadNewToCloud` (batches), `openFromCloud`, `prefetchFromCloud`, `conflictCopyName` |

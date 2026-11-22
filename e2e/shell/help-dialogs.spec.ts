@@ -211,7 +211,7 @@ test.describe('Send Feedback', () => {
     await expect(app.editor).toBeFocused();
   });
 
-  test('typing in the dialog does not edit the document behind it', async ({ app, page }) => {
+  test('typing in the dialog does not edit the document behind it', { tag: '@heavy' }, async ({ app, page }) => {
     await app.blank();
     await app.type('keep');
     await choose(app, 'Help', 'Send Feedback…');

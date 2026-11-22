@@ -16,16 +16,21 @@
 //
 // A shared folder is the same page at /view?f=<token> (a person's view-only share) or /view?pf=<token> (its public link), with
 // `&path=` for the file shown: see folderPage.ts.
+//
+// /view?frame is the embeddable viewer waiting for a file by message (./host.ts): the app frames it to show a document in its trash.
 
 import { loadLocale, pickLocale, t } from '../i18n/index.ts';
 import { mountSignIn } from '../ui/signIn.ts';
 import { showFolder } from './folderPage.ts';
 import { savedViewMode } from '../ui/viewMode.ts';
 import { CHECK_MS, downloader, downloading, highContrast, PAGE_TITLE, PUBLIC_CHECK_MS, say } from './page.ts';
+import { hostViewer } from './host.ts';
 import { checkOutcome } from './protocol.ts';
 import { mount, type Viewer } from './viewer.ts';
 
 async function start(): Promise<void> {
+  // Framed by the app, which sends the file itself (a document in the trash: ui/trashPreview.ts). The words come with it.
+  if (new URLSearchParams(location.search).has('frame')) return hostViewer();
   const locale = pickLocale(navigator.languages ?? [navigator.language]);
   await loadLocale(locale).catch(() => undefined);
   document.documentElement.lang = locale;

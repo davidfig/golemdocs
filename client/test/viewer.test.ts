@@ -7,7 +7,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import type { FontManifest } from '@golemdocs/layout';
 import { Camera, CSS_PX_PER_POINT } from '../src/view/camera.ts';
-import { canScrollSideways, checkOutcome, FIT_MARGIN, fitWidthZoom, hostKey, SIDE_PADDING, SIDE_PADDING_X, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, readToViewer, stepZoom, viewerKey, ZOOM_STEPS, type KeyContext } from '../src/viewer/protocol.ts';
+import { canScrollSideways, checkOutcome, FIT_MARGIN, fitWidthZoom, hostKey, SIDE_PADDING, SIDE_PADDING_X, linkForHost, MAX_ZOOM, MIN_ZOOM, pageIndexAt, parsePageNumber, readFromViewer, readToViewer, stepZoom, viewerKey, ZOOM_STEPS, type KeyContext } from '../src/viewer/protocol.ts';
 import { VIEWER_FONTS, viewerFontSet } from '../src/viewer/fonts.ts';
 
 test('an open message is read with its bytes, and anything else is ignored', () => {
@@ -223,4 +223,17 @@ test('a page zoomed to fit the width has no room to scroll sideways, so ← → 
 test('a key passed to the host keeps only what describes it', () => {
   const event = { key: 'f', code: 'KeyF', shiftKey: false, ctrlKey: false, altKey: false, metaKey: false, repeat: false, target: {}, timeStamp: 3 };
   assert.deepEqual(hostKey(event), { key: 'f', code: 'KeyF', shiftKey: false, ctrlKey: false, altKey: false, metaKey: false, repeat: false });
+});
+
+test('a host reads only the messages the viewer sends, and only the links it may follow', () => {
+  assert.deepEqual(readFromViewer({ type: 'golemdocs:ready' }), { type: 'golemdocs:ready' });
+  assert.deepEqual(readFromViewer({ type: 'golemdocs:opened', name: 'A.docx', format: 'docx', pages: 3, extra: 1 }), { type: 'golemdocs:opened', name: 'A.docx', format: 'docx', pages: 3 });
+  assert.deepEqual(readFromViewer({ type: 'golemdocs:error', message: 'bad' }), { type: 'golemdocs:error', message: 'bad' });
+  assert.deepEqual(readFromViewer({ type: 'golemdocs:link', url: 'https://example.com' }), { type: 'golemdocs:link', url: 'https://example.com' });
+  assert.equal(readFromViewer({ type: 'golemdocs:link', url: 'javascript:alert(1)' }), null);
+  assert.equal(readFromViewer({ type: 'golemdocs:key', key: 'Escape', code: 'Escape' })?.type, 'golemdocs:key');
+  assert.equal(readFromViewer({ type: 'golemdocs:key', key: 1 }), null);
+  assert.equal(readFromViewer({ type: 'something else' }), null);
+  assert.equal(readFromViewer('golemdocs:ready'), null);
+  assert.equal(readFromViewer(null), null);
 });

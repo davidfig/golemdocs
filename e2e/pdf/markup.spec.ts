@@ -43,7 +43,7 @@ test.describe('marking up a PDF', () => {
     expect(await app.selectedText()).toBe('');
   });
 
-  test('double-clicking a word selects that word', async ({ app }) => {
+  test('double-clicking a word selects that word', { tag: '@heavy' }, async ({ app }) => {
     const at = await pointOnPage(app.page, 0, 100, 54);
     await app.page.mouse.dblclick(at.x, at.y);
     await expect.poll(async () => (await app.selectedText()).trim()).toBe('PDF');

@@ -24,7 +24,7 @@ async function openVaultDialog(app: App) {
 }
 
 test.describe('Instructions for ai apps in the vault', () => {
-  test('the guide is written once the folder syncs, and a folder with no AGENTS.md gets one with the line', async ({ page, app }) => {
+  test('the guide is written once the folder syncs, and a folder with no AGENTS.md gets one with the line', { tag: '@heavy' }, async ({ page, app }) => {
     await start(page, app, { 'Notes.md': '# Notes\n' });
     expect(await fileText(page, 'AGENTS.md')).toBeNull();
 

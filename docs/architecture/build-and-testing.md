@@ -138,6 +138,9 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-22 | `e2e/collab/signin.spec.ts` › a sign-in that runs out › while the page is open, the note shows when the account refuses a save | Failed at 32 s in pass one of the 0.43.2 release run, with side runs going; alone, passed three times |
 | 2026-11-22 | `e2e/shell/help-dialogs.spec.ts` › Send Feedback › typing in the dialog does not edit the document behind it | Failed at 3 s in pass one of the 0.43.2 release run, with side runs going; alone, passed three times. Quick to fail for load: if it turns up again, look for a key reaching the document before the dialog has the focus |
 | 2026-11-22 | `e2e/shell/vault-decrypt.spec.ts` › an encrypted folder decrypted into the vault: readable there, changes reach the account encrypted, and Lock takes it out | In a run of all of `e2e/shell` with three workers, a new file in the vault did not reach the account within 30 s, twice; alone, passed four times in about 6 s. Its wait for the account is 60 s now |
+| 2026-11-22 | `e2e/pdf/markup.spec.ts` › marking up a PDF › double-clicking a word selects that word | Timed out at 31 s in pass one of the 0.45.0 release run, with side runs going; alone, passed in 4 s |
+| 2026-11-22 | `e2e/files/edit-journal.spec.ts` › a document whose journal has outlived it leaves nothing behind | Failed at 34 s in pass one of the 0.45.0 release run, with side runs going; alone, passed in 7 s |
+| 2026-11-22 | `e2e/shell/agent-guide.spec.ts` › Instructions for ai apps in the vault › the guide is written once the folder syncs, and a folder with no AGENTS.md gets one with the line | Timed out at 1 min in pass one of the 0.45.0 release run, and on its retry, with three side runs going; alone, passed. If it turns up again, look at how long the first vault sync takes under load |
 
 ## Performance traces (`golem:*`)
 

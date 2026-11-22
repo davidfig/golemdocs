@@ -21,6 +21,7 @@ export const panels = {
   'panels.files.dismissTip': 'Dismiss tip',
   'panels.files.dropTip': 'Drop files or folders here from your computer to import them. A folder or ZIP keeps its folders.',
   'panels.files.collapseAll': 'Collapse all',
+  'panels.files.backToFiles': 'Back to Files',
   'panels.files.openItem': 'Open',
   'panels.files.openFolder': 'Open folder',
   'panels.files.closeFolder': 'Close folder',

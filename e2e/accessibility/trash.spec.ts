@@ -1,6 +1,6 @@
-// Trash from the keyboard (docs/architecture/accessibility.md): the Files sidebar's Trash entry is a tree item like a folder, a
-// deleted document under it opens with Enter, and the read-only view of it is a named dialog that Escape closes, giving the keyboard
-// back to the row it was opened from.
+// Trash from the keyboard (docs/architecture/accessibility.md): the Files sidebar's Trash button opens a tree named Trash in the
+// Files tree's place, a deleted document in it opens with Enter, the read-only view of it is a named dialog that Escape closes
+// (giving the keyboard back to its row), and Escape again goes back to the Files tree.
 
 import { App, expect, test } from '../fixtures';
 import { waitForSaved } from '../files/helpers';
@@ -22,14 +22,12 @@ test('a deleted document is reached, opened and closed again with the keyboard a
   await page.getByRole('menuitem', { name: 'Delete' }).press('Enter');
   await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).press('Enter');
 
-  const trash = tree.getByRole('treeitem', { name: /Trash$/ });
+  const trash = sidebar.getByRole('button', { name: 'Trash', exact: true });
   await trash.focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(trash).toHaveAttribute('aria-expanded', 'true');
-  await page.keyboard.press('ArrowDown');
-  const row = tree.getByRole('treeitem', { name: /Document1/ });
+  await page.keyboard.press('Enter');
+  const row = sidebar.getByRole('tree', { name: 'Trash' }).getByRole('treeitem', { name: /Document1/ });
   await expect(row).toBeFocused();
-  await expect(row).toHaveAttribute('aria-level', '2');
+  await expect(row).toHaveAttribute('aria-level', '1');
   await page.keyboard.press('Enter');
 
   const preview = page.getByRole('dialog', { name: /Document1/ });
@@ -39,5 +37,8 @@ test('a deleted document is reached, opened and closed again with the keyboard a
   await page.keyboard.press('Escape');
   await expect(preview).toBeHidden();
   await expect(row).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(tree).toBeVisible();
+  await expect(trash).toBeFocused();
   await context.close();
 });

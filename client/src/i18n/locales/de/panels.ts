@@ -178,6 +178,7 @@ export const panels: Partial<Messages> = {
   'panels.files.dismissTip': 'Hinweis schließen',
   'panels.files.dropTip': 'Legen Sie Dateien oder Ordner von Ihrem Computer hier ab, um sie zu importieren. Ordner und ZIP-Dateien behalten ihre Ordnerstruktur.',
   'panels.files.collapseAll': 'Alle reduzieren',
+  'panels.files.backToFiles': 'Zurück zu Dateien',
   'panels.files.openItem': 'Öffnen',
   'panels.files.openFolder': 'Ordner öffnen',
   'panels.files.closeFolder': 'Ordner schließen',

@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.44.1 - Unreleased
+
+### Changed
+
+- Files sidebar: Trash is pinned at the bottom, so it is always in view to drag onto, however many documents you have. Opening it shows what you deleted in place of your documents, with Empty Trash below and a back arrow (or Escape) to return.
+
 ## 0.44.0 - 2026-11-22
 
 ### Changed

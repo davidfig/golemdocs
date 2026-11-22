@@ -55,7 +55,7 @@ async function start(engine: 'chromium' | 'webkit', chromium: Browser, baseURL: 
 }
 
 async function newSidebarFolder(page: Page, name: string): Promise<void> {
-  await sidebar(page).locator('.wm-files-tree').click({ button: 'right', position: { x: 100, y: 500 } });
+  await sidebar(page).locator('.wm-files-tree').click({ button: 'right', position: { x: 100, y: 300 } });
   await page.getByRole('menuitem', { name: 'New folder' }).click();
   await page.locator('.wm-files-rename').fill(name);
   await page.keyboard.press('Enter');
@@ -116,7 +116,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
       await expect(row(page, 'alpha')).toHaveAttribute('aria-level', '2');
       await expect(folderRow(page, 'Inner')).toHaveAttribute('aria-level', '2');
 
-      await dragOnto(row(page, 'alpha'), sidebar(page).locator('.wm-files-tree'), { x: 100, y: 500 });
+      await dragOnto(row(page, 'alpha'), sidebar(page).locator('.wm-files-tree'), { x: 100, y: 300 });
       await expect(row(page, 'alpha')).toHaveAttribute('aria-level', '1');
     });
 

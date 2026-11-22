@@ -178,6 +178,7 @@ export const panels: Partial<Messages> = {
   'panels.files.dismissTip': 'Masquer le conseil',
   'panels.files.dropTip': 'Déposez ici des fichiers ou des dossiers de votre ordinateur pour les importer. Un dossier ou un ZIP garde ses dossiers.',
   'panels.files.collapseAll': 'Tout réduire',
+  'panels.files.backToFiles': 'Retour aux fichiers',
   'panels.files.openItem': 'Ouvrir',
   'panels.files.openFolder': 'Ouvrir le dossier',
   'panels.files.closeFolder': 'Fermer le dossier',

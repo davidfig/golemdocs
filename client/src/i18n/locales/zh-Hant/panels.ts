@@ -178,6 +178,7 @@ export const panels: Partial<Messages> = {
   'panels.files.dismissTip': '關閉提示',
   'panels.files.dropTip': '將電腦上的檔案或資料夾拖放到此處即可匯入。資料夾或 ZIP 會保留其中的資料夾結構。',
   'panels.files.collapseAll': '全部摺疊',
+  'panels.files.backToFiles': '返回檔案',
   'panels.files.openItem': '開啟',
   'panels.files.openFolder': '開啟資料夾',
   'panels.files.closeFolder': '關閉資料夾',

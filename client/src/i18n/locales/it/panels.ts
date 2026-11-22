@@ -178,6 +178,7 @@ export const panels: Partial<Messages> = {
   'panels.files.dismissTip': 'Chiudi suggerimento',
   'panels.files.dropTip': 'Trascina qui file o cartelle dal computer per importarli. Una cartella o uno ZIP mantiene le sue cartelle.',
   'panels.files.collapseAll': 'Comprimi tutto',
+  'panels.files.backToFiles': 'Torna a File',
   'panels.files.openItem': 'Apri',
   'panels.files.openFolder': 'Apri cartella',
   'panels.files.closeFolder': 'Chiudi cartella',

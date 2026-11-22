@@ -198,6 +198,7 @@ export const panels: Catalog = {
   'panels.files.dismissTip': 'Скрыть подсказку',
   'panels.files.dropTip': 'Перетащите сюда файлы или папки с компьютера, чтобы импортировать их. Папка или ZIP сохраняет свои папки.',
   'panels.files.collapseAll': 'Свернуть все',
+  'panels.files.backToFiles': 'Назад к файлам',
   'panels.files.openItem': 'Открыть',
   'panels.files.openFolder': 'Открыть папку',
   'panels.files.closeFolder': 'Закрыть папку',

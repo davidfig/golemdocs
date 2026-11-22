@@ -178,6 +178,7 @@ export const panels: Partial<Messages> = {
   'panels.files.dismissTip': 'ヒントを閉じる',
   'panels.files.dropTip': 'コンピューターのファイルやフォルダーをここにドロップするとインポートされます。フォルダーや ZIP はフォルダー構成のまま取り込まれます。',
   'panels.files.collapseAll': 'すべて折りたたむ',
+  'panels.files.backToFiles': 'ファイルに戻る',
   'panels.files.openItem': '開く',
   'panels.files.openFolder': 'フォルダーを開く',
   'panels.files.closeFolder': 'フォルダーを閉じる',

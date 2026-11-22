@@ -59,7 +59,8 @@
   background: var(--wm-hot);
 }
 
-.wm-files-tree {
+.wm-files-tree,
+.wm-files-trash-list {
   flex: 1;
   min-height: 0;
   padding: 4px 0;
@@ -165,13 +166,36 @@
   margin: 0;
 }
 
-/* Trash: the tree's last entry, set off from the documents above it. */
-.wm-files-trash {
-  margin-top: 4px;
+/* Trash: pinned below the tree, so it is always in view (and there to drag onto), set off by a line. */
+.wm-files-trash-entry {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px 5px 6px;
+  border: 0;
   border-top: 1px solid var(--wm-etch-dark);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 
-.wm-files-trash .icon {
+.wm-files-trash-entry:hover {
+  background: var(--wm-hot);
+}
+
+.wm-files-trash-entry:focus-visible {
+  outline: 2px solid var(--wm-hot-border);
+  outline-offset: -2px;
+}
+
+.wm-files-trash-entry .icon {
   display: inline-flex;
   flex: none;
   width: 16px;
@@ -179,13 +203,34 @@
   justify-content: center;
 }
 
-/* What Trash says when it has nothing to list (or is being listed). */
-.wm-files-note {
-  padding: 3px 8px 3px 24px;
-  color: var(--wm-disabled);
+/* Trash open: what was deleted, in the tree's place, with Empty Trash under it. */
+.wm-files-trash-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.wm-files-trash-actions {
+  flex: none;
+  padding: 8px 10px;
+  border-top: 1px solid var(--wm-etch-dark);
+}
+
+.wm-files-tree[hidden],
+.wm-files-trash-view[hidden],
+.wm-files-trash-entry[hidden],
+.wm-files-close[hidden],
+.wm-files-trash-view .wm-files-empty[hidden] {
+  display: none;
 }
 
 /* Being deleted for good: shown until it is gone. */
 .wm-files-going {
   opacity: 0.5;
+}
+
+/* The drop tip, while Trash is open: nothing can be dropped there. */
+.wm-files-tip.wm-files-tip-away {
+  display: none;
 }

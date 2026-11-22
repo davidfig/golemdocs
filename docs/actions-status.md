@@ -16,7 +16,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 - Print, Print Preview (exports a PDF: Print from a hidden frame, Preview in a new tab; on a phone or tablet both go to the system share sheet, whose Print has every page; in the Mac app both open the PDF in Preview)
 - Share: sharing a cloud document with people by email, and its public link (view, download, embed); Sync Now
 - Sign In, Sign Out, Clear Local Data
-- Version History (File ▸ Version History: this browser's and the account's earlier versions of the open document; save a named version, rename, delete, open one as a new document) and Trash (File ▸ Trash, the last entry of the Files sidebar, and a button on the Documents screen, each a folder of what was deleted in the last 30 days, from this browser and from the account: open one read-only, restore it, delete it for good, or empty the trash). See [history.md](history.md)
+- Version History (File ▸ Version History: this browser's and the account's earlier versions of the open document; save a named version, rename, delete, open one as a new document) and Trash (File ▸ Trash, Trash pinned at the bottom of the Files sidebar, and a button on the Documents screen, each a folder of what was deleted in the last 30 days, from this browser and from the account: open one read-only, restore it, delete it for good, or empty the trash). See [history.md](history.md)
 
 **Edit**
 - Undo, Redo, Cut, Copy, Paste (formatted HTML, or plain text for formats without marks), Paste Special (HTML or text, with preview), Select All. A PDF's own pages have Copy and Select All; on a phone Copy is in the menu

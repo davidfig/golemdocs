@@ -1,5 +1,5 @@
-// The trash: deleted documents, kept 30 days, shown as a folder in File › Open (its Trash button) and as the last entry of the Files
-// sidebar. Each opens read-only to be looked at, and can be restored or deleted for good; Empty Trash deletes them all.
+// The trash: deleted documents, kept 30 days, shown as a folder in File › Open (its Trash button) and from the Trash entry pinned at
+// the bottom of the Files sidebar. Each opens read-only to be looked at, and can be restored or deleted for good; Empty Trash deletes them all.
 
 import type { Browser, Page } from '@playwright/test';
 import { App, expect, test } from './fixtures';
@@ -9,7 +9,9 @@ import { cloudDocs, newPerson, signedOutContext } from '../collab/helpers';
 const dashboard = (page: Page) => page.locator('.wm-dashboard');
 const cards = (page: Page) => dashboard(page).locator('article.wm-card');
 const sidebar = (page: Page) => page.locator('.wm-files');
-const trashEntry = (page: Page) => sidebar(page).getByRole('treeitem', { name: /Trash$/ });
+const trashEntry = (page: Page) => sidebar(page).getByRole('button', { name: 'Trash', exact: true });
+const trashTree = (page: Page) => sidebar(page).getByRole('tree', { name: 'Trash' });
+const back = (page: Page) => sidebar(page).getByRole('button', { name: 'Back to Files' });
 const trashed = (page: Page) => sidebar(page).locator('.wm-files-trashed');
 const confirm = (page: Page) => page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
 
@@ -71,12 +73,15 @@ test('File › Open shows Trash as a folder: a deleted document is there, Restor
   await close();
 });
 
-test('the Files sidebar ends with Trash, which opens like a folder and restores from its menu', async ({ browser }) => {
+test('Trash is pinned below the Files tree, opens in its place, restores from its menu, and goes back', async ({ browser }) => {
   const { page, app, close } = await guestWithDocument(browser, 'kept for later');
   await showSidebar(app);
-  await expect(trashEntry(page)).toHaveAttribute('aria-expanded', 'false');
-  // The last entry, after the documents.
-  await expect(sidebar(page).locator('.wm-files-row').last()).toHaveAttribute('data-row', 'f:#trash');
+  // Below the tree, outside it, at the bottom: always in view however long the tree is.
+  const tree = sidebar(page).getByRole('tree', { name: 'Files' });
+  const treeBox = (await tree.boundingBox())!;
+  const entryBox = (await trashEntry(page).boundingBox())!;
+  expect(entryBox.y).toBeGreaterThanOrEqual(treeBox.y + treeBox.height - 1);
+  await expect(tree.getByRole('button', { name: 'Trash' })).toHaveCount(0);
 
   const doc = sidebar(page).locator('.wm-files-file').first();
   const name = (await doc.textContent())!.trim();
@@ -85,22 +90,34 @@ test('the Files sidebar ends with Trash, which opens like a folder and restores 
   await confirm(page);
   await expect(sidebar(page).locator('.wm-files-file')).toHaveCount(0);
 
-  // Opened from the keyboard, as a folder is.
+  // Opened from the keyboard: Trash takes the tree's place, with the keyboard on what was deleted.
   await trashEntry(page).focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(trashEntry(page)).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Enter');
+  await expect(sidebar(page).getByRole('heading', { name: 'Trash' })).toBeVisible();
+  await expect(tree).toBeHidden();
+  await expect(trashEntry(page)).toBeHidden();
   await expect(trashed(page)).toHaveCount(1);
   await expect(trashed(page)).toContainText(name);
-  await expect(trashed(page)).toHaveAttribute('aria-description', /Deleted .* · Kept until .* · On this device/);
-  await page.keyboard.press('ArrowDown');
   await expect(trashed(page)).toBeFocused();
-  await sidebar(page).screenshot({ path: test.info().outputPath('trash-sidebar.png') });
+  await expect(trashed(page)).toHaveAttribute('aria-description', /Deleted .* · Kept until .* · On this device/);
+  await expect(sidebar(page).getByRole('button', { name: 'Empty Trash' })).toBeEnabled();
+  await sidebar(page).screenshot({ path: test.info().outputPath('trash-sidebar-open.png') });
 
   await trashed(page).click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Restore' }).click();
-  await expect(sidebar(page).locator('.wm-files-file')).toHaveCount(1);
   await expect(trashed(page)).toHaveCount(0);
   await expect(sidebar(page).getByText('The trash is empty.')).toBeVisible();
+  await expect(sidebar(page).getByRole('button', { name: 'Empty Trash' })).toBeDisabled();
+  // The row it was on is gone: the keyboard goes to the way back.
+  await expect(back(page)).toBeFocused();
+
+  // Escape goes back to the documents, with the keyboard on Trash.
+  await page.keyboard.press('Escape');
+  await expect(tree).toBeVisible();
+  await expect(sidebar(page).getByRole('heading', { name: 'Files' })).toBeVisible();
+  await expect(sidebar(page).locator('.wm-files-file')).toHaveCount(1);
+  await expect(trashEntry(page)).toBeFocused();
+  await sidebar(page).screenshot({ path: test.info().outputPath('trash-sidebar-closed.png') });
 
   // Its menu empties it; with nothing in it there is nothing to empty.
   await trashEntry(page).click({ button: 'right' });
@@ -109,33 +126,33 @@ test('the Files sidebar ends with Trash, which opens like a folder and restores 
   await close();
 });
 
-test('a deleted document opens read-only beside Restore, and File › Trash goes to Trash in the sidebar', async ({ browser }) => {
+test('a deleted document opens read-only beside Restore, and File › Trash opens Trash in the sidebar', async ({ browser }) => {
   const { page, app, close } = await guestWithDocument(browser, 'look before you restore');
   await showSidebar(app);
   await sidebar(page).locator('.wm-files-file').first().click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Delete' }).click();
   await confirm(page);
 
-  // File › Trash, with the sidebar showing: Trash there, open, with the keyboard on it.
+  // File › Trash, with the sidebar showing: Trash there, with the keyboard on what was deleted.
   await app.menu('File', 'Trash');
-  await expect(trashEntry(page)).toHaveAttribute('aria-expanded', 'true');
-  await expect(trashEntry(page)).toBeFocused();
+  await expect(trashTree(page)).toBeVisible();
   await expect(trashed(page)).toHaveCount(1);
+  await expect(trashed(page)).toBeFocused();
 
   const name = (await trashed(page).textContent())!.trim();
   await trashed(page).click();
   const preview = page.getByRole('dialog', { name });
   await expect(preview).toBeVisible();
   await expect(preview.getByText(/Deleted .* · Kept until .* · On this device/)).toBeVisible();
-  // The viewer in the frame has it: the status line goes once it is laid out, and the words are there to find.
+  // The viewer in the frame has it: the status line goes once it is laid out.
   await expect(preview.locator('.wm-trash-preview-status')).toBeHidden({ timeout: 30_000 });
   const frame = page.frameLocator('.wm-trash-preview-frame');
   await expect(frame.locator('.wm-footer')).toBeVisible();
-  await preview.screenshot({ path: test.info().outputPath('trash-preview.png') });
 
   await preview.getByRole('button', { name: 'Restore' }).click();
   await expect(preview).toBeHidden();
   await expect(trashed(page)).toHaveCount(0);
+  await back(page).click();
   await expect(sidebar(page).locator('.wm-files-file')).toHaveCount(1);
   await close();
 });

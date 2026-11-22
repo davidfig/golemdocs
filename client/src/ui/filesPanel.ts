@@ -1,8 +1,8 @@
 // The files sidebar (View › Files Sidebar): the account's folders and documents as a tree to the
 // left of the document, so another document is one click away without the dashboard. Folders open
 // and close; a document opens in the editor. It lists what the dashboard does (see sync.ts).
-// Trash is always the last entry: it opens like a folder onto what was deleted (trashActions.ts),
-// and a document or folder dragged onto it is deleted.
+// Trash is pinned below the tree, always in view: a document or folder dragged onto it is deleted,
+// and opening it shows what was deleted in place of the tree (trashActions.ts), with a way back.
 
 import { takeDropped, type Dropped } from '../storage/droppedFiles.ts';
 import { warmOnHover } from './warmOnHover.ts';
@@ -69,14 +69,29 @@ export interface FilesPanelHost {
 const OPEN_KEY = 'word.filesOpen';
 /** Set once the tip about dropping files here is dismissed, kept in this browser. */
 const TIP_KEY = 'word.filesDropTipDismissed';
-/** The Trash entry's id among the folders left open (no folder's id starts with #). */
-const TRASH_ID = '#trash';
 
 export class FilesPanel {
   readonly el = h('aside', { class: 'wm-files', attrs: { 'aria-label': t('panels.files.label') } });
   private readonly tree = h('div', { class: 'wm-files-tree', attrs: { role: 'tree', 'aria-label': t('panels.files.label') } });
   private readonly empty = h('p', { class: 'wm-files-empty', text: t('panels.files.empty') });
   private readonly notice = h('p', { class: 'wm-files-notice', attrs: { role: 'status' } });
+  private readonly title = h('h2', { text: t('panels.files.label') });
+  /** Back from Trash to the documents. */
+  private readonly back = iconButton('wm-files-close', 'M7.5 2L3.5 6l4 4', t('panels.files.backToFiles'));
+  private readonly collapse = iconButton('wm-files-close', 'M4 1.5H10.5V8M1.5 4H8V10.5H1.5ZM3.5 7.25H6', t('panels.files.collapseAll'));
+  /** Trash, below the tree. */
+  private readonly trashEntry = h('button', { class: 'wm-files-trash-entry', attrs: { type: 'button' }, title: t('trash.note') }, iconElement('trash'), h('span', { class: 'wm-files-name', text: t('trash.title') }));
+  /** What was deleted, shown in place of the tree while Trash is open. */
+  private readonly trashList = h('div', { class: 'wm-files-trash-list', attrs: { role: 'tree', 'aria-label': t('trash.title') } });
+  private readonly trashNote = h('p', { class: 'wm-files-empty' });
+  private readonly emptyTrash = h('button', { class: 'wm-button wm-danger', text: t('trash.emptyTrash'), attrs: { type: 'button' } });
+  private readonly trashView = h('div', { class: 'wm-files-trash-view' }, this.trashNote, this.trashList, h('div', { class: 'wm-files-trash-actions' }, this.emptyTrash));
+  /** How to drop files here (`dropTip`); not shown in Trash, where nothing can be dropped. */
+  private tip: HTMLElement | null = null;
+  /** Looking in Trash rather than at the documents. */
+  private inTrash = false;
+  /** Trash was just opened before it was listed: the keyboard goes to its first document once there is one. */
+  private focusTrash = false;
   /** The folder (its id) or document (`doc:<key>`) being renamed in place. */
   private renaming: string | null = null;
   /** What has been typed in the name field so far (and where the caret is), kept when the rows are rebuilt under it. */
@@ -108,25 +123,33 @@ export class FilesPanel {
     } catch {
       // Storage unavailable: the folders start closed.
     }
-    // A stacked box with a minus: the usual sign for closing every folder in a tree.
-    const collapse = iconButton('wm-files-close', 'M4 1.5H10.5V8M1.5 4H8V10.5H1.5ZM3.5 7.25H6', t('panels.files.collapseAll'));
+    // The collapse button is a stacked box with a minus: the usual sign for closing every folder in a tree.
     const close = iconButton('wm-files-close', CLOSE_ICON, t('panels.files.close'));
     close.addEventListener('click', () => host.close());
-    collapse.addEventListener('click', () => this.collapseAll());
-    this.el.append(h('header', { class: 'wm-files-bar' }, h('h2', { text: t('panels.files.label') }), collapse, close), this.notice, this.empty, this.tree, this.dropTip());
+    this.collapse.addEventListener('click', () => this.collapseAll());
+    this.back.addEventListener('click', () => this.leaveTrash());
+    this.back.hidden = true;
+    this.trashView.hidden = true;
+    this.trashEntry.addEventListener('click', () => this.enterTrash());
+    onContextMenu(this.trashEntry, (e) => this.menuAt(e.clientX, e.clientY, [{ label: t('panels.files.openItem'), run: () => this.enterTrash() }, this.host.trash.emptyItem()], this.trashEntry));
+    this.makeTrashTarget(this.trashEntry);
+    this.emptyTrash.addEventListener('click', () => void this.host.trash.emptyAll());
+    this.el.append(h('header', { class: 'wm-files-bar' }, this.back, this.title, this.collapse, close), this.notice, this.empty, this.tree, this.trashView, this.trashEntry, this.dropTip());
     this.notice.hidden = true;
     // Right click, or a long press on a touch screen.
     onContextMenu(this.el, (e) => {
-      if ((e.target as HTMLElement).closest('.wm-files-row, input')) return false;
-      this.menuAt(e.clientX, e.clientY, this.rootItems());
+      if ((e.target as HTMLElement).closest('.wm-files-row, .wm-files-trash-entry, input, button')) return false;
+      this.menuAt(e.clientX, e.clientY, this.inTrash ? [this.host.trash.emptyItem()] : this.rootItems());
     });
     this.makeDropTarget(this.tree, null);
     // Keys typed here stay here: the document's handlers listen on the window.
     this.el.addEventListener('keydown', (e) => this.key(e));
-    this.tree.addEventListener('focusin', (e) => {
-      const row = (e.target as HTMLElement).closest<HTMLElement>('.wm-files-row');
-      if (row?.dataset.row) this.setTabStop(row);
-    });
+    for (const list of [this.tree, this.trashList]) {
+      list.addEventListener('focusin', (e) => {
+        const row = (e.target as HTMLElement).closest<HTMLElement>('.wm-files-row');
+        if (row?.dataset.row) this.setTabStop(row);
+      });
+    }
     parent.append(this.el);
     makeResizable(this.el, { key: 'word.filesWidth', min: 140, max: 480, initial: 200 });
   }
@@ -149,6 +172,7 @@ export class FilesPanel {
       }
     });
     tip.append(h('p', { text: t('panels.files.dropTip') }), dismiss);
+    this.tip = tip;
     return tip;
   }
 
@@ -165,16 +189,31 @@ export class FilesPanel {
       this.render();
       this.reveal();
       void this.refresh();
-      if (this.expanded.has(TRASH_ID)) void this.host.trash.store.refresh();
+      if (this.inTrash) void this.host.trash.store.refresh();
     }
   }
 
-  /** File › Trash with the sidebar showing: opens Trash and puts the keyboard on it. */
+  /** File › Trash with the sidebar showing: opens Trash there. */
   showTrash(): void {
-    this.toggleFolder(TRASH_ID, true);
-    const row = this.tree.querySelector<HTMLElement>(`[data-row="f:${CSS.escape(TRASH_ID)}"]`);
-    row?.scrollIntoView({ block: 'nearest' });
-    row?.focus();
+    this.enterTrash();
+  }
+
+  /** Shows what was deleted in place of the tree, with the keyboard on the first of it (or on the way back, if there is none). */
+  private enterTrash(): void {
+    this.inTrash = true;
+    this.render();
+    void this.host.trash.store.refresh();
+    const first = this.trashList.querySelector<HTMLElement>('.wm-files-row');
+    (first ?? this.back).focus();
+    this.focusTrash = !first && !this.host.trash.store.loaded;
+  }
+
+  /** Back to the documents, with the keyboard on Trash. */
+  private leaveTrash(): void {
+    this.inTrash = false;
+    this.focusTrash = false;
+    this.render();
+    this.trashEntry.focus();
   }
 
   /** Lists everything again. */
@@ -246,8 +285,10 @@ export class FilesPanel {
     const focused = this.el.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.row : undefined;
     const here = this.host.current();
     const rows = treeRows(this.folders, this.entries, this.expanded);
-    this.tree.replaceChildren(...rows.map((row) => this.row(row, here)), ...this.trashRows());
-    this.empty.hidden = rows.length > 0;
+    this.tree.replaceChildren(...rows.map((row) => this.row(row, here)));
+    this.empty.hidden = rows.length > 0 || this.inTrash;
+    this.showWhere();
+    if (this.inTrash) this.renderTrash();
     const stop =
       (this.tabStop && this.tree.querySelector<HTMLElement>(`[data-row="${CSS.escape(this.tabStop)}"]`)) ??
       this.tree.querySelector<HTMLElement>('.wm-files-current') ??
@@ -312,54 +353,54 @@ export class FilesPanel {
     return el;
   }
 
-  /** Trash, and (while it is open) what is in it. */
-  private trashRows(): HTMLElement[] {
-    const trash = this.host.trash;
-    const store = trash.store;
-    const open = this.expanded.has(TRASH_ID);
-    const head = h(
-      'button',
-      { class: 'wm-files-row wm-files-trash', attrs: { type: 'button', role: 'treeitem', 'data-row': `f:${TRASH_ID}`, tabindex: '-1', 'aria-level': '1', 'aria-expanded': String(open) }, title: t('trash.note') },
-      h('span', { class: 'wm-files-twist', text: open ? '▾' : '▸' }),
-      iconElement('trash'),
-      h('span', { class: 'wm-files-name', text: t('trash.title') }),
-    );
-    head.addEventListener('click', (event) => {
-      const e = event as MouseEvent;
-      if (e.metaKey) {
-        e.preventDefault();
-        this.menuAt(e.clientX, e.clientY, this.trashItems(open), head);
-        return;
-      }
-      this.toggleFolder(TRASH_ID);
-    });
-    onContextMenu(head, (e) => {
-      head.focus({ preventScroll: true });
-      this.menuAt(e.clientX, e.clientY, this.trashItems(open), head);
-    });
-    this.makeTrashTarget(head);
-    if (!open) return [head];
-    const note = (text: string): HTMLElement => h('div', { class: 'wm-files-note', text, attrs: { role: 'treeitem', 'aria-level': '2', 'aria-disabled': 'true' } });
-    const rows: HTMLElement[] = [head];
-    if (store.accountError !== null) rows.push(note(t('trash.accountFailed', { message: store.accountError })));
-    if (!store.loaded) rows.push(note(t('trash.loading')));
-    else if (!store.items.length) rows.push(note(t('trash.empty')));
-    for (const item of store.items) rows.push(this.trashRow(item));
-    return rows;
+  /** Shows the documents or Trash, and the header for whichever it is. */
+  private showWhere(): void {
+    const trash = this.inTrash;
+    this.tree.hidden = trash;
+    this.trashView.hidden = !trash;
+    this.trashEntry.hidden = trash;
+    this.back.hidden = !trash;
+    this.collapse.hidden = trash;
+    this.title.textContent = trash ? t('trash.title') : t('panels.files.label');
+    this.tip?.classList.toggle('wm-files-tip-away', trash);
   }
 
-  /** A deleted document under Trash: opens read-only; its menu restores it or deletes it for good. */
+  /** What was deleted, newest first, with what to say when there is nothing (or it is still being listed). */
+  private renderTrash(): void {
+    const store = this.host.trash.store;
+    const active = document.activeElement as HTMLElement | null;
+    const focused = active && this.trashList.contains(active) ? active.dataset.row : undefined;
+    const at = focused ? [...this.trashList.querySelectorAll<HTMLElement>('.wm-files-row')].findIndex((r) => r.dataset.row === focused) : -1;
+    const note = store.accountError !== null ? t('trash.accountFailed', { message: store.accountError }) : !store.loaded ? t('trash.loading') : !store.items.length ? t('trash.empty') : '';
+    this.trashNote.textContent = note;
+    this.trashNote.hidden = !note;
+    const rows = store.items.map((item) => this.trashRow(item));
+    this.trashList.replaceChildren(...rows);
+    this.emptyTrash.disabled = !store.items.length || store.emptying !== null;
+    const stop = (this.tabStop && rows.find((r) => r.dataset.row === this.tabStop)) ?? rows[0];
+    if (stop) stop.tabIndex = 0;
+    if (this.focusTrash && store.loaded) {
+      this.focusTrash = false;
+      if (document.activeElement === this.back) rows[0]?.focus();
+      return;
+    }
+    if (focused === undefined) return;
+    // The row with the keyboard is redrawn: it keeps it, or (gone, restored or deleted) the one now in its place does.
+    const again = rows.find((r) => r.dataset.row === focused) ?? rows[Math.min(at, rows.length - 1)];
+    (again ?? this.back).focus({ preventScroll: true });
+  }
+
+  /** A deleted document in Trash: opens read-only; its menu restores it or deletes it for good. */
   private trashRow(item: TrashItem): HTMLElement {
     const trash = this.host.trash;
     const going = trash.store.going.has(trashKey(item));
     const detail = `${trash.meta(item)} · ${trash.source(item)}`;
     const el = h(
       'button',
-      { class: 'wm-files-row wm-files-trashed', attrs: { type: 'button', role: 'treeitem', 'data-row': `t:${trashKey(item)}`, tabindex: '-1', 'aria-level': '2', 'aria-description': detail }, title: `${item.name}\n${detail}` },
+      { class: 'wm-files-row wm-files-trashed', attrs: { type: 'button', role: 'treeitem', 'data-row': `t:${trashKey(item)}`, tabindex: '-1', 'aria-level': '1', 'aria-description': detail }, title: `${item.name}\n${detail}` },
       fileIcon(item.name),
       setFileName(h('span', { class: 'wm-files-name' }), item.name),
     );
-    el.style.paddingLeft = `${6 + 18}px`;
     toggleClass(el, 'wm-files-going', going);
     el.addEventListener('click', (event) => {
       const e = event as MouseEvent;
@@ -375,11 +416,6 @@ export class FilesPanel {
       this.menuAt(e.clientX, e.clientY, trash.menu(item), el);
     });
     return el;
-  }
-
-  /** Trash's menu: open or close it, and empty it. */
-  private trashItems(open: boolean): PopupItem[] {
-    return [{ label: open ? t('panels.files.closeFolder') : t('panels.files.openFolder'), run: () => this.toggleFolder(TRASH_ID) }, this.host.trash.emptyItem()];
   }
 
   /** Trash takes documents and folders dragged onto it: they are deleted, as Delete in their menus would (asking first). */
@@ -626,8 +662,6 @@ export class FilesPanel {
   }
 
   private toggleFolder(id: string, open = !this.expanded.has(id)): void {
-    // Opening Trash lists it again: something may have been deleted since.
-    if (id === TRASH_ID && open) void this.host.trash.store.refresh();
     if (open === this.expanded.has(id)) return;
     if (open) this.expanded.add(id);
     else this.expanded.delete(id);
@@ -643,9 +677,9 @@ export class FilesPanel {
     }
   }
 
-  /** Makes `row` the one Tab reaches in the tree. */
+  /** Makes `row` the one Tab reaches in its tree. */
   private setTabStop(row: HTMLElement): void {
-    for (const el of this.tree.querySelectorAll<HTMLElement>('.wm-files-row[tabindex="0"]')) if (el !== row) el.tabIndex = -1;
+    for (const el of (row.closest('[role="tree"]') ?? this.tree).querySelectorAll<HTMLElement>('.wm-files-row[tabindex="0"]')) if (el !== row) el.tabIndex = -1;
     row.tabIndex = 0;
     this.tabStop = row.dataset.row ?? null;
   }
@@ -654,10 +688,12 @@ export class FilesPanel {
     e.stopPropagation();
     if (e.target instanceof HTMLInputElement) return;
     if (e.key === 'Escape') {
-      this.host.focusEditor();
+      // In Trash, Escape goes back to the documents; there, to the document.
+      if (this.inTrash) this.leaveTrash();
+      else this.host.focusEditor();
       return;
     }
-    const rows = [...this.tree.querySelectorAll<HTMLElement>('.wm-files-row')];
+    const rows = [...(this.inTrash ? this.trashList : this.tree).querySelectorAll<HTMLElement>('.wm-files-row')];
     const at = rows.indexOf(document.activeElement as HTMLElement);
     const folderOf = (el: HTMLElement | undefined) => (el?.dataset.row?.startsWith('f:') ? el.dataset.row.slice(2) : null);
     const moveTo = (i: number) => rows[Math.max(0, Math.min(rows.length - 1, i))]?.focus();

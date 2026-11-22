@@ -178,6 +178,7 @@ export const panels: Partial<Messages> = {
   'panels.files.dismissTip': 'Dispensar dica',
   'panels.files.dropTip': 'Solte aqui arquivos ou pastas do seu computador para importá-los. Uma pasta ou ZIP mantém suas pastas.',
   'panels.files.collapseAll': 'Recolher tudo',
+  'panels.files.backToFiles': 'Voltar para Arquivos',
   'panels.files.openItem': 'Abrir',
   'panels.files.openFolder': 'Abrir pasta',
   'panels.files.closeFolder': 'Fechar pasta',

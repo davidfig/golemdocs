@@ -178,6 +178,7 @@ export const panels: Partial<Messages> = {
   'panels.files.dismissTip': '팁 닫기',
   'panels.files.dropTip': '컴퓨터의 파일이나 폴더를 여기에 놓으면 가져옵니다. 폴더나 ZIP은 폴더 구조가 유지됩니다.',
   'panels.files.collapseAll': '모두 접기',
+  'panels.files.backToFiles': '파일로 돌아가기',
   'panels.files.openItem': '열기',
   'panels.files.openFolder': '폴더 열기',
   'panels.files.closeFolder': '폴더 닫기',

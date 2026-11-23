@@ -23,6 +23,9 @@ export interface TrashRow {
   thumb_at: number | null;
   folder_id: string | null;
   deleted_at: number;
+  /** 1 for an encrypted document (sealed.ts): its name is sealed, with this key. */
+  encrypted?: number | null;
+  wrapped_key?: string | null;
 }
 
 /** The `deleted_at` of a trashed document a purge has started on: it may be missing some of its files, so it is not shown or restored. */
@@ -37,11 +40,14 @@ export const describeTrashed = (row: TrashRow) => ({
   thumbAt: row.thumb_at ?? null,
   deletedAt: row.deleted_at,
   purgeAt: row.deleted_at + TRASH_MS,
+  // Where it was (only its owner lists their trash): a folder being encrypted finds what was deleted from it, still readable.
+  folderId: row.folder_id ?? null,
+  ...(row.encrypted ? { encrypted: true, ...(row.wrapped_key ? { wrappedKey: row.wrapped_key } : {}) } : {}),
 });
 
 /** Moves catalogue rows to the trash: the statements to run in the same transaction as their deletion. */
 export function trashStatements(ids: readonly string[], now: number): { sql: string; params: unknown[] }[] {
-  return perChunk(ids, (marks) => `INSERT OR REPLACE INTO trash (id, name, size, r2_key, created_at, updated_at, thumb_at, folder_id, deleted_at) SELECT id, name, size, r2_key, created_at, updated_at, thumb_at, folder_id, ? FROM documents WHERE id IN (${marks})`, [now]);
+  return perChunk(ids, (marks) => `INSERT OR REPLACE INTO trash (id, name, size, r2_key, created_at, updated_at, thumb_at, folder_id, deleted_at, encrypted, wrapped_key) SELECT id, name, size, r2_key, created_at, updated_at, thumb_at, folder_id, ?, encrypted, wrapped_key FROM documents WHERE id IN (${marks})`, [now]);
 }
 
 /**

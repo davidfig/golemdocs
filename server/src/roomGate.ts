@@ -57,6 +57,27 @@ export function roomHeaders(headers: Headers, userId: string, role: Role, ownerI
   return out;
 }
 
+/**
+ * Hands a view-only page's WebSocket to the document's room as a listener (see room.ts): it hears of each save, and nothing else.
+ * `userId` is whose view-only share it came through (null: a public link). Without rooms it is refused (503), and the page keeps
+ * checking every so often instead.
+ */
+export function listenToRoom(env: Env, docId: string, request: Request, userId: string | null, ownerId: string): Promise<Response> | Response {
+  if (!env.ROOMS) return new Response('multiplayer is not configured', { status: 503 });
+  if (request.headers.get('upgrade') !== 'websocket') return new Response('expected a WebSocket', { status: 426 });
+  const headers = new Headers(request.headers);
+  for (const name of ['x-user', 'x-role', 'x-picture']) headers.delete(name);
+  if (userId !== null) headers.set('x-user', userId);
+  headers.set('x-owner', ownerId);
+  headers.set('x-doc', docId);
+  return roomFor(env, docId).fetch(new Request('https://room/listen', { headers }));
+}
+
+/** The document's public link was reset or turned off: the pages listening through it are let go (they find out why when they check). */
+export async function dropPublicListeners(env: Env, docId: string): Promise<void> {
+  if (env.ROOMS) await order(env, docId, 'unlisten-public');
+}
+
 /** Hands a request to the document's room: its WebSocket, or (`document`) the file it is editing. */
 export function joinRoom(env: Env, docId: string, headers: Headers, document: boolean): Promise<Response> {
   return roomFor(env, docId).fetch(new Request(`https://room/${document ? 'document' : 'ws'}`, { headers }));

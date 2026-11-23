@@ -2100,7 +2100,8 @@ class OpenDocument {
     if (!editor || !session || !document || this.annotator || this.readOnly) return;
     let pasted: Awaited<ReturnType<typeof htmlToPaste>> = null;
     try {
-      pasted = await htmlToPaste(html, document);
+      // The plain text says which of the HTML's non-breaking spaces were ordinary ones (paste.ts `spacesFromPlain`).
+      pasted = await htmlToPaste(html, document, text);
       // A live block pasted (Copy as Live Link) is filled in as it goes in; one whose source can't be read keeps what was copied.
       // One with no `by` (a link copied) is signed as the person's; someone else's stays theirs (live/owner.ts).
       if (pasted && findLiveIn(pasted.blocks).length) await (await import('../live/update.ts')).updateLiveIn(pasted.blocks, document, liveSource, { ...(liveOwner && { owner: liveOwner }), unsignedMine: true });
@@ -2242,13 +2243,16 @@ class OpenDocument {
     const page = session.displayPages.find((p) => p.id === pageId);
     // The menu key asks about the caret (where a selection ends), not a point.
     const caret = atCaret ? editor.ordered()[1] : null;
-    const hit = caret ? { paragraph: caret.paragraph, offset: caret.offset } : page && editor.hitTest(page, x, y);
+    // A hover asks about the character under the pointer, so a point beside the text (past a line's end) finds nothing;
+    // a click takes the nearest place in the text, as the caret would.
+    const hover = !caret && !select;
+    const hit = caret ? { paragraph: caret.paragraph, offset: caret.offset } : page && (hover ? editor.charUnder(page, x, y) : editor.hitTest(page, x, y));
     const documentLang = documentLanguageOf(editor);
     const language = hit && check && paragraphLanguageOf(hit.paragraph, documentLang);
     const dictionary = language && language !== 'none' ? await loadDictionary(language) : null;
     this.spell = { issue: null, menu: true };
     if (hit && dictionary) {
-      const issue = issuesOf(hit.paragraph, documentLang, () => undefined).find((i) => i.start <= hit.offset && hit.offset <= i.end);
+      const issue = issuesOf(hit.paragraph, documentLang, () => undefined).find((i) => i.start <= hit.offset && (hover ? hit.offset < i.end : hit.offset <= i.end));
       if (issue) {
         this.spell = { issue: describeIssue(paragraphText(hit.paragraph), issue, dictionary), menu: true };
         if (select) editor.apply({ kind: 'select', paragraph: editor.paragraphs().indexOf(hit.paragraph), from: issue.start, to: issue.end });

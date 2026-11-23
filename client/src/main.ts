@@ -19,6 +19,10 @@ import { SEAM_HIDE_CURSOR, SEAM_SHOW_CURSOR } from './ui/cursors.ts';
 import { blankSource, lastNewKind, rememberNewKind } from './ui/newKinds.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
 import { adoptGuestFolders, createFolder, renameEntry, setLinkKeeper } from './folderOps.ts';
+import { encryptedDocumentKey, foldersInVault, isEncryptedFolder, isSealedCopy, isUnlocked, knowKey, onBeforeLock, onSessionChange, onVaultChange, openSealedName, setDecryptedInVault, touch as touchEncryption } from './encryption/session.ts';
+import { isSealedName } from '@golemdocs/ops';
+import { setEncryptionHost, showUnlock } from './encryption/ui.ts';
+import { finishEncrypting, finishVersions } from './encryption/convert.ts';
 import { conflictCopyName, keepAsConflictCopy, openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud, type MergeHost } from './library.ts';
 import {
   adoptGuestDocuments,
@@ -715,9 +719,11 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   }
   // A picture that was changed comes back as the same document, so its undo history goes on; any other opening starts afresh.
   if (!options.pictureEdit) pictureHistory = { undo: [], redo: [] };
+  const encrypted = isEncryptedFolder(options.localId ? null : newDocumentFolder) || (!!options.localId && isSealedCopy(options.localId));
   current = {
     localId: options.localId ?? null,
-    journal: !options.shared && !options.detour && journalsSupported() ? new EditJournal(localStorage, crypto.randomUUID(), pageId) : null,
+    journal: !options.shared && !options.detour && !encrypted && journalsSupported() ? new EditJournal(localStorage, crypto.randomUUID(), pageId) : null,
+    ...(encrypted && { encrypted: true }),
     unsavedSince: 0,
     builtIn: !!options.none || source.kind === 'welcome' || source.kind === 'legal' || source.kind === 'changelog' || source.kind === 'fonts',
     room: null,
@@ -1298,7 +1304,8 @@ const guestName = (): string => t('app.guestName', { number: guestNumber });
 
 /** The multiplayer server's room for a cloud document, when signed in (else the document is edited on its own). */
 function networkRoom(cloudId: string | undefined): RoomOptions | undefined {
-  if (!cloudId || !account) return undefined;
+  // An encrypted document never has a room: the server would read the edits it orders (docs/encrypted-folders.md).
+  if (!cloudId || !account || encryptedDocumentKey(cloudId) || current.encrypted) return undefined;
   return { docId: cloudId, user: account.name ?? account.email ?? guestName(), color: userColor };
 }
 
@@ -1617,6 +1624,11 @@ interface OpenDocument {
   absorbing?: string[];
   /** A merge with the account's copy is being put into it (see `mergeHost`): its saves wait for it, or they would save over the merge. */
   merging?: Promise<void>;
+  /**
+   * In an encrypted folder (docs/encrypted-folders.md): saved sealed, never in a room, with no edit journal (it would keep the edits
+   * readable in this browser), and closed when the session locks.
+   */
+  encrypted?: boolean;
 }
 
 /** A new one per open(), so a save finishing for the previous document can't touch this one. */
@@ -3002,6 +3014,89 @@ async function updateLinksIn(entry: LibraryEntry, renames: ReadonlyMap<string, s
 }
 
 setLinkKeeper(keepLinks);
+
+// --- Encrypted folders (docs/encrypted-folders.md) --------------------------------------------
+// The session's keys live in encryption/session.ts. Locking (Lock, or the idle timer) saves the open encrypted document while the keys
+// are still here, then closes it; the library is listed again either way, to hide or show what is inside.
+onBeforeLock(async () => {
+  if (current.encrypted) await saveNow();
+});
+/**
+ * Ends encrypted folders' time in the vault folder (Stop decrypting in vault folder, Lock, the idle timer): the vault syncs while they are
+ * still decrypted into it, so a file changed or made there just now reaches its document, encrypted; then they stop, and it syncs again,
+ * which removes their files. Not waited on for ever: what a sync can't finish is left for the next one, which removes what was not changed
+ * even while locked.
+ */
+async function endInVault(ids: readonly string[]): Promise<void> {
+  if (!ids.length) return;
+  const settled = async () => {
+    await vaultService?.syncAfterCurrent();
+    ending = true;
+    for (const id of ids) setDecryptedInVault(id, false);
+    ending = false;
+    await vaultService?.syncAfterCurrent();
+  };
+  await Promise.race([settled(), new Promise((resolve) => setTimeout(resolve, 60_000))]);
+}
+let ending = false;
+// Before the keys go.
+onBeforeLock(() => endInVault(foldersInVault()));
+// Starting syncs the vault now, rather than at its next look (stopping syncs in `endInVault`).
+onVaultChange(() => {
+  if (!ending) void vaultService?.syncAfterCurrent();
+});
+onSessionChange((open) => {
+  if (!open && current.encrypted && !current.none) openSource('none', 'replace');
+  // File › Unlock and Lock show by the session's state; the library lists again to hide or show what is inside.
+  chrome.refresh();
+  void library.refresh().then(() => chrome.refresh());
+});
+// Encrypting and decrypting documents and folders (encryption/convert.ts): the open document among them is saved and closed while it is
+// converted, and opened again after.
+let reopenAfterConvert: string | null = null;
+setEncryptionHost({
+  vaultRoot: () => vaultService?.desktopRoot ?? null,
+  stopInVault: (folderId) => endInVault(foldersInVault().filter((id) => id === folderId)),
+  convert: () => ({ owner: account?.id, cloud: !!account }),
+  folders: () => library.folders,
+  entries: () => library.entries,
+  before: async (entries) => {
+    const ids = openDocumentIds();
+    const open = entries.find((e) => (ids.localId !== null && e.local?.id === ids.localId) || (ids.cloudId !== null && e.cloud?.id === ids.cloudId));
+    if (!open) return;
+    await saveNow();
+    reopenAfterConvert = open.key;
+    openSource('none', 'replace');
+  },
+  refresh: () => library.refresh(),
+  after: () => {
+    const key = reopenAfterConvert;
+    reopenAfterConvert = null;
+    const entry = key ? library.entries.find((e) => e.key === key) : undefined;
+    if (entry) libraryHost.open(entry);
+    chrome.refresh();
+    // The vault takes what was encrypted out, or what was decrypted in, now rather than at its next look at the account.
+    void vaultService?.syncAfterCurrent();
+  },
+});
+// An encrypted folder whose encryption was cut short (a tab closed, the network lost) is finished while unlocked, a moment after the
+// library lists it: what was left readable in it is encrypted now (convert.ts `finishEncrypting`).
+let finishTimer: number | undefined;
+library.subscribe(() => {
+  if (!isUnlocked()) return;
+  window.clearTimeout(finishTimer);
+  finishTimer = window.setTimeout(() => {
+    void finishEncrypting(library.folders, library.entries, { owner: account?.id, cloud: !!account })
+      .then((did) => {
+        if (!did) return;
+        void library.refresh();
+        void vaultService?.syncAfterCurrent();
+      })
+      .catch((error) => console.error('finishing encryption', error));
+  }, 2000);
+});
+// Anything done in the app keeps the session from locking for being idle.
+for (const type of ['pointerdown', 'keydown', 'wheel'] as const) window.addEventListener(type, () => touchEncryption(), { capture: true, passive: true });
 
 // --- Keeping live blocks up to date ----------------------------------------------------------
 // A live block (docs/live-blocks.md) shows a part of another document (a workbook's range, a drawing) and is kept up to date:
@@ -6434,6 +6529,10 @@ const chromeHost = createChromeHost({
   copyNoteLink: () => void copyNoteLink(),
   canShowInVault,
   showInVault: () => showInVault('open'),
+  openEntry: () => {
+    const ids = openDocumentIds();
+    return library.entries.find((e) => (ids.localId !== null && e.local?.id === ids.localId) || (ids.cloudId !== null && e.cloud?.id === ids.cloudId)) ?? null;
+  },
   vaultFolder: () => {
     const service = vaultService;
     if (!service) return null;
@@ -6718,15 +6817,26 @@ const versionHistoryDialog = new VersionHistoryDialog({
   focusEditor: focusInput,
 });
 
+/** A name as it shows: a sealed one opened while its key is unlocked, else "Encrypted document" (docs/encrypted-folders.md). */
+async function shownName(name: string, key: string | undefined): Promise<string> {
+  if (!isSealedName(name)) return name;
+  knowKey(key);
+  return openSealedName(name).catch(() => t('encryption.lockedDocument'));
+}
+
 // File ▸ Trash: what was deleted from this browser and from the account.
 const trashDeps: TrashDeps = {
   hasAccount: () => account !== null,
   // A document made while signed out can be brought back by whoever is signed in now (it is adopted, like the guest documents at sign-in).
+  // An encrypted document's name shows opened while its key is unlocked, else as "Encrypted document" (docs/encrypted-folders.md).
   listDevice: async () =>
-    (await listTrashedSaved())
-      .filter(({ info }) => info.owner === undefined || info.owner === account?.id)
-      .map(({ info, deletedAt }): TrashItem => ({ source: 'device', id: info.id, name: info.name, size: info.size, deletedAt, purgeAt: deletedAt + TRASH_MS })),
-  listAccount: async () => (await listTrash()).map((d): TrashItem => ({ source: 'account', id: d.id, name: d.name, size: d.size, deletedAt: d.deletedAt, purgeAt: d.purgeAt })),
+    Promise.all(
+      (await listTrashedSaved())
+        .filter(({ info }) => info.owner === undefined || info.owner === account?.id)
+        .map(async ({ info, deletedAt }): Promise<TrashItem> => ({ source: 'device', id: info.id, name: await shownName(info.name, info.wrappedKey), size: info.size, deletedAt, purgeAt: deletedAt + TRASH_MS })),
+    ),
+  listAccount: async () =>
+    Promise.all((await listTrash()).map(async (d): Promise<TrashItem> => ({ source: 'account', id: d.id, name: await shownName(d.name, d.wrappedKey), size: d.size, deletedAt: d.deletedAt, purgeAt: d.purgeAt }))),
   async restore(item) {
     if (item.source === 'account') {
       await restoreFromTrash(item.id);
@@ -7114,9 +7224,19 @@ const libraryHost = {
   canShowInVault,
   showInVault: (item: { doc: LibraryEntry } | { folder: Folder }) => void showInVault(item),
   open: (entry: LibraryEntry) => {
+    // A locked encrypted document opens by being unlocked first (docs/encrypted-folders.md).
+    if (entry.locked) {
+      void showUnlock().then((unlocked) => {
+        const fresh = unlocked ? library.entries.find((e) => e.key === entry.key) : undefined;
+        if (fresh && !fresh.locked) libraryHost.open(fresh);
+      });
+      return;
+    }
     newDocumentFolder = null;
     showLoading(entry.name);
     openSource(sourceOf(entry));
+    // Its versions finish converting, if that was cut short.
+    if (entry.encrypted && entry.cloud?.wrappedKey && isUnlocked()) void finishVersions(entry.cloud.id, entry.cloud.wrappedKey).catch(() => undefined);
   },
   warm: (entry: LibraryEntry) => {
     if (entry.cloud && opensFromCloud(entry)) prefetchFromCloud({ id: entry.cloud.id, updatedAt: entry.cloud.updatedAt });

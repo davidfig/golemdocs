@@ -172,7 +172,7 @@ test('edits on top of a copy someone else has since written go in a conflicted c
   await expect.poll(() => back.text()).toBe('shared start from the tab that dies from the other tab');
 });
 
-test('a document whose journal has outlived it leaves nothing behind', async ({ app, page }) => {
+test('a document whose journal has outlived it leaves nothing behind', { tag: '@heavy' }, async ({ app, page }) => {
   await blankWith(app, 'typed');
   await waitForSaved(page);
   const made = 'golemdocs.journal.99999999-9999-4999-8999-999999999999.aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';

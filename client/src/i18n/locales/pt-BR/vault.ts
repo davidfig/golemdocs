@@ -96,4 +96,7 @@ export const vault: Catalog = {
   'vault.shared.index.empty': 'Ela ainda não tem arquivos.',
   'vault.shared.index.more': '…e mais {count}',
   'vault.shared.index.how': 'Para manter esta pasta no seu cofre também, abra Arquivo › Abrir no Golem Docs e escolha “No meu cofre…” no cartão de “{share}”. O Golem Docs mantém esta lista atualizada, então alterações feitas neste arquivo não são mantidas.',
+  'vault.encrypted.file': '{name} (criptografada)',
+  'vault.encrypted.title': '{name} (criptografada)',
+  'vault.encrypted.intro': 'A pasta “{name}” está criptografada, por isso os arquivos dela não estão nesta pasta do cofre: eles nunca são gravados nesta pasta, nem legíveis nem criptografados. Abra-a no Golem Docs e digite sua chave de criptografia para vê-los. O Golem Docs mantém esta nota atualizada, então as alterações feitas nela não são mantidas.',
 };

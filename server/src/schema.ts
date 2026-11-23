@@ -108,4 +108,16 @@ export const USER_MIGRATIONS: string[][] = [
   // 10: who added a document or folder, when it was not the owner: someone editing a folder shared with them (docs/folder-sharing.md).
   // They may rename or delete what they added, and nothing else. Null: the owner's own.
   [`ALTER TABLE documents ADD COLUMN created_by TEXT`, `ALTER TABLE folders ADD COLUMN created_by TEXT`],
+  // 11: encrypted documents and folders (docs/encrypted-folders.md). An encrypted document's file, name and versions are sealed, and its item
+  // key, wrapped by the person's own key, is in `wrapped_key` (the trash keeps both). An encrypted folder (`encrypted`, with its own
+  // `wrapped_key`) encrypts what goes into it. `versions.sealed` marks a version kept sealed, so a conversion cut short is finished later.
+  [
+    `ALTER TABLE folders ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE folders ADD COLUMN wrapped_key TEXT`,
+    `ALTER TABLE documents ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE documents ADD COLUMN wrapped_key TEXT`,
+    `ALTER TABLE trash ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE trash ADD COLUMN wrapped_key TEXT`,
+    `ALTER TABLE versions ADD COLUMN sealed INTEGER NOT NULL DEFAULT 0`,
+  ],
 ];

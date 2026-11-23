@@ -666,6 +666,8 @@ export interface ChromeHost {
   canShowInVault?(): boolean;
   /** File › Show in Finder (desktop app): the open document's file in the vault, selected in the file manager. */
   showInVault?(): void;
+  /** The library's entry for the open document (File › Encrypt Document… and Decrypt Document…, docs/encrypted-folders.md); null for none. */
+  openEntry?(): import('../sync.ts').LibraryEntry | null;
   /** Samples for Help ▸ Open Sample, read each time the menu opens. */
   samples?(): Sample[];
   /** The user's documents, for File ▸ Open Recent. */

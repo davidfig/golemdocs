@@ -274,3 +274,63 @@ test('CloudFiles: read, write bumping updated_at strictly, and refusing a docume
   assert.equal(await gone.write(new Uint8Array([5])), false);
   assert.equal(w.objects.has(`${ownerId}/no-such-doc.docx`), false, 'nothing written for a deleted document');
 });
+
+// --- Listeners: view-only pages hearing of each save --------------------------------------------
+
+const listenerState = (userId: string | null) => ({ listener: true, userId });
+
+test('a listener is never a member of the room: it changes nothing there, and hears only of saves', async () => {
+  // (Sockets handed over as after an eviction: a member, a listener through a share, one through a public link.)
+  const s = fakeState(undefined, [new FakeSocket(peerState('a')), new FakeSocket(listenerState('v')), new FakeSocket(listenerState(null))]);
+  const room = new Room(s.ctx, w.env);
+  await call(room, '/state', { 'x-owner': ownerId, 'x-doc': docId });
+  assert.equal((room as any).peers.size, 1, 'only the member');
+  await room.webSocketMessage(s.sockets[0]!, hello('c1'));
+  assert.equal((s.sockets[0]!.sent[0] as any).people.length, 1, 'the member is alone');
+  assert.deepEqual(s.sockets[1]!.sent, [], 'no welcome or presence for a listener');
+
+  await call(room, '/saved?at=1234');
+  for (const listener of [s.sockets[1]!, s.sockets[2]!]) assert.deepEqual(listener.sent, [{ type: 'saved', updatedAt: 1234 }]);
+});
+
+test('a listener hears of the room\'s own saves too (people editing together)', async () => {
+  const s = fakeState(undefined, [new FakeSocket(listenerState(null))]);
+  const room = new Room(s.ctx, w.env);
+  await call(room, '/state', { 'x-owner': ownerId, 'x-doc': docId });
+  await (room as any).core.files.write(new Uint8Array([4, 5, 6]));
+  const { userDb } = await import('../src/userDb.ts');
+  const db = await userDb(w.env, ownerId);
+  const after = (await db.first<{ updated_at: number }>('SELECT updated_at FROM documents WHERE id = ?', [docId]))!.updated_at;
+  assert.deepEqual(s.sockets[0]!.sent, [{ type: 'saved', updatedAt: after }]);
+});
+
+test('listeners are let go when their access ends, the link changes or the document goes; one that talks is closed', async () => {
+  const s = fakeState(undefined, [new FakeSocket(listenerState('v')), new FakeSocket(listenerState('w')), new FakeSocket(listenerState(null)), new FakeSocket(listenerState('x'))]);
+  const room = new Room(s.ctx, w.env);
+  await call(room, '/kick?user=v');
+  assert.equal(s.sockets[0]!.closed?.code, ROOM_CLOSE.revoked);
+  assert.equal(s.sockets[1]!.closed, null);
+  await call(room, '/rejoin?user=w');
+  assert.equal(s.sockets[1]!.closed?.code, ROOM_CLOSE.stale);
+  await call(room, '/unlisten-public');
+  assert.equal(s.sockets[2]!.closed?.code, ROOM_CLOSE.revoked);
+  assert.equal(s.sockets[3]!.closed, null);
+  await room.webSocketMessage(s.sockets[3]!, hello('c1'));
+  assert.equal(s.sockets[3]!.closed?.code, ROOM_CLOSE.badMessage);
+  assert.equal((room as any).listeners.size, 0);
+
+  const t = fakeState(undefined, [new FakeSocket(listenerState(null))]);
+  const other = new Room(t.ctx, w.env);
+  await call(other, '/end');
+  assert.equal(t.sockets[0]!.closed?.code, ROOM_CLOSE.revoked);
+  await call(other, '/saved?at=1');
+  assert.deepEqual(t.sockets[0]!.sent, [], 'nothing after it is let go');
+});
+
+test('a closed listener is forgotten; /listen without an upgrade header is 426', async () => {
+  const s = fakeState(undefined, [new FakeSocket(listenerState(null))]);
+  const room = new Room(s.ctx, w.env);
+  await room.webSocketClose(s.sockets[0]!);
+  assert.equal((room as any).listeners.size, 0);
+  assert.equal((await call(room, '/listen')).status, 426);
+});

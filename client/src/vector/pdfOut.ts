@@ -11,7 +11,7 @@ import { averageColor, readGradient } from './gradients.ts';
 import { gradientInLocal } from './gradientEdit.ts';
 import { apply } from './matrix.ts';
 import type { Matrix, PathCommand, Scene, SceneNode, Style } from './model.ts';
-import { inherited, parseColor, parseLength, parseNumbers, urlReference } from './style.ts';
+import { inherited, parseColor, parseLength, parseNumbers, strokeUnderFill, urlReference } from './style.ts';
 import type { Rgba } from './style.ts';
 import { pdfChar } from '../formats/pdfExport.ts';
 
@@ -112,7 +112,14 @@ function paintShape(out: Out, node: SceneNode, chain: readonly Style[], commands
     if (list.length && list.some((v) => v > 0)) d.dash(list.length % 2 ? [...list, ...list] : list, parseLength(inherited(chain, 'stroke-dashoffset')) ?? 0);
   }
   const evenOdd = inherited(chain, 'fill-rule') === 'evenodd';
-  if (fill && shading) {
+  if (fill && strokes && strokeUnderFill(chain)) {
+    // `paint-order: stroke`: PDF's fill-and-stroke always strokes last, so the stroke is painted first on its own.
+    trace(d, commands);
+    d.stroke();
+    trace(d, commands);
+    if (shading) d.gradient(shading, evenOdd);
+    else d.fill(evenOdd);
+  } else if (fill && shading) {
     // A gradient is painted through the shape's outline as a clip, then the outline is stroked on its own.
     trace(d, commands);
     d.gradient(shading, evenOdd);
@@ -151,14 +158,33 @@ function paintText(out: Out, node: Extract<SceneNode, { kind: 'text' }>, chain: 
     x += p.run.dx ?? 0;
     y += p.run.dy ?? 0;
     const fill = colorOf(out, inherited(p.runChain, 'fill') ?? 'black', p.runChain);
-    if (fill && p.text) {
+    const stroke = colorOf(out, inherited(p.runChain, 'stroke'), p.runChain);
+    const strokeWidth = parseLength(inherited(p.runChain, 'stroke-width')) ?? 1;
+    const strokes = !!stroke && strokeWidth > 0;
+    const fillAlpha = fill ? Math.max(0, Math.min(1, fill[3] * num(inherited(p.runChain, 'fill-opacity'), 1) * opacity)) : 1;
+    const strokeAlpha = stroke ? Math.max(0, Math.min(1, stroke[3] * num(inherited(p.runChain, 'stroke-opacity'), 1) * opacity)) : 1;
+    const layer = (render: 'fill' | 'stroke' | 'fillStroke'): void => {
       d.save();
-      d.opacity(Math.max(0, Math.min(1, fill[3] * num(inherited(p.runChain, 'fill-opacity'), 1) * opacity)));
+      d.opacity(fillAlpha, strokeAlpha);
+      if (render !== 'fill') {
+        d.strokeColor(unitColor(stroke!));
+        d.lineWidth(strokeWidth);
+        const join = inherited(p.runChain, 'stroke-linejoin');
+        d.lineJoin(join === 'round' || join === 'bevel' ? join : 'miter');
+      }
       // The page is flipped to put y downward; text is flipped back so that it stands up.
       d.transform(1, 0, 0, -1, x, y);
-      d.text(p.text, 0, 0, { font: p.font, size: p.size, color: unitColor(fill) });
+      d.text(p.text, 0, 0, { font: p.font, size: p.size, ...(render !== 'stroke' && { color: unitColor(fill!) }), render });
       d.restore();
-    }
+    };
+    if (p.text && fill && strokes) {
+      // PDF's fill-and-stroke always strokes last; for `paint-order: stroke` the stroke goes down first as a run of its own.
+      if (strokeUnderFill(p.runChain)) {
+        layer('stroke');
+        layer('fill');
+      } else layer('fillStroke');
+    } else if (p.text && fill) layer('fill');
+    else if (p.text && strokes) layer('stroke');
     x += p.width;
   }
 }

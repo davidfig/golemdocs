@@ -9,8 +9,10 @@ import { h } from './dom.ts';
 import { listBox, type ListRow } from './listBox.ts';
 import { dialogTitleBar } from './popup.ts';
 
-export function pickFolder(folders: readonly Folder[], title: string, excluded: (id: string) => boolean, current: string | null | undefined, pick: (id: string | null) => void): void {
-  const all = [{ id: null as string | null, name: t('panels.dashboard.title'), depth: 0 }, ...folderTree(folders).filter((n) => !excluded(n.folder.id)).map((n) => ({ id: n.folder.id as string | null, name: n.folder.name, depth: n.depth + 1 }))];
+export function pickFolder(folders: readonly Folder[], title: string, excluded: (id: string | null) => boolean, current: string | null | undefined, pick: (id: string | null) => void): void {
+  // The top level too may be out of reach (an encrypted folder's document can't go there; docs/encrypted-folders.md), unless it is where it is now.
+  const top = current === null || current === undefined || !excluded(null) ? [{ id: null as string | null, name: t('panels.dashboard.title'), depth: 0 }] : [];
+  const all = [...top, ...folderTree(folders).filter((n) => !excluded(n.folder.id)).map((n) => ({ id: n.folder.id as string | null, name: n.folder.name, depth: n.depth + 1 }))];
   // The folders that can be picked, in the list's order: the list box counts only these.
   const choices = all.filter((choice) => choice.id !== current);
   const rows: ListRow[] = all.map((choice) => (choice.id === current ? { note: choice.name, indent: choice.depth } : { choice: choice.name, indent: choice.depth }));

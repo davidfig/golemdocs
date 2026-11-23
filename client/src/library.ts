@@ -7,7 +7,9 @@
 import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, listDocuments, moveDocuments, saveChunked, saveCloudVersion, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
 import { CHUNK_ALGO } from './storage/chunker.ts';
 import type { Manifest } from './storage/chunker.ts';
-import { getChunks, getSaved, getSavedManifest, getSyncedBase, getThumbnail, listSaved, markSynced, rebaseSaved, saveFromCloud, saveFromCloudIfSent, setSavedFolder, type SavedInfo } from './storage/local.ts';
+import { getChunks, getSaved, getSavedManifest, getSyncedBase, getThumbnail, listSaved, markSynced, openInfo, rebaseSaved, saveFromCloud, saveFromCloudIfSent, saveSaved, setSavedFolder, type SavedInfo } from './storage/local.ts';
+import { isSealed } from '@golemdocs/ops';
+import { encryptedDocumentKey, isEncryptedFolder, isUnlocked, newKey, openSealedFile, openSealedName, sealNameWith } from './encryption/session.ts';
 import { madeInAccount, makingInAccount } from './sync.ts';
 import { t } from './i18n/index.ts';
 
@@ -40,6 +42,8 @@ const MERGES = 2;
  * nothing, when there is no such version, the two changed the same paragraphs, or `host` says no.
  */
 async function mergeWithCloud(info: SavedInfo, bytes: Uint8Array, host: MergeHost): Promise<boolean> {
+  // An encrypted document's copies are sealed: they are kept apart (a conflicted copy) rather than merged.
+  if (info.encrypted) return false;
   const cloudId = info.cloudId;
   const base = cloudId ? await getSyncedBase(info.id) : null;
   if (!cloudId || !base || base.cloudUpdatedAt !== info.cloudUpdatedAt) return false;
@@ -99,7 +103,8 @@ async function sameAsCloud(cloudId: string, bytes: Uint8Array | null, manifest: 
 async function sendable(localId: string) {
   // A document this browser keeps as chunks goes as chunks, and only those the cloud does not have yet are sent; one kept whole goes whole.
   const chunked = await getSavedManifest(localId);
-  const saved = chunked ? null : await getSaved(localId);
+  // As stored: an encrypted document's file and name go sealed (docs/encrypted-folders.md).
+  const saved = chunked ? null : await getSaved(localId, { sealed: true });
   const info = (chunked ?? saved)?.info;
   if (!info) throw new Error(t('app.noLongerSaved'));
   // The server would refuse it: say so here (a big text file that grew past the limit stays in this browser).
@@ -116,7 +121,8 @@ async function sendable(localId: string) {
   };
   /** What the cloud copy has of this one's chunks: those of the version uploaded or downloaded last. */
   const known = new Set(info.cloudId ? chunked?.manifest.syncedHashes : undefined);
-  const make = (name: string, folderId?: string) => (manifest ? createChunked(name, manifest, source, folderId) : createDocument(name, bytes!, folderId));
+  // An encrypted document goes with its key, sealed as it is kept here (docs/encrypted-folders.md).
+  const make = (name: string, folderId?: string) => (manifest ? createChunked(name, manifest, source, folderId, info.wrappedKey) : createDocument(name, bytes!, folderId, info.wrappedKey));
   // A new cloud document goes in the folder it is in here (or `folderId`, for a conflicted copy: see besideOriginal). If the account
   // doesn't have that folder (it was made while signed out and hasn't been sent yet), it goes at the top level instead.
   const create = async (name: string, folderId: string | null | undefined = info.folderId) => {
@@ -147,7 +153,7 @@ function besideOriginal(cloud: CloudDocument | undefined, info: SavedInfo): stri
  * over: if the account refuses (it doesn't have that folder yet, say), the document stays where it was sent.
  */
 async function placedAsHere(localId: string, sentFolder: string | undefined, doc: CloudDocument): Promise<CloudDocument> {
-  const now = ((await getSavedManifest(localId)) ?? (await getSaved(localId)))?.info;
+  const now = ((await getSavedManifest(localId)) ?? (await getSaved(localId, { sealed: true })))?.info;
   if (!now || (now.folderId ?? null) === (sentFolder ?? null)) return doc;
   const folderId = now.folderId ?? null;
   const moved = await moveDocuments([doc.id], folderId).catch(() => null);
@@ -165,6 +171,9 @@ export async function uploadToCloud(localId: string, retry = true, host: MergeHo
 
 async function sendToCloud(localId: string, retry: boolean, host: MergeHost, merges: number): Promise<Uploaded> {
   const { info, bytes, manifest, source, known, create } = await sendable(localId);
+  // An ordinary document left in an encrypted folder (its folder's encryption cut short) is never sent readable, which the account refuses
+  // anyway: it waits here until it is encrypted (convert.ts `finishEncrypting`, while unlocked). docs/encrypted-folders.md
+  if (!info.encrypted && isEncryptedFolder(info.folderId)) throw new Error(t('encryption.finishPending'));
   let doc: CloudDocument;
   let conflictCopy = false;
   try {
@@ -174,9 +183,12 @@ async function sendToCloud(localId: string, retry: boolean, host: MergeHost, mer
     if (error.status === 404) {
       // The cloud copy was deleted elsewhere: start a new one.
       doc = await create(info.name);
-    } else if (error.status === 409 && retry && (await getSaved(localId))?.info.cloudUpdatedAt !== info.cloudUpdatedAt) {
+    } else if (error.status === 409 && retry && (await getSaved(localId, { sealed: true }))?.info.cloudUpdatedAt !== info.cloudUpdatedAt) {
       // Another tab uploaded this copy meanwhile, so the cloud moved on from here: go again from there.
       return uploadToCloud(localId, false, host, merges);
+    } else if (error.status === 409 && !info.encrypted && (await encryptedInAccount(info.cloudId))) {
+      // Encrypted on another device meanwhile (docs/encrypted-folders.md): this copy's changes are kept, never sent readable.
+      return keepEncrypted(localId, host);
     } else if (error.status === 409 && merges > 0 && bytes && (await mergeWithCloud(info, bytes, host).catch(() => false))) {
       // Changed elsewhere too, in other paragraphs: this copy has both now, on top of the cloud's version. Sent as any other save.
       return { ...(await uploadToCloud(localId, true, host, merges - 1)), merged: true };
@@ -186,7 +198,7 @@ async function sendToCloud(localId: string, retry: boolean, host: MergeHost, mer
       if (cloud && (await sameAsCloud(info.cloudId, bytes, manifest, source))) {
         doc = cloud;
       } else {
-        doc = await create(conflictCopyName(info.name), besideOriginal(cloud, info));
+        doc = await create(await copyName(info), besideOriginal(cloud, info));
         conflictCopy = true;
       }
     } else {
@@ -220,7 +232,7 @@ export async function keepAsConflictCopy(localId: string): Promise<CloudDocument
     return null;
   }
   const cloud = (await listDocuments().catch(() => [])).find((d) => d.id === info.cloudId);
-  const doc = await create(conflictCopyName(info.name), besideOriginal(cloud, info));
+  const doc = await create(await copyName(info), besideOriginal(cloud, info));
   await markSynced(localId, { cloudId: info.cloudId, syncedAt: info.updatedAt, cloudUpdatedAt: info.cloudUpdatedAt });
   return doc;
 }
@@ -264,8 +276,9 @@ export async function uploadNewToCloud(localIds: readonly string[]): Promise<Map
   for (const id of localIds) {
     // One kept as chunks is not sent whole in a batch (the next save would send it all again as chunks): it goes the single way.
     if (await getSavedManifest(id)) continue;
-    const saved = await getSaved(id);
-    if (!saved || saved.info.cloudId) continue;
+    const saved = await getSaved(id, { sealed: true });
+    // An encrypted document goes the single way too: a batch is for ordinary ones (the server refuses it in one).
+    if (!saved || saved.info.cloudId || saved.info.encrypted) continue;
     const bytes = new Uint8Array(saved.bytes);
     // Bigger than a batch: sent on its own, the ordinary way (which says if it is too big).
     if (bytes.byteLength > BATCH_MAX_BYTES) continue;
@@ -328,7 +341,7 @@ export async function keepSyncedCopy(cloud: { id: string; name: string; updatedA
  * has, nothing is downloaded. With `progress`, the share of a download received is reported as it comes. With `early` a download is returned as soon as it arrives, while its browser copy is written (chunked,
  * hashed, stored: seconds for a big file) in the background as `stored`: the caller opens the bytes without waiting for it.
  */
-export async function openFromCloud(cloud: { id: string; name: string; updatedAt?: number }, owner?: string, options: { early?: boolean; progress?: (share: number) => void } = {}): Promise<OpenedFromCloud> {
+export async function openFromCloud(cloud: { id: string; name: string; updatedAt?: number; wrappedKey?: string }, owner?: string, options: { early?: boolean; progress?: (share: number) => void } = {}): Promise<OpenedFromCloud> {
   // Copies made before documents were marked with their account count as this one's.
   const linked = (await listSaved()).find((d) => d.cloudId === cloud.id && (d.owner === undefined || d.owner === owner));
   if (linked && linked.updatedAt > (linked.cloudSyncedAt ?? 0)) {
@@ -348,7 +361,8 @@ export async function openFromCloud(cloud: { id: string; name: string; updatedAt
     if (saved) return { ...saved, usedBrowserCopy: false };
     throw error;
   }
-  if (options.early) {
+  // A sealed file (an encrypted folder's) is stored before it is opened: the early way hands over bytes before they are stored.
+  if (options.early && !isSealed(new Uint8Array(bytes))) {
     const id = linked?.id ?? crypto.randomUUID();
     // The save gets its own bytes: opening hands the others to the worker, which empties them.
     const stored = saveFromCloud({ id, name: cloud.name, bytes: bytes.slice(0), owner, cloudId: cloud.id, cloudUpdatedAt: cloud.updatedAt });
@@ -357,6 +371,34 @@ export async function openFromCloud(cloud: { id: string; name: string; updatedAt
     const info: SavedInfo = { id, name: cloud.name, size: bytes.byteLength, updatedAt, ...(owner !== undefined && { owner }), cloudId: cloud.id, cloudSyncedAt: updatedAt, ...(cloud.updatedAt !== undefined && { cloudUpdatedAt: cloud.updatedAt }) };
     return { info, bytes, usedBrowserCopy: false, stored };
   }
-  const info = await saveFromCloud({ id: linked?.id, name: cloud.name, bytes, owner, cloudId: cloud.id, cloudUpdatedAt: cloud.updatedAt });
+  const info = await saveFromCloud({ id: linked?.id, name: cloud.name, bytes, owner, cloudId: cloud.id, cloudUpdatedAt: cloud.updatedAt, ...(cloud.wrappedKey ? { wrappedKey: cloud.wrappedKey } : {}) });
+  // Stored as it came; opened for whoever is opening it (an encrypted document's, while its folder is unlocked).
+  if (info.encrypted) return { info: await openInfo(info), bytes: (await openSealedFile(new Uint8Array(bytes))).slice().buffer as ArrayBuffer, usedBrowserCopy: false };
   return { info, bytes, usedBrowserCopy: false };
+}
+
+/** Whether the account's copy of a document is encrypted now: as last listed, else as the account says. */
+async function encryptedInAccount(cloudId: string): Promise<boolean> {
+  if (encryptedDocumentKey(cloudId)) return true;
+  return !!(await listDocuments().catch(() => [])).find((d) => d.id === cloudId)?.encrypted;
+}
+
+/**
+ * A readable copy whose document was encrypted elsewhere since it was last synced, with changes of its own: it is encrypted here with a key
+ * of its own and sent as an encrypted conflicted copy beside the original, never as a readable one. While locked it can't be, so it stays
+ * in this browser, unsent, until the key is entered.
+ */
+async function keepEncrypted(localId: string, host: MergeHost): Promise<Uploaded> {
+  if (!isUnlocked()) throw new Error(t('encryption.conflictLocked'));
+  const saved = await getSaved(localId);
+  if (!saved) throw new Error(t('app.noLongerSaved'));
+  await saveSaved({ id: localId, name: saved.info.name, bytes: new Uint8Array(saved.bytes), wrappedKey: await newKey() });
+  // Sent again, now sealed: the account's copy has moved on, so it goes as a conflicted copy (no merge: one of them is sealed).
+  return uploadToCloud(localId, false, host, 0);
+}
+
+/** The name of a conflicted copy: an encrypted document's is opened, marked and sealed again. */
+async function copyName(info: SavedInfo): Promise<string> {
+  if (!info.encrypted || !info.wrappedKey) return conflictCopyName(info.name);
+  return sealNameWith(info.wrappedKey, conflictCopyName(await openSealedName(info.name)));
 }

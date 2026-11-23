@@ -307,7 +307,7 @@ test.describe('squiggles and the right-click menu', () => {
     await expect.poll(() => app.text()).toContain('X');
   });
 
-  test('typing still works after a Control-click (macOS: the button press never gets its release)', async ({ app }) => {
+  test('typing still works after a Control-click (macOS: the button press never gets its release)', { tag: '@heavy' }, async ({ app }) => {
     const text = 'I recieve mail.';
     await app.blank();
     await app.editor.focus();

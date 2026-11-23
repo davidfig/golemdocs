@@ -36,10 +36,11 @@ import {
 import { removeFolders, type FolderRow } from './folders.ts';
 import { cleanName, HttpError, ID, json } from './http.ts';
 import { describe, listDocuments, ownStorage } from './documents.ts';
-import { kickFromRoom, rejoinRoom } from './roomGate.ts';
+import { kickFromRoom, listenToRoom, rejoinRoom } from './roomGate.ts';
 import { person, userByEmail } from './sharing.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
 import { existingUserDb, type UserDb } from './userDb.ts';
+import { refuseEncrypted } from './sealed.ts';
 
 type DocumentRow = Parameters<typeof describe>[0] & { created_by?: string | null };
 
@@ -47,7 +48,7 @@ type DocumentRow = Parameters<typeof describe>[0] & { created_by?: string | null
 async function contents(env: Env, ownerId: string, db: UserDb, root: string, folders?: Map<string, FolderLink>) {
   const all = folders ?? new Map((await listFolders<FolderRow>(db)).map((f) => [f.id, f]));
   const inside = subtree(all.values(), root);
-  const documents = (await listDocuments(env, ownerId, db)).filter((row) => row.folder_id !== null && inside.has(row.folder_id)) as DocumentRow[];
+  const documents = (await listDocuments(env, ownerId, db)).filter((row) => row.folder_id !== null && inside.has(row.folder_id) && !row.encrypted) as DocumentRow[];
   return { folders: [...inside].map((id) => all.get(id)!).filter(Boolean), documents, all };
 }
 
@@ -69,6 +70,8 @@ export async function handleFolderLinkOrShares(request: Request, env: Env, userI
   const { syncing, ownDb } = await ownStorage(env, userId, 'GET');
   const folder = ownDb && (await ownDb.first<FolderRow>('SELECT * FROM folders WHERE id = ?', [folderId]));
   if (!ownDb || !folder) throw new HttpError(404, 'not found');
+  // An encrypted folder is never shared (docs/encrypted-folders.md); who it is shared with is still answered: nobody.
+  if (request.method === 'PUT' || request.method === 'POST') refuseEncrypted(folder, 'sharing');
   const requireSync = () => {
     if (!syncing) throw subscriptionRequired();
   };
@@ -307,7 +310,7 @@ export function pathsOf(root: string, folders: readonly (FolderLink & { created_
  * or someone else's token, a folder that is gone, an owner without sync and a path that is not in the tree all answer 404. Public
  * answers may be kept a minute and are never indexed.
  */
-export async function handleFolderView(request: Request, env: Env, url: URL, userId: string | null, token: string, file: boolean): Promise<Response> {
+export async function handleFolderView(request: Request, env: Env, url: URL, userId: string | null, token: string, part: 'file' | 'live' | undefined): Promise<Response> {
   if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
   const target = userId === null ? await folderPublicShare(env, token) : await folderViewShare(env, token, userId);
   if (!target) throw new HttpError(404, 'not found');
@@ -323,10 +326,12 @@ export async function handleFolderView(request: Request, env: Env, url: URL, use
   const { folders, documents } = await contents(env, target.ownerId, db, target.folderId, all);
   const tree = pathsOf(target.folderId, folders as FolderRow[], documents);
   const headers: Record<string, string> = { 'x-robots-tag': 'noindex, nofollow', ...(userId === null ? { 'cache-control': 'public, max-age=60' } : {}) };
-  if (!file) return json({ name: root.name, folders: tree.folders, files: tree.files }, 200, headers);
+  if (!part) return json({ name: root.name, folders: tree.folders, files: tree.files }, 200, headers);
   const docId = tree.byPath.get(url.searchParams.get('path') ?? '');
   const row = docId && documents.find((d) => d.id === docId);
   if (!row) throw new HttpError(404, 'not found');
+  // The WebSocket that tells the page of each save of the file it shows (`listenToRoom`).
+  if (part === 'live') return listenToRoom(env, row.id, request, userId, target.ownerId);
   const response = await documentResponse(env, row.r2_key, target.ownerId, row.id, DOCX, request.headers.get('if-none-match'));
   if (!response) throw new HttpError(404, 'not found');
   const out = new Headers(response.headers);

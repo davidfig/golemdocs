@@ -12,6 +12,7 @@ import { CloudError, isDeleted, isDeletedDocument, listDocuments, listFolders, l
 import type { Folder } from './folders.ts';
 import { deleteSavedIfUnchanged, listLocalFolders, listSaved, ownedBy, type SavedInfo } from './storage/local.ts';
 import { t } from './i18n/index.ts';
+import { presentSealed } from './encryption/present.ts';
 
 export type SyncState =
   /** Only in this browser: signed out, or not uploaded yet. */
@@ -44,6 +45,9 @@ export interface LibraryEntry {
    * account (`local` and `cloud` are null). It is opened, and shown in Finder, and nothing else: it is renamed, moved and deleted there.
    */
   vault?: { path: string };
+  /** Encrypted (docs/encrypted-folders.md), and whether it is locked: shown as "Encrypted document" until the key is entered. */
+  encrypted?: boolean;
+  locked?: boolean;
 }
 
 /** How a browser copy and its cloud copy relate. `cloud` is null when it's missing or unknown. */
@@ -283,7 +287,7 @@ export async function loadLocalLibrary(user: User | null): Promise<{ entries: Li
   // Signed in, the folders are the account's; otherwise they are this browser's.
   const folders = user ? [...(cached?.folders ?? []), ...[...madeFolders.values()].filter((m) => !cached?.folders.some((f) => f.id === m.id))].filter((f) => !isDeleted(f.id)) : await listLocalFolders().catch(() => []);
   const cloud = cached ? cached.cloud.filter((d) => !isDeletedDocument(d)) : null;
-  return { entries: mergeLibrary(local, cloud), local, cloud, shared: cached?.shared ?? [], folders };
+  return presentSealed({ entries: mergeLibrary(local, cloud), local, cloud, shared: cached?.shared ?? [], folders });
 }
 
 /**
@@ -296,7 +300,7 @@ export async function loadLibrary(user: User | null, identity: User | null = use
   if (!user) {
     const sharedFoldersRequest = identity ? listSharedFolders().catch(() => null) : Promise.resolve([]);
     const shared = identity ? await listShared().catch(() => []) : [];
-    return { entries: mergeLibrary(local, null), local, cloud: null, cloudProblem: null, offline: false, signedOut: false, shared, sharedFolders: await sharedFoldersRequest, folders: await listLocalFolders().catch(() => []) };
+    return presentSealed({ entries: mergeLibrary(local, null), local, cloud: null, cloudProblem: null, offline: false, signedOut: false, shared, sharedFolders: await sharedFoldersRequest, folders: await listLocalFolders().catch(() => []) });
   }
 
   const editsBefore = catalogueEdits;
@@ -310,7 +314,7 @@ export async function loadLibrary(user: User | null, identity: User | null = use
   } catch (error) {
     const signedOut = error instanceof CloudError && error.status === 401;
     const problem = signedOut ? t('app.signedOutProblem') : t('app.cloudUnreachable', { message: (error as Error).message });
-    return { entries: mergeLibrary(local, null), local, cloud: null, cloudProblem: problem, offline: error instanceof TypeError, signedOut, shared: [], sharedFolders: null, folders: null };
+    return presentSealed({ entries: mergeLibrary(local, null), local, cloud: null, cloudProblem: problem, offline: error instanceof TypeError, signedOut, shared: [], sharedFolders: null, folders: null });
   }
 
   // Decided from copies read before the account was asked: one saved to meanwhile is kept.
@@ -323,5 +327,5 @@ export async function loadLibrary(user: User | null, identity: User | null = use
   const folders = await foldersRequest;
   // Unless the catalogue was changed here meanwhile: this answer may be from before, and the next one writes it.
   if (catalogueEdits === editsBefore) writeCatalogue(user, cloud, shared, folders ?? readCatalogue(user)?.folders ?? []);
-  return { entries: mergeLibrary(kept, cloud), local: kept, cloud, cloudProblem: null, offline: false, signedOut: false, shared, sharedFolders: await sharedFoldersRequest, folders };
+  return presentSealed({ entries: mergeLibrary(kept, cloud), local: kept, cloud, cloudProblem: null, offline: false, signedOut: false, shared, sharedFolders: await sharedFoldersRequest, folders });
 }

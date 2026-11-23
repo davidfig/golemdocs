@@ -9,10 +9,11 @@
 // a .wdoc: `toVaultFile` turns it into that file, in the vault's convert worker, started only when it is first clicked). Other sites embed it in a frame as /view?p=<token>&embed, which shows the
 // document's name alone in the bar.
 //
-// What it shows is the latest save, not each keystroke: it asks every half minute, and when the tab is looked at again, whether the
-// file has changed (`If-None-Match`, answered 304 while it hasn't), and shows the newer one in place (`Viewer.reload`). While it is
-// being edited the file is saved within seconds of each change (an editor's autosave, or a shared room's snapshot), so it catches
-// up. See docs/architecture/viewer.md.
+// What it shows is the latest save, not each keystroke. The document's room tells the page of each save over a live line (live.ts),
+// and the page then asks for the file (`If-None-Match`, answered 304 while it hasn't changed) and shows the newer one in place
+// (`Viewer.reload`). While it is being edited the file is saved within seconds of each change (an editor's autosave, or a shared
+// room's snapshot), so it follows the edits. It also asks every half minute, and when the tab is looked at again, which is how it
+// hears that access ended and how it keeps up without the line. See docs/architecture/viewer.md.
 //
 // A shared folder is the same page at /view?f=<token> (a person's view-only share) or /view?pf=<token> (its public link), with
 // `&path=` for the file shown: see folderPage.ts.
@@ -25,6 +26,7 @@ import { showFolder } from './folderPage.ts';
 import { savedViewMode } from '../ui/viewMode.ts';
 import { CHECK_MS, downloader, downloading, highContrast, PAGE_TITLE, PUBLIC_CHECK_MS, say } from './page.ts';
 import { hostViewer } from './host.ts';
+import { followSaves } from './live.ts';
 import { checkOutcome } from './protocol.ts';
 import { mount, type Viewer } from './viewer.ts';
 
@@ -112,6 +114,7 @@ async function start(): Promise<void> {
         // Access is over: the document goes, pages, text and worker with it (not just hidden), and nothing more is asked.
         ended = true;
         clearInterval(timer);
+        live.stop();
         document.removeEventListener('visibilitychange', onShown);
         viewer.destroy();
         stored = null;
@@ -127,6 +130,8 @@ async function start(): Promise<void> {
     }
   };
   const timer = setInterval(() => void check(), isPublic ? PUBLIC_CHECK_MS : CHECK_MS);
+  // Each save, as it goes in.
+  const live = followSaves(`${api}/live`, () => void check());
   // A tab looked at again checks at once: one whose access ended while it was in the background clears as soon as it is seen.
   const onShown = (): void => void check();
   document.addEventListener('visibilitychange', onShown);

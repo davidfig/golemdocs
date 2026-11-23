@@ -58,6 +58,8 @@ import { DocumentTitle } from './documentTitle.ts';
 import { displayDocumentName } from '../documentName.ts';
 import { DEFAULT_LAYOUT, MOBILE_KEYS, MOBILE_PRIMARY, SEPARATOR, loadLayout, saveLayout, type ToolbarLayout } from './toolbarLayout.ts';
 import { desktopBridge, desktopMenu, isDesktopApp, showInFileManagerLabel } from '../desktop/bridge.ts';
+import { anyLocked, isUnlocked } from '../encryption/session.ts';
+import { decryptDocuments, documentItems, encryptDocuments, lockNow, showUnlock } from '../encryption/ui.ts';
 import { NativeMenuSync } from '../desktop/nativeMenu.ts';
 import './ui.css';
 
@@ -342,6 +344,12 @@ export class Chrome {
       dialog('file.versionHistory', t('history.menu'), 'versionHistory', { tooltip: t('history.menu.tip') }),
       dialog('file.trash', t('history.trashMenu'), 'trash', { tooltip: t('history.trashMenu.tip') }),
       dialog('file.vault', t('vault.menu'), 'vault', { tooltip: t('vault.menu.tip'), visible: () => desktopBridge() !== null }),
+      // Encrypted folders (docs/encrypted-folders.md): made in File › Open; unlocked and locked for the session.
+      // The open document's Encrypt… or Decrypt…, offered where its menus in the Files pane and File › Open offer them (encryption/ui.ts).
+      { id: 'file.encryptDocument', label: t('encryption.encryptDocument'), run: () => void encryptDocuments(this.openEncryptable('encrypt')), takesKeyboard: true, visible: () => this.openEncryptable('encrypt').length > 0 },
+      { id: 'file.decryptDocument', label: t('encryption.decryptDocument'), run: () => void decryptDocuments(this.openEncryptable('decrypt')), takesKeyboard: true, visible: () => this.openEncryptable('decrypt').length > 0 },
+      { id: 'file.unlockEncrypted', label: t('encryption.unlockMenu'), run: () => void showUnlock(), takesKeyboard: true, visible: () => anyLocked() },
+      { id: 'file.lockEncrypted', label: t('encryption.lock'), run: () => void lockNow(), visible: () => isUnlocked() },
       { id: 'file.showInVault', label: showInFileManagerLabel(), tooltip: t('vault.reveal.menu.tip'), run: () => this.options.host.showInVault?.(), visible: () => this.options.host.canShowInVault?.() ?? false, enabled: (s) => !s.nothingOpen },
       { id: 'file.copyNoteLink', label: t('vault.link.menu'), tooltip: t('vault.link.menu.tip'), run: () => this.options.host.copyNoteLink?.(), visible: () => desktopBridge() !== null, enabled: (s) => !s.nothingOpen },
       a('file.clearLocalData', t('chrome.file.clearLocalData'), { kind: 'clearLocalData' }, { tooltip: t('chrome.file.clearLocalData.tip') }),
@@ -714,6 +722,15 @@ export class Chrome {
     return { name: displayDocumentName(documentName, kind), rename: renamable ? () => this.registry.execute('file.rename') : null };
   }
 
+  /** The open document, in a list, if its menus offer this (Encrypt… or Decrypt…); empty otherwise. */
+  private openEncryptable(change: 'encrypt' | 'decrypt'): import('../sync.ts').LibraryEntry[] {
+    const entry = this.options.host.openEntry?.() ?? null;
+    if (!entry || entry.locked) return [];
+    const offered = documentItems(entry);
+    const label = change === 'encrypt' ? t('encryption.encrypt') : t('encryption.decrypt');
+    return offered.some((item) => item !== 'separator' && item.label === label) ? [entry] : [];
+  }
+
   /**
    * The phone's menu: not the desktop menus behind a button but one list of what is used on a
    * phone, grouped under small headings, with the full menus last for everything else.
@@ -816,6 +833,10 @@ export class Chrome {
           sep,
           cmd('file.import'),
           cmd('file.importFolder'),
+          cmd('file.encryptDocument'),
+          cmd('file.decryptDocument'),
+          cmd('file.unlockEncrypted'),
+          cmd('file.lockEncrypted'),
           sep,
           cmd('file.share'),
           cmd('file.copyNoteLink'),

@@ -5,7 +5,7 @@
 // look as they did (the styles they use, their list definitions) is carried over as operations.
 
 import { liveTag } from '../live/liveMarks.ts';
-import { paragraphsIn, type Block, type Inline, type Style, type WordDocument } from '@golemdocs/docx';
+import { paragraphsIn, type Block, type Inline, type Style, type Text, type WordDocument } from '@golemdocs/docx';
 import type { Operation } from '@golemdocs/ops';
 import { importDocument } from './convert.ts';
 import { styleFor } from './markdownStyles.ts';
@@ -48,9 +48,37 @@ function unwrapUnsafeLinks(inlines: Inline[]): Inline[] {
  * The clipboard's HTML as blocks to paste into `target`, or null if it holds nothing to paste.
  * Throws if it can't be read at all (the caller pastes the plain text instead).
  */
-export async function htmlToPaste(html: string, target: WordDocument): Promise<Pasted | null> {
+export async function htmlToPaste(html: string, target: WordDocument, plain?: string): Promise<Pasted | null> {
   const { document } = await importDocument('html', encoder.encode(html));
-  return pastedFrom(document, target);
+  const pasted = pastedFrom(document, target);
+  if (pasted && plain) spacesFromPlain(pasted.blocks, plain);
+  return pasted;
+}
+
+/**
+ * Gives pasted text back the ordinary spaces its plain-text form has. HTML collapses spaces, so whatever writes it (this app's copy,
+ * a browser's) turns a space at the start or end of a line, or the second of two, into a non-breaking one (&nbsp;) to keep it; read
+ * back, that would stay non-breaking. Where the HTML's text and the clipboard's plain text are the same but for such spaces, the plain
+ * text says which were ordinary; a non-breaking space the plain text has too stays one. Anything else (they differ) is left alone.
+ */
+export function spacesFromPlain(blocks: Block[], plain: string): void {
+  const texts: Text[] = [];
+  for (const p of paragraphsIn(blocks)) {
+    for (const inline of inlinesOf(p.children)) if (inline.kind === 'run') for (const c of inline.content) if (c.kind === 'text') texts.push(c);
+  }
+  const pasted = texts.map((t) => t.text).join('');
+  if (!pasted.includes('\u00a0')) return;
+  const given = plain.replace(/[\r\n\t]/g, '');
+  if (pasted.replace(/\u00a0/g, ' ') !== given.replace(/\u00a0/g, ' ')) return;
+  let at = 0;
+  for (const t of texts) {
+    let out = '';
+    for (const ch of t.text) {
+      out += ch === '\u00a0' && given[at] === ' ' ? ' ' : ch;
+      at += ch.length;
+    }
+    t.text = out;
+  }
 }
 
 /** The blocks of a scratch document, with what they need from it, as something to paste into `target` (empty ones at the ends go unless `trim` is off). */

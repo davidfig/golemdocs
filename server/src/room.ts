@@ -4,6 +4,10 @@
 //
 // The Worker authenticates the request and works out the user's role before forwarding it here, so
 // the object trusts the x-* headers (it can only be reached through the Worker's binding).
+//
+// Besides its members, a room has listeners: view-only pages (/view, src/viewer/share.ts and folderPage.ts) that hear each save of
+// the document and fetch it, so they follow the edits. A listener is never a member: RoomCore does not know about it, so it changes
+// nothing about the room (alone in a room stays alone), and all it is ever sent is `saved`.
 
 import { deleteChunks, isChunked, readDocument } from './fileStore.ts';
 import { DOCX, docxKey } from './keys.ts';
@@ -15,6 +19,16 @@ import { userDb } from './userDb.ts';
 import { checkpoint, prune, retainedChunks } from './versions.ts';
 
 const MAX_MESSAGE_CHARS = 4 * 1024 * 1024;
+/** View-only pages listening at once; past this a page keeps checking every so often instead. */
+export const MAX_LISTENERS = 1000;
+
+/** A listener's attachment: whose view-only share it came through (null: a public link), so it is closed when their access ends. */
+interface ListenerState {
+  listener: true;
+  userId: string | null;
+}
+
+const isListener = (state: unknown): state is ListenerState => (state as ListenerState | null)?.listener === true;
 
 declare const WebSocketPair: new () => { 0: WebSocketHandle; 1: WebSocketHandle };
 
@@ -107,6 +121,8 @@ export class CloudFiles implements RoomFiles {
     private readonly env: Env,
     private readonly owner: () => string,
     private readonly doc: () => string,
+    /** A new version went in (its `updated_at`). */
+    private readonly written?: (updatedAt: number) => void,
   ) {}
 
   private key = () => docxKey(this.owner(), this.doc());
@@ -129,8 +145,10 @@ export class CloudFiles implements RoomFiles {
     await this.env.FILES.put(this.key(), bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, { httpMetadata: { contentType: DOCX } });
     if (isChunked(before)) await deleteChunks(this.env, this.owner(), this.doc(), await retainedChunks(this.env, this.owner(), db, this.doc())).catch((error) => console.error('removing chunks failed', error));
     // Strictly increasing, like an upload's: clients tell versions apart by it.
-    await db.run('UPDATE documents SET size = ?, updated_at = ? WHERE id = ?', [bytes.byteLength, Math.max(Date.now(), row.updated_at + 1), this.doc()]);
+    const updatedAt = Math.max(Date.now(), row.updated_at + 1);
+    await db.run('UPDATE documents SET size = ?, updated_at = ? WHERE id = ?', [bytes.byteLength, updatedAt, this.doc()]);
     await prune(this.env, this.owner(), db, this.doc(), bytes.byteLength);
+    this.written?.(updatedAt);
     return true;
   }
 
@@ -147,6 +165,8 @@ export class Room {
   private readonly store: SqlStore;
   private readonly core: RoomCore;
   private readonly peers = new Map<WebSocketHandle, Peer>();
+  /** View-only pages hearing of each save (see the top of this file). */
+  private readonly listeners = new Set<WebSocketHandle>();
 
   constructor(
     private readonly ctx: DurableObjectState,
@@ -158,9 +178,38 @@ export class Room {
       alarm: (at: number | null) => void (at === null ? ctx.storage.deleteAlarm() : ctx.storage.setAlarm(at)).catch((e) => console.error('room alarm', e)),
       log: (message: string, error?: unknown) => console.error(message, error),
     };
-    this.core = new RoomCore(this.store, new CloudFiles(env, () => this.store.get('owner') ?? '', () => this.store.get('doc') ?? ''), host, DEFAULT_TIMINGS);
+    const files = new CloudFiles(env, () => this.store.get('owner') ?? '', () => this.store.get('doc') ?? '', (at) => this.tellListeners(at));
+    this.core = new RoomCore(this.store, files, host, DEFAULT_TIMINGS);
     // After being evicted, the sockets that stayed open are still ours.
-    for (const socket of ctx.getWebSockets()) this.core.add(this.peer(socket));
+    for (const socket of ctx.getWebSockets()) {
+      if (isListener(socket.deserializeAttachment())) this.listeners.add(socket);
+      else this.core.add(this.peer(socket));
+    }
+  }
+
+  /** A save went in: every listener fetches it. */
+  private tellListeners(updatedAt: number): void {
+    const message = JSON.stringify({ type: 'saved', updatedAt } satisfies MultiplayerServerMessage);
+    for (const socket of this.listeners) {
+      try {
+        socket.send(message);
+      } catch {
+        // Already closing; its close event will remove it.
+      }
+    }
+  }
+
+  /** Closes the listeners `which` picks (their access ended, or the document went). */
+  private closeListeners(which: (state: ListenerState) => boolean, code: number, reason: string): void {
+    for (const socket of [...this.listeners]) {
+      if (!which(socket.deserializeAttachment() as ListenerState)) continue;
+      this.listeners.delete(socket);
+      try {
+        socket.close(code, reason);
+      } catch {
+        // Already closed.
+      }
+    }
   }
 
   private peer(socket: WebSocketHandle): Peer {
@@ -219,6 +268,16 @@ export class Room {
       return new Response(null, { status: 101, webSocket: client } as ResponseInit);
     }
 
+    if (url.pathname === '/listen') {
+      if (h.get('upgrade') !== 'websocket') return new Response('expected a WebSocket', { status: 426 });
+      if (this.listeners.size >= MAX_LISTENERS) return new Response('too many listeners', { status: 503 });
+      const { 0: client, 1: server } = new WebSocketPair();
+      this.ctx.acceptWebSocket(server);
+      server.serializeAttachment({ listener: true, userId: h.get('x-user') || null } satisfies ListenerState);
+      this.listeners.add(server);
+      return new Response(null, { status: 101, webSocket: client } as ResponseInit);
+    }
+
     if (url.pathname === '/document') {
       const doc = await this.core.document();
       if (!doc) return new Response('no document', { status: 404 });
@@ -228,19 +287,31 @@ export class Room {
     }
     if (url.pathname === '/state') return Response.json({ maySave: this.core.clientsMaySave });
     if (url.pathname === '/saved') {
-      this.core.saved(Number(url.searchParams.get('at')) || Date.now());
+      const at = Number(url.searchParams.get('at')) || Date.now();
+      this.core.saved(at);
+      this.tellListeners(at);
       return new Response(null, { status: 204 });
     }
     if (url.pathname === '/kick') {
-      this.core.kick(url.searchParams.get('user') ?? '');
+      const user = url.searchParams.get('user') ?? '';
+      this.core.kick(user);
+      this.closeListeners((l) => l.userId === user, ROOM_CLOSE.revoked, 'access withdrawn');
       return new Response(null, { status: 204 });
     }
     if (url.pathname === '/rejoin') {
-      this.core.rejoin(url.searchParams.get('user') ?? '');
+      const user = url.searchParams.get('user') ?? '';
+      this.core.rejoin(user);
+      // A view-only share whose role changed has no view address any more: the page finds that out when it checks.
+      this.closeListeners((l) => l.userId === user, ROOM_CLOSE.stale, 'role changed');
+      return new Response(null, { status: 204 });
+    }
+    if (url.pathname === '/unlisten-public') {
+      this.closeListeners((l) => l.userId === null, ROOM_CLOSE.revoked, 'link changed');
       return new Response(null, { status: 204 });
     }
     if (url.pathname === '/end') {
       this.core.end();
+      this.closeListeners(() => true, ROOM_CLOSE.revoked, 'document deleted');
       // Otherwise every deleted document would leave its room's rows behind for good.
       await this.store.wipe();
       return new Response(null, { status: 204 });
@@ -249,6 +320,15 @@ export class Room {
   }
 
   async webSocketMessage(socket: WebSocketHandle, data: string | ArrayBuffer): Promise<void> {
+    // A listener only listens.
+    if (this.listeners.delete(socket)) {
+      try {
+        socket.close(ROOM_CLOSE.badMessage, 'bad message');
+      } catch {
+        // Already closed.
+      }
+      return;
+    }
     const peer = this.peer(socket);
     if (typeof data !== 'string' || data.length > MAX_MESSAGE_CHARS) return peer.close(ROOM_CLOSE.badMessage, 'bad message');
     let message: MultiplayerClientMessage;
@@ -276,6 +356,7 @@ export class Room {
 
   /** A connection ended: out of the room, and out of the map (which would otherwise keep every socket the object ever had). */
   private async forget(socket: WebSocketHandle): Promise<void> {
+    if (this.listeners.delete(socket)) return;
     const peer = this.peers.get(socket);
     this.peers.delete(socket);
     if (peer) await this.core.disconnect(peer);

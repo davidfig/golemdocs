@@ -43,7 +43,12 @@ export interface VaultDisk {
 }
 
 export interface VaultCloud {
-  list(): Promise<{ docs: CloudDoc[]; folders: CloudFolder[] }>;
+  /**
+   * The documents and folders the vault keeps. Encrypted ones are left out (vaultEncrypted.ts): `encrypted` names the documents, so a file
+   * the vault still has for one is taken out; `notes` are written in place of encrypted folders; `encryptedPaths` are where those folders
+   * would be, so a folder of that name on disk is not made in the account.
+   */
+  list(): Promise<{ docs: CloudDoc[]; folders: CloudFolder[]; encrypted?: string[]; notes?: { path: string; text: string }[]; encryptedPaths?: string[]; decryptedPaths?: string[] }>;
   download(id: string): Promise<Uint8Array>;
   /** Replaces a document's bytes, whatever the account has now. */
   replace(id: string, bytes: Uint8Array): Promise<{ updatedAt: number }>;
@@ -101,6 +106,13 @@ interface State {
   folders?: string[];
   /** The vault has had all of the account's folders, empty ones too, since the last sync (see `mirrorFolders`). */
   mirrored?: boolean;
+  /** The notes written in place of encrypted folders (see `VaultCloud.list`), so one no longer wanted is removed. */
+  notes?: string[];
+  /**
+   * The encrypted folders decrypted into the vault at the last sync (their vault paths): when one no longer is, whatever is left under it
+   * (files the vault doesn't sync) is removed, here or at the first sync after a quit or a crash.
+   */
+  decrypted?: string[];
 }
 
 /** Where a running sync is, for the dialog: the step, and for the last one how many of the changes are done and which file is being worked on. */
@@ -206,7 +218,8 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
   tell({ phase: 'account' });
   const listing = await cloud.list();
   report.accountDocs = listing.docs.length;
-  state.entries = adoptable(state.entries, host.account, new Set(listing.docs.map((d) => d.id)));
+  // Encrypted documents count as listed: their entries are this side's, and are taken out below rather than dropped here.
+  state.entries = adoptable(state.entries, host.account, new Set([...listing.docs.map((d) => d.id), ...(listing.encrypted ?? [])]));
   tell({ phase: 'folder', accountDocs: report.accountDocs });
   const all = cloudPaths(listing.docs, listing.folders);
   const nameOf = new Map(listing.docs.map((d) => [d.id, d.name]));
@@ -218,11 +231,74 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
   report.folderFiles = scanned.length;
   // Audio and video too big for the account stay in the vault only: never read, uploaded, or taken for deleted (`report.inPlace`).
   const inPlace = scanned.filter((f) => playsInPlace(baseName(f.path), f.size));
-  report.inPlace = inPlace;
   const inPlacePaths = new Set(inPlace.map((f) => f.path));
-  const local = scanned.filter((f) => !inPlacePaths.has(f.path) && codec.kept(baseName(f.path)));
+  let local = scanned.filter((f) => !inPlacePaths.has(f.path) && codec.kept(baseName(f.path)));
   // One that was kept before it grew past the limit keeps its link, and its document in the account is left as it was.
   const heldBack = new Set(state.entries.filter((e) => inPlacePaths.has(e.path)).map((e) => e.id));
+
+  // Encrypted documents (docs/encrypted-folders.md) are never in the vault. A file it still has for one (encrypted since) is taken out here,
+  // before the plan, which would otherwise take its document for deleted and, had the file been edited, make it a readable document again:
+  // an edit made to the file since the last sync is saved into the document first, sealed. While that can't be done (it is locked), the
+  // file and the memory of it stay, out of the plan, until it can.
+  const sealedIds = new Set(listing.encrypted ?? []);
+  const held: ManifestEntry[] = [];
+  const outOfPlan = new Set<string>();
+  for (const entry of state.entries.filter((e) => sealedIds.has(e.id))) {
+    try {
+      if (local.some((f) => f.path === entry.path)) {
+        const bytes = await disk.read(entry.path);
+        if ((await host.hash(bytes)) !== entry.hash) {
+          await cloud.replace(entry.id, await codec.fromFile(bytes, baseName(entry.path)));
+          report.uploaded++;
+        }
+        await disk.remove(entry.path);
+        report.deletedHere++;
+      }
+    } catch (error) {
+      held.push(entry);
+      outOfPlan.add(entry.path);
+      report.errors.push({ action: { kind: 'deleteLocal', id: entry.id, path: entry.path }, message: error instanceof Error ? error.message : String(error) });
+      continue;
+    }
+    outOfPlan.add(entry.path);
+  }
+  state.entries = state.entries.filter((e) => !sealedIds.has(e.id));
+  // A note in place of each encrypted folder, rewritten only when its text changed; one the person made at that path is left alone.
+  const notes = new Map((listing.notes ?? []).map((n) => [n.path, n.text]));
+  const notesBefore = new Set(state.notes ?? []);
+  const written: string[] = [];
+  for (const [path, text] of notes) {
+    if (local.some((f) => f.path === path) && !notesBefore.has(path)) continue;
+    const bytes = new TextEncoder().encode(text);
+    const had = await disk.read(path).catch(() => null);
+    if (!had || had.length !== bytes.length || !had.every((b, i) => b === bytes[i])) await disk.write(path, bytes).catch(() => undefined);
+    written.push(path);
+    outOfPlan.add(path);
+  }
+  for (const path of notesBefore) {
+    if (notes.has(path)) continue;
+    await disk.remove(path).catch(() => undefined);
+    outOfPlan.add(path);
+  }
+  state.notes = written.length ? written : undefined;
+  const encryptedPaths = listing.encryptedPaths ?? [];
+  const under = (path: string, dirs: readonly string[]) => dirs.some((dir) => path.startsWith(`${dir}/`));
+  // A file under an encrypted folder that isn't decrypted into the vault is never made a readable document: it is left out of the plan
+  // (one made there just before a quit is taken in, encrypted, the next time the folder is decrypted into the vault).
+  for (const file of local) if (under(file.path, encryptedPaths)) outOfPlan.add(file.path);
+  // A folder no longer decrypted into the vault: the files left under it that the vault doesn't sync (no document holds them) are
+  // readable too, and go. Documents' files went above, or are held until their changes can be saved.
+  const decryptedNow = listing.decryptedPaths ?? [];
+  const ended = (state.decrypted ?? []).filter((dir) => !decryptedNow.includes(dir));
+  for (const file of scanned) {
+    if (!under(file.path, ended) || notes.has(file.path) || (codec.kept(baseName(file.path)) && !inPlacePaths.has(file.path))) continue;
+    await disk.remove(file.path).catch(() => undefined);
+    report.deletedHere++;
+  }
+  state.decrypted = decryptedNow.length ? decryptedNow : undefined;
+  local = local.filter((f) => !outOfPlan.has(f.path));
+  // Not listed from inside an encrypted folder that isn't decrypted into the vault, nor once removed above.
+  report.inPlace = inPlace.filter((f) => !under(f.path, encryptedPaths) && !under(f.path, ended));
   const localByPath = new Map(local.map((f) => [f.path, f]));
 
   tell({ phase: 'compare', accountDocs: report.accountDocs, folderFiles: report.folderFiles });
@@ -485,7 +561,9 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
     }
     // A name the account would spell differently (`a:b` is `a_b` there) would be made again on every sync: such a folder is left out.
     const spelledAlike = (path: string) => path.split('/').every((name) => safeName(name) === name);
-    for (const path of [...onDisk].filter((p) => !remembered.has(p) && !inAccount.has(p) && spelledAlike(p)).sort((a, b) => depth(a) - depth(b))) {
+    // Nor is a folder where an encrypted folder would be: it is the one the vault had before it was encrypted (its files are gone).
+    const encrypted = (path: string) => encryptedPaths.some((e) => path === e || path.startsWith(`${e}/`));
+    for (const path of [...onDisk].filter((p) => !remembered.has(p) && !inAccount.has(p) && spelledAlike(p) && !encrypted(p)).sort((a, b) => depth(a) - depth(b))) {
       if (await attempt({ kind: 'makeFolder', path, where: 'cloud' })) inAccount.add(path);
     }
     // In the account and not here: new there, or emptied by this sync's moves and deletes (a file's folder goes with its last file).
@@ -500,7 +578,7 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
     return [...inAccount].filter((p) => listed.has(p));
   }
 
-  state.entries = [...entries.values()];
+  state.entries = [...entries.values(), ...held];
   const filesNow = [...scanned.map((f) => f.path).filter((path) => !removedHere.has(path)), ...state.entries.map((e) => e.path)];
   if (mirrored) state.mirrored = true;
   // Not compared this time (the account could not be listed): what was remembered stays, so no folder is taken for new or removed.

@@ -53,5 +53,7 @@ export function searchableShared(doc: CloudDocument, deps: SourceDeps): Searchab
 /** Everything searchable: the entries, then what was shared (skipping any that is also one of the entries). */
 export function searchableDocuments(entries: readonly LibraryEntry[], shared: readonly CloudDocument[], deps: SourceDeps): SearchableDocument[] {
   const own = new Set(entries.flatMap((e) => (e.cloud ? [e.cloud.id] : [])));
-  return [...entries.map((e) => searchableEntry(e, deps)), ...shared.filter((d) => !own.has(d.id)).map((d) => searchableShared(d, deps))];
+  // An encrypted folder's documents are left out: their index would be kept in this browser, readable (docs/encrypted-folders.md).
+  const searchable = entries.filter((e) => !e.local?.encrypted && !e.cloud?.encrypted);
+  return [...searchable.map((e) => searchableEntry(e, deps)), ...shared.filter((d) => !own.has(d.id)).map((d) => searchableShared(d, deps))];
 }

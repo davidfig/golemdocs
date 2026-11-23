@@ -7,6 +7,7 @@ import { app } from './app.ts';
 import { chrome } from './chrome.ts';
 import { columns } from './columns.ts';
 import { dialogs } from './dialogs.ts';
+import { encryption } from './encryption.ts';
 import { history } from './history.ts';
 import { textEditor } from './textEditor.ts';
 import { sheet } from './sheet.ts';
@@ -30,4 +31,4 @@ import { pasteSpecial } from './pasteSpecial.ts';
 import { properties } from './properties.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Catalog = { ...a11y, ...a11ySheet, ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...live, ...scripts, ...math, ...media, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };
+export const messages: Catalog = { ...a11y, ...a11ySheet, ...app, ...chrome, ...columns, ...dialogs, ...encryption, ...history, ...textEditor, ...sheet, ...link, ...live, ...scripts, ...math, ...media, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };

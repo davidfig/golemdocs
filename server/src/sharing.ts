@@ -45,9 +45,10 @@ async function folderShareAbove(env: Env, userId: string, ownerId: string, docId
   if (!shares.length) return null;
   const db = await existingUserDb(env, ownerId);
   if (!db) return null;
-  const cached = (await db.peekList<{ id: string; folder_id: string | null }>('documents'))?.find((r) => r.id === docId);
-  const row = cached ?? (await db.first<{ folder_id: string | null }>('SELECT folder_id FROM documents WHERE id = ?', [docId]));
-  if (!row?.folder_id) return null;
+  const cached = (await db.peekList<{ id: string; folder_id: string | null; encrypted?: number | null }>('documents'))?.find((r) => r.id === docId);
+  const row = cached ?? (await db.first<{ folder_id: string | null; encrypted?: number | null }>('SELECT folder_id, encrypted FROM documents WHERE id = ?', [docId]));
+  // An encrypted document is never shared, by a folder above it either (docs/encrypted-folders.md).
+  if (!row?.folder_id || row.encrypted) return null;
   const folders = new Map((await listFolders<FolderLink>(db)).map((f) => [f.id, f]));
   return bestFolderShare(shares, folders, row.folder_id);
 }
@@ -178,6 +179,14 @@ export async function publicShare(env: Env, token: string): Promise<{ docId: str
     .bind(token)
     .first<{ doc_id: string; owner_id: string }>();
   return row ? { docId: row.doc_id, ownerId: row.owner_id } : null;
+}
+
+/**
+ * Ends everything shared from a document that is being encrypted (docs/encrypted-folders.md): its shares and its public link. They are
+ * removed, not only refused, so decrypting it later gives nobody access again.
+ */
+export async function dropSharing(env: Env, docId: string): Promise<void> {
+  await env.DIRECTORY.batch([env.DIRECTORY.prepare('DELETE FROM shares WHERE doc_id = ?').bind(docId), env.DIRECTORY.prepare('DELETE FROM public_links WHERE doc_id = ?').bind(docId)]);
 }
 
 export async function unshare(env: Env, docId: string, granteeId: string): Promise<void> {

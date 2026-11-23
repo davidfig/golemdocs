@@ -214,6 +214,13 @@ export class LineScene {
     return { line, col: Math.min(at, shown(index, line).length) };
   }
 
+  /** Whether a point in points is over the characters [from, to) of a line (not beside them, past the line's end). */
+  over(line: number, from: number, to: number, x: number, y: number): boolean {
+    const entry = this.entries().entryOf(line);
+    if (entry < 0) return false;
+    return this.spans(entry, from, to).some((r) => x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height);
+  }
+
   /** The rectangles covering the characters [from, to) of a line (one per row it touches); `past` adds a cell after the last, to show a selected line break. */
   spans(entry: number, from: number, to: number, past = false): Rect[] {
     const laid = this.layout(this.entries().lineOf(entry));

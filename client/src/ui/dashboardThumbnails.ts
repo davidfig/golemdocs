@@ -84,7 +84,9 @@ export class Thumbnails {
     const shared = this.sharedFor.get(thumb);
     if (shared) return this.show(thumb, thumbnailUrl(shared));
     const entry = this.entryFor.get(thumb);
-    if (!entry) return;
+    // An encrypted document shows no picture of its page, locked or not (docs/encrypted-folders.md): one kept from before it was
+    // encrypted would show what it says.
+    if (!entry || entry.encrypted || entry.local?.encrypted || entry.cloud?.encrypted) return;
     const generation = this.generation;
     const cloudUrl = entry.cloud ? thumbnailUrl(entry.cloud) : null;
     let src: string | null = prefersCloud(entry) ? cloudUrl : null;

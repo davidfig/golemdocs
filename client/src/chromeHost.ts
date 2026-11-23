@@ -77,6 +77,8 @@ export interface AppHooks {
   /** File › Show in Finder (desktop app): whether the vault keeps files here, and showing the open document's file. */
   canShowInVault(): boolean;
   showInVault(): void;
+  /** The library's entry for the open document, for File › Encrypt Document… and Decrypt Document… (null for none). */
+  openEntry(): import('./sync.ts').LibraryEntry | null;
   /** Help ▸ Check for Updates (desktop app): look for a newer version of the app and offer to install it. */
   showUpdates(): void;
   /** Ask for the page size, margins and orientation, then set them. */
@@ -635,6 +637,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
     copyNoteLink: app.copyNoteLink,
     canShowInVault: app.canShowInVault,
     showInVault: app.showInVault,
+    openEntry: app.openEntry,
     fonts: app.fonts,
   };
 }

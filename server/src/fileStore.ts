@@ -7,6 +7,8 @@
 // Chunks belong to one document, so they are never shared and need no counting: a save removes the ones its manifest dropped,
 // and deleting the document removes the rest by prefix. A save that fails part way leaves chunks nobody uses; they go with the document.
 
+import { isSealedSize } from '@golemdocs/ops';
+import { requireSealedStart } from './sealed.ts';
 import { sha256Hex } from '@golemdocs/docx';
 import type { Env } from './cf.ts';
 import { HttpError } from './http.ts';
@@ -205,10 +207,23 @@ export async function applyDelta(
   key: string,
   body: ArrayBuffer,
   previous: Manifest | null,
-  options: { maxBytes: number; etagMatches?: string },
+  /** `sealedWith`: an encrypted document's wrapped key; its file must be sealed with it (sealed.ts). */
+  options: { maxBytes: number; etagMatches?: string; sealedWith?: string | null },
 ): Promise<Delta> {
   const { manifest, supplied } = parse(body, options.maxBytes);
   const had = new Set(previous?.chunks.map((c) => c.h));
+  // An encrypted document's file must be sealed with its own key: its first chunk starts with the envelope naming that key. One the
+  // save does not bring was checked when it came, as the first chunk of the manifest before; one in another place was not, so it is
+  // refused. The chunks after it can't be checked on their own, but the whole must be the size of a sealed file, so readable bytes
+  // added after a sealed start are refused too.
+  if (options.sealedWith !== undefined) {
+    const first = manifest.chunks[0]?.h;
+    const firstBefore = previous?.chunks[0]?.h;
+    const bytes = first === undefined ? undefined : supplied.get(first);
+    if (first === undefined || (!bytes && first !== firstBefore)) throw new HttpError(400, 'an encrypted document’s file must be encrypted', 'not-sealed');
+    if (bytes) requireSealedStart(bytes, options.sealedWith);
+    if (!isSealedSize(manifest.size)) throw new HttpError(400, 'an encrypted document’s file is not the size of an encrypted file', 'not-sealed');
+  }
   const missing = [...new Set(manifest.chunks.map((c) => c.h))].filter((h) => !supplied.has(h) && !had.has(h));
   if (missing.length) {
     throw new HttpError(400, 'chunks are missing', 'missing-chunks');

@@ -170,8 +170,8 @@ test('a card\'s right-click menu has its commands, in the Files pane\'s order, a
   const beta = cards(page).filter({ hasText: 'beta.md' });
   await beta.click({ button: 'right' });
   const menu = page.getByRole('menu');
-  // A document kept only in this browser can't be shared.
-  await expect(menu.getByRole('menuitem')).toHaveText(['Open', 'Rename', 'Move…', 'Delete']);
+  // A document kept only in this browser can't be shared; any document can be encrypted (docs/encrypted-folders.md).
+  await expect(menu.getByRole('menuitem')).toHaveText(['Open', 'Rename', 'Move…', 'Encrypt…', 'Delete']);
   await menu.getByRole('menuitem', { name: 'Delete' }).click();
   const dialog = page.getByRole('alertdialog');
   await expect(dialog.locator('.wm-delete-list li')).toHaveText(['beta.md']);
@@ -179,7 +179,7 @@ test('a card\'s right-click menu has its commands, in the Files pane\'s order, a
 
   await cards(page).filter({ hasText: 'alpha.txt' }).getByRole('button', { name: 'Open alpha.txt' }).focus();
   await page.keyboard.press('Shift+F10');
-  await expect(page.getByRole('menu').getByRole('menuitem')).toHaveText(['Open', 'Rename', 'Move…', 'Delete']);
+  await expect(page.getByRole('menu').getByRole('menuitem')).toHaveText(['Open', 'Rename', 'Move…', 'Encrypt…', 'Delete']);
   await page.getByRole('menuitem', { name: 'Open' }).click();
   await expect(dashboard(page)).toBeHidden();
   await expect.poll(() => app.text()).toContain('the first');

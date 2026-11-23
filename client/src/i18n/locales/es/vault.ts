@@ -96,4 +96,7 @@ export const vault: Catalog = {
   'vault.shared.index.empty': 'Todavía no tiene archivos.',
   'vault.shared.index.more': '…y {count} más',
   'vault.shared.index.how': 'Para guardar también esta carpeta en tu bóveda, abre Archivo › Abrir en Golem Docs y elige «En mi bóveda…» en la tarjeta de «{share}». Golem Docs mantiene esta lista al día, así que los cambios hechos en este archivo no se conservan.',
+  'vault.encrypted.file': '{name} (cifrada)',
+  'vault.encrypted.title': '{name} (cifrada)',
+  'vault.encrypted.intro': 'La carpeta «{name}» está cifrada, así que sus archivos no están en esta carpeta del baúl: nunca se escriben en esta carpeta, ni legibles ni cifrados. Ábrela en Golem Docs e introduce tu clave de cifrado para verlos. Golem Docs mantiene esta nota al día, así que los cambios que le hagas no se conservan.',
 };

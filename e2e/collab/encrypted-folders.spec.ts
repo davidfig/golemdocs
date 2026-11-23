@@ -5,6 +5,7 @@
 import { expect, test } from '../fixtures';
 import { cloudDocs, newPerson } from './helpers';
 import { moveTo } from '../files/helpers';
+import { CLIENT_ORIGIN } from '../ports.ts';
 
 test('encrypt a folder you made: set up a key, lock, unlock with the key (not a mistyped one), decrypt again', { tag: '@heavy' }, async ({ browser }) => {
   const person = await newPerson(browser, 'encrypted');
@@ -161,5 +162,45 @@ test('moving a document out of an encrypted folder in the app asks, then decrypt
   expect(await folderOf()).toBeNull();
   const file = Buffer.from(await (await page.request.get(`/api/documents/${doc!.id}`)).body());
   expect(file.subarray(0, 4).toString()).not.toBe('GDE1');
+  await person.context.close();
+});
+
+test('encrypting a folder offers to delete for good what was deleted from it before, still readable in Trash', { tag: '@heavy' }, async ({ browser }) => {
+  const person = await newPerson(browser, 'encrypted-trash');
+  const { page, app } = person;
+  await app.goto('?doc=welcome');
+  await app.menu('File', 'Open…');
+  const dashboard = page.locator('.wm-dashboard');
+  await dashboard.getByRole('button', { name: 'New folder', exact: true }).click();
+  const field = dashboard.getByRole('textbox', { name: 'Folder name' });
+  await field.fill('Diary');
+  await field.press('Enter');
+  await dashboard.locator('article.wm-folder').filter({ hasText: 'Diary' }).getByRole('button', { name: /Diary/ }).click();
+  await dashboard.getByRole('button', { name: 'New document', exact: true }).first().click();
+  await app.type('dear diary');
+  await expect.poll(async () => (await cloudDocs(page)).length, { timeout: 30_000 }).toBe(1);
+  await expect(page.locator('.wm-sync')).toHaveAttribute('data-state', 'saved', { timeout: 30_000 });
+  // Deleted while the folder was ordinary: in the account's trash, readable.
+  const [doc] = await cloudDocs(page);
+  expect((await page.request.delete('/api/documents', { data: { ids: [doc!.id] }, headers: { origin: CLIENT_ORIGIN } })).ok()).toBe(true);
+  const trash = async () => (await (await page.request.get('/api/trash')).json()) as { id: string; folderId?: string | null }[];
+  expect((await trash()).map((d) => d.id)).toEqual([doc!.id]);
+
+  await page.locator('.wm-files-folder', { hasText: 'Diary' }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Encrypt folder…' }).click();
+  await page.getByRole('dialog', { name: 'Encrypt “Diary”?' }).getByRole('button', { name: 'Encrypt' }).click();
+  const setup = page.getByRole('dialog', { name: 'Your Encryption Key' });
+  const key = (await setup.locator('.wm-encryption-key').textContent())!;
+  await setup.getByLabel('Paste the key again to confirm you saved it').fill(key);
+  await setup.getByRole('button', { name: 'I saved it' }).click();
+
+  // Encrypting doesn't reach the trash: it says so, and Delete Forever deletes what is there for good.
+  const offer = page.getByRole('dialog', { name: 'Readable in Trash' });
+  await expect(offer).toBeVisible({ timeout: 30_000 });
+  await expect(offer).toContainText('Diary');
+  await expect(offer).toContainText('documents: 1');
+  await offer.getByRole('button', { name: 'Delete Forever' }).click();
+  await expect(offer).toHaveCount(0);
+  await expect.poll(async () => (await trash()).length, { timeout: 15_000 }).toBe(0);
   await person.context.close();
 });

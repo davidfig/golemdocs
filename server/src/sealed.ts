@@ -6,7 +6,7 @@
 // or moved into it, at any depth, must be encrypted, and a folder's name inside one is sealed. Only the folder that was encrypted keeps a
 // readable name. Documents and folders are converted in the browser, then saved as such.
 
-import { isSealed, isSealedName, isWrappedKey, sealedKeyId, wrappedKeyId } from '@golemdocs/ops';
+import { isSealed, isSealedName, isSealedSize, isWrappedKey, sealedKeyId, wrappedKeyId } from '@golemdocs/ops';
 import { listFolders } from './folderShares.ts';
 import { HttpError } from './http.ts';
 import type { UserDb } from './userDb.ts';
@@ -57,8 +57,14 @@ export function requireSealed(bytes: ArrayBuffer | Uint8Array): void {
  */
 export function requireSealedWith(bytes: ArrayBuffer | Uint8Array, wrapped: string | null | undefined): void {
   const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  requireSealed(view);
-  if (!wrapped || sealedKeyId(view) !== wrappedKeyId(wrapped)) throw new HttpError(400, 'an encrypted document’s file must be encrypted with its own key', 'not-sealed');
+  requireSealedStart(view, wrapped);
+  if (!isSealedSize(view.byteLength)) throw new HttpError(400, 'an encrypted document’s file is not the size of an encrypted file', 'not-sealed');
+}
+
+/** The first bytes of an encrypted document's file (the whole of it, or its first chunk) are sealed with its own key. */
+export function requireSealedStart(bytes: Uint8Array, wrapped: string | null | undefined): void {
+  requireSealed(bytes);
+  if (!wrapped || sealedKeyId(bytes) !== wrappedKeyId(wrapped)) throw new HttpError(400, 'an encrypted document’s file must be encrypted with its own key', 'not-sealed');
 }
 
 /** A decrypted document's file must not be sealed any more. */

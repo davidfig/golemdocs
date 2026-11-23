@@ -76,13 +76,13 @@ const routes: ExportedHandler = {
       // The desktop app's installers are public: they are downloaded before there is an account (downloads.ts).
       if (path === '/api/downloads' || path.startsWith('/api/downloads/')) return await handleDownloads(request, env, path);
 
-      // GET /api/public/:token[/file|/thumbnail]: a document's public link, for anyone (see handlePublic).
-      const publicMatch = /^\/api\/public\/([^/]+)(?:\/(file|thumbnail))?$/.exec(path);
-      if (publicMatch) return await handlePublic(request, env, publicMatch[1]!, publicMatch[2] as 'file' | 'thumbnail' | undefined);
+      // GET /api/public/:token[/file|/thumbnail|/live]: a document's public link, for anyone (see handlePublic).
+      const publicMatch = /^\/api\/public\/([^/]+)(?:\/(file|thumbnail|live))?$/.exec(path);
+      if (publicMatch) return await handlePublic(request, env, publicMatch[1]!, publicMatch[2] as 'file' | 'thumbnail' | 'live' | undefined);
 
-      // GET /api/folder-public/:token[/file?path=…]: a folder's public link, for anyone (see handleFolderView).
-      const folderPublicMatch = /^\/api\/folder-public\/([^/]+)(\/file)?$/.exec(path);
-      if (folderPublicMatch) return await handleFolderView(request, env, url, null, folderPublicMatch[1]!, !!folderPublicMatch[2]);
+      // GET /api/folder-public/:token[/file?path=…|/live?path=…]: a folder's public link, for anyone (see handleFolderView).
+      const folderPublicMatch = /^\/api\/folder-public\/([^/]+)(?:\/(file|live))?$/.exec(path);
+      if (folderPublicMatch) return await handleFolderView(request, env, url, null, folderPublicMatch[1]!, folderPublicMatch[2] as 'file' | 'live' | undefined);
 
       if (path.startsWith('/api/auth/')) return await handleAuth(request, env, url);
 
@@ -126,13 +126,16 @@ const routes: ExportedHandler = {
         return joinRoom(env, docId, headers, !!roomMatch[2]);
       }
 
-      // GET /api/view/:token[/file]: a document shared view-only, by its share's own address (see handleView).
-      const viewMatch = /^\/api\/view\/([^/]+)(\/file)?$/.exec(path);
-      if (viewMatch) return await handleView(request, env, userId, viewMatch[1], !!viewMatch[2]);
+      // GET /api/view/:token[/file|/live]: a document shared view-only, by its share's own address (see handleView).
+      const viewMatch = /^\/api\/view\/([^/]+)(?:\/(file|live))?$/.exec(path);
+      // Cookies ride along on cross-site WebSocket handshakes, so a live line's origin is checked here (as a room's is).
+      if (viewMatch?.[2] === 'live' && request.headers.get('origin') !== url.origin) throw new HttpError(403, 'bad origin');
+      if (viewMatch) return await handleView(request, env, userId, viewMatch[1]!, viewMatch[2] as 'file' | 'live' | undefined);
 
-      // GET /api/folder-view/:token[/file?path=…]: a folder shared view-only, by its share's own address (see handleFolderView).
-      const folderViewMatch = /^\/api\/folder-view\/([^/]+)(\/file)?$/.exec(path);
-      if (folderViewMatch) return await handleFolderView(request, env, url, userId, folderViewMatch[1]!, !!folderViewMatch[2]);
+      // GET /api/folder-view/:token[/file?path=…|/live?path=…]: a folder shared view-only, by its share's own address (see handleFolderView).
+      const folderViewMatch = /^\/api\/folder-view\/([^/]+)(?:\/(file|live))?$/.exec(path);
+      if (folderViewMatch?.[2] === 'live' && request.headers.get('origin') !== url.origin) throw new HttpError(403, 'bad origin');
+      if (folderViewMatch) return await handleFolderView(request, env, url, userId, folderViewMatch[1]!, folderViewMatch[2] as 'file' | 'live' | undefined);
 
       // /api/shared-folders[/:ownerId/:folderId[/tree|/folders/:id]]: folders other people shared with this user (sharedFolders.ts).
       const sharedFoldersMatch = /^\/api\/shared-folders(?:\/([^/]+)\/([^/]+)(?:\/(tree|folders)(?:\/([^/]+))?)?)?$/.exec(path);

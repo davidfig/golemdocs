@@ -315,6 +315,8 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       for (const page of pagesById.values()) page.dispose(gl);
       pagesById.clear();
       shelf.clear();
+      // Its pictures are named as the old version's were (a picture file's is always the same): drop the old ones' textures too.
+      renderer?.images?.clear();
     }
     const added: GpuPage[] = [];
     for (const encoded of update.pages) {

@@ -25,7 +25,8 @@ test('a key typed in while nothing encrypted is known makes no new keys until it
   await assert.rejects(session.newKey(), session.LockedError);
   // Their own key opens it, and is the one used from then on, though typed in second.
   assert.ok((await session.unlock(personal.text)) > 0);
-  assert.equal(session.currentKey()?.text, personal.text);
+  assert.equal(session.currentKey()?.id, personal.id);
+  assert.equal('text' in session.currentKey()!, false, 'its text is not kept');
   const made = await session.newKey();
   assert.ok(await newItemKey(personal).then(() => session.keysOf(made)));
   session.lock();
@@ -34,7 +35,9 @@ test('a key typed in while nothing encrypted is known makes no new keys until it
 test('a key made here, or typed in with nothing encrypted anywhere, is the person’s once that is known', async () => {
   // A new key (setup) is theirs at once.
   const made = await session.createKey();
-  assert.equal(session.currentKey(), made);
+  assert.ok(made.text.startsWith('golem-key-1-'), 'shown once, to be saved');
+  assert.equal(session.currentKey()?.id, made.id);
+  assert.equal('text' in session.currentKey()!, false, 'its text is not kept');
   session.lock();
   assert.equal(session.currentKey(), null, 'forgotten when the session locks');
 });

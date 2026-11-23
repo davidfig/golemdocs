@@ -190,6 +190,15 @@ test('the viewer reads the folder by its share’s address, as paths, and names 
   assert.equal((await w.call(ALICE, 'GET', `/api/folder-view/${token}/file?path=../Private.md`)).status, 404);
   assert.equal((await w.call(BOB, 'GET', `/api/folder-view/${token}`)).status, 404, 'someone else’s address');
   assert.equal((await w.call(null, 'GET', `/api/folder-view/${token}`)).status, 401);
+
+  // The live line for the file shown: a listener in that document's room, from the site itself, for a file in the folder only.
+  const upgrade = { upgrade: 'websocket' };
+  const idea = w.roomCalls.length;
+  assert.equal((await w.call(ALICE, 'GET', `/api/folder-view/${token}/live?path=${encodeURIComponent('Notes/Idea.md')}`, { headers: upgrade })).status, 204);
+  const listen = w.roomCalls.slice(idea).find((c) => c.path === '/listen')!;
+  assert.ok(listen && !text.includes(listen.doc));
+  assert.equal((await w.call(ALICE, 'GET', `/api/folder-view/${token}/live?path=../Private.md`, { headers: upgrade })).status, 404);
+  assert.equal((await w.call(ALICE, 'GET', `/api/folder-view/${token}/live?path=Plan.md`, { headers: { ...upgrade, origin: 'https://evil.example' } })).status, 403);
 });
 
 test('a folder’s public link opens it for anyone, read only and not indexed; resetting or turning it off kills the old address', async () => {

@@ -6,10 +6,10 @@
 // old form; `finishVersions` completes them the next time the document is opened with its key.
 
 import { isSealed } from '@golemdocs/ops';
-import { convertCloudDocument, downloadCloudVersion, listCloudVersions, listDocuments, listFolders, listTrash, putFolders, replaceCloudVersion, throwIfFailed, type CloudDocument } from '../cloud.ts';
+import { convertCloudDocument, downloadCloudVersion, listCloudVersions, listDocuments, listFolders, listTrash, purgeTrash, putFolders, replaceCloudVersion, throwIfFailed, type CloudDocument } from '../cloud.ts';
 import type { Folder } from '../folders.ts';
 import { openFromCloud } from '../library.ts';
-import { convertLocalVersions, deleteSearchIndexes, getSaved, listLocalFolders, listSaved, listTrashedSaved, saveFromCloud, saveSaved, updateLocalFolder, type SavedInfo } from '../storage/local.ts';
+import { convertLocalVersions, deleteSearchIndexes, getSaved, listLocalFolders, listSaved, listTrashedSaved, purgeTrashedSaved, saveFromCloud, saveSaved, updateLocalFolder, type SavedInfo } from '../storage/local.ts';
 import type { LibraryEntry } from '../sync.ts';
 import { addFoldersToCatalogue, putDocInCatalogue } from '../sync.ts';
 import { opensFromCloud } from '../ui/dashboardFormat.ts';
@@ -169,6 +169,30 @@ export async function learnEncrypted(host: ConvertHost): Promise<void> {
   knowDocuments(docs);
   knowFolders(folders);
   for (const t of trash) knowKey(t.wrappedKey);
+}
+
+/** Documents in the trash that are still readable: in the account's (`cloud`), and in this browser's (`local`), by id. */
+export interface ReadableTrash {
+  cloud: string[];
+  local: string[];
+}
+
+/**
+ * What was deleted from a folder (or a folder inside it) before it was encrypted, and is still readable in the trash until it is deleted
+ * for good: encrypting the folder doesn't reach it, so the person is offered to delete it now (docs/encrypted-folders.md).
+ */
+export async function readableTrashIn(folder: Folder, folders: readonly Folder[], host: ConvertHost): Promise<ReadableTrash> {
+  const tree = new Set([folder.id, ...foldersUnder(folders, folder.id).map((f) => f.id)]);
+  const inTree = (id: string | null | undefined) => !!id && tree.has(id);
+  const local = (await listTrashedSaved()).filter((r) => !r.info.encrypted && inTree(r.info.folderId)).map((r) => r.info.id);
+  const cloud = host.cloud ? (await listTrash()).filter((d) => !d.encrypted && inTree(d.folderId)).map((d) => d.id) : [];
+  return { cloud, local };
+}
+
+/** Deletes those documents for good, in the account and here. */
+export async function purgeReadableTrash(trash: ReadableTrash): Promise<void> {
+  for (const id of trash.cloud) await purgeTrash(id);
+  for (const id of trash.local) await purgeTrashedSaved(id);
 }
 
 /** The folders under `root` (not itself), parents before children. */

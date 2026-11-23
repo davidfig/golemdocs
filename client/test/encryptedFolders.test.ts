@@ -344,3 +344,22 @@ test('a folder whose encryption was cut short is finished: what was left readabl
   session.lock();
   assert.equal(await convert.finishEncrypting([marked, sub], entries, guest), false);
 });
+
+test('what was deleted from a folder before it was encrypted is found in the trash, still readable, and can be deleted for good', async () => {
+  await session.createKey();
+  const top = folder(uuid(), { name: 'Taxes' });
+  const sub = folder(uuid(), { name: '2027', parentId: top.id });
+  for (const f of [top, sub]) await local.putLocalFolder(f);
+  session.knowFolders([top, sub]);
+  const fromTop = await local.saveSaved({ name: 'Old.docx', bytes: bytes(1), folderId: top.id });
+  const fromSub = await local.saveSaved({ name: 'Older.docx', bytes: bytes(2), folderId: sub.id });
+  const elsewhere = await local.saveSaved({ name: 'Elsewhere.docx', bytes: bytes(3) });
+  for (const d of [fromTop, fromSub, elsewhere]) await local.trashSaved(d.id);
+  await convert.encryptFolder(top, [top, sub], [], guest);
+  const found = await convert.readableTrashIn(top, [top, sub], guest);
+  assert.deepEqual(found.cloud, []);
+  assert.deepEqual(new Set(found.local), new Set([fromTop.id, fromSub.id]), 'what was in its tree, not what was elsewhere');
+  await convert.purgeReadableTrash(found);
+  const left = (await local.listTrashedSaved()).map((r) => r.info.id);
+  assert.deepEqual(left, [elsewhere.id]);
+});

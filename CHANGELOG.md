@@ -1,5 +1,18 @@
 # What’s New in Golem Docs
 
+## 0.45.1 - Unreleased
+
+### Changed
+
+- A document, picture or folder shared “Can view” or by public link now follows the owner's edits: the page shows each save a few seconds after it is made, instead of checking every half minute (or every two minutes for a public link).
+- Encrypting a folder now tells you when documents deleted from it earlier are still in Trash, readable, and offers to delete them for good.
+
+### Fixed
+
+- Encryption: an earlier version of an encrypted document that was never encrypted can no longer be restored as an encrypted document the server could read, and the server checks that a large encrypted document sent in parts is the size of an encrypted file.
+- While a document or folder is being encrypted or decrypted, its dialog now says what it is doing (“Encrypting “Family””) rather than repeating the question, shows a progress bar, and no longer has a focus ring around it.
+- A picture shared “Can view” or by public link now shows the owner's changes instead of the first version it opened.
+
 ## 0.45.0 - 2026-11-22
 
 ### Added

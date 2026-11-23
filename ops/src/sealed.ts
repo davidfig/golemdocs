@@ -81,3 +81,12 @@ export function paddedLength(n: number): number {
   const step = 2 ** (Math.floor(Math.log2(need)) - 4);
   return Math.ceil(need / step) * step;
 }
+
+/**
+ * Whether `size` bytes can be a sealed file: the header and tag around a padded file (`paddedLength`). The server checks it for a file it
+ * gets in chunks, where only the first chunk shows the envelope: readable bytes added after a sealed start would not fit.
+ */
+export function isSealedSize(size: number): boolean {
+  const padded = size - SEALED_HEADER_BYTES - SEALED_TAG_BYTES;
+  return padded >= 4096 && paddedLength(padded - 4) === padded;
+}

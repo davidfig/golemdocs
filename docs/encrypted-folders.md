@@ -21,6 +21,14 @@ What a breach still shows: the name of a folder that was encrypted (the person c
 included, are sealed), which documents are encrypted and roughly how big they are (*Padding*), when each was created, saved and deleted, how
 many versions history keeps, and the shape of the folder tree.
 
+**Read, not write.** Someone who can also write to the storage can't read or forge an encrypted document, but can put back an older file
+of the same document (a version, or the file as it was), or swap its versions: AES-GCM shows a file was made with the document's key, not
+that it is the newest. Telling would need a record of the newest that the server can't change, which the browser doesn't have across
+devices. Each document has its own key, so a file can't be passed off as another document's.
+
+**Copies outside the app.** A vault folder in "Desktop & Documents" in iCloud (macOS) is uploaded under an unchanged path, so the check
+before decrypting into it can't refuse it (`syncedService`); its question names that setting instead.
+
 ## Decisions
 
 - **Encrypt what you have.** A document's menu has Encrypt… (Decrypt… once it is); so has a folder's. There is no special kind of folder to
@@ -35,6 +43,8 @@ many versions history keeps, and the shape of the folder tree.
   first and then decrypted (the server decrypts nothing inside an encrypted folder). A subfolder moved out is decrypted with everything in
   it. Cancel leaves it where it was. Moves made in the vault folder never decrypt (nobody is there to ask; see *Decrypted into the vault
   folder*).
+- **The key's text is not kept.** Unlocking keeps only a key WebCrypto won't give back and a fingerprint (`PersonalKey.id`); setup
+  returns the text once, to show. A script in the page can use an unlocked key, but not carry it off.
 - **The key is random and the person keeps it.** A 256-bit **personal key**, generated in the browser, shown once to save in a password
   manager. The server never has it, so there is no passphrase to guess offline. It is never stored on a device either: it is pasted in to
   unlock, held in memory, and gone when the session ends. One key opens everything the person encrypted.
@@ -120,6 +130,10 @@ vault folder… in its menu, in the desktop app only, while it has a vault folde
   is finished the next time the document is opened unlocked.
 - **Converting** a folder is `PUT /api/folders/:id { encrypted }`; the browser then converts what is in it.
 - **It refuses** for encrypted documents and folders: shares, public links, folder shares, rooms, the search index, thumbnails.
+- **Sizes:** a whole file, or a file sent in chunks (where only the first chunk shows the envelope), must be the size of a sealed file
+  (`isSealedSize`, ops): the header and tag around a padded file, so readable bytes added after a sealed start are refused.
+- **Restoring a version** makes a document of its document's kind only: a version not converted yet (a conversion cut short) is refused,
+  sealed one for an ordinary document, readable one for an encrypted one.
 
 ## The browser
 
@@ -128,6 +142,9 @@ vault folder… in its menu, in the desktop app only, while it has a vault folde
   document's key. Its local history is kept sealed. No thumbnail, undo steps, search index or edit journal is kept for it.
 - **The cloud client** sends every name of an encrypted document or folder sealed, and a new one's `wrappedKey`.
 - **The library** (`encryption/present.ts`) shows names opened while unlocked, placeholders with a padlock while locked.
+- **Trash:** documents deleted from a folder before it was encrypted stay readable in the trash until they are deleted for good. After
+  encrypting a folder, the app lists them (`readableTrashIn`, from each trashed document's `folderId`) and offers to delete them for good
+  (`offerToPurgeTrash`, `ui.ts`).
 - **Conversion** (`encryption/convert.ts`): a document's file, name and every version, here and in the account; a folder's subfolders and
   documents, one at a time, with progress. Conversions run one at a time (`exclusive`). A folder's encryption cut short is finished while
   unlocked, a moment after the library lists it (`finishEncrypting`, from `main.ts`); until then, uploads of what is left readable in it wait

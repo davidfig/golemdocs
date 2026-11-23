@@ -3833,6 +3833,13 @@ body.wm-fullscreen .wm-keys {
 .wm-encryption-dialog p {
   margin: 0 0 10px;
 }
+/* While encrypting or decrypting: nothing in it takes the focus, so the dialog holds it, without a ring around the whole card. */
+.wm-dialog.wm-encryption-progress:focus-visible {
+  outline: none;
+}
+.wm-encryption-progress .wm-progress-track {
+  margin-bottom: 4px;
+}
 .wm-encryption-field {
   display: grid;
   gap: 4px;

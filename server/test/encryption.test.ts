@@ -31,8 +31,10 @@ const MIN = 60_000;
 const uuid = () => crypto.randomUUID();
 const json = (value: unknown) => ({ body: JSON.stringify(value), type: 'application/json' });
 const call = (method: string, path: string, init: { body?: BodyInit; type?: string; headers?: Record<string, string> } = {}, as = OWNER) => w.call(as, method, path, init);
-/** Something shaped like a sealed file (the server only looks at the shape, and at which key it names: `k`'s, when given). */
-const sealed = (fill = 9, length = 100, k?: string) => {
+/** The size of a sealed file of up to 4 KiB: the header and tag around the smallest padding (@golemdocs/ops `isSealedSize`). */
+const SEALED = 4096 + 32 + 16;
+/** Something shaped like a sealed file (the server only looks at the shape, its size, and which key it names: `k`'s, when given). */
+const sealed = (fill = 9, length = SEALED, k?: string) => {
   const out = new Uint8Array(length).fill(fill);
   out.set(SEALED_MAGIC, 0);
   return k ? stamp(out, k) : out;
@@ -76,11 +78,11 @@ test('a document is encrypted when it is made with its key: sealed file and name
   assert.equal(made.encrypted, true);
   assert.equal(made.wrappedKey, k);
   assert.equal((await docs()).find((d) => d.id === made.id).wrappedKey, k, 'listed with its key');
-  assert.deepEqual(new Uint8Array(await (await call('GET', `/api/documents/${made.id}`)).arrayBuffer()), sealed(9, 100, k));
+  assert.deepEqual(new Uint8Array(await (await call('GET', `/api/documents/${made.id}`)).arrayBuffer()), sealed(9, SEALED, k));
   // Saves and renames stay sealed.
   assert.equal((await call('PUT', `/api/documents/${made.id}`, { body: plain() as BodyInit, type: DOCX })).status, 400);
   assert.equal((await call('PATCH', `/api/documents/${made.id}`, json({ name: 'Visible.docx' }))).status, 400);
-  assert.equal((await call('PUT', `/api/documents/${made.id}?base=${made.updatedAt}`, { body: sealed(3, 100, k) as BodyInit, type: DOCX })).status, 200);
+  assert.equal((await call('PUT', `/api/documents/${made.id}?base=${made.updatedAt}`, { body: sealed(3, SEALED, k) as BodyInit, type: DOCX })).status, 200);
   // Moved anywhere: it carries its own key.
   const elsewhere = (await folder('Elsewhere')).id;
   assert.equal((await call('PATCH', `/api/documents/${made.id}`, json({ folderId: elsewhere }))).status, 200);
@@ -100,8 +102,8 @@ test('converting a document: its file and name, then each kept version in place,
   // Encrypt: the readable copy it replaces is not kept as a version.
   assert.equal((await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${name}&base=${doc.updatedAt}`, { body: plain(5) as BodyInit, type: DOCX })).status, 400, 'sealed bytes only');
   assert.equal((await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=Plan.docx&base=${doc.updatedAt}`, { body: sealed() as BodyInit, type: DOCX })).status, 400, 'a sealed name only');
-  assert.equal((await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${name}&base=${doc.updatedAt}`, { body: sealed(9, 100, k) as BodyInit, type: DOCX }, ALICE)).status, 404, 'the owner’s call');
-  const converted = await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${name}&base=${doc.updatedAt}`, { body: sealed(9, 100, k) as BodyInit, type: DOCX });
+  assert.equal((await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${name}&base=${doc.updatedAt}`, { body: sealed(9, SEALED, k) as BodyInit, type: DOCX }, ALICE)).status, 404, 'the owner’s call');
+  const converted = await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${name}&base=${doc.updatedAt}`, { body: sealed(9, SEALED, k) as BodyInit, type: DOCX });
   assert.equal(converted.status, 200);
   const after = (await converted.json()) as any;
   assert.equal(after.encrypted, true);
@@ -111,17 +113,17 @@ test('converting a document: its file and name, then each kept version in place,
   const first = before[0]!;
   assert.equal((await call('PUT', `/api/documents/${doc.id}/versions/${first.version}`, { body: plain() as BodyInit, type: DOCX })).status, 400);
   for (const v of before) {
-    const response = await call('PUT', `/api/documents/${doc.id}/versions/${v.version}${v.name ? `?name=${sealedName()}` : ''}`, { body: sealed(v.version % 200, 100, k) as BodyInit, type: DOCX });
+    const response = await call('PUT', `/api/documents/${doc.id}/versions/${v.version}${v.name ? `?name=${sealedName()}` : ''}`, { body: sealed(v.version % 200, SEALED, k) as BodyInit, type: DOCX });
     assert.equal(response.status, 200);
   }
   const resealed = await versions(doc.id);
   assert.deepEqual(resealed.map((v) => v.version), before.map((v) => v.version));
   assert.ok(resealed.every((v) => v.sealed));
   assert.ok(resealed.every((v) => v.name === null || v.name.startsWith('gde1.')));
-  assert.deepEqual(new Uint8Array(await (await call('GET', `/api/documents/${doc.id}/versions/${first.version}`)).arrayBuffer()), sealed(first.version % 200, 100, k));
+  assert.deepEqual(new Uint8Array(await (await call('GET', `/api/documents/${doc.id}/versions/${first.version}`)).arrayBuffer()), sealed(first.version % 200, SEALED, k));
   // A save of the encrypted document keeps a sealed version.
   clock += 30 * MIN;
-  const saved = (await (await call('PUT', `/api/documents/${doc.id}?base=${after.updatedAt}`, { body: sealed(7, 100, k) as BodyInit, type: DOCX })).json()) as any;
+  const saved = (await (await call('PUT', `/api/documents/${doc.id}?base=${after.updatedAt}`, { body: sealed(7, SEALED, k) as BodyInit, type: DOCX })).json()) as any;
   assert.ok((await versions(doc.id)).find((v) => v.version === after.updatedAt)?.sealed);
   // Decrypt: readable file and name, and versions back one by one.
   assert.equal((await call('PUT', `/api/documents/${doc.id}?decrypt=1&name=Plan.docx&base=${saved.updatedAt}`, { body: sealed() as BodyInit, type: DOCX })).status, 400);
@@ -182,9 +184,13 @@ test('a large encrypted document uploads as chunks only if its first chunk is se
     }
     return out;
   };
-  const send = (chunks: Uint8Array[]) => call('POST', `/api/documents?name=${sealedName()}&key=${key()}`, { body: delta(chunks) as BodyInit, type: DELTA });
-  assert.equal((await send([new Uint8Array(1000).fill(1), sealed(2, 1000)])).status, 400);
-  assert.equal((await send([sealed(1, 1000), new Uint8Array(1000).fill(2)])).status, 201);
+  const send = (chunks: Uint8Array[], k = key()) => call('POST', `/api/documents?name=${sealedName()}&key=${k}`, { body: delta(chunks) as BodyInit, type: DELTA });
+  const half = SEALED / 2;
+  const k = key();
+  assert.equal((await send([new Uint8Array(half).fill(1), sealed(2, half, k)], k)).status, 400, 'a first chunk that is not sealed');
+  assert.equal((await send([sealed(1, half, key()), new Uint8Array(half).fill(2)], k)).status, 400, 'sealed with another key');
+  assert.equal((await send([sealed(1, half, k), new Uint8Array(half).fill(2), new Uint8Array(500).fill(3)], k)).status, 400, 'readable bytes added after a sealed file');
+  assert.equal((await send([sealed(1, half, k), new Uint8Array(half).fill(2)], k)).status, 201);
 });
 
 test('what would need the server to read an encrypted document, or give it to someone, is refused', async () => {
@@ -246,7 +252,7 @@ test('encrypting a document drops what was made readable from it, and ends its s
   assert.ok(link);
   const k = key();
   const current = (await docs()).find((d) => d.id === doc.id);
-  const converted = await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${sealedName()}&base=${current.updatedAt}`, { body: sealed(9, 100, k) as BodyInit, type: DOCX });
+  const converted = await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${sealedName()}&base=${current.updatedAt}`, { body: sealed(9, SEALED, k) as BodyInit, type: DOCX });
   assert.equal(converted.status, 200);
   assert.equal(((await converted.json()) as any).thumbAt, null);
   assert.ok(!w.objects.has(`${ownerKey}/${doc.id}.thumb`), 'the thumbnail shows its first page');
@@ -274,9 +280,9 @@ test('encrypting a folder ends its shares and its public link', async () => {
 test('an encrypted document is saved only sealed with its own key; one left readable in an encrypted folder only by being encrypted', async () => {
   const k = key();
   const doc = (await (await create(sealed(), sealedName(), { key: k })).json()) as any;
-  assert.equal((await call('PUT', `/api/documents/${doc.id}?base=${doc.updatedAt}`, { body: sealed(4, 100, key()) as BodyInit, type: DOCX })).status, 400, 'sealed with another key');
+  assert.equal((await call('PUT', `/api/documents/${doc.id}?base=${doc.updatedAt}`, { body: sealed(4, SEALED, key()) as BodyInit, type: DOCX })).status, 400, 'sealed with another key');
   assert.equal((await call('PUT', `/api/documents/${doc.id}?base=${doc.updatedAt}`, { body: sealed(4) as BodyInit, type: DOCX })).status, 400, 'only shaped like a sealed file');
-  assert.equal((await call('PUT', `/api/documents/${doc.id}?base=${doc.updatedAt}`, { body: sealed(4, 100, k) as BodyInit, type: DOCX })).status, 200);
+  assert.equal((await call('PUT', `/api/documents/${doc.id}?base=${doc.updatedAt}`, { body: sealed(4, SEALED, k) as BodyInit, type: DOCX })).status, 200);
   // A folder encrypted while a document in it was not yet (its encryption cut short): that document takes no readable save.
   const taxes = (await folder('Taxes')).id;
   const left = (await (await create(plain(), 'Left.docx', { folder: taxes })).json()) as any;
@@ -285,5 +291,26 @@ test('an encrypted document is saved only sealed with its own key; one left read
   assert.equal(refused.status, 409);
   assert.equal(await codeOf(refused), 'encrypted');
   const k2 = key();
-  assert.equal((await call('PUT', `/api/documents/${left.id}?encrypt=${k2}&name=${sealedName()}&base=${left.updatedAt}`, { body: sealed(9, 100, k2) as BodyInit, type: DOCX })).status, 200);
+  assert.equal((await call('PUT', `/api/documents/${left.id}?encrypt=${k2}&name=${sealedName()}&base=${left.updatedAt}`, { body: sealed(9, SEALED, k2) as BodyInit, type: DOCX })).status, 200);
+});
+
+test('a version is restored only as the kind its document is now: sealed with its key, or readable', async () => {
+  // An encrypted document whose versions are not all sealed yet (its conversion cut short).
+  let doc = (await (await create(plain(1), 'Plan.docx')).json()) as any;
+  clock += 30 * MIN;
+  doc = (await (await call('PUT', `/api/documents/${doc.id}?base=${doc.updatedAt}`, { body: plain(2) as BodyInit, type: DOCX })).json()) as any;
+  const [readable] = await versions(doc.id);
+  const k = key();
+  const converted = (await (await call('PUT', `/api/documents/${doc.id}?encrypt=${k}&name=${sealedName()}&base=${doc.updatedAt}`, { body: sealed(9, SEALED, k) as BodyInit, type: DOCX })).json()) as any;
+  assert.equal(converted.encrypted, true);
+  const refused = await call('POST', `/api/documents/${doc.id}/versions/${readable!.version}/restore`);
+  assert.equal(refused.status, 400, 'a readable version would become an encrypted document the server can read');
+  assert.equal((await call('PUT', `/api/documents/${doc.id}/versions/${readable!.version}`, { body: sealed(5, SEALED, k) as BodyInit, type: DOCX })).status, 200);
+  assert.equal((await call('POST', `/api/documents/${doc.id}/versions/${readable!.version}/restore`)).status, 201);
+  // Decrypted again, with that version still sealed (the decryption cut short): it isn't restored as an ordinary document.
+  const current = (await docs()).find((d) => d.id === doc.id);
+  assert.equal((await call('PUT', `/api/documents/${doc.id}?decrypt=1&name=Plan.docx&base=${current.updatedAt}`, { body: plain(3) as BodyInit, type: DOCX })).status, 200);
+  const stillSealed = await call('POST', `/api/documents/${doc.id}/versions/${readable!.version}/restore`);
+  assert.equal(stillSealed.status, 409);
+  assert.equal(await codeOf(stillSealed), 'encrypted');
 });

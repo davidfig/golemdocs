@@ -17,6 +17,7 @@ import { mountSignIn } from '../ui/signIn.ts';
 import { firstFile, folderTree, resolveFolderLink, type TreeFolder } from './folderLinks.ts';
 import { savedViewMode } from '../ui/viewMode.ts';
 import { CHECK_MS, downloader, downloading, highContrast, PAGE_TITLE, PUBLIC_CHECK_MS, say, sayIn } from './page.ts';
+import { followSaves, type LiveLine } from './live.ts';
 import { checkOutcome } from './protocol.ts';
 import { mount, type Viewer } from './viewer.ts';
 
@@ -165,7 +166,11 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
   // left when another file opens, as in the editor.
   let view = savedViewMode();
 
+  // The live line for the file shown (live.ts): each save of it makes the page check at once.
+  let live: LiveLine | null = null;
   const close = (): void => {
+    live?.stop();
+    live = null;
     viewer?.destroy();
     viewer = null;
     shown = null;
@@ -206,6 +211,7 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
     // A copy for Download: the viewer is handed the bytes, which go to its worker.
     const opened = { path, etag: response.headers.get('etag'), stored: isPublic ? new Uint8Array(bytes.slice(0)) : null };
     shown = opened;
+    live = followSaves(`${api}/live?path=${encodeURIComponent(path)}`, () => void check());
     docEl.replaceChildren();
     viewer = mount(docEl, {
       bytes,

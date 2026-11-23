@@ -204,7 +204,7 @@ export async function opens(key: string | undefined | null): Promise<boolean> {
  */
 export async function unlock(text: string): Promise<number> {
   const key = await openPersonalKey(text);
-  if (personal.some((p) => p.text === key.text)) return Math.max(unlocked.size, 1);
+  if (personal.some((p) => p.id === key.id)) return Math.max(unlocked.size, 1);
   let opened = 0;
   for (const [id, item] of wrapped) {
     if (unlocked.has(id)) continue;
@@ -224,14 +224,15 @@ export async function unlock(text: string): Promise<number> {
   return Math.max(opened, 1);
 }
 
-/** A key made for the person (setup): unlocked at once, and returned so its text can be shown and saved. */
-export async function createKey(): Promise<PersonalKey> {
-  const key = await newPersonalKey();
-  personal.push(key);
-  verified.add(key);
+/** A key made for the person (setup): unlocked at once, and its text returned to be shown and saved. Only the key is kept, not the text. */
+export async function createKey(): Promise<{ text: string; id: string }> {
+  const { text, id, key } = await newPersonalKey();
+  const kept: PersonalKey = { id, key };
+  personal.push(kept);
+  verified.add(kept);
   touch();
   emit();
-  return key;
+  return { text, id };
 }
 
 /** The personal key new item keys are wrapped with: the first one known to be the person's (see `verified`). */

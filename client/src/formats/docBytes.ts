@@ -16,9 +16,20 @@ export function isWorkbook(bytes: ArrayBuffer | Uint8Array): boolean {
   }
 }
 
+/** Whether stored bytes are a deck (a ZIP with ppt/presentation.xml): kept as the .pptx itself, edited in the slides editor. */
+export function isDeck(bytes: ArrayBuffer | Uint8Array): boolean {
+  const b = new Uint8Array(bytes);
+  if (b.length < 4 || b[0] !== 0x50 || b[1] !== 0x4b) return false;
+  try {
+    return ZipArchive.read(b).entries.has('ppt/presentation.xml');
+  } catch {
+    return false;
+  }
+}
+
 /** The document in a stored document's bytes; null when it has none (a PDF not turned into text yet, a workbook). */
 export async function wordDocumentFromBytes(bytes: ArrayBuffer): Promise<WordDocument | null> {
-  if (isPlainText(new Uint8Array(bytes)) || isWorkbook(bytes)) return null;
+  if (isPlainText(new Uint8Array(bytes)) || isWorkbook(bytes) || isDeck(bytes)) return null;
   const docx = isWdoc(bytes) ? (await readWdoc(new Uint8Array(bytes))).document : new Uint8Array(bytes);
   return docx ? WordDocument.read(docx) : null;
 }
@@ -53,6 +64,11 @@ export async function segmentsFromBytes(bytes: ArrayBuffer): Promise<Segment[] |
     const segments: Segment[] = rows.map((row) => ({ text: row.filter(Boolean).join(' ') })).filter((s) => s.text);
     // The sources of its live ranges, on a line of their own (the vault graph: docs/live-blocks.md §5).
     return live.length ? [liveLine(live), ...segments] : segments;
+  }
+  // A deck: a paragraph a line of its slides' text and notes.
+  if (isDeck(bytes)) {
+    const { deckIndexed } = await import('./handlers/pptx.ts');
+    return (await deckIndexed(new Uint8Array(bytes))).map((text) => ({ text }));
   }
   let live: string[] = [];
   if (isWdoc(bytes)) {

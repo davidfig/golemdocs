@@ -15,9 +15,9 @@ import { jpeg as jpegHandler, png as pngHandler, webp as webpHandler } from './h
 import mdHandler from './handlers/md.ts';
 
 /** The formats a document can be opened, saved and switched to. */
-export type Format = 'docx' | 'odt' | 'rtf' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'pdf' | 'md' | 'txt' | 'xlsx';
+export type Format = 'docx' | 'odt' | 'rtf' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'pdf' | 'md' | 'txt' | 'xlsx' | 'pptx';
 
-export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'svg', 'svgz', 'pdf', 'md', 'txt', 'xlsx'];
+export const FORMAT_LIST: readonly Format[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'svg', 'svgz', 'pdf', 'md', 'txt', 'xlsx', 'pptx'];
 
 export function isFormat(kind: string): kind is Format {
   return (FORMAT_LIST as readonly string[]).includes(kind);
@@ -78,6 +78,7 @@ const HANDLERS: Record<Format, () => Promise<FormatHandler>> = {
   svgz: async () => (await import('./handlers/svg.ts')).svgz,
   txt: async () => txtHandler,
   xlsx: async () => (await import('./handlers/xlsx.ts')).default,
+  pptx: async () => (await import('./handlers/pptx.ts')).default,
 };
 
 /** Reads a file into the model, with the format's own extension. */
@@ -123,6 +124,8 @@ export async function convertContent(content: OpenContent, to: Format, fonts: Fo
  */
 export function conversionIsLossy(from: Format, to: Format): boolean {
   if (from === to) return false;
+  // A deck is shapes on slides: as a document it is an outline of their text, and a document becomes a deck of its headings.
+  if (from === 'pptx' || to === 'pptx') return true;
   // OPML holds plain one-line entries, and FictionBook has no lists or code blocks.
   if (to === 'opml' || to === 'fb2') return from !== 'txt' && from !== 'csv' && from !== 'tsv';
   // A picture document is a page with the picture on it: nothing is lost going to Word or PDF, or to PNG; JPEG and WebP compress.

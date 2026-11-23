@@ -389,10 +389,29 @@ export class OpcPackage {
    * used them finds them): relationships by part and id, and parts under `unreferencedUnder` (`word/media/`) that no
    * relationship written points at.
    */
-  async write(omit: { relationships?: Map<string, Set<string>>; unreferencedUnder?: string } = {}): Promise<Uint8Array> {
+  async write(omit: { relationships?: Map<string, Set<string>>; unreferencedUnder?: string; unreachableUnder?: readonly string[] } = {}): Promise<Uint8Array> {
     const inputs: ZipInput[] = [];
     const omitRels = omit.relationships ?? new Map<string, Set<string>>();
     const omitted = new Set<string>();
+    if (omit.unreachableUnder?.length) {
+      // Parts under these folders that no chain of relationships from the package reaches (a deleted slide, and its notes).
+      const prefixes = omit.unreachableUnder.map((p) => p.toLowerCase());
+      const reached = new Set<string>();
+      const queue = [''];
+      while (queue.length) {
+        const owner = queue.pop()!;
+        const rels = await this.relationships(owner);
+        const skip = omitRels.get(owner);
+        for (const rel of rels.list) {
+          if (rel.external || skip?.has(rel.id)) continue;
+          const target = this.resolveName(rels.partName(rel));
+          if (target === undefined || reached.has(target)) continue;
+          reached.add(target);
+          queue.push(target);
+        }
+      }
+      for (const name of this.parts.keys()) if (!reached.has(name) && prefixes.some((p) => name.toLowerCase().startsWith(p))) omitted.add(name);
+    }
     if (omit.unreferencedUnder) {
       const prefix = omit.unreferencedUnder.toLowerCase();
       const referenced = new Set<string>();

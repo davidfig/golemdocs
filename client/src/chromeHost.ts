@@ -17,7 +17,7 @@ import type { GpuPage } from './webgl/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
 import type { FindTab } from './ui/findDialog.ts';
 import { blankSource, lastNewKind } from './ui/newKinds.ts';
-import { acceptList, worksWithoutDocument, type ImageOp, type SheetOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type ListedDocument, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
+import { acceptList, worksWithoutDocument, type ImageOp, type SheetOp, type SlidesOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type ListedDocument, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
 import { t } from './i18n/index.ts';
 
 export interface AppHooks {
@@ -114,6 +114,7 @@ export interface AppHooks {
   imageAction(op: ImageOp): Promise<void>;
   /** The spreadsheet editor's commands (Sheet menu, context menus). */
   sheetAction(op: SheetOp): void;
+  slidesAction(op: SlidesOp): void;
   /** A vector editor tool or command (select, draw a shape, group, order...). */
   vectorAction(op: VectorOp): void;
   /** The look of the selected shapes and of the next ones. */
@@ -207,6 +208,7 @@ const LEAVES_SOURCE = new Set<ActionKind>(['print', 'printPreview', 'convert', '
 
 const SUPPORTED = new Set<ActionKind>([
   'sheet',
+  'slides',
   'new',
   'open',
   'close',
@@ -501,6 +503,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.imageAction(action.op);
         case 'sheet':
           return app.sheetAction(action.op);
+        case 'slides':
+          return app.slidesAction(action.op);
         case 'drawStyle':
           {
           const { kind: _kind, ...change } = action;

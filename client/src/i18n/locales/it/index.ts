@@ -11,6 +11,7 @@ import { encryption } from './encryption.ts';
 import { history } from './history.ts';
 import { textEditor } from './textEditor.ts';
 import { sheet } from './sheet.ts';
+import { slides } from './slides.ts';
 import { link } from './link.ts';
 import { live } from './live.ts';
 import { scripts } from './scripts.ts';
@@ -30,4 +31,4 @@ import { pasteSpecial } from './pasteSpecial.ts';
 import { properties } from './properties.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Partial<Messages> = { ...a11y, ...a11ySheet, ...app, ...chrome, ...columns, ...dialogs, ...encryption, ...history, ...textEditor, ...sheet, ...link, ...live, ...scripts, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };
+export const messages: Partial<Messages> = { ...a11y, ...a11ySheet, ...app, ...chrome, ...columns, ...dialogs, ...encryption, ...history, ...textEditor, ...sheet, ...slides, ...link, ...live, ...scripts, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };

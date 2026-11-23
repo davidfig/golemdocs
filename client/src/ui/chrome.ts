@@ -6,6 +6,7 @@
 import {
   DEFAULT_STATE,
   SHEET_OPS,
+  SLIDES_OPS,
   type Action,
   type Alignment,
   type CaseChange,
@@ -620,6 +621,15 @@ export class Chrome {
     };
     for (const op of SHEET_OPS) r.add(a(`sheet.${op}`, t(`sheet.op.${op}`), { kind: 'sheet', op }, SHEET_ICONS[op] ? { icon: SHEET_ICONS[op] } : {}));
 
+    // Slides: the Slide menu, Insert's slide items and View's (the editor's own keys and context menus do the rest; see slides/view.ts).
+    const SLIDE_ICONS: Partial<Record<(typeof SLIDES_OPS)[number], string>> = { textBox: 'text', picture: 'image', table: 'table', shape: 'shapes' };
+    for (const op of SLIDES_OPS) {
+      if (op === 'cut' || op === 'copy' || op === 'paste') continue;
+      // The show, the notes pane and the lists of layouts, shapes and table sizes take the keyboard: it is not handed back to the slides.
+      const takesKeyboard = op === 'presentStart' || op === 'presentCurrent' || op === 'notes' || op === 'layout' || op === 'shape' || op === 'table' || op === 'picture';
+      r.add(a(`slides.${op}`, t(`slides.op.${op}`), { kind: 'slides', op }, { ...(SLIDE_ICONS[op] && { icon: SLIDE_ICONS[op] }), ...(takesKeyboard && { takesKeyboard }) }));
+    }
+
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
     for (const [tool, icon] of [['select', 'select'], ['rect', 'rectangle'], ['ellipse', 'ellipse'], ['shape', 'shapes'], ['line', 'line'], ['pen', 'penTool'], ['pencil', 'pencil'], ['nudge', 'nudge'], ['text', 'text'], ['canvas', 'canvasTool']] as const) {
       r.add(a(`vector.${tool}`, t(`vector.${tool}`), { kind: 'vector', op: tool }, { icon, scope: 'vector', shortcut: VECTOR_TOOL_KEYS[tool], checked: (s) => s.vector.tool === tool }));
@@ -881,6 +891,7 @@ export class Chrome {
           cmd('view.print'),
           cmd('view.flow'),
           cmd('view.grid'),
+          cmd('slides.sorter'),
           cmd('view.markdownSource'),
           sep,
           sub(t('chrome.view.toolbars'), [cmd('view.toolbars'), sep, cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
@@ -894,6 +905,7 @@ export class Chrome {
           cmd('view.editForm'),
           sep,
           cmd('view.pagesPanel'),
+          cmd('slides.notes'),
           cmd('view.filesPanel'),
           cmd('view.footer'),
           sep,
@@ -946,6 +958,10 @@ export class Chrome {
           cmd('insert.drawing'),
           cmd('insert.textBox'),
           cmd('insert.table'),
+          cmd('slides.textBox'),
+          cmd('slides.shape'),
+          cmd('slides.picture'),
+          cmd('slides.table'),
           cmd('sheet.insertPivot'),
           sub(t('sheet.chart'), [cmd('sheet.chartColumn'), cmd('sheet.chartBar'), cmd('sheet.chartLine'), cmd('sheet.chartArea'), cmd('sheet.chartPie'), cmd('sheet.chartDoughnut'), cmd('sheet.chartScatter')]),
           sub(t('sheet.sparklines'), [cmd('sheet.sparklineLine'), cmd('sheet.sparklineColumn'), cmd('sheet.sparklineWinLoss'), sep, cmd('sheet.clearSparklines')]),
@@ -1099,6 +1115,27 @@ export class Chrome {
           sep,
           cmd('sheet.nextSheet'),
           cmd('sheet.previousSheet'),
+        ],
+      },
+      {
+        label: t('slides.menu'),
+        items: [
+          cmd('slides.newSlide'),
+          cmd('slides.duplicateSlide'),
+          cmd('slides.deleteSlide'),
+          cmd('slides.hideSlide'),
+          sep,
+          cmd('slides.moveSlideUp'),
+          cmd('slides.moveSlideDown'),
+          cmd('slides.layout'),
+          cmd('slides.resetSlide'),
+          sep,
+          cmd('slides.duplicateShape'),
+          cmd('slides.deleteShape'),
+          sub(t('slides.arrange'), [cmd('slides.bringToFront'), cmd('slides.bringForward'), cmd('slides.sendBackward'), cmd('slides.sendToBack')]),
+          sep,
+          cmd('slides.presentStart'),
+          cmd('slides.presentCurrent'),
         ],
       },
       {

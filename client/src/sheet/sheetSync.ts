@@ -8,6 +8,8 @@ import { RoomClient, type RoomHost } from '../collab/roomClient.ts';
 import type { RoomState } from '../layout/protocol.ts';
 
 export interface SheetRoomOptions {
+  /** A workbook's room (`cells`, the default) or a deck's (`slides`): both are watched, and work the same way. */
+  kind?: 'cells' | 'slides';
   docId: string;
   client: string;
   name: string;
@@ -65,6 +67,6 @@ export function sheetRoom(o: SheetRoomOptions): SheetRoom {
     release: () => o.release(),
     flush: () => o.flush(),
   };
-  const client = new RoomClient({ client: o.client, name: o.name, color: o.color, kind: 'cells', host, ...cloudRoomTransport(o.docId), upload: o.upload });
+  const client = new RoomClient({ client: o.client, name: o.name, color: o.color, kind: o.kind ?? 'cells', host, ...cloudRoomTransport(o.docId), upload: o.upload });
   return { client };
 }

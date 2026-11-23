@@ -229,24 +229,33 @@ function paintNode(out: Out, node: SceneNode, parentChain: readonly Style[], par
 }
 
 /** The scene as a one-page PDF the size of the drawing. */
-export async function sceneToPdf(scene: Scene, title?: string): Promise<Uint8Array> {
+export function sceneToPdf(scene: Scene, title?: string): Promise<Uint8Array> {
+  return scenesToPdf([scene], title);
+}
+
+/** Scenes as the pages of one PDF, each the size of its scene (a deck's slides, docs/slides.md); fonts and pictures are shared. */
+export async function scenesToPdf(scenes: readonly Scene[], title?: string): Promise<Uint8Array> {
   const pdf = PdfDocument.create();
   if (title) pdf.setMetadata('Title', title);
   pdf.setMetadata('Creator', 'Golem Docs');
   pdf.setMetadata('Producer', 'Golem Docs PDF export');
-  const width = Math.max(scene.width * PT, 1);
-  const height = Math.max(scene.height * PT, 1);
-  const page = pdf.addPage([width, height]);
-  const d = page.draw();
-  // User units to points, y downward.
-  d.transform(PT, 0, 0, -PT, 0, height);
-  d.save();
-  // The drawing is clipped to its own area.
-  d.rectPath(0, 0, scene.width, scene.height).clip();
-  d.transform(...(viewBoxMatrix(scene) as Matrix as readonly [number, number, number, number, number, number]));
-  const out: Out = { d, scene, pdf, fonts: new Map(), images: new Map(), depth: 0 };
-  for (const node of scene.children) paintNode(out, node, [scene.style], 1);
-  d.restore();
-  d.finish();
+  const fonts = new Map<string, PdfFont>();
+  const images = new Map<string, PdfImage | null>();
+  for (const scene of scenes) {
+    const width = Math.max(scene.width * PT, 1);
+    const height = Math.max(scene.height * PT, 1);
+    const page = pdf.addPage([width, height]);
+    const d = page.draw();
+    // User units to points, y downward.
+    d.transform(PT, 0, 0, -PT, 0, height);
+    d.save();
+    // The drawing is clipped to its own area.
+    d.rectPath(0, 0, scene.width, scene.height).clip();
+    d.transform(...(viewBoxMatrix(scene) as Matrix as readonly [number, number, number, number, number, number]));
+    const out: Out = { d, scene, pdf, fonts, images, depth: 0 };
+    for (const node of scene.children) paintNode(out, node, [scene.style], 1);
+    d.restore();
+    d.finish();
+  }
   return pdf.save();
 }

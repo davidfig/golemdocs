@@ -11,6 +11,7 @@ import { encryption } from './encryption.ts';
 import { history } from './history.ts';
 import { textEditor } from './textEditor.ts';
 import { sheet } from './sheet.ts';
+import { slides } from './slides.ts';
 import { link } from './link.ts';
 import { live } from './live.ts';
 import { math } from './math.ts';
@@ -30,7 +31,7 @@ import { vector } from './vector.ts';
 import { viewer } from './viewer.ts';
 import { wordCount } from './wordCount.ts';
 
-export const catalogs = [a11y, a11ySheet, app, chrome, columns, dialogs, encryption, history, textEditor, sheet, link, live, math, menus, pageSetup, panels, format, paragraph, pasteSpecial, picture, properties, scripts, spelling, table, vault, vector, viewer, wordCount] as const;
+export const catalogs = [a11y, a11ySheet, app, chrome, columns, dialogs, encryption, history, textEditor, sheet, slides, link, live, math, menus, pageSetup, panels, format, paragraph, pasteSpecial, picture, properties, scripts, spelling, table, vault, vector, viewer, wordCount] as const;
 
 export const en = Object.assign({}, ...catalogs) as UnionToIntersection<(typeof catalogs)[number]>;
 

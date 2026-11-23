@@ -24,7 +24,7 @@ const TITLE_SIZE = 14;
 const PAD = 7;
 
 /** A series' data as the chart shows it: categories (or x values) and values, from its cells. */
-interface Resolved {
+export interface Resolved {
   name: string;
   cats: string[];
   vals: (number | null)[];

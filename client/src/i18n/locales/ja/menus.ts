@@ -40,6 +40,7 @@ export const menus: Partial<Messages> = {
   'menus.format.tsv': 'TSV (タブ区切り)',
   'menus.format.txt': 'テキスト',
   'menus.format.xlsx': 'Excel ブック',
+  'menus.format.pptx': 'PowerPoint プレゼンテーション',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': '電子メール メッセージ',
   'menus.format.png': 'PNG 画像',

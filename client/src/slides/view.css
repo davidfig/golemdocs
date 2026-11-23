@@ -1,0 +1,57 @@
+/* The slides editor (see view.ts): its canvas over the view, the hidden textarea that takes the keyboard, and the notes pane. */
+
+.wm-slides {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.wm-slides[hidden] {
+  display: none;
+}
+
+.wm-slides-canvas {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.wm-slides-input {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  width: 2px;
+  height: 1em;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  opacity: 0;
+  resize: none;
+  pointer-events: none;
+}
+
+.wm-slides-notes {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 6px;
+  border-top: 1px solid var(--wm-border);
+  background: var(--wm-face);
+  pointer-events: auto;
+}
+
+.wm-slides-notes[hidden] {
+  display: none;
+}
+
+.wm-slides-notes-input {
+  flex: 1;
+  height: 72px;
+  resize: vertical;
+  font-family: var(--wm-font);
+}

@@ -71,6 +71,8 @@ export type DocumentSource =
   | { kind: 'csv'; name: string; bytes: ArrayBuffer }
   /** A workbook: opened by the spreadsheet editor (client/src/sheet), never sent to the layout worker. */
   | { kind: 'xlsx'; name: string; bytes: ArrayBuffer }
+  /** A PowerPoint deck: opened by the slides editor (client/src/slides, docs/slides.md); the layout worker only sees one turned into a document. */
+  | { kind: 'pptx'; name: string; bytes: ArrayBuffer }
   /** Tab-delimited text, opened as a table. */
   | { kind: 'tsv'; name: string; bytes: ArrayBuffer }
   /** An e-book. */

@@ -9,7 +9,7 @@ export * from './edit/comments.ts';
 export * from './edit/fields.ts';
 export { isPlainText, paragraphSegments, textSegments, type Segment } from './edit/segments.ts';
 export { WordDocument } from './docx/document.ts';
-export { OpcPackage, PackageError, REL, CONTENT_TYPE } from './opc/package.ts';
+export { OpcPackage, PackageError, REL, CONTENT_TYPE, Relationships, isRelType, resolveTarget, contentTypeForExtension, type Relationship } from './opc/package.ts';
 export { SHARED_MEDIA_IN_TEXT, sharedMediaHash, sharedMediaPart, sha256Hex } from './opc/sharedMedia.ts';
 export { ZipArchive, ZipEntry, ZipError, deflatePieces, writeZip } from './zip/zip.ts';
 export { deflateRaw, inflateRaw } from './zip/deflate.ts';

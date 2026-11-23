@@ -6,6 +6,7 @@
 // second computer doesn't do the work again. Where documents come from and where indexes are kept
 // is passed in (main.ts knows both), so none of this needs a browser to test.
 
+import { isMediaName } from '../media/mediaFiles.ts';
 import { INDEX_VERSION, buildIndex, parseQuery, searchIndex, tagsOf, type DocIndex, type ParsedQuery } from '@golemdocs/docx';
 import type { StoredIndex } from '../storage/local.ts';
 
@@ -117,7 +118,8 @@ export class SearchLibrary {
 
   /** Makes the index of one document: the account's if it has one, else read from the document. Null when it can't be had now (offline). */
   private async make(doc: SearchableDocument): Promise<StoredIndex | null> {
-    if (doc.size > MAX_BYTES) return { stamp: doc.stamp, index: buildIndex([]) };
+    // Audio and video have no words to index (their name is still searched).
+    if (doc.size > MAX_BYTES || isMediaName(doc.name)) return { stamp: doc.stamp, index: buildIndex([]) };
     if (doc.fromCloud) {
       const found = await doc.fromCloud().catch(() => null);
       if (found) return { stamp: `c:${found.at}`, index: found.index };

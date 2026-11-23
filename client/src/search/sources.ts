@@ -18,6 +18,8 @@ export interface SourceDeps {
 
 /** What `entry` is searched as: the account's copy when it is the one that opens (or is the same as the browser's), else the browser's. */
 export function searchableEntry(entry: LibraryEntry, deps: SourceDeps): SearchableDocument {
+  // Audio or video in the vault only: found by its name, with nothing to read (searchLibrary.ts indexes no media).
+  if (entry.vault) return { key: entry.key, name: entry.name, updatedAt: entry.updatedAt, size: entry.size, stamp: `v:${entry.updatedAt}`, bytes: async () => new ArrayBuffer(0) };
   const fromCloud = entry.cloud !== null && (opensFromCloud(entry) || entry.state === 'synced');
   const cloudId = entry.cloud?.id;
   const stamp = fromCloud ? `c:${entry.cloud!.updatedAt}` : `l:${entry.local!.updatedAt}`;

@@ -2,7 +2,8 @@
 // The worker starts with the first conversion and ends after a while with nothing to do, so a vault that is only
 // being watched holds no converters in memory.
 
-import { vaultFormat } from './vaultFormats.ts';
+import { vaultFormat, vaultKeeps } from './vaultFormats.ts';
+import { isMediaName } from '../media/mediaFiles.ts';
 import type { ConvertReply, ConvertRequest } from './convertWorker.ts';
 import type { VaultCodec } from './vaultSync.ts';
 
@@ -31,10 +32,12 @@ export class ConvertWorker implements VaultCodec {
   ) {}
 
   kept(name: string): boolean {
-    return vaultFormat(name) !== null;
+    return vaultKeeps(name);
   }
 
   toFile(stored: Uint8Array, name: string): Promise<Uint8Array | null> {
+    // Audio and video are stored as the files themselves: nothing to convert, and too big to copy to the worker for nothing.
+    if (isMediaName(name)) return Promise.resolve(stored);
     return this.run('toFile', stored, name);
   }
 
@@ -44,6 +47,7 @@ export class ConvertWorker implements VaultCodec {
   }
 
   async fromFile(file: Uint8Array, name: string, previous?: Uint8Array): Promise<Uint8Array> {
+    if (isMediaName(name)) return file;
     const bytes = await this.run('fromFile', file, name, previous);
     if (!bytes) throw new Error(`not a file the vault keeps: ${name}`);
     return bytes;

@@ -102,7 +102,8 @@ export type Dragged = { kind: 'doc'; entry: LibraryEntry } | { kind: 'folder'; f
 
 /** Whether `item` can be dropped in folder `to` (null: the top level): somewhere it isn't already, and a folder never inside itself. */
 export function canDrop(folders: readonly Folder[], item: Dragged, to: string | null): boolean {
-  if (item.kind === 'doc') return folderOf(item.entry, folders) !== to;
+  // Audio or video in the vault only is moved in Finder, not here.
+  if (item.kind === 'doc') return !item.entry.vault && folderOf(item.entry, folders) !== to;
   return item.folder.parentId !== to && to !== item.folder.id && !isInside(folders, to, item.folder.id);
 }
 

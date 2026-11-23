@@ -239,6 +239,10 @@ async function load(source: DocumentSource, fonts: FontSet): Promise<Loaded> {
   switch (source.kind) {
     case 'pdf':
       return { name: source.name, document: null, extensions: {}, original: new Uint8Array(source.bytes), lens: 'pdf', origin: 'pdf', pagesCurrent: true };
+    // Played in the media viewer on the page (../media), never laid out.
+    case 'audio':
+    case 'video':
+      throw new Error(`${source.name} is audio or video: it plays in the media viewer, not as a document`);
     case 'md':
     case 'odt':
     case 'rtf':

@@ -40,6 +40,8 @@ export const menus: Partial<Messages> = {
   'menus.format.tsv': 'TSV (durch Tabulatoren getrennt)',
   'menus.format.txt': 'Nur Text',
   'menus.format.xlsx': 'Excel-Arbeitsmappe',
+  'menus.format.audio': 'Audio',
+  'menus.format.video': 'Video',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': 'E-Mail-Nachricht',
   'menus.format.png': 'PNG-Bild',

@@ -6,6 +6,8 @@
 import {
   DEFAULT_STATE,
   SHEET_OPS,
+  MEDIA_OPS,
+  type MediaOp,
   type Action,
   type Alignment,
   type CaseChange,
@@ -359,6 +361,7 @@ export class Chrome {
       a('edit.cut', t('chrome.edit.cut'), { kind: 'cut' }, { icon: 'cut', shortcut: 'Mod+X', nativeShortcut: true, enabled: (s) => s.hasSelection }),
       a('edit.copy', t('chrome.edit.copy'), { kind: 'copy' }, { icon: 'copy', shortcut: 'Mod+C', nativeShortcut: true, enabled: (s) => s.hasSelection }),
       a('edit.copyLiveLink', t('chrome.edit.copyLiveLink'), { kind: 'copyLiveLink' }),
+      a('edit.copyMomentLink', t('chrome.edit.copyMomentLink'), { kind: 'copyMomentLink' }),
       a('edit.paste', t('chrome.edit.paste'), { kind: 'paste' }, { icon: 'paste', shortcut: 'Mod+V', nativeShortcut: true }),
       dialog('edit.pasteSpecial', t('chrome.edit.pasteSpecial'), 'pasteSpecial'),
       a('edit.selectAll', t('chrome.edit.selectAll'), { kind: 'selectAll' }, { shortcut: 'Mod+A' }),
@@ -610,6 +613,14 @@ export class Chrome {
       sortDescending: 'sheetSortDescending',
       filter: 'sheetFilter',
     };
+    // Audio and video: the Playback menu (the player's own keys do the same: see media/viewer.ts).
+    const MEDIA_ICONS: Partial<Record<MediaOp, string>> = { playPause: 'mediaPlay', back: 'mediaBack', forward: 'mediaForward', mute: 'mediaMute', captions: 'mediaCaptions', fullScreen: 'mediaFullScreen' };
+    const MEDIA_CHECKED: Partial<Record<MediaOp, (s: ChromeState) => boolean>> = { mute: (s) => !!s.media?.muted, captions: (s) => !!s.media?.captions };
+    const MEDIA_ENABLED: Partial<Record<MediaOp, (s: ChromeState) => boolean>> = { captions: (s) => !!s.media?.hasCaptions, fullScreen: (s) => !!s.media?.video };
+    for (const op of MEDIA_OPS) {
+      r.add(a(`media.${op}`, t(`media.op.${op}`), { kind: 'media', op }, { ...(MEDIA_ICONS[op] && { icon: MEDIA_ICONS[op] }), ...(MEDIA_CHECKED[op] && { checked: MEDIA_CHECKED[op] }), ...(MEDIA_ENABLED[op] && { enabled: MEDIA_ENABLED[op] }) }));
+    }
+
     for (const op of SHEET_OPS) r.add(a(`sheet.${op}`, t(`sheet.op.${op}`), { kind: 'sheet', op }, SHEET_ICONS[op] ? { icon: SHEET_ICONS[op] } : {}));
 
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
@@ -839,6 +850,7 @@ export class Chrome {
           cmd('edit.cut'),
           cmd('edit.copy'),
           cmd('edit.copyLiveLink'),
+          cmd('edit.copyMomentLink'),
           cmd('edit.paste'),
           cmd('edit.pasteSpecial'),
           cmd('edit.selectAll'),
@@ -1079,6 +1091,10 @@ export class Chrome {
           cmd('sheet.nextSheet'),
           cmd('sheet.previousSheet'),
         ],
+      },
+      {
+        label: t('media.menu'),
+        items: [cmd('media.playPause'), cmd('media.back'), cmd('media.forward'), cmd('media.start'), sep, cmd('media.mute'), cmd('media.slower'), cmd('media.faster'), cmd('media.normalSpeed'), sep, cmd('media.captions'), cmd('media.fullScreen')],
       },
       {
         label: t('picture.menu'),

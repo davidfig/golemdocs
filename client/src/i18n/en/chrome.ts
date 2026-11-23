@@ -17,6 +17,7 @@ export const chrome = {
   'chrome.edit.cut': 'Cu&t',
   'chrome.edit.copy': '&Copy',
   'chrome.edit.copyLiveLink': 'Copy as Live Link',
+  'chrome.edit.copyMomentLink': 'Copy Link to This Moment',
   'chrome.file.livePdf': 'Live PDF Copy',
   'chrome.file.livePdf.tip': 'Save a PDF of this document beside it, written again whenever the document changes',
   'chrome.edit.paste': '&Paste',

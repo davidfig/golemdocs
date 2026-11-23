@@ -318,6 +318,15 @@ export const ICONS: Record<string, string> = {
     `<path d="M3 5h7M3 9.6h7M3 14.2h7M3 18.8h5M14 5h7M14 9.6h7M14 14.2h7M14 18.8h5" stroke-width="2.2"/>`,
   ),
   // Spreadsheets (the Sheet toolbar).
+  // The Playback menu (audio and video).
+  mediaPlay: svg(`<path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z" fill="${GREEN}"/>`),
+  mediaPause: svg(`<rect x="5.5" y="4.5" width="4.5" height="15" rx="1" fill="${BLUE}"/><rect x="14" y="4.5" width="4.5" height="15" rx="1" fill="${BLUE}"/>`),
+  mediaVolume: svg(`<path d="M3.5 9h3.5l5-4.5v15l-5-4.5H3.5z" fill="${YELLOW}"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" stroke="${BLUE}" stroke-width="2"/>`),
+  mediaBack: svg(`<path d="M12 5.5v13L3.5 12z" fill="${BLUE}"/><path d="M20.5 5.5v13L12 12z" fill="${SKY}"/>`),
+  mediaForward: svg(`<path d="M12 5.5v13l8.5-6.5z" fill="${BLUE}"/><path d="M3.5 5.5v13L12 12z" fill="${SKY}"/>`),
+  mediaMute: svg(`<path d="M3.5 9h3.5l5-4.5v15l-5-4.5H3.5z" fill="${YELLOW}"/><path d="M16 9l5 6M21 9l-5 6" stroke="${RED}" stroke-width="2.2"/>`),
+  mediaCaptions: svg(`<rect x="2.5" y="5" width="19" height="14" rx="2.5" fill="${PAPER}"/><path d="M6 11.5h5M13 11.5h5M6 15h8M16 15h2" stroke="${BLUE}" stroke-width="2"/>`),
+  mediaFullScreen: svg(outlined('M3.5 9V3.5H9M15 3.5h5.5V9M20.5 15v5.5H15M9 20.5H3.5V15', BLUE, 2)),
   sheetCurrency: svg(
     `<rect x="2.5" y="6" width="19" height="12" rx="2" fill="${GREEN}"/><circle cx="12" cy="12" r="3" fill="${PAPER}"/>` +
       `<path d="M5.5 9v6M18.5 9v6" stroke="${PAPER}" stroke-width="1.4"/>`,

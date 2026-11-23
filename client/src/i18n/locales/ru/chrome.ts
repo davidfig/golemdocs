@@ -19,6 +19,7 @@ export const chrome: Catalog = {
   'chrome.edit.cut': 'Вы&резать',
   'chrome.edit.copy': '&Копировать',
   'chrome.edit.copyLiveLink': 'Копировать как живую ссылку',
+  'chrome.edit.copyMomentLink': 'Копировать ссылку на этот момент',
   'chrome.file.livePdf': 'Живая PDF-копия',
   'chrome.file.livePdf.tip': 'Сохранить рядом PDF этого документа, который перезаписывается при каждом изменении документа',
   'chrome.edit.paste': 'Вст&авить',

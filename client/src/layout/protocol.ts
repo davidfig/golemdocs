@@ -81,6 +81,8 @@ export type DocumentSource =
   | { kind: 'rtf'; name: string; bytes: ArrayBuffer }
   /** A plain-text file, edited one paragraph per line. */
   | { kind: 'txt'; name: string; bytes: ArrayBuffer }
+  /** An audio or video file: played in the media viewer (../media), never sent to the worker. */
+  | { kind: 'audio' | 'video'; name: string; bytes: ArrayBuffer }
   /** The app's own file (see ../formats/wdoc.ts): the whole document, opened in the format it was being edited as. */
   | { kind: 'wdoc'; name: string; bytes: ArrayBuffer }
   /** A new, empty document. */

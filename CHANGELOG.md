@@ -2,6 +2,11 @@
 
 ## 0.44.1 - Unreleased
 
+### Added
+
+- Audio and video: MP4, MOV, WebM, MKV, MP3, M4A, WAV, Ogg, Opus and FLAC files open in a player, with a waveform for audio, a Playback menu and keys (Space or K, J and L, the arrows, M, C, F). Captions come from a .vtt or .srt file of the same name beside it. Edit › Copy Link to This Moment copies a link such as [[talk.mp4#t=12:30]] that opens the file at that time.
+- Audio and video over 50 MB play from where they are, without being copied into Golem Docs or your account; in the desktop app, such files in the vault folder show in Files as on this computer only.
+
 ### Changed
 
 - Files sidebar: Trash is pinned at the bottom, so it is always in view to drag onto, however many documents you have. Opening it shows what you deleted in place of your documents, with Empty Trash below and a back arrow (or Escape) to return.

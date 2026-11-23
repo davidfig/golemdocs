@@ -19,6 +19,7 @@ export const chrome: Partial<Messages> = {
   'chrome.edit.cut': 'Cor&tar',
   'chrome.edit.copy': '&Copiar',
   'chrome.edit.copyLiveLink': 'Copiar como vínculo dinámico',
+  'chrome.edit.copyMomentLink': 'Copiar vínculo a este momento',
   'chrome.file.livePdf': 'Copia PDF dinámica',
   'chrome.file.livePdf.tip': 'Guardar junto a este documento un PDF suyo, que se vuelve a escribir cada vez que el documento cambia',
   'chrome.edit.paste': '&Pegar',

@@ -13,6 +13,8 @@ mod incoming;
 #[cfg(any(desktop, target_os = "ios"))]
 mod log;
 #[cfg(any(desktop, target_os = "ios"))]
+mod media;
+#[cfg(any(desktop, target_os = "ios"))]
 mod vault;
 
 #[cfg(any(desktop, target_os = "ios"))]
@@ -41,6 +43,16 @@ fn save_window_state_on_change(window: &tauri::WebviewWindow) {
     });
 }
 
+/// The player's requests for a vault file (media.rs), answered off the main thread: a read of a few megabytes must not hold up the window.
+#[cfg(any(desktop, target_os = "ios"))]
+fn serve_media(ctx: tauri::UriSchemeContext<'_, tauri::Wry>, request: tauri::http::Request<Vec<u8>>, responder: tauri::UriSchemeResponder) {
+    let app = ctx.app_handle().clone();
+    std::thread::spawn(move || {
+        let token = app.state::<media::MediaToken>().0.clone();
+        responder.respond(media::serve(&app.state::<vault::Vault>(), &token, &request));
+    });
+}
+
 #[cfg(desktop)]
 fn builder() -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
@@ -49,6 +61,8 @@ fn builder() -> tauri::Builder<tauri::Wry> {
         // Reopen the window where and at the size the person last left it.
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(vault::Vault::default())
+        .manage(media::MediaToken::default())
+        .register_asynchronous_uri_scheme_protocol(media::SCHEME, serve_media)
         // golemdocs:// links and Markdown files opened with the app (link.rs); a file from outside the vault comes in as on a phone.
         .manage(link::Links::default())
         .manage(incoming::Incoming::default())
@@ -82,6 +96,7 @@ fn builder() -> tauri::Builder<tauri::Wry> {
             vault::vault_make_folder,
             vault::vault_remove_folder,
             vault::vault_set_times,
+            media::vault_media_url,
             log::app_log,
             menu::set_native_menu,
             print::print_open_pdf,
@@ -100,6 +115,8 @@ fn builder() -> tauri::Builder<tauri::Wry> {
 fn builder() -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
         .manage(vault::Vault::default())
+        .manage(media::MediaToken::default())
+        .register_asynchronous_uri_scheme_protocol(media::SCHEME, serve_media)
         .manage(incoming::Incoming::default())
         .setup(|app| {
             // Without iCloud the vault stays unset and the page shows no folder; the documents are still in the account.
@@ -119,6 +136,7 @@ fn builder() -> tauri::Builder<tauri::Wry> {
             vault::vault_make_folder,
             vault::vault_remove_folder,
             vault::vault_set_times,
+            media::vault_media_url,
             log::app_log,
             incoming::incoming_pending,
             incoming::incoming_read,

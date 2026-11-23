@@ -19,6 +19,7 @@ export const chrome: Partial<Messages> = {
   'chrome.edit.cut': '剪切(&T)',
   'chrome.edit.copy': '复制(&C)',
   'chrome.edit.copyLiveLink': '复制为实时链接',
+  'chrome.edit.copyMomentLink': '复制指向此刻的链接',
   'chrome.file.livePdf': '实时 PDF 副本',
   'chrome.file.livePdf.tip': '在此文档旁保存它的 PDF，文档每次更改时都会重新写入',
   'chrome.edit.paste': '粘贴(&P)',

@@ -310,6 +310,11 @@ impl Vault {
         self.root()
     }
 
+    /// A file of the vault by its path (`/` between names), for the media scheme (media.rs): never the sync state.
+    pub fn file(&self, relative: &str) -> Result<PathBuf, String> {
+        resolve(&self.root()?, relative, false)
+    }
+
     /// Whether the folder is fixed (iCloud on a phone): there is nothing for the person to choose or stop.
     fn fixed(&self) -> bool {
         self.state_home.lock().unwrap().is_some()

@@ -39,6 +39,11 @@ export interface LibraryEntry {
   state: SyncState;
   /** The folder it is in, as recorded (folders.ts says whether that folder still exists). */
   folderId: string | null;
+  /**
+   * Audio or video in the vault too big for the account (media/mediaFiles.ts): on this computer only, with no copy here or in the
+   * account (`local` and `cloud` are null). It is opened, and shown in Finder, and nothing else: it is renamed, moved and deleted there.
+   */
+  vault?: { path: string };
 }
 
 /** How a browser copy and its cloud copy relate. `cloud` is null when it's missing or unknown. */

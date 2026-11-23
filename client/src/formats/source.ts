@@ -4,6 +4,7 @@ import type { DocumentSource } from '../layout/protocol.ts';
 import { isTextName } from './textFiles.ts';
 import { ZipArchive } from '@golemdocs/docx';
 import { isWdoc } from './wdoc.ts';
+import { mediaKindOf } from '../media/mediaFiles.ts';
 
 const DOCX_FILE = /\.(docx|docm|dotx)$/i;
 const DOC_FILE = /\.(doc|dot)$/i;
@@ -87,6 +88,8 @@ export function sourceFromFile(name: string, bytes: ArrayBuffer): DocumentSource
   if (IMAGE_FILE.test(name)) return { kind: 'image', name, bytes };
   if (SVG_FILE.test(name)) return { kind: 'svg', name, bytes };
   if (PDF_FILE.test(name)) return { kind: 'pdf', name, bytes };
+  const media = mediaKindOf(name);
+  if (media) return { kind: media, name, bytes };
   if (MARKDOWN_FILE.test(name)) return { kind: 'md', name, bytes };
   if (TEXT_FILE.test(name) || isTextName(name)) return { kind: 'txt', name, bytes };
   return null;
@@ -98,7 +101,7 @@ export const isZipName = (name: string): boolean => /\.zip$/i.test(name);
 /** Strips a known document extension from a file name. */
 export function stem(name: string): string {
   if (isTextName(name)) return name.replace(/\.[^.]*$/, '');
-  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mhtml?|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|heic|heif|svgz?|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|typ|dbk|docbook|nxml|jats|fb2|opml|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc|xlsx|xlsm|xltx|xltm)$/i, '');
+  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mhtml?|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|heic|heif|svgz?|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|typ|dbk|docbook|nxml|jats|fb2|opml|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc|xlsx|xlsm|xltx|xltm|mp4|m4v|mov|webm|mkv|ogv|mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i, '');
 }
 
 /**

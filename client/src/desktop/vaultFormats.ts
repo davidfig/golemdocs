@@ -6,6 +6,7 @@
 
 import { isFormat, type Format } from '../formats/convert.ts';
 import { sourceFromFile } from '../formats/source.ts';
+import { isMediaName } from '../media/mediaFiles.ts';
 
 /** The format a picture file is edited, and so written, as. */
 function pictureFormat(name: string): Format {
@@ -26,4 +27,9 @@ export function vaultFormat(name: string): Format | null {
 /** The kind of file a name is, as `sourceFromFile` tells it: the bytes of a file uploaded under this name are of this kind. */
 export function vaultKind(name: string): string | null {
   return sourceFromFile(name, new ArrayBuffer(0))?.kind ?? null;
+}
+
+/** Whether the vault keeps files with this name: those in a format the app writes, and audio and video, which go as they are (never converted). */
+export function vaultKeeps(name: string): boolean {
+  return vaultFormat(name) !== null || isMediaName(name);
 }

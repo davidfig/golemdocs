@@ -19,6 +19,7 @@ export const chrome: Partial<Messages> = {
   'chrome.edit.cut': '잘라내기(&T)',
   'chrome.edit.copy': '복사(&C)',
   'chrome.edit.copyLiveLink': '라이브 링크로 복사',
+  'chrome.edit.copyMomentLink': '이 시점 링크 복사',
   'chrome.file.livePdf': '라이브 PDF 사본',
   'chrome.file.livePdf.tip': '이 문서의 PDF를 옆에 저장하고, 문서가 바뀔 때마다 다시 씁니다',
   'chrome.edit.paste': '붙여넣기(&P)',

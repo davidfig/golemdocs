@@ -27,6 +27,9 @@ const REFRESH_DELAY_MS = 3000;
 
 export class LibraryStore {
   private entryList: LibraryEntry[] = [];
+  /** The vault's audio and video too big for the account (`LibraryEntry.vault`), listed after the rest. */
+  private vaultList: LibraryEntry[] = [];
+  private joined: LibraryEntry[] | null = null;
   private folderList: Folder[] = [];
   private sharedList: CloudDocument[] = [];
   private sharedFolderList: SharedFolder[] = [];
@@ -45,7 +48,16 @@ export class LibraryStore {
   constructor(private readonly host: LibraryHost) {}
 
   get entries(): LibraryEntry[] {
-    return this.entryList;
+    return (this.joined ??= this.vaultList.length ? [...this.entryList, ...this.vaultList] : this.entryList);
+  }
+
+  /** The vault's files on this computer only (after each vault sync): shown with the rest, never sent anywhere. */
+  setVaultEntries(entries: LibraryEntry[]): void {
+    const same = entries.length === this.vaultList.length && entries.every((e, i) => e.key === this.vaultList[i]!.key && e.size === this.vaultList[i]!.size && e.updatedAt === this.vaultList[i]!.updatedAt && e.folderId === this.vaultList[i]!.folderId);
+    if (same) return;
+    this.vaultList = entries;
+    this.joined = null;
+    for (const listener of [...this.listeners]) listener();
   }
 
   get folders(): Folder[] {
@@ -93,8 +105,10 @@ export class LibraryStore {
   private set(change: { entries?: LibraryEntry[]; folders?: Folder[]; shared?: CloudDocument[]; sharedFolders?: SharedFolder[] }): void {
     if (change.sharedFolders) this.sharedFolderList = change.sharedFolders;
     if (change.entries) {
-      this.entryList = change.entries;
+      // A change made from `entries` brings the vault's along: they are kept apart (`setVaultEntries`).
+      this.entryList = change.entries.filter((e) => !e.vault);
       this.derived = null;
+      this.joined = null;
     }
     if (change.folders) this.folderList = change.folders;
     if (change.shared) this.sharedList = change.shared;

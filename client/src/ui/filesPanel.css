@@ -108,6 +108,28 @@
   white-space: nowrap;
 }
 
+/* Audio or video in the vault only (too big for the account): a small computer after the name. */
+.wm-files-where {
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+  padding-left: 6px;
+}
+
+.wm-files-where svg path {
+  fill: none;
+  stroke: var(--wm-muted);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (forced-colors: active) {
+  .wm-files-where svg path {
+    stroke: CanvasText;
+  }
+}
+
 .wm-files-current {
   background: var(--wm-hot);
 }

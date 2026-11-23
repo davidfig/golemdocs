@@ -327,6 +327,12 @@ export class FilesPanel {
     if (folder) el.setAttribute('aria-expanded', String(row.open));
     else {
       const { item } = row;
+      if (item.vault) {
+        el.classList.add('wm-files-inplace');
+        el.setAttribute('aria-description', t('media.vaultOnly'));
+        el.title = `${name}\n${t('media.vaultOnlyTip')}`;
+        el.append(h('span', { class: 'wm-files-where', attrs: { 'aria-hidden': 'true' } }, computerIcon()));
+      }
       const isCurrent = (here.localId !== null && item.local?.id === here.localId) || (here.cloudId !== null && item.cloud?.id === here.cloudId);
       toggleClass(el, 'wm-files-current', isCurrent);
       if (isCurrent) el.setAttribute('aria-current', 'true');
@@ -347,7 +353,8 @@ export class FilesPanel {
       el.focus({ preventScroll: true });
       this.menuAt(e.clientX, e.clientY, folder ? this.folderItems(row.folder, row.open) : this.fileItems(row.item), el);
     });
-    this.makeDraggable(el, folder ? { kind: 'folder', folder: row.folder } : { kind: 'doc', entry: row.item });
+    // A vault-only file stays where it is in the vault (it can still be dragged onto a note, as a link).
+    if (folder || !row.item.vault) this.makeDraggable(el, folder ? { kind: 'folder', folder: row.folder } : { kind: 'doc', entry: row.item });
     // Dropped on a document, a thing goes in the folder that document is in.
     this.makeDropTarget(el, folder ? row.folder.id : folderOf(row.item, this.folders));
     return el;
@@ -435,8 +442,9 @@ export class FilesPanel {
       if (!item) return;
       e.preventDefault();
       e.stopPropagation();
-      if (item.kind === 'doc') void this.ask([], [item.entry], () => this.host.delete([item.entry]));
-      else void this.ask([item.folder], [], (before) => removeFolderTree(before.folders, before.entries, [item.folder], (entries, folderIds) => this.host.delete(entries, folderIds)));
+      if (item.kind === 'doc') {
+        if (!item.entry.vault) void this.ask([], [item.entry], () => this.host.delete([item.entry]));
+      } else void this.ask([item.folder], [], (before) => removeFolderTree(before.folders, before.entries, [item.folder], (entries, folderIds) => this.host.delete(entries, folderIds)));
     });
   }
 
@@ -479,6 +487,8 @@ export class FilesPanel {
   }
 
   private fileItems(entry: LibraryEntry): PopupItem[] {
+    // Audio or video in the vault only: renamed, moved and deleted in Finder, not here.
+    if (entry.vault) return [{ label: t('panels.files.openItem'), run: () => this.host.open(entry) }, ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ doc: entry }) }] : [])];
     const items: PopupItem[] = [
       { label: t('panels.files.openItem'), run: () => this.host.open(entry) },
       ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ doc: entry }) }] : []),
@@ -732,4 +742,17 @@ export class FilesPanel {
     }
     e.preventDefault();
   }
+}
+
+/** A small computer, beside a file that is on this computer only (drawn, not typed: see AGENTS.md). */
+function computerIcon(): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  const icon = document.createElementNS(NS, 'svg');
+  icon.setAttribute('viewBox', '0 0 12 12');
+  icon.setAttribute('width', '12');
+  icon.setAttribute('height', '12');
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', 'M1.5 2.5h9v6h-9zM4 10.5h4M6 8.5v2');
+  icon.append(path);
+  return icon;
 }

@@ -38,6 +38,8 @@ export const menus = {
   'menus.format.tsv': 'TSV (Tab-Separated)',
   'menus.format.txt': 'Plain Text',
   'menus.format.xlsx': 'Excel Workbook',
+  'menus.format.audio': 'Audio',
+  'menus.format.video': 'Video',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': 'Email Message',
   'menus.format.png': 'PNG Image',

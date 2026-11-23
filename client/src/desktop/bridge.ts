@@ -39,6 +39,11 @@ export interface DesktopBridge {
   openPrivacy(): Promise<void>;
   scan(): Promise<LocalFile[]>;
   read(path: string): Promise<Uint8Array>;
+  /**
+   * An address the web view's <video> and <audio> can play a vault file from, read in ranges as it plays (the shell's
+   * `golemvault:` scheme), so a file of any size never crosses whole. Null in a shell too old to serve one.
+   */
+  mediaUrl(path: string): Promise<string | null>;
   /** Writes through a temporary file and a rename. Returns the new modification time in milliseconds. */
   write(path: string, bytes: Uint8Array): Promise<number>;
   remove(path: string): Promise<void>;
@@ -190,6 +195,11 @@ export function desktopBridge(): DesktopBridge | null {
       return core.invoke<number>('vault_write', data as unknown as Record<string, unknown>, { headers: { path: encodeURIComponent(path).replace(/%2F/gi, '/') } });
     },
     remove: (path) => core.invoke<void>('vault_remove', { path }),
+    mediaUrl: (path) =>
+      core.invoke<string>('vault_media_url', { path }).catch((error: unknown) => {
+        if (isMissingCommand(error)) return null;
+        throw error;
+      }),
     // An older shell lists files only: the sync then keeps the folders it can see through them, as it did before.
     folders: () => core.invoke<string[]>('vault_folders').catch((error: unknown) => {
       if (isMissingCommand(error)) return null;

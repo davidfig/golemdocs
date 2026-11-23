@@ -7,6 +7,7 @@
 // sync runs in tests against in-memory stand-ins. One action failing is reported and the rest carry on; what failed
 // is still different from the manifest, so the next sync tries it again.
 
+import { playsInPlace } from '../media/mediaFiles.ts';
 import { cloudPaths, folderPaths, foldersOf, needsHash, planVault, safeName, vanishedFolders, type CloudDoc, type CloudFile, type CloudFolder, type LocalFile, type ManifestEntry, type VaultAction, type VaultPlan } from './vaultPlan.ts';
 
 /** Failures in a row after which a sync stops: a bad file is skipped, but every file failing is a problem to show now. */
@@ -147,6 +148,11 @@ export interface SyncReport {
   gaveUp?: number;
   /** The vault belongs to another account (or, signed out, to an account at all); nothing was done. */
   wrongAccount?: boolean;
+  /**
+   * Audio and video too big for the account (media/mediaFiles.ts): left alone in the vault, never read, uploaded or taken for
+   * deleted. The app lists them as on this computer only and plays them from the folder.
+   */
+  inPlace?: LocalFile[];
 }
 
 const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1);
@@ -210,14 +216,20 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
   // Taken with the files, before the sync changes anything: a folder missing from this was removed by the person, not by this sync.
   const diskFolders = disk.folders && disk.makeFolder && disk.removeFolder ? await disk.folders() : null;
   report.folderFiles = scanned.length;
-  const local = scanned.filter((f) => codec.kept(baseName(f.path)));
+  // Audio and video too big for the account stay in the vault only: never read, uploaded, or taken for deleted (`report.inPlace`).
+  const inPlace = scanned.filter((f) => playsInPlace(baseName(f.path), f.size));
+  report.inPlace = inPlace;
+  const inPlacePaths = new Set(inPlace.map((f) => f.path));
+  const local = scanned.filter((f) => !inPlacePaths.has(f.path) && codec.kept(baseName(f.path)));
+  // One that was kept before it grew past the limit keeps its link, and its document in the account is left as it was.
+  const heldBack = new Set(state.entries.filter((e) => inPlacePaths.has(e.path)).map((e) => e.id));
   const localByPath = new Map(local.map((f) => [f.path, f]));
 
   tell({ phase: 'compare', accountDocs: report.accountDocs, folderFiles: report.folderFiles });
   const hashes = new Map<string, string>();
   for (const path of needsHash(local, state.entries)) hashes.set(path, await host.hash(await disk.read(path)));
 
-  const plan = planVault({ local, manifest: state.entries, cloud: kept, hashes, allowMassDelete: options.allowMassDelete });
+  const plan = planVault({ local, manifest: state.entries.filter((e) => !heldBack.has(e.id)), cloud: kept.filter((c) => !heldBack.has(c.id)), hashes, allowMassDelete: options.allowMassDelete });
   if (plan.blocked) report.blocked = plan.blocked;
 
   const entries = new Map(state.entries.map((e) => [e.id, e]));

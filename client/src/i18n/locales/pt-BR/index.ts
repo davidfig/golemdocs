@@ -14,6 +14,7 @@ import { link } from './link.ts';
 import { live } from './live.ts';
 import { scripts } from './scripts.ts';
 import { math } from './math.ts';
+import { media } from './media.ts';
 import { menus } from './menus.ts';
 import { format } from './format.ts';
 import { paragraph } from './paragraph.ts';
@@ -29,4 +30,4 @@ import { viewer } from './viewer.ts';
 import { pageSetup } from './pageSetup.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Partial<Messages> = { ...a11y, ...a11ySheet, ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...live, ...scripts, ...math, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };
+export const messages: Partial<Messages> = { ...a11y, ...a11ySheet, ...app, ...chrome, ...columns, ...dialogs, ...history, ...textEditor, ...sheet, ...link, ...live, ...scripts, ...math, ...media, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };

@@ -11,6 +11,7 @@ import { realHost, sharedApi } from './vaultHost.ts';
 import { vaultMemory } from './vaultMemory.ts';
 import { excludedFolders, keepsCopy, outsideDisk, setExcludedFolders, sharedRoot, syncShared, type MemoryFor, type SharedSyncReport } from './vaultShared.ts';
 import { syncVault, type SyncProgress, type SyncReport, type VaultCodec, type VaultHost } from './vaultSync.ts';
+import type { LocalFile } from './vaultPlan.ts';
 
 export type VaultState = 'off' | 'signedOut' | 'waiting' | 'syncing' | 'idle' | 'offline' | 'error' | 'access' | 'blocked' | 'wrongAccount';
 
@@ -36,6 +37,8 @@ export interface VaultHooks {
   changed(touched: string[]): void;
   /** This browser's id for the document open in the editor, if any: the sync leaves its copy to `changed`. */
   openLocalId?(): string | null;
+  /** The vault's audio and video too big for the account (see `SyncReport.inPlace`), after every sync, in the folder `root`. */
+  inPlace?(files: LocalFile[], root: string): void;
 }
 
 /** What the shell answers to a scan while iCloud Drive is still downloading files into the folder (desktop/src-tauri/src/icloud.rs). */
@@ -396,6 +399,8 @@ export class VaultService {
       const took = Date.now() - started;
       this.logOutcome(`${state} ${report.errors[0]?.message ?? ''}`, changes > 0 || took >= SLOW_MS, () => `sync ${state} in ${Math.round(took / 1000)} s: ${changes} change(s)${report.errors.length ? `, ${report.errors.length} error(s), first: ${report.errors[0].message}` : ''}`);
       if (changes > 0) this.hooks.changed(report.touched);
+      // Audio and video too big for the account: the page lists them as on this computer only (none for a folder that isn't this account's).
+      this.hooks.inPlace?.(report.wrongAccount ? [] : (report.inPlace ?? []), root);
     } catch (error) {
       if (!current() || error instanceof SyncAbandoned) return;
       const offline = error instanceof TypeError || (error instanceof CloudError && error.status >= 500);

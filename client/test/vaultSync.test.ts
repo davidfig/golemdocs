@@ -860,3 +860,58 @@ test('a document with no creation time (saved in this browser) leaves the file\'
   await s.sync();
   assert.equal(s.folder.files.get('mine.md')!.created, 7);
 });
+
+/** Has the disk of `s` report `path` at the size `size()` gives (as a scan of a large video would) without holding that much; lists what is read. */
+function sizedAs(s: ReturnType<typeof setup>, path: string, size: () => number | null) {
+  const scan = s.folder.disk.scan;
+  const read = s.folder.disk.read;
+  const reads: string[] = [];
+  s.folder.disk.scan = async () => (await scan()).map((f) => (f.path === path && size() !== null ? { ...f, size: size()! } : f));
+  s.folder.disk.read = async (p) => {
+    reads.push(p);
+    return read(p);
+  };
+  return reads;
+}
+
+test('audio and video too big for the account stay in the vault, unread and unsent, and are reported', async () => {
+  const s = setup();
+  s.folder.put('Talks/keynote.mp4', 'a long video');
+  s.folder.put('Talks/clip.mp4', 'a short one');
+  const reads = sizedAs(s, 'Talks/keynote.mp4', () => 60 * 1024 * 1024);
+  const report = await s.sync();
+  assert.deepEqual(report.inPlace?.map((f) => f.path), ['Talks/keynote.mp4']);
+  assert.ok(!reads.includes('Talks/keynote.mp4'), 'never read');
+  assert.deepEqual(
+    s.calls.filter((c) => c.startsWith('create')),
+    ['create Talks/clip.mp4'],
+    'only the small one goes to the account',
+  );
+  const again = await s.sync();
+  assert.equal(counts(again), quiet);
+  assert.deepEqual(again.inPlace?.map((f) => f.path), ['Talks/keynote.mp4']);
+  assert.ok(s.folder.get('Talks/keynote.mp4'), 'still in the vault');
+});
+
+test('a kept video that grows past the limit is left alone on both sides, and syncs again once it is small', async () => {
+  const s = setup();
+  s.folder.put('clip.mp4', 'small');
+  let size: number | null = null;
+  sizedAs(s, 'clip.mp4', () => size);
+  await s.sync();
+  const id = [...s.docs.values()].find((d) => d.name === 'clip.mp4')!.id;
+  // Recorded over with something far bigger.
+  s.folder.put('clip.mp4', 'big now');
+  size = 80 * 1024 * 1024;
+  const grown = await s.sync();
+  assert.equal(counts(grown), quiet, 'not uploaded, not taken for deleted');
+  assert.ok(s.docs.has(id), 'the account keeps its copy');
+  assert.equal(read(s.docs.get(id)!.bytes), 'wdoc:small');
+  assert.deepEqual(grown.inPlace?.map((f) => f.path), ['clip.mp4']);
+  // Trimmed back under the limit: the same document takes it.
+  s.folder.put('clip.mp4', 'small again');
+  size = null;
+  const back = await s.sync();
+  assert.equal(counts(back), '0,1,0,0,0,0,0');
+  assert.equal(read(s.docs.get(id)!.bytes), 'wdoc:small again');
+});

@@ -31,6 +31,7 @@ import { annotatedPdf, reflow } from '../formats/pdfFile.ts';
 import { sourceFromFile } from '../formats/source.ts';
 import { delimitedWdoc, isWdoc, readWdoc, writeWdoc, WDOC_VERSION, type Extensions } from '../formats/wdoc.ts';
 import { vaultFormat, vaultKind } from './vaultFormats.ts';
+import { isMediaName } from '../media/mediaFiles.ts';
 
 export { vaultFormat };
 
@@ -67,6 +68,8 @@ async function editFonts(fonts: VaultFonts) {
 
 /** The file to put in the vault for a document the account stores as `stored`, named `name`. Null if its format is not kept. */
 export async function toVaultFile(stored: Uint8Array, name: string, fonts: VaultFonts = APP_FONTS): Promise<Uint8Array | null> {
+  // Audio and video are kept as the files themselves.
+  if (isMediaName(name)) return stored;
   const format = vaultFormat(name);
   if (!format) return null;
   const kind = sourceFromFile(name, stored.slice().buffer)?.kind;
@@ -104,6 +107,7 @@ export async function toVaultFile(stored: Uint8Array, name: string, fonts: Vault
  * the account stores now (`keepsLayout`): a CSV or TSV file's layout stays with the new file, and a Markdown file is merged into it.
  */
 export async function fromVaultFile(file: Uint8Array, name: string, previous?: Uint8Array): Promise<Uint8Array> {
+  if (isMediaName(name)) return file;
   const format = vaultFormat(name);
   if (!format) throw new Error(`not a file the vault keeps: ${name}`);
   const kind = vaultKind(name);

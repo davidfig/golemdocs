@@ -48,6 +48,21 @@ export type VectorOp = 'select' | 'rect' | 'ellipse' | 'shape' | `shape:${ShapeI
 /** What the picture tools do (the Picture menu): turns, flips, the three that ask for more, and the one-click effects. */
 export type ImageOp = 'rotateLeft' | 'rotateRight' | 'rotate180' | 'flipHorizontal' | 'flipVertical' | 'crop' | 'resize' | 'adjust' | 'grayscale' | 'sepia' | 'invert' | 'blur' | 'sharpen' | 'autoLevels' | 'background' | 'canvasSize' | 'selectAll' | 'deselect' | 'duplicate' | 'group' | 'ungroup' | 'newLayer' | 'front' | 'forward' | 'backward' | 'back' | 'delete' | 'layers' | 'sizeUp' | 'sizeDown' | `shape:${ShapeId}` | DrawToolName;
 
+/** The media viewer's commands (the Playback menu), in the menu's order. */
+export const MEDIA_OPS = ['playPause', 'back', 'forward', 'start', 'mute', 'slower', 'faster', 'normalSpeed', 'captions', 'fullScreen'] as const;
+export type MediaOp = (typeof MEDIA_OPS)[number];
+
+/** What the media viewer shows, for the Playback menu's checks. Null when no audio or video is open. */
+export interface MediaState {
+  playing: boolean;
+  muted: boolean;
+  /** Captions are showing; `hasCaptions`: there are any to show. */
+  captions: boolean;
+  hasCaptions: boolean;
+  /** It shows pictures (full screen means something). */
+  video: boolean;
+}
+
 /** What the spreadsheet editor's commands do (the Sheet menu and toolbar, and the cells' context menu). */
 /** A spreadsheet command (see SHEET_OPS). */
 export type SheetOp = (typeof SHEET_OPS)[number];
@@ -225,6 +240,8 @@ export type Action =
   | { kind: 'copy' }
   /** The selection as a live block's source (docs/live-blocks.md): pasted into any document, it is kept up to date. */
   | { kind: 'copyLiveLink' }
+  /** Edit › Copy Link to This Moment: a link to the open audio or video at the time it is at (`[[talk.mp4#t=12:30]]`). */
+  | { kind: 'copyMomentLink' }
   | { kind: 'paste' }
   | { kind: 'selectAll' }
   | { kind: 'dialog'; name: DialogName }
@@ -323,6 +340,8 @@ export type Action =
   | { kind: 'vector'; op: VectorOp }
   // Spreadsheet
   | { kind: 'sheet'; op: SheetOp }
+  // Audio and video
+  | { kind: 'media'; op: MediaOp }
   /** How the selected shapes (and the next ones) look; null is none. */
   | { kind: 'vectorStyle'; fill?: string | null; stroke?: string | null; strokeWidth?: number; strokeStyle?: string; fillType?: 'solid' | 'linear' | 'radial' }
   /** Edits the stops of the selected shape's gradient: pick one, add one at a position (0 to 1), take one away, move one, or turn the gradient around. */
@@ -333,7 +352,7 @@ export type Action =
 export type ActionKind = Action['kind'];
 
 /** Kinds of document the chrome knows how to present. */
-export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'txt' | 'xlsx';
+export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'txt' | 'xlsx' | 'audio' | 'video';
 
 /**
  * Formatting at the selection, for toolbar state. `undefined` means unknown or mixed (the
@@ -553,6 +572,8 @@ export interface ChromeState {
   draw: DrawStyle & { tool: DrawToolName | null; hasSelection: boolean; layers: boolean };
   /** The vector editor: the tool picked, whether anything is selected, and the look of the selection (or of the next shape). */
   vector: { tool: 'select' | 'rect' | 'ellipse' | 'shape' | 'line' | 'pen' | 'pencil' | 'nudge' | 'text' | 'canvas'; shape: ShapeId; hasSelection: boolean; multiple: boolean; clipped: boolean; masked: boolean; layers: boolean; snap: boolean; fill: string | null; stroke: string | null; strokeWidth: number; fillType: 'solid' | 'linear' | 'radial'; strokeStyle: string; gradient: { stops: { offset: number; color: string }[]; stop: number; type: 'linear' | 'radial' } | null; documentColors: string[] };
+  /** The audio or video playing, when one is open. */
+  media?: MediaState | null;
   /** Whether the open document is saved, for the button at the top right. */
   sync: SyncStatus;
   /** The paid sync subscription: `active` (menus offer to manage it), `none` (they offer to subscribe), null while unknown. */

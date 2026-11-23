@@ -875,6 +875,16 @@ export class Dashboard {
     }
 
     const badges = h('div', { class: 'wm-badges' });
+    // Audio or video in the vault too big for the account: opened, and shown in Finder, and nothing else (it is renamed, moved and deleted there).
+    if (entry.vault) {
+      badges.append(h('span', { class: 'wm-badge', text: t('media.vaultOnly'), title: t('media.vaultOnlyTip') }));
+      const card = h('article', { class: 'wm-card' }, open, badges);
+      this.cardMenu(card, () => [
+        { label: t('panels.files.openItem'), run: () => open.click() },
+        ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ doc: entry }) }] : []),
+      ]);
+      return card;
+    }
     const sync = syncBadge(entry.state, this.host.account() !== null);
     if (sync) badges.append(h('span', { class: `wm-badge wm-badge-${sync.tone}`, text: sync.text }));
 

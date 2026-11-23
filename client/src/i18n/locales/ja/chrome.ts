@@ -19,6 +19,7 @@ export const chrome: Partial<Messages> = {
   'chrome.edit.cut': '切り取り(&T)',
   'chrome.edit.copy': 'コピー(&C)',
   'chrome.edit.copyLiveLink': 'ライブリンクとしてコピー',
+  'chrome.edit.copyMomentLink': 'この時点へのリンクをコピー',
   'chrome.file.livePdf': 'ライブ PDF コピー',
   'chrome.file.livePdf.tip': 'この文書の PDF を隣に保存し、文書が変わるたびに書き直します',
   'chrome.edit.paste': '貼り付け(&P)',

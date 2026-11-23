@@ -40,6 +40,8 @@ export const menus: Partial<Messages> = {
   'menus.format.tsv': 'TSV (以定位點分隔)',
   'menus.format.txt': '純文字',
   'menus.format.xlsx': 'Excel 活頁簿',
+  'menus.format.audio': '音訊',
+  'menus.format.video': '視訊',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': '電子郵件',
   'menus.format.png': 'PNG 影像',

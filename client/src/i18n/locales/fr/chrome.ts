@@ -19,6 +19,7 @@ export const chrome: Partial<Messages> = {
   'chrome.edit.cut': 'Co&uper',
   'chrome.edit.copy': '&Copier',
   'chrome.edit.copyLiveLink': 'Copier comme lien dynamique',
+  'chrome.edit.copyMomentLink': 'Copier le lien vers ce moment',
   'chrome.file.livePdf': 'Copie PDF dynamique',
   'chrome.file.livePdf.tip': 'Enregistrer à côté un PDF de ce document, réécrit chaque fois que le document change',
   'chrome.edit.paste': 'Col&ler',

@@ -4,6 +4,7 @@
 
 import { t } from '../i18n/index.ts';
 import { TEXT_EXTENSIONS } from '../formats/textFiles.ts';
+import { AUDIO_EXTENSIONS, VIDEO_EXTENSIONS } from '../media/mediaFiles.ts';
 import type { Action, DocumentKind, Mark } from './actions.ts';
 
 export interface FormatProfile {
@@ -49,6 +50,8 @@ export interface FormatProfile {
   textEditor: boolean;
   /** A workbook, shown in the spreadsheet editor (see ../sheet): its own cells, editing, undo and clipboard. */
   sheetEditor: boolean;
+  /** Audio or video, shown in the media viewer (see ../media): played, never edited. */
+  mediaViewer: boolean;
 }
 
 const WORD_STYLES = [
@@ -96,6 +99,7 @@ const RICH: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   vectorTools: false,
   textEditor: false,
   sheetEditor: false,
+  mediaViewer: false,
 };
 
 const NOTHING: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
@@ -127,6 +131,7 @@ const NOTHING: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = {
   vectorTools: false,
   textEditor: false,
   sheetEditor: false,
+  mediaViewer: false,
 };
 
 /** What an HTML page can express; EPUB and MHTML hold the same content in a container. */
@@ -161,6 +166,9 @@ const LARGE_TEXT: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> 
 
 /** A workbook: edited in the spreadsheet editor (see ../sheet). */
 const SHEET: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, sheetEditor: true };
+
+/** Audio or video: played in the media viewer (see ../media), with nothing to edit. */
+const MEDIA: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, mediaViewer: true };
 
 /** A vector drawing: looked at for now; the vector editor's tools come with it (see vector/). */
 const VECTOR: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, vectorTools: true };
@@ -288,6 +296,8 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
   // An outline: headings and nested lists of plain text.
   opml: { ...NOTHING, kind: 'opml', label: 'OPML', extensions: ['.opml'], mime: 'text/x-opml', styles: ['Normal', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Heading 5', 'Heading 6'], lists: true, indent: true },
   xlsx: { ...SHEET, kind: 'xlsx', get label() { return t('menus.format.xlsx'); }, extensions: ['.xlsx', '.xlsm', '.xltx', '.xltm'], mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+  audio: { ...MEDIA, kind: 'audio', get label() { return t('menus.format.audio'); }, extensions: AUDIO_EXTENSIONS, mime: 'audio/mpeg' },
+  video: { ...MEDIA, kind: 'video', get label() { return t('menus.format.video'); }, extensions: VIDEO_EXTENSIONS, mime: 'video/mp4' },
   largetext: { ...LARGE_TEXT, kind: 'largetext', get label() { return t('menus.format.txt'); }, extensions: [], mime: 'text/plain' },
   png: { ...PICTURE, kind: 'png', get label() { return t('menus.format.png'); }, extensions: ['.png', '.gif', '.bmp'], mime: 'image/png' },
   jpeg: { ...PICTURE, kind: 'jpeg', get label() { return t('menus.format.jpeg'); }, extensions: ['.jpg', '.jpeg', '.heic', '.heif'], mime: 'image/jpeg' },
@@ -434,6 +444,24 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
         return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'searchAll' || action.name === 'pageSetup';
     }
   }
+  // The media viewer plays the file: its own playback commands, copying a link to the moment, and what any file can do (close, share, download).
+  if (profile.mediaViewer) {
+    switch (action.kind) {
+      case 'media':
+      case 'copyMomentLink':
+      case 'close':
+      case 'share':
+      case 'download':
+      case 'downloadAll':
+      case 'toggleFilesPanel':
+      case 'toggleFooter':
+      case 'toggleToolbars':
+        return true;
+      case 'dialog':
+        return action.name === 'searchAll' || action.name === 'options' || action.name === 'properties' || action.name === 'trash' || action.name === 'vault' || action.name === 'updates';
+    }
+    return worksWithoutDocument(action);
+  }
   // The text editor edits text and nothing else: no formatting or document properties (printing and converting open the file as a document first).
   if (profile.textEditor) {
     switch (action.kind) {
@@ -507,6 +535,9 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       return profile.vectorTools;
     case 'sheet':
       return profile.sheetEditor;
+    case 'media':
+    case 'copyMomentLink':
+      return profile.mediaViewer;
     // Headings and tables are a flowing document's.
     case 'jump':
       return profile.kind !== 'pdf' && !profile.imageTools && !profile.vectorTools && !profile.sheetEditor;

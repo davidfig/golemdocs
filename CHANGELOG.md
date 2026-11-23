@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.46.1 - Unreleased
+
+### Fixed
+
+- Drawings saved as PDF (and as PNG) now keep an outline drawn behind its fill (`paint-order: stroke`), as on outlined lettering, instead of drawing it over the fill; outlined text in a drawing also keeps its outline in a PDF.
+
 ## 0.46.0 - 2026-11-23
 
 ### Changed

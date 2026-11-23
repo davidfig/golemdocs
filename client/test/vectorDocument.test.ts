@@ -17,6 +17,7 @@ import { isGzip } from '../src/vector/gzip.ts';
 import { paintScene } from '../src/vector/paint.ts';
 import { sceneToPdf } from '../src/vector/pdfOut.ts';
 import { readSvg } from '../src/vector/svgRead.ts';
+import { strokeUnderFill } from '../src/vector/style.ts';
 import { FakeCanvas, FakeContext, installFakeCanvas } from './fakeCanvas.ts';
 import { pngBytes } from './pictures.ts';
 
@@ -176,4 +177,46 @@ test('a gradient fill is a PDF shading drawn through the shape, with its stroke 
   const page = PdfDocument.load(bytes).pages[0];
   const shadings = page.resources.get('Shading') as unknown as Map<string, unknown>;
   assert.equal([...shadings].length, 2);
+});
+
+const OUTLINED = (order: string): string => `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50" viewBox="0 0 100 50">
+  <g paint-order="${order}" fill="#f00" stroke="#000" stroke-width="4">
+    <rect x="10" y="10" width="30" height="20"/>
+    <text x="50" y="30" font-size="16">Hi</text>
+  </g></svg>`;
+
+test('paint-order: the stroke goes under the fill only when it is named before it', () => {
+  const under = (order: string): boolean => strokeUnderFill([{ 'paint-order': order }]);
+  assert.equal(under('normal'), false);
+  assert.equal(under('fill'), false);
+  assert.equal(under('markers'), false);
+  assert.equal(under('fill stroke'), false);
+  assert.equal(under('markers fill stroke'), false);
+  assert.equal(under('stroke'), true);
+  assert.equal(under('stroke fill'), true);
+  assert.equal(under('markers stroke'), true);
+  // Inherited from a group.
+  assert.equal(strokeUnderFill([{}, { 'paint-order': 'stroke' }]), true);
+});
+
+test('painting follows paint-order for shapes and text', () => {
+  const order = (ctx: FakeContext): string[] => ctx.calls.map((c) => c.op).filter((op) => ['fill', 'stroke', 'fillText', 'strokeText'].includes(op));
+  assert.deepEqual(order(paint(OUTLINED('normal'), 100, 50)), ['fill', 'stroke', 'fillText', 'strokeText']);
+  assert.deepEqual(order(paint(OUTLINED('stroke'), 100, 50)), ['stroke', 'fill', 'strokeText', 'fillText']);
+});
+
+test('a PDF follows paint-order: the stroke is painted first, then the fill over it', async () => {
+  const ops = async (order: string) => PdfDocument.load(await sceneToPdf(readSvg(OUTLINED(order)))).pages[0].operations();
+  const normal = await ops('normal');
+  // Shape: one fill-and-stroke. Text: one run drawn filled and stroked, so it is there once when copied.
+  assert.ok(normal.some((o) => o.op === 'B'));
+  assert.deepEqual(normal.filter((o) => o.op === 'Tr').map((o) => o.operands[0]), [2]);
+  const stroke = await ops('stroke');
+  const names = stroke.map((o) => o.op);
+  assert.ok(!names.includes('B'));
+  assert.ok(names.indexOf('S') < names.indexOf('f'), 'outline under the fill');
+  // The text: a stroked run (Tr 1), then a filled one (no Tr) on top.
+  assert.deepEqual(stroke.filter((o) => o.op === 'Tr').map((o) => o.operands[0]), [1]);
+  assert.equal(names.filter((o) => o === 'Tj' || o === 'TJ').length, 2);
+  assert.ok(names.indexOf('Tr') < names.lastIndexOf('Tj'));
 });

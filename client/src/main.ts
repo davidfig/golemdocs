@@ -1390,6 +1390,7 @@ function applyLayout(update: LayoutUpdate): void {
   const kept = update.keep && pagesById.get(update.keep.page);
   if (kept && isBook() && readingHold) showReadingPlace(kept, update.keep!.y);
   else if (kept) camera.y = kept.y + update.keep!.y;
+  shelf.keep(pagesInReach());
   if (newDrawingSince) {
     for (const page of pages) {
       const added = page.images.find((i) => i.svg && !newDrawingSince!.has(i.svg));
@@ -1400,6 +1401,16 @@ function applyLayout(update: LayoutUpdate): void {
       }
     }
   }
+}
+
+/** Where the pages in view and a screen either side are in `pages`. */
+function reach(): { from: number; to: number } {
+  return nearRange(pages, { top: camera.y, bottom: camera.y + camera.height / camera.scale }, 1);
+}
+
+function pagesInReach(): GpuPage[] {
+  const { from, to } = reach();
+  return pages.slice(from, to);
 }
 
 /** Positions pages; places the camera the first time, and keeps a grid fitted while it grows. */
@@ -5280,7 +5291,7 @@ function render(): void {
     if (renderer.flat) camera.x = bounds.x;
     renderer.forced = forcedColors();
     // The pages in view and a screen either side keep their glyphs unpacked, or get them back, and are where squiggles are found.
-    const range = nearRange(pages, { top: camera.y, bottom: camera.y + camera.height / camera.scale }, 1);
+    const range = reach();
     shelf.keep(pages.slice(range.from, range.to));
     worker.view(range.from, range.to);
     lastStats = renderer.render(camera, pages, selection, caretVisible, pagesDark());

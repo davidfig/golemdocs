@@ -209,6 +209,11 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     if (!frame && !destroyed) frame = win.requestAnimationFrame(render);
   }
 
+  /** The pages in view and a screen either side keep their glyphs, or get them back. */
+  function keepNear(): void {
+    shelf.keep(pagesNear(pages, { top: camera.y, bottom: camera.y + camera.height / camera.scale }, 1));
+  }
+
   function render(): void {
     frame = 0;
     if (!renderer || !selection) return;
@@ -218,7 +223,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     // Flow has no page edges: the text runs to the window's sides.
     renderer.flat = reflowing();
     syncReflow();
-    shelf.keep(pagesNear(pages, { top: camera.y, bottom: camera.y + camera.height / camera.scale }, 1));
+    keepNear();
     renderer.render(camera, pages, selection, false, dark);
     reader?.render({ x: camera.x, y: camera.y, scale: camera.zoom * CSS_PX_PER_POINT, width: canvas.clientWidth, height: canvas.clientHeight }, pages);
     updateBar();
@@ -351,6 +356,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       loading.hide();
     }
     arrange();
+    keepNear();
   }
 
   function applySelection(update: SelectionUpdate): void {

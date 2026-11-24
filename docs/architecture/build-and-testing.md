@@ -143,6 +143,7 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-22 | `e2e/pdf/markup.spec.ts` › marking up a PDF › double-clicking a word selects that word | Timed out at 31 s in pass one of the 0.45.0 release run, with side runs going; alone, passed in 4 s |
 | 2026-11-22 | `e2e/files/edit-journal.spec.ts` › a document whose journal has outlived it leaves nothing behind | Failed at 34 s in pass one of the 0.45.0 release run, with side runs going; alone, passed in 7 s |
 | 2026-11-22 | `e2e/shell/agent-guide.spec.ts` › Instructions for ai apps in the vault › the guide is written once the folder syncs, and a folder with no AGENTS.md gets one with the line | Timed out at 1 min in pass one of the 0.45.0 release run, and on its retry, with three side runs going; alone, passed. If it turns up again, look at how long the first vault sync takes under load |
+| 2026-11-23 | `e2e/viewer/sandbox.spec.ts` › Chromium: the sandboxed viewer starts its worker, draws with WebGL and loads its fonts under a strict CSP | Already `@heavy`, fourth time here: hit its 3.0 min limit (no assertion failed) in the heavy pass of the 0.46.2 release run, passed its retry in 28.8 s; alone, passed in 19.7 s. Its build was not timed this time; its limit should allow for one |
 
 ## Performance traces (`golem:*`)
 

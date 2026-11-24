@@ -1,5 +1,13 @@
 # What’s New in Golem Docs
 
+## 0.46.2 - Unreleased
+
+### Fixed
+
+- PDFs: text drawn over other text in a different font keeps the order the PDF painted it in, so a caption over its outline (as a browser writes outlined lettering in a PDF) shows as the caption with its outline round it, not the outline over the caption.
+- PDFs: outlined text (stroked rather than filled) is drawn as an outline instead of as solid letters.
+- Editing a document of more than a few pages no longer makes the text of the page on view blink out for a moment now and then.
+
 ## 0.46.1 - 2026-11-23
 
 ### Fixed

@@ -94,6 +94,8 @@ export class GlyphList extends InstanceList {
   constructor(
     readonly font: ResolvedFont,
     readonly metrics: FaceMetrics,
+    /** Drawn after every list of a lower layer: text that must cover text of another face painted before it (see `PageLayout.glyphList`). */
+    readonly layer = 0,
   ) {
     super(GLYPH_INSTANCE_BYTES);
   }
@@ -222,18 +224,29 @@ export class PageLayout {
     public number: number,
   ) {}
 
-  glyphList(font: ResolvedFont, metrics: FaceMetrics): GlyphList {
-    let list = this.glyphs.get(font.key);
+  /**
+   * The page's glyphs in a face. Text is drawn a face at a time, so glyphs of two faces that overlap have no order between them
+   * unless they are on different layers: a higher `layer` is drawn after all the lower ones (a PDF's white caption over the dark
+   * halo another font of it painted first). `glyphs` stays in layer order, so whatever walks it draws the layers in turn.
+   */
+  glyphList(font: ResolvedFont, metrics: FaceMetrics, layer = 0): GlyphList {
+    const key = layer ? `${layer}|${font.key}` : font.key;
+    let list = this.glyphs.get(key);
     if (!list) {
-      list = new GlyphList(font, metrics);
-      this.glyphs.set(font.key, list);
+      list = new GlyphList(font, metrics, layer);
+      this.glyphs.set(key, list);
+      if ([...this.glyphs.values()].some((other) => other.layer > layer)) {
+        const ordered = [...this.glyphs].sort((a, b) => a[1].layer - b[1].layer);
+        this.glyphs.clear();
+        for (const [k, v] of ordered) this.glyphs.set(k, v);
+      }
     }
     return list;
   }
 
   /** Adds another layout's content (a header/footer overlay) on top of this page's. */
   append(other: PageLayout): void {
-    for (const list of other.glyphs.values()) this.glyphList(list.font, list.metrics).append(list);
+    for (const list of other.glyphs.values()) this.glyphList(list.font, list.metrics, list.layer).append(list);
     this.background.append(other.background);
     this.foreground.append(other.foreground);
     this.images.push(...other.images);

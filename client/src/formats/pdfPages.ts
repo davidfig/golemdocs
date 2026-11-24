@@ -7,7 +7,7 @@
 
 import { FontSet, PageLayout, isCjk, type GlyphList, isHangul, langOfFontName, packColor, type CjkLang, type FaceMetrics, type ManifestFace, type ResolvedFont } from '@golemdocs/layout';
 import { PdfDocument, applyAnnotations, applyEdits, applyFields, blockFromRuns, collectCharacters, collectFonts, encodePng, findBlocks, imageBytes, interpretPage, readAnnotations, readFields, scanPage, type Annotation, type ApplyResult, type Box, type FormField, type DisplayImage, type DisplayPath, type FontStyle, type PageDisplay, type GlyphRun, type PageObject, type PdfEdit, type TextBlock, type TextRun } from '@golemdocs/pdf';
-import { drawingSvg, type DrawingGroup } from './pdfDrawings.ts';
+import { drawingSvg, strokedTextPath, type DrawingGroup } from './pdfDrawings.ts';
 import { PdfFaces } from './pdfFaces.ts';
 import { pageCharacters, type PdfCharacter } from './pdfText.ts';
 import type { EditFonts } from './pdfFonts.ts';
@@ -89,6 +89,62 @@ export function pictures(display: PageDisplay): Picture[] {
     out.push({ kind: 'image', image: item });
   }
   flush();
+  return out;
+}
+
+/**
+ * Adds the outlines of the page's stroked text (a halo round a caption, outlined lettering) to its shapes, so they
+ * are drawn as vector pictures at their place in the painting order: the glyph atlases only fill. Returns the runs
+ * that are only stroked and whose outline was made: they are not drawn as text too.
+ */
+export function outlineText(display: PageDisplay, faces: PdfFaces): Set<GlyphRun> {
+  const outlinedOnly = new Set<GlyphRun>();
+  for (const run of display.glyphRuns) {
+    if (!run.stroke) continue;
+    const path = strokedTextPath(run, (glyph) => faces.outline(run, glyph));
+    if (!path) continue;
+    display.paths.push(path);
+    if (run.stroke.only) outlinedOnly.add(run);
+  }
+  return outlinedOnly;
+}
+
+/** Grid cell for finding the runs a run overlaps, points. */
+const LAYER_CELL = 48;
+
+/**
+ * Each run with the layer it is drawn on (`PageLayout.glyphList`). Text is drawn a face at a time, so a run that covers text of
+ * another font painted before it (a caption over the halo a second font draws round it, a word set over a drop cap) goes a layer
+ * above that text; text in one font keeps its order on one layer. Most pages have no such overlap and stay on layer 0.
+ */
+export function textLayers(runs: readonly GlyphRun[]): [GlyphRun, number][] {
+  const grid = new Map<string, { box: [number, number, number, number]; font: object; layer: number }[]>();
+  const out: [GlyphRun, number][] = [];
+  for (const run of runs) {
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const g of run.glyphs) [x0, y0, x1, y1] = [Math.min(x0, g.x), Math.min(y0, g.y - run.size * 0.8), Math.max(x1, g.x + Math.abs(g.advance)), Math.max(y1, g.y + run.size * 0.2)];
+    // Shrunk a little, so that neighbours that only touch (words of a line in two fonts, lines set close) don't count.
+    const inset = run.size * 0.1;
+    [x0, y0, x1, y1] = [x0 + inset, y0 + inset, x1 - inset, y1 - inset];
+    if (!(x1 > x0) || !(y1 > y0)) {
+      out.push([run, 0]);
+      continue;
+    }
+    const cells: string[] = [];
+    for (let cx = Math.floor(x0 / LAYER_CELL); cx <= Math.floor(x1 / LAYER_CELL); cx++) for (let cy = Math.floor(y0 / LAYER_CELL); cy <= Math.floor(y1 / LAYER_CELL); cy++) cells.push(`${cx},${cy}`);
+    let layer = 0;
+    for (const cell of cells)
+      for (const e of grid.get(cell) ?? []) {
+        if (e.box[0] < x1 && e.box[2] > x0 && e.box[1] < y1 && e.box[3] > y0) layer = Math.max(layer, e.font === run.fontDict ? e.layer : e.layer + 1);
+      }
+    const entry = { box: [x0, y0, x1, y1] as [number, number, number, number], font: run.fontDict, layer };
+    for (const cell of cells) {
+      let list = grid.get(cell);
+      if (!list) grid.set(cell, (list = []));
+      list.push(entry);
+    }
+    out.push([run, layer]);
+  }
   return out;
 }
 
@@ -278,18 +334,19 @@ export async function openPdfView(
     if (lastShapes?.page !== index) {
       const pdfPage = doc.pages[index];
       const display = pdfPage && interpretPage(pdfPage, { hideFields: true, paths: true, strips: false });
+      if (display) outlineText(display, embedded);
       lastShapes = { page: index, groups: display ? pictures(display).flatMap((item) => (item.kind === 'shapes' ? [item.group] : [])) : [] };
     }
     return lastShapes.groups;
   };
 
-  const pushRun = (page: PageLayout, run: GlyphRun): void => {
+  const pushRun = (page: PageLayout, run: GlyphRun, layer = 0): void => {
     const choice = choose(run);
     const metrics = choice.metrics ?? fallback.metrics;
     const resolved = choice.metrics ? choice.resolved : fallback.resolved;
     // Made when a glyph needs it: a run drawn wholly from its own font has no stand-in list.
     let standIn: GlyphList | undefined;
-    const list = (): GlyphList => (standIn ??= page.glyphList(resolved, metrics!));
+    const list = (): GlyphList => (standIn ??= page.glyphList(resolved, metrics!, layer));
     const runColor = packColor(run.color, run.alpha);
     for (const g of run.glyphs) {
       // Text painted with a gradient: each glyph in its own color.
@@ -297,7 +354,7 @@ export async function openPdfView(
       // The font's own glyph, where its program has it (null: a blank one).
       const own = embedded.glyph(run, g.glyph);
       if (own !== undefined) {
-        if (own) page.glyphList(own.font, own.metrics).push(g.x, g.y, run.size, own.glyph, color);
+        if (own) page.glyphList(own.font, own.metrics, layer).push(g.x, g.y, run.size, own.glyph, color);
         continue;
       }
       if (!metrics) continue;
@@ -308,7 +365,7 @@ export async function openPdfView(
           if (metrics.visible[glyph]) list().push(g.x, g.y, run.size, glyph, color);
         } else {
           const drawn = pageFace(run, cps[0]);
-          if (drawn?.metrics.visible[drawn.glyph]) page.glyphList(drawn.resolved, drawn.metrics).push(g.x, g.y, run.size, drawn.glyph, color);
+          if (drawn?.metrics.visible[drawn.glyph]) page.glyphList(drawn.resolved, drawn.metrics, layer).push(g.x, g.y, run.size, drawn.glyph, color);
         }
         continue;
       }
@@ -440,7 +497,9 @@ export async function openPdfView(
       } catch (e) {
         warn(`page ${index + 1}: embedded fonts could not be drawn (${(e as Error).message})`);
       }
-      for (const run of display.glyphRuns) pushRun(page, run);
+      const outlinedOnly = outlineText(display, embedded);
+      const layers = textLayers(display.glyphRuns.filter((run) => !outlinedOnly.has(run)));
+      for (const [run, layer] of layers) pushRun(page, run, layer);
       if (lastShapes?.page === index) lastShapes = undefined;
       for (const part of vectorParts.get(index) ?? []) {
         vectors.delete(part);

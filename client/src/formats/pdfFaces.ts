@@ -109,6 +109,11 @@ export class PdfFaces {
     return entry === 'missing' ? undefined : entry;
   }
 
+  /** A glyph's outline from its run's font program (ems, y up), or null when the font has no program or no such glyph. */
+  outline(run: GlyphRun, glyph: number): Outline | null {
+    return this.state(run.fontDict).program?.outline(glyph) ?? null;
+  }
+
   private state(dict: PdfDict): FontState {
     let state = this.fonts.get(dict);
     if (!state) {

@@ -58,6 +58,8 @@ export interface EncodedText {
   count: number;
   /** May be longer than count instances (spare capacity is transferred, not copied). */
   instances: ArrayBuffer;
+  /** `GlyphList.layer`, when above 0. */
+  layer?: number;
 }
 
 export interface EncodedRects {
@@ -102,6 +104,7 @@ export function encodePage(page: PageLayout): { page: EncodedPage; faces: FaceMe
       syntheticBold: list.font.syntheticBold,
       count: list.count,
       instances: list.buffer,
+      ...(list.layer && { layer: list.layer }),
     });
     glyphCount += list.count;
     transferables.push(list.buffer);

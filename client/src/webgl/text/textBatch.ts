@@ -36,6 +36,8 @@ export class TextBatch {
     readonly count: number,
     public originX = 0,
     public originY = 0,
+    /** Drawn after the batches of lower layers (`GlyphList.layer`). */
+    readonly layer = 0,
   ) {
     this.data = instances;
   }

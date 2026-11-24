@@ -7,7 +7,8 @@
 // a great many small squares (a code), count as art.
 
 import { el, type XmlElement } from '@golemdocs/docx';
-import { encodePng, imageBytes, type DisplayClip, type DisplayImage, type DisplayPaint, type DisplayPath, type PdfDocument } from '@golemdocs/pdf';
+import { encodePng, imageBytes, type DisplayClip, type DisplayImage, type DisplayPaint, type DisplayPath, type GlyphRun, type PdfDocument } from '@golemdocs/pdf';
+import type { Outline } from '@golemdocs/pdf/fontProgram';
 import { encodeCanvas, makeCanvas } from './imageCodec.ts';
 import { serializeTransform } from '../vector/matrix.ts';
 import { emptyScene, type GroupNode, type ImageNode, type Matrix, type PathCommand, type PathNode, type Scene, type SceneNode } from '../vector/model.ts';
@@ -278,6 +279,66 @@ function pathNode(p: DisplayPath, dx: number, dy: number, defs: Definitions): Pa
     }
   }
   return { kind: 'path', commands, style, attrs: {} };
+}
+
+/**
+ * The outline of a stroked run of text (`run.stroke`) as a path to draw among the page's shapes: its glyphs'
+ * outlines (ems, y up, from the font's program) set at their places, curves flattened. Null when the run is
+ * not stroked or its font has no outlines, so the caller draws the run as text alone.
+ */
+export function strokedTextPath(run: GlyphRun, outline: (glyph: number) => Outline | null | undefined): DisplayPath | null {
+  const stroke = run.stroke;
+  if (!stroke) return null;
+  const subpaths: DisplayPath['subpaths'] = [];
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const g of run.glyphs) {
+    // A glyph its font can't outline (or a broken font): the run is drawn as text alone. (An empty outline is a blank glyph.)
+    let shape: Outline | null | undefined;
+    try {
+      shape = outline(g.glyph);
+    } catch {
+      return null;
+    }
+    if (!shape) return null;
+    const px = (gx: number): number => g.x + gx * run.size;
+    const py = (gy: number): number => g.y - gy * run.size;
+    for (const contour of shape) {
+      if (!contour.length) continue;
+      const pts = [px(contour[0].points[0]), py(contour[0].points[1])];
+      for (const { points: p } of contour) {
+        if (p.length === 4) pts.push(px(p[2]), py(p[3]));
+        else if (p.length === 6 || p.length === 8) {
+          const steps = Math.min(16, Math.max(4, Math.ceil(run.size / 4)));
+          for (let i = 1; i <= steps; i++) {
+            const t = i / steps;
+            const u = 1 - t;
+            if (p.length === 6) pts.push(px(u * u * p[0] + 2 * u * t * p[2] + t * t * p[4]), py(u * u * p[1] + 2 * u * t * p[3] + t * t * p[5]));
+            else pts.push(px(u * u * u * p[0] + 3 * u * u * t * p[2] + 3 * u * t * t * p[4] + t * t * t * p[6]), py(u * u * u * p[1] + 3 * u * u * t * p[3] + 3 * u * t * t * p[5] + t * t * t * p[7]));
+          }
+        }
+      }
+      for (let i = 0; i < pts.length; i += 2) [x0, y0, x1, y1] = [Math.min(x0, pts[i]), Math.min(y0, pts[i + 1]), Math.max(x1, pts[i]), Math.max(y1, pts[i + 1])];
+      subpaths.push({ pts, closed: true });
+    }
+  }
+  if (!subpaths.length) return null;
+  const grow = stroke.width / 2;
+  [x0, y0, x1, y1] = [x0 - grow, y0 - grow, x1 + grow, y1 + grow];
+  for (const c of stroke.clips ?? []) [x0, y0, x1, y1] = [Math.max(x0, c.x0), Math.max(y0, c.y0), Math.min(x1, c.x1), Math.min(y1, c.y1)];
+  if (!(x1 > x0) || !(y1 > y0)) return null;
+  return {
+    subpaths,
+    stroke: { color: stroke.color, alpha: stroke.alpha, width: stroke.width, cap: 0, join: stroke.join, miter: stroke.miter, dash: [], phase: 0 },
+    ...(stroke.clips && { clips: stroke.clips }),
+    x0,
+    y0,
+    x1,
+    y1,
+    plain: false,
+    over: stroke.over,
+    order: stroke.order,
+    vectorOnly: true,
+  };
 }
 
 /** The paths as scene nodes, in a group of their own under each clip they share (nested for nested clips). */

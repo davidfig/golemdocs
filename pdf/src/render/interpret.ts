@@ -56,6 +56,29 @@ export interface GlyphRun extends FontStyle {
   color: number;
   alpha: number;
   glyphs: DisplayGlyph[];
+  /** Outlined text (render modes 1, 2, 5 and 6, only when asked for with `paths`): how its glyphs are stroked. */
+  stroke?: GlyphStroke;
+}
+
+/**
+ * The outline of a run of text, to draw as a shape from the glyphs' outlines at its place among the page's
+ * paths and images (`order`), the way a stroked path is drawn. A run that is only stroked (`only`, render
+ * mode 1 or 5) is not filled: its `color` and `alpha` are the outline's, for callers that can't stroke text.
+ */
+export interface GlyphStroke {
+  color: number;
+  alpha: number;
+  /** Line width in points. */
+  width: number;
+  join: number;
+  miter: number;
+  only: boolean;
+  /** What cut it, outermost first (as `DisplayPath.clips`). */
+  clips?: DisplayClip[];
+  /** Painted after text or an image it overlaps. */
+  over: boolean;
+  /** Where it comes in the page's painting order, among the paths and images. */
+  order: number;
 }
 
 export interface DisplayRect {
@@ -558,8 +581,23 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
       ymin = Math.min(ymin, g.y);
       ymax = Math.max(ymax, g.y);
     }
-    ctx.boxes.push([x0, ymin - ul * 0.8, x1, ymax + ul * 0.2]);
-    ctx.out.glyphRuns.push({ ...fe.style, fontDict: font.dict, size: ul, color, alpha, glyphs });
+    const box: [number, number, number, number] = [x0, ymin - ul * 0.8, x1, ymax + ul * 0.2];
+    // The outline (fill and stroke: modes 2 and 6, after the fill) is a shape among the page's shapes, so it is
+    // layered as painted: a halo stroked before its text goes under it, and over whatever was painted before it.
+    let stroke: GlyphStroke | undefined;
+    const outlined = gs.render === 1 || gs.render === 2 || gs.render === 5 || gs.render === 6;
+    if (outlined && ctx.pathPoints >= 0 && !gs.strokePattern) {
+      const scale = Math.sqrt(Math.abs(gs.ctm[0] * gs.ctm[3] - gs.ctm[1] * gs.ctm[2])) || 1;
+      const width = Math.max(gs.lineWidth * scale, 0.25);
+      const clips: DisplayClip[] = [];
+      for (let c = gs.clip; c; c = c.parent) {
+        if (c.rect && box[0] - width >= c.x0 - 0.01 && box[1] - width >= c.y0 - 0.01 && box[2] + width <= c.x1 + 0.01 && box[3] + width <= c.y1 + 0.01) continue;
+        clips.unshift(c);
+      }
+      stroke = { color: gs.stroke, alpha: gs.strokeAlpha, width, join: gs.join, miter: gs.miter, only: stroked, ...(clips.length && { clips }), over: overlaps(box[0], box[1], box[2], box[3]), order: ctx.order.next++ };
+    }
+    ctx.boxes.push(box);
+    ctx.out.glyphRuns.push({ ...fe.style, fontDict: font.dict, size: ul, color, alpha, glyphs, ...(stroke && { stroke }) });
   };
 
   // --- paths ---

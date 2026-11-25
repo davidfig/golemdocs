@@ -27,4 +27,9 @@ export const viewer = {
   'viewer.signInToViewFolder': 'Sign in to see this folder.',
   'viewer.folderEmpty': 'This folder is empty.',
   'viewer.fileGone': 'That file isn’t in the folder any more.',
+  'viewer.downloadAll': 'Download All',
+  'viewer.downloadingAll': 'Downloading file {done} of {count}…',
+  'viewer.zippingAll': 'Making the ZIP…',
+  'viewer.downloadedAll': 'Downloaded {count} files',
+  'viewer.downloadedAllSomeKept': 'Downloaded the folder, but {names} could not be converted. They are in the ZIP as .wdoc files, which only Golem Docs opens',
 } as const;

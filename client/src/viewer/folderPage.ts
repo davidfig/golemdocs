@@ -10,13 +10,19 @@
 // Everything asked for is the share's token and a path in the folder (`/api/folder-view|folder-public/<token>[/file?path=]`), never
 // an id. As the document page does, it checks every half minute (two minutes for a public link) and when the tab is looked at again:
 // the tree, and the file shown (`If-None-Match`). When access ends the document and tree go and nothing more is asked.
+//
+// Both pages download: the bar's Download saves the file shown, and Download All beside the folder's name saves every file of the
+// folder as one ZIP, in its folders, each converted to the file its name says as Download does (`storage/archive.ts`, which the
+// app's File › Download All uses too). A person with view access could read every file anyway, so withholding it protects nothing.
 
 import { t } from '../i18n/index.ts';
 import { CHEVRON_ICON, h, iconButton } from '../ui/dom.ts';
 import { mountSignIn } from '../ui/signIn.ts';
-import { firstFile, folderTree, resolveFolderLink, type TreeFolder } from './folderLinks.ts';
+import { archivePlace, firstFile, folderTree, resolveFolderLink, type TreeFolder } from './folderLinks.ts';
+import { archiveFiles, zipDocuments, type ArchiveDoc } from '../storage/archive.ts';
+import { saveFile } from '../ui/saveFile.ts';
 import { savedViewMode } from '../ui/viewMode.ts';
-import { CHECK_MS, downloader, downloading, highContrast, PAGE_TITLE, PUBLIC_CHECK_MS, say, sayIn } from './page.ts';
+import { CHECK_MS, downloader, downloading, highContrast, PAGE_TITLE, PUBLIC_CHECK_MS, say, sayIn, toFile } from './page.ts';
 import { followSaves, type LiveLine } from './live.ts';
 import { checkOutcome } from './protocol.ts';
 import { mount, type Viewer } from './viewer.ts';
@@ -35,6 +41,8 @@ interface FolderTreeResponse {
 
 /** A panel beside the page: the icon of the Files button. */
 const ICON_FILES = 'M1.5 2.5H10.5V9.5H1.5ZM4.5 2.5V9.5';
+/** Download All: an arrow into a folder. */
+const ICON_DOWNLOAD_ALL = 'M1.5 4V10.5H10.5V4H8M4 4H1.5M6 1V7M4 5L6 7L8 5';
 /** How long a note in the bar (a link that goes outside the folder) stays. */
 const NOTE_MS = 6000;
 
@@ -87,7 +95,8 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
   toggle.setAttribute('aria-controls', nav.id);
   const folderName = h('h1', { class: 'wm-viewer-title wm-folder-name' });
   const note = h('span', { class: 'wm-find-message', attrs: { role: 'status' } });
-  const head = h('header', { class: 'wm-viewer-bar wm-folder-head' }, toggle, folderName, note);
+  const downloadAllButton = iconButton('wm-tbutton', ICON_DOWNLOAD_ALL, t('viewer.downloadAll'));
+  const head = h('header', { class: 'wm-viewer-bar wm-folder-head' }, toggle, folderName, note, downloadAllButton);
   document.body.replaceChildren(h('div', { class: 'wm-viewer wm-folder-page' }, head, h('div', { class: 'wm-folder-body' }, nav, docEl)));
 
   const narrow = matchMedia('(max-width: 640px)');
@@ -102,11 +111,48 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
   });
 
   let noteTimer = 0;
-  const tell = (text: string): void => {
+  /** A note in the bar; one that stays (`lasting`) is for progress, replaced by the next. */
+  const tell = (text: string, lasting = false): void => {
     clearTimeout(noteTimer);
     note.textContent = text;
-    noteTimer = window.setTimeout(() => (note.textContent = ''), NOTE_MS);
+    if (!lasting) noteTimer = window.setTimeout(() => (note.textContent = ''), NOTE_MS);
   };
+
+  // --- Download All ------------------------------------------------------------------------------
+  let zipping = false;
+  async function downloadAll(): Promise<void> {
+    if (zipping || ended) return;
+    zipping = true;
+    downloadAllButton.setAttribute('aria-disabled', 'true');
+    try {
+      const files = tree.files;
+      if (!files.length) return tell(t('viewer.folderEmpty'));
+      const docs: ArchiveDoc[] = [];
+      for (const [i, file] of files.entries()) {
+        tell(t('viewer.downloadingAll', { done: i + 1, count: files.length }), true);
+        const response = await fetch(`${api}/file?path=${encodeURIComponent(file.path)}`, { cache: 'no-store' });
+        if (response.status === 401) return end('signedOut');
+        // Gone since the tree was read: left out (the next check redraws the tree).
+        if (response.status === 404 || response.status === 403) continue;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        docs.push({ ...archivePlace(file.path), bytes: new Uint8Array(await response.arrayBuffer()) });
+        if (ended) return;
+      }
+      tell(t('viewer.zippingAll'), true);
+      const converted = await archiveFiles(docs, toFile);
+      const zip = await zipDocuments(converted.docs);
+      if (ended) return;
+      if (await saveFile(`${tree.name.replace(/[\\/:*?"<>|]/g, '_').trim() || 'folder'}.zip`, zip, 'application/zip'))
+        tell(converted.kept.length ? t('viewer.downloadedAllSomeKept', { names: converted.kept.join(', ') }) : t('viewer.downloadedAll', { count: docs.length }));
+      else tell('');
+    } catch (error) {
+      if (!ended) tell(t('app.downloadFailed', { message: (error as Error).message }));
+    } finally {
+      zipping = false;
+      downloadAllButton.removeAttribute('aria-disabled');
+    }
+  }
+  downloadAllButton.addEventListener('click', () => void downloadAll());
 
   // --- The tree ----------------------------------------------------------------------------------
   const links = new Map<string, HTMLAnchorElement>();
@@ -209,7 +255,7 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
     const title = t('viewer.viewOnlyTitle', { name });
     document.title = `${title} · ${tree.name}`;
     // A copy for Download: the viewer is handed the bytes, which go to its worker.
-    const opened = { path, etag: response.headers.get('etag'), stored: isPublic ? new Uint8Array(bytes.slice(0)) : null };
+    const opened = { path, etag: response.headers.get('etag'), stored: new Uint8Array(bytes.slice(0)) as Uint8Array | null };
     shown = opened;
     live = followSaves(`${api}/live?path=${encodeURIComponent(path)}`, () => void check());
     docEl.replaceChildren();
@@ -229,7 +275,7 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
       waited,
       heading: section || undefined,
       onError: (message) => console.error(message),
-      onDownload: isPublic ? () => void (opened.stored && save(opened.stored, name)) : undefined,
+      onDownload: () => void (opened.stored && save(opened.stored, name)),
       // A web link opens in a tab of its own; a link to another document opens it here, if it is the folder's.
       onLink: (url) => void window.open(url, '_blank', 'noopener,noreferrer'),
       onDocLink: (address) => {

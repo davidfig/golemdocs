@@ -69,3 +69,9 @@ export function firstFile<T extends FolderFile>(files: readonly T[]): T | undefi
   const top = files.filter((f) => !f.path.includes('/'));
   return top.find((f) => /^(readme|index)\b/i.test(f.path)) ?? top[0] ?? files[0];
 }
+
+/** A path in the folder as Download All stores it: the file's name, and the folders it is in, outermost first. */
+export function archivePlace(path: string): { name: string; folders: string[] } {
+  const parts = path.split('/').filter(Boolean);
+  return { name: parts.pop() ?? path, folders: parts };
+}

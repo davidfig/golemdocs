@@ -57,7 +57,7 @@ Built: the same page (`client/view/index.html`, `src/viewer/share.ts`), which ha
 - **Headings:** `#Section` goes to the heading once the file is laid out (`heading` in `mount`, the layout worker's `goToPlace`).
 - **Embeds:** not yet: an embed is drawn from what the file stores.
 - **Refresh and ending:** the tree and the open file are checked as the document viewer does: at once on each save of the open file (its live line, `/live?path=…`, see [Embeddable viewer](architecture/viewer.md)), and every 30 s for a person, 2 min for the public link, and when the tab is looked at again. A 404 or 403 on the tree destroys the viewer and the tree and says the folder is no longer shared; a 401 shows the sign-in buttons; a file gone from a folder that is still shared says just that.
-- **Download** on the public link, per file, as for a document.
+- **Download** on both pages: the bar's Download saves the file shown, as for a document's public link, and **Download All** beside the folder's name saves every file of the folder as one ZIP named for the folder, in its folders, each converted as Download converts it (`archiveFiles` and `zipDocuments` in `storage/archive.ts`, shared with the app's File › Download All). A person's view-only share downloads too: they can read every file anyway, so withholding it protects nothing.
 
 ## App (Can edit)
 

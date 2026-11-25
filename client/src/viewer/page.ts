@@ -1,5 +1,5 @@
 // What the site's viewer pages share (share.ts for a document, folderPage.ts for a folder): a message in place of the document, the
-// app's High Contrast choice, and Download for a public link.
+// app's High Contrast choice, and Download.
 
 import { h } from '../ui/dom.ts';
 import { FORMATS, kindFromName } from '../ui/formats.ts';
@@ -55,16 +55,19 @@ export function highContrast(): boolean {
   }
 }
 
+let converter: ConvertWorker | null = null;
+
 /**
- * Saves a stored document as the file its name says (the account keeps a .wdoc: `toVaultFile` turns it into that file, in the
- * vault's convert worker, started only when it is first asked for).
+ * A stored document as the file its name says (the account keeps a .wdoc: `toVaultFile` turns it into that file, in the vault's
+ * convert worker, started only when it is first asked for); null if it can't be converted.
  */
+export const toFile = (bytes: Uint8Array, name: string): Promise<Uint8Array | null> => (converter ??= new ConvertWorker(startConvertWorker)).toFile(bytes, name);
+
+/** Saves a stored document as the file its name says (`toFile`). */
 export function downloader(): (bytes: Uint8Array, name: string) => Promise<void> {
-  let converter: ConvertWorker | null = null;
   return async (bytes, name) => {
     try {
-      converter ??= new ConvertWorker(startConvertWorker);
-      const out = (await converter.toFile(bytes, name)) ?? bytes;
+      const out = (await toFile(bytes, name)) ?? bytes;
       await saveFile(name, out, FORMATS[kindFromName(name)].mime);
     } catch (error) {
       console.error(error);

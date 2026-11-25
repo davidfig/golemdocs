@@ -77,6 +77,9 @@ test('the owner shares a document with "Can view", and the other person opens it
   await guest.page.keyboard.type('changed by the viewer');
   await guest.page.keyboard.press('Enter');
   await expect.poll(() => viewerText(guest.page)).toBe('the plan');
+  // Download saves it under its name, as on a public link.
+  const [download] = await Promise.all([guest.page.waitForEvent('download'), guest.page.getByRole('button', { name: 'Download' }).click()]);
+  expect(download.suggestedFilename()).toBe('Plan.docx');
   await owner.context.close();
   await guest.context.close();
 });

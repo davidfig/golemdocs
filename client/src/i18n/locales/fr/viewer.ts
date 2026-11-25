@@ -27,4 +27,9 @@ export const viewer: Partial<Messages> = {
   'viewer.signInToViewFolder': 'Connectez-vous pour voir ce dossier.',
   'viewer.folderEmpty': 'Ce dossier est vide.',
   'viewer.fileGone': 'Ce fichier n’est plus dans le dossier.',
+  'viewer.downloadAll': 'Tout télécharger',
+  'viewer.downloadingAll': 'Téléchargement du fichier {done} sur {count}…',
+  'viewer.zippingAll': 'Création du ZIP…',
+  'viewer.downloadedAll': '{count} fichiers téléchargés',
+  'viewer.downloadedAllSomeKept': 'Dossier téléchargé, mais {names} n’a pas pu être converti. Ils sont dans le ZIP en fichiers .wdoc, que seul Golem Docs ouvre',
 };

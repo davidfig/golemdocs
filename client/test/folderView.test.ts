@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { firstFile, folderTree, resolveFolderLink } from '../src/viewer/folderLinks.ts';
+import { archivePlace, firstFile, folderTree, resolveFolderLink } from '../src/viewer/folderLinks.ts';
 
 const files = [{ path: 'Overview.md' }, { path: 'Notes/Plan.docx' }, { path: 'Notes/Ideas.md' }, { path: 'Archive/Plan.docx' }];
 const go = (address: string, from = 'Overview.md') => resolveFolderLink(address, 'Shared', files, from)?.file.path ?? null;
@@ -45,4 +45,9 @@ test('the first file shown is a README at the top, else the first at the top', (
   assert.equal(firstFile([{ path: 'A/x.md' }, { path: 'b.md' }])?.path, 'b.md');
   assert.equal(firstFile([{ path: 'A/x.md' }])?.path, 'A/x.md');
   assert.equal(firstFile([]), undefined);
+});
+
+test('Download All stores each file in the folders it is in', () => {
+  assert.deepEqual(archivePlace('Overview.md'), { name: 'Overview.md', folders: [] });
+  assert.deepEqual(archivePlace('Notes/Old/Plan.docx'), { name: 'Plan.docx', folders: ['Notes', 'Old'] });
 });

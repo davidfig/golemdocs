@@ -2,6 +2,10 @@
 
 ## 0.47.1 - Unreleased
 
+### Added
+
+- Shared folders: a folder shared view-only, or by its public link, has a Download All button beside its name that saves every file in it as one ZIP, in its folders. People a folder or document is shared with view-only can also download the file they are looking at.
+
 ### Fixed
 
 - SVG drawings: text is drawn in the fonts the file embeds, instead of a stand-in.

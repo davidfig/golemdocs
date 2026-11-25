@@ -27,4 +27,9 @@ export const viewer: Partial<Messages> = {
   'viewer.signInToViewFolder': '登录以查看此文件夹。',
   'viewer.folderEmpty': '此文件夹为空。',
   'viewer.fileGone': '该文件已不在文件夹中。',
+  'viewer.downloadAll': '全部下载',
+  'viewer.downloadingAll': '正在下载第 {done} 个文件，共 {count} 个…',
+  'viewer.zippingAll': '正在创建 ZIP…',
+  'viewer.downloadedAll': '已下载 {count} 个文件',
+  'viewer.downloadedAllSomeKept': '已下载文件夹，但无法转换 {names}。它们以 .wdoc 文件放在 ZIP 中，只有 Golem Docs 能打开',
 };

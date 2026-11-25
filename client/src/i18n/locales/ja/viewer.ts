@@ -27,4 +27,9 @@ export const viewer: Partial<Messages> = {
   'viewer.signInToViewFolder': 'このフォルダーを見るにはサインインしてください。',
   'viewer.folderEmpty': 'このフォルダーは空です。',
   'viewer.fileGone': 'そのファイルはもうフォルダーにありません。',
+  'viewer.downloadAll': 'すべてダウンロード',
+  'viewer.downloadingAll': '{count} 件中 {done} 件目のファイルをダウンロード中…',
+  'viewer.zippingAll': 'ZIP を作成中…',
+  'viewer.downloadedAll': '{count} 件のファイルをダウンロードしました',
+  'viewer.downloadedAllSomeKept': 'フォルダーをダウンロードしましたが、{names} は変換できませんでした。Golem Docs でのみ開ける .wdoc ファイルとして ZIP に含まれています',
 };

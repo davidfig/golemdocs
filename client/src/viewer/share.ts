@@ -5,7 +5,7 @@
 // refuses them any change whatever the page does (see server/src/sharing.ts).
 //
 // A document's public link is the same page at /view?p=<token> (`public_links.token`, read from `/api/public/<token>`): anyone may
-// open it, signed in or not, and it has a Download button, which saves the document as the file its name says (the account keeps
+// open it, signed in or not. Both have a Download button (a person who can view it could read it anyway), which saves the document as the file its name says (the account keeps
 // a .wdoc: `toVaultFile` turns it into that file, in the vault's convert worker, started only when it is first clicked). Other sites embed it in a frame as /view?p=<token>&embed, which shows the
 // document's name alone in the bar.
 //
@@ -74,7 +74,7 @@ async function start(): Promise<void> {
   const waited = loaded();
   if (!bytes) return void say(t('app.openSharedFailed', { message: '' }));
   // A copy for Download: the viewer is handed the bytes, which go to its worker.
-  let stored = isPublic ? new Uint8Array(bytes.slice(0)) : null;
+  let stored: Uint8Array | null = new Uint8Array(bytes.slice(0));
   const save = downloader();
   const download = async (): Promise<void> => {
     if (stored) await save(stored, name);
@@ -92,7 +92,7 @@ async function start(): Promise<void> {
     view: savedViewMode(),
     waited,
     onError: (message) => console.error(message),
-    onDownload: isPublic ? () => void download() : undefined,
+    onDownload: () => void download(),
     // The page is the site's: a link opens in a tab of its own.
     onLink: (url) => void window.open(url, '_blank', 'noopener,noreferrer'),
   });

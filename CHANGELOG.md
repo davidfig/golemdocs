@@ -1,5 +1,12 @@
 # What’s New in Golem Docs
 
+## 0.47.1 - Unreleased
+
+### Fixed
+
+- SVG drawings: text is drawn in the fonts the file embeds, instead of a stand-in.
+- PDFs: text and logos over a solid panel that covers part of a picture are no longer hidden by the panel, gradients and fades in PDFs made by Chrome are drawn, and pictures no longer show past the edge of the page or of the box they are cut to.
+
 ## 0.47.0 - 2026-11-25
 
 ### Added

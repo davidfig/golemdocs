@@ -442,7 +442,8 @@ test('strips: false leaves curves and gradients to the caller, in painting order
   assert.equal(display.rects[0].color, 0x00ff00);
   // One painting order across paths and images: the image comes after the gradient and before the line.
   const [image] = display.images;
-  assert.deepEqual([curve.order, box.order, gradient.order, image.order, line.order], [0, 1, 2, 3, 4]);
+  const orders = [curve.order, box.order, display.rects[0].order, gradient.order, image.order, line.order];
+  assert.deepEqual(orders, [0, 1, 2, 3, 4, 5]);
   assert.ok(!display.warnings.some((w) => w.includes('pattern')));
 });
 
@@ -518,4 +519,30 @@ test('outlined text: with paths, a stroked run says how it is stroked and where 
   assert.ok(halo.order < square.order && square.order < both.stroke!.order);
   // Without paths, nothing changes.
   assert.equal(interpretPage(page).glyphRuns.some((r) => r.stroke), false);
+});
+
+test('a pattern is placed by the space its content starts in, not by a cm made since (Chromium starts every page with one)', () => {
+  const { page } = withGradient('.5 0 0 -.5 0 100 cm /Pattern cs /G scn 0 0 400 200 re f');
+  const [path] = interpretPage(page, { paths: true }).paths;
+  assert.deepEqual(path.fill!.paint!.matrix, [1, 0, 0, -1, 0, 100]);
+});
+
+test('rectangles and images are cut to the page and their clips', () => {
+  const { page } = withGradient('q 20 20 50 50 re W n 1 0 0 rg 0 0 200 100 re f q 100 0 0 100 -10 10 cm /Im Do Q Q q 300 0 0 300 -50 -100 cm /Im Do Q q 5 5 1 1 re W n 20 0 0 20 100 50 cm /Im Do Q', (doc, res) => {
+    const img = new PdfStream(new PdfDict({ Type: N('XObject'), Subtype: N('Image'), Width: 1, Height: 1, ColorSpace: N('DeviceRGB'), BitsPerComponent: 8 }), new Uint8Array([255, 0, 0]));
+    res.set('XObject', new PdfDict({ Im: doc.add(img) }));
+  });
+  const { rects, images } = interpretPage(page);
+  assert.deepEqual(rects.map((r) => [r.x, r.y, r.w, r.h]), [[20, 30, 50, 50]]);
+  // The third image shows nothing. One past the page has no clip of its own.
+  assert.deepEqual(images.map((i) => i.shown), [[20, 30, 70, 80], [0, 0, 200, 100]]);
+  assert.deepEqual(images.map((i) => i.clips?.length ?? 0), [1, 0]);
+  assert.deepEqual([images[0].x, images[0].y, images[0].w, images[0].h], [-10, -10, 100, 100]);
+});
+
+test('rectangles say whether they are over text, which touching its ends is not, and text has a place in the painting order', () => {
+  const { page } = withGradient('BT /F1 20 Tf 10 40 Td (M) Tj ET 0 0 1 rg 0 0 200 37 re f 1 0 0 rg 0 45 200 10 re f BT /F1 20 Tf 10 10 Td (M) Tj ET');
+  const { rects, glyphRuns } = interpretPage(page);
+  assert.deepEqual(rects.map((r) => [r.over, r.overText]), [[true, false], [true, true]]);
+  assert.deepEqual([glyphRuns[0].order, ...rects.map((r) => r.order), glyphRuns[1].order], [0, 1, 2, 3]);
 });

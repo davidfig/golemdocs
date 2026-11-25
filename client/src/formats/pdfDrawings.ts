@@ -341,6 +341,13 @@ export function strokedTextPath(run: GlyphRun, outline: (glyph: number) => Outli
   };
 }
 
+/** Nodes inside a group for each of these clips (outermost first); the first node as it is when there are none. */
+export function clipped(nodes: SceneNode[], clips: readonly DisplayClip[] | undefined, dx: number, dy: number, defs: Definitions): SceneNode {
+  let inner = nodes;
+  for (const clip of [...(clips ?? [])].reverse()) inner = [{ kind: 'group', tag: 'g', children: inner, style: { 'clip-path': `url(#${defs.clip(clip, dx, dy)})` }, attrs: {} }];
+  return inner[0];
+}
+
 /** The paths as scene nodes, in a group of their own under each clip they share (nested for nested clips). */
 export function nodesOf(paths: readonly DisplayPath[], dx: number, dy: number, defs: Definitions): SceneNode[] {
   const root: SceneNode[] = [];

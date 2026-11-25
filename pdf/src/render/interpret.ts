@@ -16,7 +16,8 @@
 //    tiling patterns), to draw as vectors. With `strips: false` as well, a shape that isn't exactly rectangles
 //    (a curve, a slant, a gradient) is left out of `rects` and marked `vectorOnly`: the caller draws it.
 //  * Text filled with a gradient or pattern: each glyph gets the paint's color where it stands.
-//  * Clipping is ignored by the rectangles. Rectangles are clamped to the page.
+//  * Rectangles are cut to the box of their clips and to the page (a clip of another shape cuts only paths). Images keep
+//    where they are placed, with the box of them that shows (`shown`) and their clips.
 //  * Images: axis-aligned placements (mirroring allowed); rotated ones are skipped, unless `paths` is asked for.
 //  * Form XObjects recurse to a depth limit; annotation appearance streams are drawn;
 //    hidden optional-content layers are honored.
@@ -56,6 +57,8 @@ export interface GlyphRun extends FontStyle {
   color: number;
   alpha: number;
   glyphs: DisplayGlyph[];
+  /** Where it comes in the page's painting order, among the paths, images and rectangles. */
+  order: number;
   /** Outlined text (render modes 1, 2, 5 and 6, only when asked for with `paths`): how its glyphs are stroked. */
   stroke?: GlyphStroke;
 }
@@ -88,8 +91,12 @@ export interface DisplayRect {
   h: number;
   color: number;
   alpha: number;
-  /** Painted after text or an image it overlaps: belongs in front of the text. */
+  /** Painted after text or an image it overlaps. */
   over: boolean;
+  /** Painted after text it overlaps. */
+  overText: boolean;
+  /** Where it comes in the page's painting order, among the paths, images and text. */
+  order: number;
 }
 
 export interface DisplayImage {
@@ -111,6 +118,10 @@ export interface DisplayImage {
   /** Stencil masks: the fill color to paint with. */
   maskColor?: number;
   alpha: number;
+  /** The box of it that shows: inside its clips' boxes and the page. */
+  shown: [x0: number, y0: number, x1: number, y1: number];
+  /** What cut it, outermost first (as `DisplayPath.clips`). */
+  clips?: DisplayClip[];
   over: boolean;
   /** Where it comes in the page's painting order, among the paths and images. */
   order: number;
@@ -228,7 +239,8 @@ interface Ctx {
   oc: OcState;
   inlineCount: number;
   pageIndex: number;
-  boxes: [number, number, number, number][];
+  /** The text and images painted so far (`text` says which). */
+  boxes: { x0: number; y0: number; x1: number; y1: number; text: boolean }[];
   skippedRotated: number;
   skippedPaths: number;
   /** Rectangles left to spend on slanted strokes, curves and filled shapes (they are drawn as many thin ones). */
@@ -428,7 +440,8 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
     warn(ctx, 'too many drawing operations: the rest of the page skipped');
     return;
   }
-  let gs: GS = start;
+  // A copy: a `cm` outside any q changes `gs`, while `start` stays the content's own space, which places its patterns.
+  let gs: GS = { ...start };
   const stack: GS[] = [];
   let tm: Matrix = IDENTITY;
   let tlm: Matrix = IDENTITY;
@@ -501,7 +514,15 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
   };
 
   const overlaps = (x0: number, y0: number, x1: number, y1: number): boolean => {
-    for (const b of ctx.boxes) if (x0 < b[2] && x1 > b[0] && y0 < b[3] && y1 > b[1]) return true;
+    for (const b of ctx.boxes) if (x0 < b.x1 && x1 > b.x0 && y0 < b.y1 && y1 > b.y0) return true;
+    return false;
+  };
+  /** Over text, not counting what only touches the ends of its tall and deep letters. */
+  const overlapsText = (x0: number, y0: number, x1: number, y1: number): boolean => {
+    for (const b of ctx.boxes) {
+      const inset = b.text ? (b.y1 - b.y0) * 0.1 : 0;
+      if (b.text && x0 < b.x1 && x1 > b.x0 && y0 < b.y1 - inset && y1 > b.y0 + inset) return true;
+    }
     return false;
   };
 
@@ -511,8 +532,10 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
     y0 = Math.max(y0, 0);
     x1 = Math.min(x1, ctx.out.width);
     y1 = Math.min(y1, ctx.out.height);
+    for (let c = gs.clip; c; c = c.parent) [x0, y0, x1, y1] = [Math.max(x0, c.x0), Math.max(y0, c.y0), Math.min(x1, c.x1), Math.min(y1, c.y1)];
     if (!(x1 > x0) || !(y1 > y0) || alpha <= 0) return;
-    ctx.out.rects.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0, color, alpha, over: overlaps(x0, y0, x1, y1) });
+    const over = overlaps(x0, y0, x1, y1);
+    ctx.out.rects.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0, color, alpha, over, overText: over && overlapsText(x0, y0, x1, y1), order: ctx.order.next++ });
   };
 
   // --- text ---
@@ -584,6 +607,7 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
     const box: [number, number, number, number] = [x0, ymin - ul * 0.8, x1, ymax + ul * 0.2];
     // The outline (fill and stroke: modes 2 and 6, after the fill) is a shape among the page's shapes, so it is
     // layered as painted: a halo stroked before its text goes under it, and over whatever was painted before it.
+    const order = ctx.order.next++;
     let stroke: GlyphStroke | undefined;
     const outlined = gs.render === 1 || gs.render === 2 || gs.render === 5 || gs.render === 6;
     if (outlined && ctx.pathPoints >= 0 && !gs.strokePattern) {
@@ -596,8 +620,8 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
       }
       stroke = { color: gs.stroke, alpha: gs.strokeAlpha, width, join: gs.join, miter: gs.miter, only: stroked, ...(clips.length && { clips }), over: overlaps(box[0], box[1], box[2], box[3]), order: ctx.order.next++ };
     }
-    ctx.boxes.push(box);
-    ctx.out.glyphRuns.push({ ...fe.style, fontDict: font.dict, size: ul, color, alpha, glyphs, ...(stroke && { stroke }) });
+    ctx.boxes.push({ x0: box[0], y0: box[1], x1: box[2], y1: box[3], text: true });
+    ctx.out.glyphRuns.push({ ...fe.style, fontDict: font.dict, size: ul, color, alpha, glyphs, order, ...(stroke && { stroke }) });
   };
 
   // --- paths ---
@@ -881,6 +905,17 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
   };
 
   // --- images ---
+  /** What of an image's box shows, and the clips that cut it; null when nothing of it does. */
+  const shownOf = (x: number, y: number, w: number, h: number): Pick<DisplayImage, 'shown' | 'clips'> | null => {
+    const clips: DisplayClip[] = [];
+    let [x0, y0, x1, y1] = [Math.max(x, 0), Math.max(y, 0), Math.min(x + w, ctx.out.width), Math.min(y + h, ctx.out.height)];
+    for (let c = gs.clip; c; c = c.parent) {
+      if (c.rect && x0 >= c.x0 - 0.01 && y0 >= c.y0 - 0.01 && x1 <= c.x1 + 0.01 && y1 <= c.y1 + 0.01) continue;
+      clips.unshift(c);
+      [x0, y0, x1, y1] = [Math.max(x0, c.x0), Math.max(y0, c.y0), Math.min(x1, c.x1), Math.min(y1, c.y1)];
+    }
+    return x1 > x0 && y1 > y0 ? { shown: [x0, y0, x1, y1], ...(clips.length && { clips }) } : null;
+  };
   const placeImage = (stream: PdfStream, key: string) => {
     if (ctx.hidden) return;
     const dict = stream.dict;
@@ -901,7 +936,8 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
       const ys = [f, f + b, f + d, f + b + d];
       const [x, y] = [Math.min(...xs), Math.min(...ys)];
       const [w, h] = [Math.max(...xs) - x, Math.max(...ys) - y];
-      if (w < 0.05 || h < 0.05 || x >= ctx.out.width || y >= ctx.out.height || x + w <= 0 || y + h <= 0) return;
+      const shown = w < 0.05 || h < 0.05 ? null : shownOf(x, y, w, h);
+      if (!shown) return;
       ctx.out.images.push({
         id: key + '|rot' + [a, b, c, d, e, f].map((v) => Math.round(v * 100)).join(','),
         x,
@@ -916,10 +952,12 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
         matrix: [a, b, c, d, e, f],
         ...(doc.resolve(dict.get('ImageMask') ?? dict.get('IM')) === true && { maskColor: gs.fillPattern ? 0 : gs.fill }),
         alpha: gs.fillAlpha,
-        over: overlaps(x, y, x + w, y + h),
+        ...shown,
+        over: overlaps(...shown.shown),
         order: ctx.order.next++,
       });
-      ctx.boxes.push([x, y, x + w, y + h]);
+      const [bx0, by0, bx1, by1] = shown.shown;
+      ctx.boxes.push({ x0: bx0, y0: by0, x1: bx1, y1: by1, text: false });
       return;
     }
     const w = Math.abs(a);
@@ -927,7 +965,8 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
     if (w < 0.05 || h < 0.05) return;
     const x = Math.min(e, e + a);
     const y = Math.min(f, f + d);
-    if (x >= ctx.out.width || y >= ctx.out.height || x + w <= 0 || y + h <= 0) return;
+    const shown = shownOf(x, y, w, h);
+    if (!shown) return;
     const flipX = a < 0;
     const flipY = d > 0;
     const stencil = doc.resolve(dict.get('ImageMask') ?? dict.get('IM')) === true;
@@ -946,10 +985,12 @@ function run(ctx: Ctx, ops: Operation[], resources: PdfDict | undefined, start: 
       flipY,
       maskColor,
       alpha: gs.fillAlpha,
-      over: overlaps(x, y, x + w, y + h),
+      ...shown,
+      over: overlaps(...shown.shown),
       order: ctx.order.next++,
     });
-    ctx.boxes.push([x, y, x + w, y + h]);
+    const [bx0, by0, bx1, by1] = shown.shown;
+    ctx.boxes.push({ x0: bx0, y0: by0, x1: bx1, y1: by1, text: false });
   };
 
   const inlineImage = (op: Operation) => {

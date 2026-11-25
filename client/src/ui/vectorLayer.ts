@@ -8,6 +8,7 @@ import { decodeImage } from '../formats/imageCodec.ts';
 import { viewBoxMatrix } from '../vector/geometry.ts';
 import { apply, invert } from '../vector/matrix.ts';
 import type { Scene } from '../vector/model.ts';
+import { fontCss, loadFonts, type SceneFonts } from '../vector/fonts.ts';
 import { loadImages, paintScene } from '../vector/paint.ts';
 import type { ImageCache } from '../vector/paint.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
@@ -42,6 +43,9 @@ export class VectorLayer {
   private readonly canvas = h('canvas', { class: 'wm-vector-canvas' });
   private _scene: Scene | null = null;
   private images: ImageCache = new Map();
+  /** The fonts the drawing embeds, held while it is shown, and the stylesheet they come from. */
+  private fonts: SceneFonts | null = null;
+  private fontCss = '';
   /** What was last painted, so a frame where nothing moved costs nothing. */
   private painted = '';
   /** Counts scenes shown, so pictures that arrive for an earlier one are ignored. */
@@ -94,6 +98,7 @@ export class VectorLayer {
     this.painted = '';
     const version = ++this.version;
     this.el.hidden = !scene;
+    this.showFonts(scene);
     if (!scene) return;
     void loadImages(scene, (bytes) => decodeImage(bytes)).then((images) => {
       if (version !== this.version) return;
@@ -107,7 +112,24 @@ export class VectorLayer {
   update(scene: Scene): void {
     this._scene = scene;
     this.painted = '';
+    this.showFonts(scene);
     this.host.changed();
+  }
+
+  /** Loads the fonts a drawing embeds, in place of the last one's, unless they are the same; painted again when they come. */
+  private showFonts(scene: Scene | null): void {
+    const css = scene ? fontCss(scene) : '';
+    if (css === this.fontCss) return;
+    this.fontCss = css;
+    this.fonts?.release();
+    this.fonts = null;
+    if (!scene || !css) return;
+    void loadFonts(scene).then((fonts) => {
+      if (css !== this.fontCss || this.fonts) return fonts.release();
+      this.fonts = fonts;
+      this.painted = '';
+      this.host.changed();
+    });
   }
 
   /** Asks for the layer to be painted again, as it is. */
@@ -149,7 +171,7 @@ export class VectorLayer {
     ctx.scale(width / scene.width, height / scene.height);
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, scene.width, scene.height);
-    paintScene(ctx, scene, scene.width, scene.height, { images: this.images });
+    paintScene(ctx, scene, scene.width, scene.height, { images: this.images, fonts: this.fonts?.aliases });
     ctx.restore();
     return true;
   }
@@ -192,7 +214,7 @@ export class VectorLayer {
       ctx.rect(0, 0, scene.width, scene.height);
       ctx.clip();
     }
-    paintScene(ctx, scene, scene.width, scene.height, { images: this.images });
+    paintScene(ctx, scene, scene.width, scene.height, { images: this.images, fonts: this.fonts?.aliases });
     ctx.restore();
     if (this.decorate) {
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);

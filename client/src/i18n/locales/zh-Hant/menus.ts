@@ -42,6 +42,7 @@ export const menus: Partial<Messages> = {
   'menus.format.xlsx': 'Excel 活頁簿',
   'menus.format.audio': '音訊',
   'menus.format.video': '視訊',
+  'menus.format.pptx': 'PowerPoint 簡報',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': '電子郵件',
   'menus.format.png': 'PNG 影像',

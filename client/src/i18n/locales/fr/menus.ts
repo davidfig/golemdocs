@@ -42,6 +42,7 @@ export const menus: Partial<Messages> = {
   'menus.format.xlsx': 'Classeur Excel',
   'menus.format.audio': 'Audio',
   'menus.format.video': 'Vidéo',
+  'menus.format.pptx': 'Présentation PowerPoint',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': 'Message électronique',
   'menus.format.png': 'Image PNG',

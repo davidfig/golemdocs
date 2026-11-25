@@ -163,6 +163,7 @@ import { MediaViewer, spokenTime, type CaptionTrack } from './media/viewer.ts';
 import { isMediaName, mediaMime, playsInPlace } from './media/mediaFiles.ts';
 import { formatClock, momentFragment, parseMoment, type MediaMoment } from './media/timecode.ts';
 import { captionFilesFor, isSrtName, srtToVtt } from './media/captions.ts';
+import { SlidesEditor } from './slides/handle.ts';
 import { showAdjustDialog, showBackgroundDialog, showPictureCanvasDialog, showResizeDialog } from './ui/pictureDialogs.ts';
 import { PictureLayersPanel } from './ui/pictureLayersPanel.ts';
 import { samplePicture } from './formats/imageSample.ts';
@@ -639,7 +640,7 @@ function kindOfSource(source: DocumentSource): DocumentKind {
   if (source.kind === 'image') return kindFromName(source.name, 'png');
   if (source.kind === 'audio' || source.kind === 'video') return source.kind;
   if (source.kind === 'svg') return kindFromName(source.name, 'svg');
-  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'rtf' || source.kind === 'epub' || source.kind === 'csv' || source.kind === 'tex' || source.kind === 'adoc' || source.kind === 'rst' || source.kind === 'org' || source.kind === 'mediawiki' || source.kind === 'eml' || source.kind === 'ipynb' || source.kind === 'textile' || source.kind === 'typst' || source.kind === 'docbook' || source.kind === 'jats' || source.kind === 'fb2' || source.kind === 'opml' || source.kind === 'tsv' || source.kind === 'mhtml' || source.kind === 'html' || source.kind === 'xlsx' ? source.kind : 'docx';
+  return source.kind === 'pdf' || source.kind === 'md' || source.kind === 'txt' || source.kind === 'odt' || source.kind === 'rtf' || source.kind === 'epub' || source.kind === 'csv' || source.kind === 'tex' || source.kind === 'adoc' || source.kind === 'rst' || source.kind === 'org' || source.kind === 'mediawiki' || source.kind === 'eml' || source.kind === 'ipynb' || source.kind === 'textile' || source.kind === 'typst' || source.kind === 'docbook' || source.kind === 'jats' || source.kind === 'fb2' || source.kind === 'opml' || source.kind === 'tsv' || source.kind === 'mhtml' || source.kind === 'html' || source.kind === 'xlsx' || source.kind === 'pptx' ? source.kind : 'docx';
 }
 
 function setStatus(text: string): void {
@@ -710,6 +711,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   textView.close();
   sheetView.close();
   closeMedia();
+  slidesView.close();
   drawLayer.cancel();
   // A drawing that was changed comes back as the same drawing, with the editor's own copy still in front of it.
   if (!options.pictureEdit) {
@@ -800,6 +802,11 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
   // Plain text is edited in the text editor, not as a document (`asDocument`: for the things only a document does, such as printing).
   if (source.kind === 'txt' && !options.asDocument) {
     void openLarge(source.name, new Uint8Array(source.bytes), options);
+    return;
+  }
+  // A deck is edited in the slides editor (`asDocument`: its outline, for converting).
+  if (source.kind === 'pptx' && !options.asDocument) {
+    void openSlides(source.name, new Uint8Array(source.bytes), options);
     return;
   }
   // A workbook is edited in the spreadsheet editor (`asDocument`: its active sheet as a table, for printing and converting).
@@ -1183,14 +1190,18 @@ function leaveSheetRoom(): void {
   sheetRoomDoc = null;
 }
 
-/** A workbook in the account has a room of its own, watched (see sheet/sheetSync.ts): one session edits it, the others look. */
+/**
+ * A workbook or a deck in the account has a room of its own, watched (see sheet/sheetSync.ts): one session edits it, the others
+ * look. A workbook's is a `cells` room, a deck's a `slides` room.
+ */
 async function joinSheetRoom(doc: OpenDocument, cloudId: string): Promise<void> {
   const room = networkRoom(cloudId);
-  if (!room || doc.roomRequested || current !== doc || !sheetView.active) return;
+  const deck = slidesView.active;
+  if (!room || doc.roomRequested || current !== doc || !(sheetView.active || deck)) return;
   doc.roomRequested = true;
   // The room client is loaded with the first workbook that has a room.
   const { sheetRoom } = await import('./sheet/sheetSync.ts');
-  if (current !== doc || !sheetView.active) {
+  if (current !== doc || !(deck ? slidesView.active : sheetView.active)) {
     doc.roomRequested = false;
     return;
   }
@@ -1202,12 +1213,15 @@ async function joinSheetRoom(doc: OpenDocument, cloudId: string): Promise<void> 
     client: crypto.randomUUID(),
     name: room.user,
     color: room.color,
-    serialize: async () => (await sheetView.save())?.stored ?? new Uint8Array(0),
+    kind: deck ? 'slides' : 'cells',
+    serialize: async () => (deck ? await slidesView.save() : (await sheetView.save())?.stored) ?? new Uint8Array(0),
     changed: (state) => {
       const d = open();
       if (!d) return;
       // Watching (someone else holds it), or only allowed to look: read-only.
-      sheetView.readOnly = state.role === 'viewer' || state.watching || state.catchingUp || d.shared?.role === 'viewer';
+      const readOnly = state.role === 'viewer' || state.watching || state.catchingUp || d.shared?.role === 'viewer';
+      if (deck) slidesView.readOnly = readOnly;
+      else sheetView.readOnly = readOnly;
       roomStateChanged(state);
     },
     upload: async (bytes) => {
@@ -1401,6 +1415,7 @@ function applyLayout(update: LayoutUpdate): void {
   const kept = update.keep && pagesById.get(update.keep.page);
   if (kept && isBook() && readingHold) showReadingPlace(kept, update.keep!.y);
   else if (kept) camera.y = kept.y + update.keep!.y;
+  shelf.keep(pagesInReach());
   if (newDrawingSince) {
     for (const page of pages) {
       const added = page.images.find((i) => i.svg && !newDrawingSince!.has(i.svg));
@@ -1411,6 +1426,16 @@ function applyLayout(update: LayoutUpdate): void {
       }
     }
   }
+}
+
+/** Where the pages in view and a screen either side are in `pages`. */
+function reach(): { from: number; to: number } {
+  return nearRange(pages, { top: camera.y, bottom: camera.y + camera.height / camera.scale }, 1);
+}
+
+function pagesInReach(): GpuPage[] {
+  const { from, to } = reach();
+  return pages.slice(from, to);
 }
 
 /** Positions pages; places the camera the first time, and keeps a grid fitted while it grows. */
@@ -1475,7 +1500,7 @@ let keepCamera = false;
 function placeCamera(): void {
   cameraPlaced = true;
   // A workbook places its own camera when it opens (openSheet): pages left from the last document, or a resize, must not move it.
-  if (sheetView.active) return;
+  if (sheetView.active || slidesView.active) return;
   if (keepCamera) {
     keepCamera = false;
     viewRestored = true;
@@ -1717,7 +1742,8 @@ async function uploadShared(): Promise<void> {
     // No name: only the owner renames it (`fileName()` would also be the next document's, if one is
     // being opened). The whole document goes, so what it is edited as (Markdown...) is kept.
     const sheetSave = sheetView.save();
-    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).stored : null) ?? (await worker.save());
+    const deckSave = slidesView.save();
+    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).stored : null) ?? (deckSave ? await deckSave : null) ?? (await worker.save());
     if (bytes.length >= CHUNK_MIN_FILE) {
       // A big document goes as chunks, and after the first save of this session only those that changed.
       const { manifest, fresh } = await traced('chunkBytes', () => chunkBytes(bytes));
@@ -1772,11 +1798,11 @@ function bringBackEdits(info: SavedInfo, source: DocumentSource, plan: RecoveryP
   if (doc.localId !== info.id) return;
   doc.journal?.attach(info.id, info.updatedAt);
   // The undo steps kept with this copy go back first: kept edits are replayed on top of them, as one more step.
-  if (undo && !textView.active && !sheetView.active && source.kind !== 'audio' && source.kind !== 'video') worker.restoreUndo(undo);
+  if (undo && !textView.active && !sheetView.active && !slidesView.active && source.kind !== 'audio' && source.kind !== 'video') worker.restoreUndo(undo);
   if (!plan) return;
   for (const session of plan.discard) removeJournal(localStorage, info.id, session);
   // A kept journal is of a document, and those open in the worker: not one that has since become something else (a workbook, a big text file).
-  const inWorker = !textView.active && !sheetView.active && source.kind !== 'audio' && source.kind !== 'video' && source.kind !== 'xlsx' && source.kind !== 'csv' && source.kind !== 'tsv' && source.kind !== 'txt' && !/\.(csv|tsv|tab)$/i.test(info.name);
+  const inWorker = !textView.active && !sheetView.active && !slidesView.active && source.kind !== 'audio' && source.kind !== 'video' && source.kind !== 'pptx' && source.kind !== 'xlsx' && source.kind !== 'csv' && source.kind !== 'tsv' && source.kind !== 'txt' && !/\.(csv|tsv|tab)$/i.test(info.name);
   // A book takes no edits (one may have been kept from before books were read-only): they are let go.
   if (source.kind === 'epub') {
     for (const session of [...plan.absorb, ...plan.conflicted]) removeJournal(localStorage, info.id, session);
@@ -2134,7 +2160,7 @@ function joinRoomOf(doc: OpenDocument, cloudId: string): void {
   // Nothing in audio or video is edited, so there is nothing to share a room for (see docs/media.md).
   if (mediaView.active) return;
   if (textView.active && !markdownSource) return void joinTextRoom(doc, cloudId);
-  if (sheetView.active) return void joinSheetRoom(doc, cloudId);
+  if (sheetView.active || slidesView.active) return void joinSheetRoom(doc, cloudId);
   const room = networkRoom(cloudId);
   if (!room) return;
   doc.roomRequested = true;
@@ -2317,7 +2343,7 @@ async function copyDocumentLiveLink(): Promise<void> {
   await writeClipboardRich(`![[${source}]]`, `<div data-golem-live="${attr}"><p></p></div>`);
 }
 
-const fileName = () => (textView.active ? textFileNameOf(textView.fileName) : current.kind === 'txt' && hasExtension(current.name) ? current.name : current.kind === 'xlsx' && /\.(xlsx|xlsm|xltx|xltm)$/i.test(current.name) ? current.name : isMediaName(current.name) ? current.name : stem(current.name) + FORMATS[current.kind].extensions[0]);
+const fileName = () => (textView.active ? textFileNameOf(textView.fileName) : current.kind === 'txt' && hasExtension(current.name) ? current.name : current.kind === 'xlsx' && /\.(xlsx|xlsm|xltx|xltm)$/i.test(current.name) ? current.name : current.kind === 'pptx' && /\.(pptx|pptm|potx|potm|ppsx|ppsm)$/i.test(current.name) ? current.name : isMediaName(current.name) ? current.name : stem(current.name) + FORMATS[current.kind].extensions[0]);
 const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
 
 /** File ▸ Download All: every document saved in this browser (or the account's copies), as one ZIP. */
@@ -2515,8 +2541,8 @@ async function makeThumbnail(info: SavedInfo): Promise<void> {
     return;
   }
   // A workbook's is the top left of its active sheet (see sheet/thumbnail.ts).
-  if (sheetView.active) {
-    const blob = await sheetView.thumbnail().catch(() => null);
+  if (sheetView.active || slidesView.active) {
+    const blob = await (sheetView.active ? sheetView.thumbnail() : slidesView.thumbnail()).catch(() => null);
     if (blob) await saveThumbnail(info.id, blob, info.updatedAt).catch(() => undefined);
     return;
   }
@@ -2571,8 +2597,9 @@ function saveInBrowser(): Promise<string | null> {
   const sheetSave = sheetView.save();
   // Audio and video are kept as the files themselves.
   const mediaSave = mediaView.active && mediaInput?.blob ? mediaInput.blob.arrayBuffer().then((b) => new Uint8Array(b)) : null;
-  const marked = large || sheetSave || mediaSave ? null : worker.saveMarked();
-  const bytes = source ? sourceMerged(source, textView.snapshot()!) : large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.stored) : mediaSave ? mediaSave : marked!.then((saved) => saved.bytes);
+  const deckSave = slidesView.save();
+  const marked = large || sheetSave || deckSave || mediaSave ? null : worker.saveMarked();
+  const bytes = source ? sourceMerged(source, textView.snapshot()!) : large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.stored) : deckSave ? deckSave : mediaSave ? mediaSave : marked!.then((saved) => saved.bytes);
   bytes.catch(() => {}); // handled below, once earlier saves are written
   const done = saving.then(async () => {
     const created = !doc.localId;
@@ -3689,7 +3716,8 @@ async function newInSharedFolder(share: SharedFolder, folderId: string, docKind?
     if (converted) await convertTo(docKind ?? lastNewKind());
     if (current !== doc || !doc.shared) return;
     const sheetSave = sheetView.save();
-    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).stored : null) ?? (await worker.save());
+    const deckSave = slidesView.save();
+    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).stored : null) ?? (deckSave ? await deckSave : null) ?? (await worker.save());
     const made = await createInSharedFolder(share.ownerId, folderId, fileName(), bytes);
     sharedDocs.set(made.id, sharedFolderDoc(share, made));
     if (current !== doc || !doc.shared) return;
@@ -3824,7 +3852,8 @@ async function download(): Promise<void> {
     const name = large ? textView.fileName : fileName();
     const type = large ? 'text/plain' : FORMATS[current.kind].mime;
     const sheetSave = sheetView.save();
-    const bytes = large ?? (sheetSave ? (await sheetSave).file : await worker.convert(current.kind as Format));
+    const deckSave = slidesView.save();
+    const bytes = large ?? (sheetSave ? (await sheetSave).file : deckSave ? await deckSave : await worker.convert(current.kind as Format));
     if (await saveFile(name, bytes, type)) setStatus(t('app.downloaded', { name }));
   } catch (e) {
     reportError(t('app.downloadFailed', { message: (e as Error).message }));
@@ -3839,7 +3868,8 @@ async function download(): Promise<void> {
  */
 async function print(preview: boolean): Promise<void> {
   // A workbook prints its active sheet as Excel does (its page setup, from the grid itself); anything else as a document.
-  const sheetPdf = sheetView.active ? sheetView.printPdf() : null;
+  // A deck prints a page per slide.
+  const sheetPdf = sheetView.active ? sheetView.printPdf() : slidesView.active ? slidesView.printPdf() : null;
   if (!sheetPdf && !(await openAsDocument())) return;
   const name = fileName().replace(/\.[^.]*$/, '') + '.pdf'; // named now: another document may be open by the time the bytes come back
   const bytes = sheetPdf ? await sheetPdf : await worker.convert('pdf');
@@ -3907,6 +3937,8 @@ function switchedNotice(to: Format): string {
 async function convertTo(to: DocumentKind): Promise<void> {
   // Between the grid's own formats (Excel, CSV, TSV) a workbook stays in the grid: the spreadsheet editor writes it as the other.
   const inGrid = sheetView.active && (to === 'xlsx' || to === 'csv' || to === 'tsv') ? sheetView.saveAs(to) : null;
+  // A deck as PDF is its slides, a page each (not its outline).
+  if (slidesView.active && to === 'pdf') return download();
   if (!inGrid && !(await openAsDocument())) return;
   const from = current.kind;
   if (to === from) return;
@@ -3937,8 +3969,8 @@ async function convertTo(to: DocumentKind): Promise<void> {
   const liveLost = !KEEPS_LIVE.has(to) && liveEntry ? liveKeeper.mayHaveLive(liveEntry.key).catch(() => false) : Promise.resolve(false);
   const name = stem(current.name) + FORMATS[to].extensions[0];
   // A document becomes a workbook proper (its first table, a sheet), to edit in the grid; other formats keep the document in the app's own file.
-  const toWorkbook = !inGrid && to === 'xlsx';
-  const bytes = inGrid ?? (toWorkbook ? worker.convert('xlsx') : worker.save(to));
+  const toWorkbook = !inGrid && (to === 'xlsx' || to === 'pptx');
+  const bytes = inGrid ?? (toWorkbook ? worker.convert(to) : worker.save(to));
   bytes.catch(() => {});
   const done = saving.then(async () => {
     const kept = keepBook && doc.localId ? ((await getSavedManifest(doc.localId).catch(() => null)) ?? (await getSaved(doc.localId).catch(() => null))) : null;
@@ -4477,6 +4509,48 @@ async function openSheet(name: string, bytes: Uint8Array, options: OpenOptions =
   if (!options.localId && !options.shared) documentEdited();
 }
 
+// --- Decks -----------------------------------------------------------------------------------------
+// A deck opens in the slides editor (docs/slides.md): its slides are drawn on the canvas by it, and it is kept as the .pptx itself.
+
+async function openSlides(name: string, bytes: Uint8Array, options: OpenOptions = {}): Promise<void> {
+  const latest = openTicket();
+  try {
+    await slidesView.load();
+  } catch (e) {
+    return reportOpenFailure((e as Error).message);
+  }
+  if (!latest()) return;
+  openRequests++;
+  // Opened again in place of itself (watching, it was saved): it keeps its room.
+  const keptRoom = options.keepRoom && sheetRoomHandle ? current.room : null;
+  const { opening } = beginOpen({ kind: 'pptx', name, bytes: new ArrayBuffer(0) }, { localId: options.localId, shared: options.shared, keepRoom: keptRoom !== null });
+  worker.close();
+  await slidesView.open(name, bytes);
+  // Another document was opened while the deck was read.
+  if (current !== opening || !slidesView.active) return;
+  slidesView.readOnly = options.shared?.role === 'viewer';
+  // A deck opens with its first slide fitted to the window.
+  slidesView.fitFirst(canvas.clientWidth, canvas.clientHeight);
+  if (keptRoom) {
+    opening.room = keptRoom;
+    opening.roomRequested = true;
+    sheetRoomDoc = opening;
+    sheetRoomHandle?.client.refreshed(options.version);
+  } else {
+    const cloudId = options.cloudId ?? options.shared?.id;
+    if (cloudId) void accountKnown.then(() => joinSheetRoom(opening, cloudId));
+  }
+  loaded = true;
+  documentReady();
+  loadingScreen.hide();
+  setStatus(t('app.ready', { name }));
+  focusInput();
+  syncPagesPanel();
+  requestRender();
+  // A deck that came from somewhere is kept in this browser at once, as a document is.
+  if (!options.localId && !options.shared) documentEdited();
+}
+
 /** The most of a big file that opens as an ordinary document: past this the document model costs too much (see docs/text-files.md). */
 const MAX_SELECTION_BYTES = 5 * 1024 * 1024;
 
@@ -4488,6 +4562,16 @@ async function openAsDocument(): Promise<boolean> {
   if (markdownSource) {
     await leaveMarkdownSource();
     return !textView.active;
+  }
+  if (slidesView.active) {
+    const saved = await slidesView.save();
+    if (!saved) return false;
+    const before = current;
+    await saveNow();
+    const ready = nextDocumentReady();
+    open({ kind: 'pptx', name: before.name, bytes: saved.slice().buffer }, { asDocument: true, localId: before.localId ?? undefined });
+    await ready;
+    return true;
   }
   if (sheetView.active) {
     const saved = await sheetView.save();
@@ -5186,6 +5270,7 @@ function focusInput(): void {
   if (textView.active) return textEngine.focus();
   if (sheetView.active) return sheetEngine.focus();
   if (mediaView.active) return mediaView.focus();
+  if (slidesView.active) return slidesEngine.focus();
   focusTextInput(input);
 }
 
@@ -5324,12 +5409,18 @@ function render(): void {
     camera.clampToStart(sheetView.bounds(), canvas.clientWidth, canvas.clientHeight);
     sheetView.draw(pagesDark(), forcedColors());
     lastStats = { pages: 0, visiblePages: 0, glyphs: 0, drawCalls: 0 };
+  } else if (slidesView.active) {
+    // A deck: the desk is cleared, and the slides editor paints its slides over it on a canvas of its own.
+    camera.clamp(slidesView.bounds(), canvas.clientWidth, canvas.clientHeight, 48);
+    renderer.render(camera, [], undefined, false, pagesDark());
+    slidesView.draw(pagesDark());
+    lastStats = { pages: slidesView.slideCount(), visiblePages: 0, glyphs: 0, drawCalls: 0 };
   } else {
     if (!pendingView) camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight); // a restored position may lie past the pages that have arrived so far
     if (renderer.flat) camera.x = bounds.x;
     renderer.forced = forcedColors();
     // The pages in view and a screen either side keep their glyphs unpacked, or get them back, and are where squiggles are found.
-    const range = nearRange(pages, { top: camera.y, bottom: camera.y + camera.height / camera.scale }, 1);
+    const range = reach();
     shelf.keep(pages.slice(range.from, range.to));
     worker.view(range.from, range.to);
     lastStats = renderer.render(camera, pages, selection, caretVisible, pagesDark());
@@ -5347,7 +5438,7 @@ function render(): void {
     people: current.room?.people.some((p) => !p.me) ? current.room.people.filter((p) => !p.me) : NO_PEOPLE,
     renamable: renamable(),
     kind: textView.active ? 'largetext' : embeddedDrawing ? 'svg' : current.kind,
-    pictureSelected: !textView.active && !sheetView.active && !!selectedPicture,
+    pictureSelected: !textView.active && !sheetView.active && !slidesView.active && !!selectedPicture,
     zoom: camera.zoom,
     pagesPanel: pagesOpen() && !textView.active && !sheetView.active && !reflowing(),
     filesPanel: filesOpen,
@@ -5355,7 +5446,7 @@ function render(): void {
     toolbars: toolbarsOn,
     rulerVisible: rulerOn,
     collapsePages,
-    format: sheetView.active ? sheetView.formatState() : selectionFormat,
+    format: sheetView.active ? sheetView.formatState() : slidesView.active ? slidesView.formatState() : selectionFormat,
     ...editingState(),
     formMode: annotating ? formMode : null,
     painting,
@@ -5515,6 +5606,10 @@ function press(e: Press): void {
   }
   if (sheetView.active) {
     sheetView.press(e.offsetX, e.offsetY, e.shiftKey, clickCount(e), e.metaKey || e.ctrlKey);
+    return;
+  }
+  if (slidesView.active) {
+    slidesView.press(e.offsetX, e.offsetY, e.shiftKey, clickCount(e), e.metaKey || e.ctrlKey);
     return;
   }
   // A double click between two pages hides the space between them, or shows it again.
@@ -6073,6 +6168,17 @@ canvas.addEventListener('pointermove', (e) => {
     else canvas.style.cursor = sheetView.cursorAt(e.offsetX, e.offsetY);
     return;
   }
+  if (slidesView.active) {
+    // A deck: a drag moves, sizes or turns shapes, or selects text (the middle button pans); the pointer shows what a press would do.
+    if (pan) {
+      userMoved = true;
+      camera.panBy(pan.x - e.clientX, pan.y - e.clientY);
+      pan = { x: e.clientX, y: e.clientY };
+      requestRender();
+    } else if (e.buttons) slidesView.drag(e.offsetX, e.offsetY, e.shiftKey);
+    else canvas.style.cursor = slidesView.cursorAt(e.offsetX, e.offsetY);
+    return;
+  }
   if (textView.active) {
     // A big text file: a drag selects (or pans, with the middle button), and there are no links to hover.
     if (pan) {
@@ -6119,6 +6225,7 @@ const endPointer = () => {
   selecting = false;
   textView.release();
   sheetView.release();
+  slidesView.release();
 };
 canvas.addEventListener('pointerup', (e) => {
   if (e.pointerType === 'touch') return touchUp(e);
@@ -6489,7 +6596,7 @@ const chromeHost = createChromeHost({
   canvas,
   camera,
   pages: () => pages,
-  bounds: () => (textView.active ? textEngine.bounds() : sheetView.active ? sheetEngine.bounds() : bounds),
+  bounds: () => (textView.active ? textEngine.bounds() : sheetView.active ? sheetEngine.bounds() : slidesView.active ? slidesEngine.bounds() : bounds),
   open: (source) => {
     setUrl(new URLSearchParams(), true);
     open(source, { store: true });
@@ -6669,7 +6776,8 @@ const chromeHost = createChromeHost({
   mediaAction: (op) => mediaView.op(op),
   copyMomentLink: () => copyMomentLink(),
   openMediaFile: (file) => openMediaFile(file),
-  engine: () => (textView.active ? textEngine : sheetView.active ? sheetEngine : mediaView.active ? mediaEngine : null),
+  slidesAction: (op) => slidesView.slidesOp(op),
+  engine: () => (textView.active ? textEngine : sheetView.active ? sheetEngine : slidesView.active ? slidesEngine : mediaView.active ? mediaEngine : null),
   openSelection,
   openLarge,
   drawStyle: (change) => setDrawStyle(change),
@@ -6738,9 +6846,9 @@ const chromeHost = createChromeHost({
  */
 function editingState(): Pick<ChromeState, 'canUndo' | 'canRedo' | 'hasSelection'> {
   return {
-    hasSelection: textView.active ? textEngine.hasSelection : sheetView.active ? sheetEngine.hasSelection : selection.text.length > 0,
-    canUndo: textView.active ? textEngine.canUndo : sheetView.active ? sheetEngine.canUndo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
-    canRedo: textView.active ? textEngine.canRedo : sheetView.active ? sheetEngine.canRedo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
+    hasSelection: textView.active ? textEngine.hasSelection : sheetView.active ? sheetEngine.hasSelection : slidesView.active ? slidesEngine.hasSelection : selection.text.length > 0,
+    canUndo: textView.active ? textEngine.canUndo : sheetView.active ? sheetEngine.canUndo : slidesView.active ? slidesEngine.canUndo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
+    canRedo: textView.active ? textEngine.canRedo : sheetView.active ? sheetEngine.canRedo : slidesView.active ? slidesEngine.canRedo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
   };
 }
 
@@ -7148,9 +7256,9 @@ window.addEventListener('keydown', spellHoverStop, true);
 canvas.addEventListener('contextmenu', (e) => {
   // The menu takes the pointer: a press that was under way is over, and the editor keeps the keyboard.
   endPointer();
-  if (sheetView.active) {
+  if (sheetView.active || slidesView.active) {
     e.preventDefault();
-    sheetView.contextMenu(e.clientX, e.clientY, e.offsetX, e.offsetY);
+    (sheetView.active ? sheetView : slidesView).contextMenu(e.clientX, e.clientY, e.offsetX, e.offsetY);
     return;
   }
   if (textView.active) {
@@ -7190,7 +7298,7 @@ canvas.addEventListener('contextmenu', (e) => {
 // The same menu from the keyboard: the menu key or Shift+F10 in the document opens it for the word at the caret, under it,
 // with the keyboard in the menu (its synonyms, the Thesaurus, a mistake's suggestions, a table's commands).
 function caretMenu(): boolean {
-  if (!selection.caret || textView.active || sheetView.active || annotating || isPicture() || isDrawing()) return false;
+  if (!selection.caret || textView.active || sheetView.active || slidesView.active || annotating || isPicture() || isDrawing()) return false;
   if (!spellDialog.checkingLive && !FORMATS[current.kind].editable) return false;
   // The worker answers about its own caret, which keys typed just before may have moved beyond the one shown here.
   spellMenuAt = { ...caretPoint(), caret: true };
@@ -7932,6 +8040,63 @@ Object.assign(window, {
     columnEdge: (col: number) => sheetView.columnEdge(col),
   },
 });
+const slidesView: SlidesEditor = new SlidesEditor(document.getElementById('viewport')!, {
+  camera,
+  fontBase: FONT_BASE,
+  render: () => requestRender(),
+  viewKey: (e) => viewKey(e),
+  appKey: () => false,
+  notify: (message) => reportError(message),
+  openFailed: (message) => void reportOpenFailure(message),
+  pickImage: () =>
+    new Promise((resolve) => {
+      const picker = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/heic,image/heif,.heic,.heif' });
+      picker.addEventListener('change', () => resolve(picker.files?.[0] ?? null));
+      picker.addEventListener('cancel', () => resolve(null));
+      picker.click();
+    }),
+});
+/** The slides editor as the chrome sees it (see documentEngine.ts). */
+const slidesEngine: DocumentEngine = {
+  get canUndo() {
+    return slidesView.canUndo;
+  },
+  get canRedo() {
+    return slidesView.canRedo;
+  },
+  get hasSelection() {
+    return slidesView.hasSelection;
+  },
+  snapshot: () => null,
+  bounds: () => slidesView.bounds(),
+  undo: () => slidesView.undo(),
+  redo: () => slidesView.redo(),
+  selectAll: () => slidesView.selectAll(),
+  insert: (text) => slidesView.insert(text),
+  copy: () => slidesView.copy(),
+  cut: () => slidesView.cut(),
+  paste: () => slidesView.paste(),
+  find: () => undefined,
+  focus: () => slidesView.focus(),
+  format: (action) => slidesView.formatAction(action),
+};
+slidesView.onEdit = () => {
+  documentEdited();
+  pagesPanel.refresh();
+  requestRender();
+};
+slidesView.onState = () => {
+  syncPagesPanel();
+  requestRender();
+};
+// What the slides editor shows, for the end-to-end tests (its slides are painted on a canvas).
+Object.assign(window, {
+  slidesEditor: {
+    state: () => slidesView.debugState(),
+    screenOf: (name: string) => slidesView.screenOf(name),
+  },
+});
+
 // The vector editor (see ui/vectorSession.ts): a chunk of its own, fetched when the first drawing is opened.
 let vector: VectorSession | null = null;
 let vectorLoading: Promise<VectorSession> | null = null;
@@ -8153,11 +8318,12 @@ const pictureLayers = new PictureLayersPanel(document.getElementById('workspace'
 });
 
 // The thumbnails of the pages beside the document; for a PDF's pages, drag them into order or delete them (see ui/pagesPanel.ts).
+// A deck's slides are its pages here: the slide strip, where slides are put in order and deleted too.
 const pagesPanel = new PagesPanel(document.getElementById('workspace')!, {
-  go: goToPage,
-  draw: (page, width, height) => thumbnailPixels(page as GpuPage, width, height),
-  move: (index, to) => changePages(index, { op: 'move', to }),
-  remove: (index) => changePages(index, { op: 'delete' }),
+  go: (index) => (slidesView.active ? slidesView.go(index) : goToPage(index)),
+  draw: (page, width, height) => (slidesView.active ? slidesView.thumbnailPixels(slidesView.stripPages().indexOf(page as never), width, height) : thumbnailPixels(page as GpuPage, width, height)),
+  move: (index, to) => (slidesView.active ? slidesView.moveSlide(index, to) : changePages(index, { op: 'move', to })),
+  remove: (index) => (slidesView.active ? slidesView.deleteSlide(index) : changePages(index, { op: 'delete' })),
   close: togglePagesPanel,
   focusEditor: focusInput,
 });
@@ -8325,6 +8491,12 @@ function updateFooter(): void {
     footer.update({ kind: current.kind, page: null, zoom: camera.zoom, words: null, selection: null, picture: null, view: 'print', canFlow: false, text: null });
     return;
   }
+  if (slidesView.active) {
+    // The slide in hand, of how many.
+    const info = slidesView.footerInfo();
+    footer.update({ kind: current.kind, page: info && { current: info.slide, count: info.count }, zoom: camera.zoom, words: null, selection: null, picture: null, view: slidesView.sorter ? 'grid' : 'print', canFlow: false, text: null });
+    return;
+  }
   if (sheetView.active) {
     // The sheet's size, as a CSV document's was shown.
     const size = sheetView.size;
@@ -8368,6 +8540,21 @@ function updateFooter(): void {
 
 /** Keeps the pages panel in step with the document: shown or not, editable or not, and marking the page in view. */
 function syncPagesPanel(): void {
+  if (slidesView.active) {
+    // A deck: the slide strip, always in step with the slides and marking the one in hand.
+    const shown = pagesOpen() && !current.none;
+    pagesPanel.setVisible(shown);
+    if (!shown) return;
+    const strip = slidesView.stripPages();
+    if (strip !== panelStrip) {
+      panelStrip = strip;
+      pagesPanel.setPages(strip);
+    }
+    pagesPanel.setEditable(!slidesView.readOnly);
+    pagesPanel.setCurrent(slidesView.currentIndex);
+    return;
+  }
+  panelStrip = null;
   // While a document opens it has no pages yet: a panel already showing stays, empty, rather than closing and opening again.
   const shown = pagesOpen() && !current.none && !textView.active && !reflowing() && (pages.length > 0 || (loadingScreen.visible && !pagesPanel.el.hidden));
   pagesPanel.setVisible(shown);
@@ -8380,6 +8567,9 @@ function syncPagesPanel(): void {
   const page = nearestPage(pages, center.x, center.y);
   pagesPanel.setCurrent(page ? pages.indexOf(page) : -1);
 }
+
+/** The slides last given to the pages panel (the editor keeps the same list until the slides change). */
+let panelStrip: readonly { width: number; height: number }[] | null = null;
 
 // A PDF's form fields, over its pages: filled in or arranged (see ui/formLayer.ts).
 function setFormMode(mode: FormMode): void {
@@ -8493,7 +8683,7 @@ function focusRegions(): Region[] {
   // A workbook's own parts (formula bar, cells, sheet tabs) stand in for the document.
   // Audio or video: the player, its controls with it.
   const mediaRegion: Region = { el: mediaView.el, focus: () => (mediaView.focus(), true) };
-  const documentRegions = sheetView.active ? sheetView.regions() : mediaView.active ? [mediaRegion] : [documentRegion];
+  const documentRegions = sheetView.active ? sheetView.regions() : slidesView.active ? slidesView.regions() : mediaView.active ? [mediaRegion] : [documentRegion];
   // The notes at the bottom of the window (a new version, reload, sign-in ran out), while they show (ui/notice.ts).
   const notices = [...document.querySelectorAll<HTMLElement>('.wm-notice:not([hidden])')].map(panel);
   return [...chrome.regions(), ...documentRegions, ...layers, panel(commentsPanel.el), panel(filesPanel.el), panel(pagesPanel.el), panel(footer.el), ...notices];
@@ -8556,15 +8746,16 @@ installAutomation({
   loaded: () => loaded,
   status: () => status,
   selection: () => ({ text: selection.text, caret: selection.caret }),
-  outline: () => (textView.active || sheetView.active || mediaView.active ? Promise.resolve(null) : worker.outline()),
+  outline: () => (textView.active || sheetView.active || slidesView.active || mediaView.active ? Promise.resolve(null) : worker.outline()),
   text: async () => {
     if (textView.active) return new TextDecoder().decode(textView.editor?.flatten() ?? new Uint8Array(0));
     if (sheetView.active) throw new Error('golem.doc.text: a workbook has no text; read its cells with sheetEditor.cell(row, col)');
+    if (slidesView.active) return slidesView.text();
     if (mediaView.active) throw new Error('golem.doc.text: audio and video have no text; read the player with mediaViewer.state()');
     return new TextDecoder().decode(await worker.convert('txt'));
   },
   markdown: async () => {
-    if (textView.active || sheetView.active || mediaView.active) throw new Error(`golem.doc.markdown: a ${current.kind} file can't be written as Markdown`);
+    if (textView.active || sheetView.active || slidesView.active || mediaView.active) throw new Error(`golem.doc.markdown: a ${current.kind} file can't be written as Markdown`);
     return new TextDecoder().decode(await worker.convert('md'));
   },
   select: (paragraph, from, to) => send({ kind: 'select', paragraph, from, to }),

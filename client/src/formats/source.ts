@@ -36,6 +36,7 @@ const MARKDOWN_FILE = /\.(md|markdown)$/i;
 const TEXT_FILE = /\.(txt|text)$/i;
 const WDOC_FILE = /\.wdoc$/i;
 const XLSX_FILE = /\.(xlsx|xlsm|xltx|xltm)$/i;
+const PPTX_FILE = /\.(pptx|pptm|potx|potm|ppsx|ppsm)$/i;
 
 /** Whether bytes are a Word document (a ZIP with `word/document.xml`), whatever the file is called. */
 function isPlainDocx(input: ArrayBuffer): boolean {
@@ -61,6 +62,8 @@ export function sourceFromFile(name: string, bytes: ArrayBuffer): DocumentSource
   if (DOC_FILE.test(name)) return { kind: 'doc', name, bytes };
   // A workbook opens in the spreadsheet editor (client/src/sheet), not as a document.
   if (XLSX_FILE.test(name)) return { kind: 'xlsx', name, bytes };
+  // A deck opens in the slides editor (client/src/slides).
+  if (PPTX_FILE.test(name)) return { kind: 'pptx', name, bytes };
   if (ODT_FILE.test(name)) return { kind: 'odt', name, bytes };
   if (RTF_FILE.test(name)) return { kind: 'rtf', name, bytes };
   if (HTML_FILE.test(name)) return { kind: 'html', name, bytes };
@@ -101,7 +104,7 @@ export const isZipName = (name: string): boolean => /\.zip$/i.test(name);
 /** Strips a known document extension from a file name. */
 export function stem(name: string): string {
   if (isTextName(name)) return name.replace(/\.[^.]*$/, '');
-  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mhtml?|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|heic|heif|svgz?|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|typ|dbk|docbook|nxml|jats|fb2|opml|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc|xlsx|xlsm|xltx|xltm|mp4|m4v|mov|webm|mkv|ogv|mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i, '');
+  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mhtml?|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|heic|heif|svgz?|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|typ|dbk|docbook|nxml|jats|fb2|opml|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc|xlsx|xlsm|xltx|xltm|pptx|pptm|potx|potm|ppsx|ppsm|mp4|m4v|mov|webm|mkv|ogv|mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i, '');
 }
 
 /**

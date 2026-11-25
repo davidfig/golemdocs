@@ -42,6 +42,7 @@ export const menus: Catalog = {
   'menus.format.xlsx': 'Книга Excel',
   'menus.format.audio': 'Аудио',
   'menus.format.video': 'Видео',
+  'menus.format.pptx': 'Презентация PowerPoint',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': 'Сообщение электронной почты',
   'menus.format.png': 'Изображение PNG',

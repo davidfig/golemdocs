@@ -148,10 +148,10 @@ export class PageRenderer {
     if (selection) drawCalls += this.rects.render(camera, selection.highlightsFor(this.visible));
     this.images?.render(camera, images(false));
 
-    // Group text by face across pages so each atlas is bound once per frame.
+    // Group text by face across pages so each atlas is bound once per frame; layers keep their order (text over other text).
     this.batches.length = 0;
     for (const page of this.visible) this.batches.push(...page.text);
-    this.batches.sort((a, b) => a.face.id - b.face.id);
+    this.batches.sort((a, b) => a.layer - b.layer || a.face.id - b.face.id);
     const text = this.text.render(camera, this.batches);
     drawCalls += text.drawCalls + this.rects.render(camera, this.visible.flatMap((p) => p.foreground));
     if (selection) drawCalls += this.rects.render(camera, selection.squigglesFor(this.visible));

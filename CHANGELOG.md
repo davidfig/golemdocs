@@ -4,8 +4,26 @@
 
 ### Added
 
+- Presentations: PowerPoint decks (`.pptx`) open in a slides editor. Slides are drawn as PowerPoint draws them (layouts, masters, themes, shapes, pictures, tables, charts and SmartArt), down the page or in Slide Sorter (View › Slide Sorter), with the slides beside them to click, drag into order or delete. Type in any text box or placeholder, format text from the toolbar, move, size and turn shapes, and add slides, text boxes, shapes, pictures and tables from the Slide and Insert menus. View › Notes shows a slide's speaker notes. Slide › Present from Beginning (F5) shows the deck full screen, with click-by-click builds, fades between slides and a Presenter View. Decks save back as `.pptx`, print a page per slide, and can be made from a document's headings with File › Convert To; File › New › PowerPoint Presentation starts one.
 - Audio and video: MP4, MOV, WebM, MKV, MP3, M4A, WAV, Ogg, Opus and FLAC files open in a player, with a waveform for audio, a Playback menu and keys (Space or K, J and L, the arrows, M, C, F). Captions come from a .vtt or .srt file of the same name beside it. Edit › Copy Link to This Moment copies a link such as [[talk.mp4#t=12:30]] that opens the file at that time.
 - Audio and video over 50 MB play from where they are, without being copied into Golem Docs or your account; in the desktop app, such files in the vault folder show in Files as on this computer only.
+- Spreadsheets: ⌘; (Ctrl+; on Windows and Linux) inserts today's date.
+
+### Changed
+
+- Spreadsheets: the box you type in is the size of its cell while the text fits, then grows as you type to the full width of the window, and then taller.
+
+### Fixed
+
+- Spreadsheets: a cell being edited keeps its own font, size, style, colors and alignment.
+
+## 0.46.2 - 2026-11-23
+
+### Fixed
+
+- PDFs: text drawn over other text in a different font keeps the order the PDF painted it in, so a caption over its outline (as a browser writes outlined lettering in a PDF) shows as the caption with its outline round it, not the outline over the caption.
+- PDFs: outlined text (stroked rather than filled) is drawn as an outline instead of as solid letters.
+- Editing a document of more than a few pages no longer makes the text of the page on view blink out for a moment now and then.
 
 ## 0.46.1 - 2026-11-23
 

@@ -40,6 +40,7 @@ export const menus = {
   'menus.format.xlsx': 'Excel Workbook',
   'menus.format.audio': 'Audio',
   'menus.format.video': 'Video',
+  'menus.format.pptx': 'PowerPoint Presentation',
   'menus.format.pdf': 'PDF',
   'menus.format.eml': 'Email Message',
   'menus.format.png': 'PNG Image',

@@ -52,6 +52,8 @@ export interface FormatProfile {
   sheetEditor: boolean;
   /** Audio or video, shown in the media viewer (see ../media): played, never edited. */
   mediaViewer: boolean;
+  /** A deck, shown in the slides editor (see ../slides): its own shapes, text, undo and clipboard. */
+  slidesEditor?: boolean;
 }
 
 const WORD_STYLES = [
@@ -169,6 +171,9 @@ const SHEET: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { .
 
 /** Audio or video: played in the media viewer (see ../media), with nothing to edit. */
 const MEDIA: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, mediaViewer: true };
+
+/** A deck: edited in the slides editor (see ../slides). */
+const SLIDES: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, slidesEditor: true };
 
 /** A vector drawing: looked at for now; the vector editor's tools come with it (see vector/). */
 const VECTOR: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, vectorTools: true };
@@ -298,6 +303,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
   xlsx: { ...SHEET, kind: 'xlsx', get label() { return t('menus.format.xlsx'); }, extensions: ['.xlsx', '.xlsm', '.xltx', '.xltm'], mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
   audio: { ...MEDIA, kind: 'audio', get label() { return t('menus.format.audio'); }, extensions: AUDIO_EXTENSIONS, mime: 'audio/mpeg' },
   video: { ...MEDIA, kind: 'video', get label() { return t('menus.format.video'); }, extensions: VIDEO_EXTENSIONS, mime: 'video/mp4' },
+  pptx: { ...SLIDES, kind: 'pptx', get label() { return t('menus.format.pptx'); }, extensions: ['.pptx', '.pptm', '.potx', '.potm', '.ppsx', '.ppsm'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
   largetext: { ...LARGE_TEXT, kind: 'largetext', get label() { return t('menus.format.txt'); }, extensions: [], mime: 'text/plain' },
   png: { ...PICTURE, kind: 'png', get label() { return t('menus.format.png'); }, extensions: ['.png', '.gif', '.bmp'], mime: 'image/png' },
   jpeg: { ...PICTURE, kind: 'jpeg', get label() { return t('menus.format.jpeg'); }, extensions: ['.jpg', '.jpeg', '.heic', '.heif'], mime: 'image/jpeg' },
@@ -332,7 +338,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
 };
 
 /** The formats a document can be converted to (File ▸ Convert To and the selector in the chrome), in order. */
-export const CONVERT_ORDER: DocumentKind[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'xlsx', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'svg', 'svgz', 'pdf', 'md', 'txt'];
+export const CONVERT_ORDER: DocumentKind[] = ['docx', 'odt', 'rtf', 'html', 'epub', 'mhtml', 'pptx', 'xlsx', 'csv', 'tsv', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2', 'opml', 'eml', 'ipynb', 'png', 'jpeg', 'webp', 'svg', 'svgz', 'pdf', 'md', 'txt'];
 
 /** What a picture can be converted to: the picture types, and the document types that can hold it. */
 export const PICTURE_CONVERT_ORDER: DocumentKind[] = ['png', 'jpeg', 'webp', 'svg', 'svgz', 'docx', 'pdf'];
@@ -349,7 +355,7 @@ export const PICTURE_KINDS: readonly DocumentKind[] = ['png', 'jpeg', 'webp'];
 /** How the format list is grouped: the popular formats first, then the rest by type. */
 export const FORMAT_GROUPS: { id: 'popular' | 'documents' | 'web' | 'data' | 'markup' | 'images' | 'vector'; kinds: DocumentKind[] }[] = [
   { id: 'popular', kinds: ['docx', 'pdf', 'html', 'md', 'txt'] },
-  { id: 'documents', kinds: ['odt', 'rtf'] },
+  { id: 'documents', kinds: ['odt', 'rtf', 'pptx'] },
   { id: 'web', kinds: ['epub', 'fb2', 'mhtml'] },
   { id: 'data', kinds: ['xlsx', 'csv', 'tsv'] },
   { id: 'markup', kinds: ['tex', 'typst', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'docbook', 'jats', 'opml'] },
@@ -462,6 +468,38 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     }
     return worksWithoutDocument(action);
   }
+  // The slides editor: its own shapes, text, undo and clipboard; its commands, and character and paragraph formatting of slide text.
+  if (profile.slidesEditor) {
+    switch (action.kind) {
+      case 'print':
+      case 'printPreview':
+      case 'convert':
+      case 'share':
+      case 'close':
+      case 'undo':
+      case 'redo':
+      case 'cut':
+      case 'copy':
+      case 'paste':
+      case 'selectAll':
+      case 'insertText':
+      case 'slides':
+      case 'setFont':
+      case 'setFontSize':
+      case 'growFont':
+      case 'shrinkFont':
+      case 'setColor':
+      case 'setHighlight':
+      case 'clearFormatting':
+      case 'setAlignment':
+      case 'setLineSpacing':
+      case 'toggleList':
+      case 'indent':
+        return true;
+      case 'toggleMark':
+        return action.mark !== 'code';
+    }
+  }
   // The text editor edits text and nothing else: no formatting or document properties (printing and converting open the file as a document first).
   if (profile.textEditor) {
     switch (action.kind) {
@@ -538,9 +576,11 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'media':
     case 'copyMomentLink':
       return profile.mediaViewer;
+    case 'slides':
+      return !!profile.slidesEditor;
     // Headings and tables are a flowing document's.
     case 'jump':
-      return profile.kind !== 'pdf' && !profile.imageTools && !profile.vectorTools && !profile.sheetEditor;
+      return profile.kind !== 'pdf' && !profile.imageTools && !profile.vectorTools && !profile.sheetEditor && !profile.slidesEditor;
     // Every document can be selected and copied from, a PDF's own pages too (which can't be cut from or pasted into: answered below).
     case 'copy':
     case 'selectAll':

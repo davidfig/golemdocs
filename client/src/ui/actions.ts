@@ -63,6 +63,38 @@ export interface MediaState {
   video: boolean;
 }
 
+/** A slides editor command (the Slide menu, Insert, View and the slide's context menu; see ../slides/view.ts). */
+export type SlidesOp = (typeof SLIDES_OPS)[number];
+
+/** Every slides command. */
+export const SLIDES_OPS = [
+  'newSlide',
+  'duplicateSlide',
+  'deleteSlide',
+  'hideSlide',
+  'moveSlideUp',
+  'moveSlideDown',
+  'layout',
+  'resetSlide',
+  'textBox',
+  'shape',
+  'picture',
+  'table',
+  'deleteShape',
+  'duplicateShape',
+  'bringToFront',
+  'bringForward',
+  'sendBackward',
+  'sendToBack',
+  'presentStart',
+  'presentCurrent',
+  'sorter',
+  'notes',
+  'cut',
+  'copy',
+  'paste',
+] as const;
+
 /** What the spreadsheet editor's commands do (the Sheet menu and toolbar, and the cells' context menu). */
 /** A spreadsheet command (see SHEET_OPS). */
 export type SheetOp = (typeof SHEET_OPS)[number];
@@ -342,6 +374,7 @@ export type Action =
   | { kind: 'sheet'; op: SheetOp }
   // Audio and video
   | { kind: 'media'; op: MediaOp }
+  | { kind: 'slides'; op: SlidesOp }
   /** How the selected shapes (and the next ones) look; null is none. */
   | { kind: 'vectorStyle'; fill?: string | null; stroke?: string | null; strokeWidth?: number; strokeStyle?: string; fillType?: 'solid' | 'linear' | 'radial' }
   /** Edits the stops of the selected shape's gradient: pick one, add one at a position (0 to 1), take one away, move one, or turn the gradient around. */
@@ -352,7 +385,7 @@ export type Action =
 export type ActionKind = Action['kind'];
 
 /** Kinds of document the chrome knows how to present. */
-export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'txt' | 'xlsx' | 'audio' | 'video';
+export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'txt' | 'xlsx' | 'pptx' | 'audio' | 'video';
 
 /**
  * Formatting at the selection, for toolbar state. `undefined` means unknown or mixed (the

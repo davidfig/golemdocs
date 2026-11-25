@@ -145,23 +145,36 @@
   display: contents;
 }
 
-/* The in-cell editor: a real textarea over the cell, growing to the right with what is typed. */
+/* The in-cell editor: a real textarea over the cell, sized and styled as the cell and growing with what is typed (view.ts,
+   placeEditor). Its frame is an outline, which takes no room from the text. */
 .wm-sheet-editor {
   position: absolute;
   pointer-events: auto;
   box-sizing: border-box;
   margin: 0;
-  padding: 1px 3px;
-  border: 2px solid var(--wm-hot-border, #316ac5);
-  background: var(--wm-paper, #fff);
-  color: #000;
-  font-family: Calibri, Carlito, Arial, sans-serif;
-  line-height: 1.2;
+  padding: 0;
+  border: 0;
+  outline: 2px solid var(--wm-hot-border, #316ac5);
+  outline-offset: -1px;
   resize: none;
   overflow: hidden;
-  white-space: pre;
-  outline: none;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  overflow-wrap: break-word;
   z-index: 1;
+}
+
+/* Out of sight, the same text as the editor's, for its size. */
+.wm-sheet-measure {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  box-sizing: border-box;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  overflow-wrap: break-word;
 }
 
 .wm-sheet-editor[hidden] {

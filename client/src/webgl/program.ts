@@ -51,6 +51,8 @@ export function uniforms<const T extends readonly string[]>(
 
 /** The sheet's color under Dark Pages: what pageColor() makes of white. */
 export const DARK_PAGE_RGB = 0x28292d;
+/** What it makes of black. */
+const DARK_TEXT_RGB = 0xe3e3e0;
 
 /**
  * Dark Pages: a document color as it shows on a dark page. The lightness flips and the hue stays,
@@ -66,9 +68,21 @@ vec3 pageColor(vec3 c) {
   // The system's high contrast colors (forced-colors): light colors become the page's, every other one the text's.
   if (u_forced > 0.5) return dot(c, vec3(0.2126, 0.7152, 0.0722)) > 0.6 ? u_forcedPage : u_forcedText;
   vec3 flipped = c + (1.0 - max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b));
-  return mix(c, mix(vec3(${hexToGlsl(DARK_PAGE_RGB)}), vec3(${hexToGlsl(0xe3e3e0)}), flipped), u_darkPages);
+  return mix(c, mix(vec3(${hexToGlsl(DARK_PAGE_RGB)}), vec3(${hexToGlsl(DARK_TEXT_RGB)}), flipped), u_darkPages);
 }
 `;
+
+/** The same for what is drawn over the canvas in CSS: a color (0xRRGGBB) as Dark Pages shows it. */
+export function darkPageColor(rgb: number): number {
+  const c = [rgb >> 16, rgb >> 8, rgb].map((v) => (v & 255) / 255);
+  const shift = 1 - Math.max(...c) - Math.min(...c);
+  const at = (i: number) => {
+    const from = (DARK_PAGE_RGB >> (16 - 8 * i)) & 255;
+    const to = (DARK_TEXT_RGB >> (16 - 8 * i)) & 255;
+    return Math.round(from + (to - from) * (c[i] + shift));
+  };
+  return (at(0) << 16) | (at(1) << 8) | at(2);
+}
 
 /** The system's high contrast colors (Windows' contrast themes: the forced-colors media feature), 0xRRGGBB, or null when it has none. */
 export interface ForcedColors {

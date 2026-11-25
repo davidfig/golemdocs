@@ -62,7 +62,7 @@ export class GpuPage {
       // A face the GPU can't hold (too large for MAX_TEXTURE_SIZE, already warned about) draws nothing.
       if (!face) continue;
       const style = { skew: t.syntheticItalic ? SYNTHETIC_SKEW : 0, embolden: t.syntheticBold ? SYNTHETIC_EMBOLDEN : 0 };
-      text.push(new TextBatch(face, style, t.instances, t.count, this._x, this._y));
+      text.push(new TextBatch(face, style, t.instances, t.count, this._x, this._y, t.layer ?? 0));
     }
     const rects = (r: EncodedPage['background']) => (r.count ? [new RectBatch(r.instances, r.count, this._x, this._y)] : []);
     return { text, background: rects(page.background), foreground: rects(page.foreground), images: page.images, glyphCount: page.glyphCount };

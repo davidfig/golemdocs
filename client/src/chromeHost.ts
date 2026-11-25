@@ -18,7 +18,7 @@ import type { GpuPage } from './webgl/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
 import type { FindTab } from './ui/findDialog.ts';
 import { blankSource, lastNewKind } from './ui/newKinds.ts';
-import { acceptList, worksWithoutDocument, type ImageOp, type SheetOp, type MediaOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type ListedDocument, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
+import { acceptList, worksWithoutDocument, type ImageOp, type SheetOp, type SlidesOp, type MediaOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type ListedDocument, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
 import { t } from './i18n/index.ts';
 
 export interface AppHooks {
@@ -121,6 +121,7 @@ export interface AppHooks {
   mediaAction(op: MediaOp): void;
   /** Edit › Copy Link to This Moment, for the open audio or video. */
   copyMomentLink(): Promise<void>;
+  slidesAction(op: SlidesOp): void;
   /** A vector editor tool or command (select, draw a shape, group, order...). */
   vectorAction(op: VectorOp): void;
   /** The look of the selected shapes and of the next ones. */
@@ -216,6 +217,7 @@ const SUPPORTED = new Set<ActionKind>([
   'sheet',
   'media',
   'copyMomentLink',
+  'slides',
   'new',
   'open',
   'close',
@@ -516,6 +518,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.mediaAction(action.op);
         case 'copyMomentLink':
           return app.copyMomentLink();
+        case 'slides':
+          return app.slidesAction(action.op);
         case 'drawStyle':
           {
           const { kind: _kind, ...change } = action;

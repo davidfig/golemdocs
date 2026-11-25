@@ -119,7 +119,8 @@ export async function fromVaultFile(file: Uint8Array, name: string, previous?: U
     const layout = previous && isWdoc(previous) ? await readWdoc(previous).then((wdoc) => wdoc.extensions.csv?.layout, () => undefined) : undefined;
     return layout ? delimitedWdoc(file, format, layout) : file;
   }
-  if (format === 'xlsx') return file;
+  // A deck too: the account keeps the .pptx itself, edited in the slides editor.
+  if (format === 'xlsx' || format === 'pptx') return file;
   // A PDF becomes its own original: what was done to the one before it is in the file now.
   if (format === 'pdf') return writeWdoc({ manifest: { version: WDOC_VERSION, lens: 'pdf', origin: 'pdf', pagesCurrent: true }, document: null, original: file, extensions: {} });
   // A Markdown file is merged into the document it was written from, so what Markdown can't hold (colours, fonts, pictures...)

@@ -4,7 +4,7 @@
 
 import { isTextName } from '../formats/textFiles.ts';
 
-export type FileKind = 'doc' | 'md' | 'txt' | 'code' | 'pdf' | 'html' | 'epub' | 'sheet' | 'tex' | 'markup' | 'eml' | 'notebook' | 'image' | 'vector';
+export type FileKind = 'doc' | 'md' | 'txt' | 'code' | 'pdf' | 'html' | 'epub' | 'sheet' | 'tex' | 'markup' | 'eml' | 'notebook' | 'image' | 'vector' | 'slides';
 
 const BY_EXTENSION: Record<string, FileKind> = {
   md: 'md', markdown: 'md',
@@ -19,6 +19,7 @@ const BY_EXTENSION: Record<string, FileKind> = {
   ipynb: 'notebook',
   png: 'image', jpg: 'image', jpeg: 'image', webp: 'image', gif: 'image', bmp: 'image',
   svg: 'vector', svgz: 'vector',
+  pptx: 'slides', pptm: 'slides', potx: 'slides', potm: 'slides', ppsx: 'slides', ppsm: 'slides',
 };
 
 /** Which kind of file a name is. Word-processor formats, and names with no extension, are plain documents. */
@@ -52,6 +53,7 @@ const DRAWINGS: Record<FileKind, { fill: string; body: string }> = {
   eml: { fill: '#ff8fab', body: `<rect x="4.5" y="7.5" width="7" height="5" rx=".8" fill="${WHITE}" stroke-width="1"/><path d="M4.8 8l3.2 2.5L11.2 8" stroke-width="1"/>` },
   notebook: { fill: '#f5a623', body: `<path d="M6.5 7.5h4M6.5 9.5h4M6.5 11.5h4" stroke="${WHITE}"/><path d="M5 7.5v0M5 9.5v0M5 11.5v0" stroke="${WHITE}" stroke-width="1.6"/>` },
   vector: { fill: '#e6dcff', body: `<path d="M5 12.6C5.6 8.6 8.6 11.8 11 7.6" stroke="#7a52e0" stroke-width="1.2"/><rect x="3.9" y="11.5" width="2.2" height="2.2" rx=".4" fill="${WHITE}" stroke-width=".9"/><rect x="9.9" y="6.5" width="2.2" height="2.2" rx=".4" fill="${WHITE}" stroke-width=".9"/>` },
+  slides: { fill: '#ff8a3d', body: `<rect x="4.6" y="7.4" width="6.8" height="4.6" rx=".6" fill="${WHITE}" stroke-width="1"/><path d="M8 12v1.4" stroke="${WHITE}" stroke-width="1.1"/>` },
   image: { fill: SKY, body: `<circle cx="10.3" cy="8" r="1" fill="#ffc93c" stroke-width=".8"/><path d="M4.8 12.5l2.4-3 1.8 2 1.2-1.3 1.3 2.3z" fill="#4cc38a" stroke-width="1"/>` },
 };
 

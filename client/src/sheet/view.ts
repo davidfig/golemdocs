@@ -14,6 +14,7 @@ import { IS_MAC, altGraph, formatShortcut, parseShortcut } from '../ui/shortcuts
 import { announce } from '../ui/announce.ts';
 import { onScreenReaderChange, SCREEN_READER_SHORTCUT, screenReaderOn } from '../ui/screenReader.ts';
 import type { Region } from '../ui/focusRegions.ts';
+import { darkPageColor } from '../webgl/program.ts';
 import type { ForcedColors } from '../webgl/program.ts';
 import { cellMessage, chartMessage, rangeMessage, sheetMessage } from './a11y.ts';
 import type { Action, FormatState, SheetOp } from '../ui/actions.ts';
@@ -23,6 +24,8 @@ import type { AtlasLibrary } from '../webgl/text/gpuFace.ts';
 import { MAX_COLUMNS, MAX_ROWS, columnName } from './model/column.ts';
 import type { CellRange } from './model/worksheet.ts';
 import { PAD as CELL_PAD } from './cellText.ts';
+import { editorBox } from './editorBox.ts';
+import { dateInput } from './input.ts';
 import { CellFonts } from './fonts.ts';
 import type { BorderChange, StyleChange } from './format/styleChange.ts';
 import type { PasteWhat } from './pasteCells.ts';
@@ -118,6 +121,9 @@ const BORDER_OPS = {
   borderNone: 'none',
 } as const satisfies Record<string, BorderChange>;
 
+/** Ctrl+; (⌘; on a Mac, where Excel's Control+; works too): today's date. By the character or the key, so any layout has it. */
+const isDateKey = (e: KeyboardEvent): boolean => (e.ctrlKey || (IS_MAC && e.metaKey)) && !e.altKey && (e.key === ';' || (e.code === 'Semicolon' && !e.shiftKey));
+
 export class SheetEditorView {
   readonly el = h('div', { class: 'wm-sheet', attrs: { hidden: '' } });
   private readonly formulaBar = h('div', { class: 'wm-sheet-formula' });
@@ -133,6 +139,10 @@ export class SheetEditorView {
   private readonly tabList = h('div', { class: 'wm-sheet-tablist', attrs: { role: 'tablist', 'aria-label': t('sheet.tabs') } });
   private readonly status = h('span', { class: 'wm-sheet-status', attrs: { 'aria-live': 'polite' } });
   private readonly cellEditor = h('textarea', { class: 'wm-sheet-editor', attrs: { 'aria-label': t('sheet.cellEditor'), spellcheck: 'false', autocomplete: 'off', hidden: '' } });
+  /** Measures the cell editor's text: out of sight, with its font. */
+  private readonly editorMeasure = h('div', { class: 'wm-sheet-measure', attrs: { 'aria-hidden': 'true' } });
+  /** The last text measured (its width, then its height at a width), so a frame that changes nothing measures nothing. */
+  private measured = { key: '', width: 0, at: -1, height: 0 };
   /** Takes the keyboard while no cell is being edited (typing starts editing the active cell). */
   private readonly input = h('textarea', { class: 'wm-sheet-input', attrs: { 'aria-label': t('sheet.editor'), autocapitalize: 'off', autocomplete: 'off', autocorrect: 'off', spellcheck: 'false', rows: '1', 'data-sheet-input': '' } });
   /** The cells' part of the window for F6 (the two textareas that take the keyboard there); it lays nothing out. */
@@ -193,7 +203,7 @@ export class SheetEditorView {
   constructor(
     parent: HTMLElement,
     private readonly deps: SheetEditorDeps,
-    fonts: CellFonts,
+    private readonly fonts: CellFonts,
   ) {
     this.renderer = new SheetRenderer(deps.gl, fonts);
     this.renderer.want = (sheet, keys) => this.requestTiles(sheet, keys);
@@ -234,7 +244,7 @@ export class SheetEditorView {
       else return;
       e.preventDefault();
     });
-    this.cells.append(this.cellEditor, this.input);
+    this.cells.append(this.cellEditor, this.editorMeasure, this.input);
     this.el.append(this.formulaBar, this.findBar, h('div', { class: 'wm-sheet-fill' }), this.tabs, this.cells);
     parent.append(this.el);
     this.listen();
@@ -504,8 +514,11 @@ export class SheetEditorView {
       forced,
     });
     if (pending) requestAnimationFrame(() => this.deps.render());
+    this.darkPages = darkPages;
     this.placeEditor();
   }
+
+  private darkPages = false;
 
   /** Where the cells' area starts below the canvas's top (the formula bar, and the find bar when it shows). */
   private offsetTop = FORMULA_BAR;
@@ -575,6 +588,7 @@ export class SheetEditorView {
     this.contentOf = `${this.sheetIndex}:${at.row}:${at.col}`;
     if (!this.editing) this.formulaInput.value = reply.content.input;
     // A locked cell of a protected sheet can't be typed into from the formula bar either.
+    this.placeEditor();
     this.formulaInput.readOnly = !!reply.content.locked;
     const sel = this.selection;
     this.nameBox.value = sel.r0 === sel.r1 && sel.c0 === sel.c1 ? `${columnName(at.col)}${at.row + 1}` : rangeName(sel);
@@ -646,27 +660,76 @@ export class SheetEditorView {
     this.deps.render();
   }
 
-  /** Puts the cell editor over the cell being edited (growing right as the text grows, as Excel's does). */
+  /**
+   * Puts the cell editor over the cell being edited, looking as the cell does: its size while the text fits, then growing to
+   * the width of the view and then down (editorBox.ts).
+   */
   private placeEditor(): void {
     const e = this.editing;
     const g = this.geometry;
-    if (!e || !g) return;
+    if (!e || !g || this.cellEditor.hidden) return;
     const { camera } = this.deps;
     const scale = camera.zoom * CSS_PX_PER_POINT;
     const region = this.renderer.regions.find((r) => (e.col < g.frozenCols) === !r.scrollX && (e.row < g.frozenRows) === !r.scrollY) ?? this.renderer.regions[this.renderer.regions.length - 1];
     if (!region) return;
-    const box = g.mergeAt(e.row, e.col) ?? single(e.row, e.col);
-    const x = region.x + (g.x(box.c0) - region.originX) * scale;
-    const y = this.offsetTop + region.y + (g.y(box.r0) - region.originY) * scale;
-    const width = (g.x(box.c1 + 1) - g.x(box.c0)) * scale;
-    const height = (g.y(box.r1 + 1) - g.y(box.r0)) * scale;
-    const style = this.cellEditor.style;
-    style.left = `${x}px`;
-    style.top = `${y}px`;
-    style.minWidth = `${width}px`;
-    style.minHeight = `${height}px`;
-    style.fontSize = `${11 * scale}px`;
-    style.width = `${Math.max(width, Math.min(600, (this.cellEditor.value.length + 1) * 7 * scale * 0.8))}px`;
+    const range = g.mergeAt(e.row, e.col) ?? single(e.row, e.col);
+    const x0 = region.x + (g.x(range.c0) - region.originX) * scale;
+    const y0 = this.offsetTop + region.y + (g.y(range.r0) - region.originY) * scale;
+    const cell = { x0, y0, x1: x0 + (g.x(range.c1 + 1) - g.x(range.c0)) * scale, y1: y0 + (g.y(range.r1 + 1) - g.y(range.r0)) * scale };
+    const view = { x0: this.renderer.headerWidth, y0: this.offsetTop + g.headerHeight, x1: camera.width / camera.dpr, y1: camera.height / camera.dpr - TABS_BAR };
+
+    // The cell's own look (the last cell's, for the moment until this one's has come).
+    const look = this.content.look;
+    const name = look?.font ?? 'Calibri';
+    const bold = !!look?.bold;
+    const italic = !!look?.italic;
+    const size = (look?.size ?? 11) * scale;
+    const font = this.fonts.font(name, bold, italic);
+    const metrics = font && this.fonts.metrics(font);
+    const line = (metrics?.lineHeight ?? 1.22) * size;
+    const pad = CELL_PAD * scale;
+    const text = { ...this.fonts.css(name, bold, italic), fontSize: `${size}px`, lineHeight: `${line}px`, padding: `0 ${pad}px` };
+    const value = this.cellEditor.value;
+    const key = `${text.fontFamily}|${text.fontWeight}|${text.fontStyle}|${size}|${line}|${value}`;
+    const probe = this.editorMeasure;
+    if (this.measured.key !== key) {
+      Object.assign(probe.style, text, { width: 'max-content', whiteSpace: 'pre' });
+      // Something after the last line break, so that its empty line counts.
+      probe.textContent = `${value}\u200b`;
+      // Room for the caret after the last character.
+      this.measured = { key, width: Math.ceil(probe.getBoundingClientRect().width) + 2, at: -1, height: 0 };
+    }
+    const height = (width: number): number => {
+      if (this.measured.at !== width) {
+        Object.assign(probe.style, { width: `${width}px`, whiteSpace: 'pre-wrap' });
+        this.measured.at = width;
+        this.measured.height = probe.getBoundingClientRect().height;
+      }
+      return this.measured.height;
+    };
+    const align = look?.horizontal === 'right' ? 'right' : look?.horizontal === 'center' || look?.horizontal === 'centerContinuous' ? 'center' : 'left';
+    const box = editorBox(cell, view, { width: this.measured.width, height }, align === 'right' ? 'end' : align === 'center' ? 'middle' : 'start', !!look?.wrap);
+    const width = box.x1 - box.x0;
+    const tall = height(width);
+    const room = Math.max(0, box.y1 - box.y0 - tall);
+    // Where the cell's text stands in it: a point off the top or bottom edge (cellText.ts), or in the middle.
+    const vertical = look?.vertical ?? 'bottom';
+    const top = vertical === 'top' ? Math.min(room, scale) : vertical === 'bottom' ? Math.max(0, room - scale) : room / 2;
+    const color = (rgb: number) => `#${(this.darkPages ? darkPageColor(rgb) : rgb).toString(16).padStart(6, '0')}`;
+    Object.assign(this.cellEditor.style, text, {
+      left: `${box.x0}px`,
+      top: `${box.y0}px`,
+      width: `${width}px`,
+      height: `${box.y1 - box.y0}px`,
+      paddingTop: `${top}px`,
+      textAlign: align,
+      textDecoration: [look?.underline && 'underline', look?.strike && 'line-through'].filter(Boolean).join(' ') || 'none',
+      color: color(look?.color ?? 0),
+      background: color(look?.fill ?? 0xffffff),
+      // Wrapped only when it must be: a rounding of the width never breaks a line that fits.
+      whiteSpace: look?.wrap || this.measured.width > width ? 'pre-wrap' : 'pre',
+      overflowY: tall > box.y1 - box.y0 + 0.5 && box.y1 - box.y0 >= view.y1 - view.y0 - 0.5 ? 'auto' : 'hidden',
+    });
   }
 
   /** Ends editing, keeping what was typed (`commit`) or not; then moves as Enter or Tab would. */
@@ -1058,6 +1121,10 @@ export class SheetEditorView {
     const g = this.geometry;
     if (!g) return;
     const handled = (() => {
+      if (isDateKey(e)) {
+        this.insert(dateInput(new Date()));
+        return true;
+      }
       const extend = e.shiftKey;
       const target = extend ? this.focusCell : this.active;
       switch (e.key) {
@@ -1171,6 +1238,11 @@ export class SheetEditorView {
 
   private editorKey(e: KeyboardEvent): void {
     e.stopPropagation();
+    if (isDateKey(e)) {
+      e.preventDefault();
+      this.insert(dateInput(new Date()));
+      return;
+    }
     const mod = IS_MAC ? e.metaKey : e.ctrlKey;
     switch (e.key) {
       case 'Enter':
@@ -1247,9 +1319,12 @@ export class SheetEditorView {
   /** Types text into the active cell (Insert › Symbol and the like): it is edited with the text added. */
   insert(text: string): void {
     if (this.editing) {
-      const editor = this.cellEditor;
+      const bar = document.activeElement === this.formulaInput;
+      if (bar && this.formulaInput.readOnly) return;
+      const editor = bar ? this.formulaInput : this.cellEditor;
       editor.setRangeText(text, editor.selectionStart, editor.selectionEnd, 'end');
-      this.formulaInput.value = editor.value;
+      (bar ? this.cellEditor : this.formulaInput).value = editor.value;
+      this.placeEditor();
     } else this.startEdit('enter', text);
   }
 

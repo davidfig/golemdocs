@@ -10,6 +10,7 @@ export const NS = {
   wp: 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing',
   a: 'http://schemas.openxmlformats.org/drawingml/2006/main',
   pic: 'http://schemas.openxmlformats.org/drawingml/2006/picture',
+  p: 'http://schemas.openxmlformats.org/presentationml/2006/main',
   mc: 'http://schemas.openxmlformats.org/markup-compatibility/2006',
   w14: 'http://schemas.microsoft.com/office/word/2010/wordml',
   m: 'http://schemas.openxmlformats.org/officeDocument/2006/math',
@@ -23,6 +24,7 @@ const STRICT: Record<string, keyof typeof NS> = {
   'http://purl.oclc.org/ooxml/drawingml/wordprocessingDrawing': 'wp',
   'http://purl.oclc.org/ooxml/drawingml/main': 'a',
   'http://purl.oclc.org/ooxml/drawingml/picture': 'pic',
+  'http://purl.oclc.org/ooxml/presentationml/main': 'p',
   'http://purl.oclc.org/ooxml/officeDocument/math': 'm',
 };
 
@@ -33,6 +35,7 @@ export const CANONICAL_PREFIX: ReadonlyMap<string, string> = new Map<string, str
   ['http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing', 'wp'],
   ['http://schemas.openxmlformats.org/drawingml/2006/main', 'a'],
   ['http://schemas.openxmlformats.org/drawingml/2006/picture', 'pic'],
+  ['http://schemas.openxmlformats.org/presentationml/2006/main', 'p'],
   ['http://schemas.openxmlformats.org/officeDocument/2006/math', 'm'],
   ...Object.entries(STRICT),
 ]);

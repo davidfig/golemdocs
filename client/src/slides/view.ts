@@ -5,7 +5,8 @@
 import { t } from '../i18n/index.ts';
 import type { MessageKey } from '../i18n/index.ts';
 import { cloneElement, type XmlElement } from '@golemdocs/docx';
-import { decodeImage } from '../formats/imageCodec.ts';
+import { decodeImage, toPng } from '../formats/imageCodec.ts';
+import { sniffImage } from '../formats/images.ts';
 import { paintScene, type ImageCache } from '../vector/paint.ts';
 import { apply, invert, multiply } from '../vector/matrix.ts';
 import type { Matrix, Scene } from '../vector/model.ts';
@@ -27,7 +28,7 @@ import { colorContext, slideScene, type ShapeText, type ShapeView, type SlideSce
 import { cNvPr, placeholderOf, xfrmOf, type Frame, type ResolvedShape } from './shapes.ts';
 import { paragraphString, type LaidLine } from './textLayout.ts';
 import { comparePos, deleteRange, ensureBody, insertBreak, insertMultiline, maxPos, minPos, paragraphLength, paragraphsOf, plainText, pPrOf, rPrOf, runsIn, splitAt, splitParagraph, textBetween, wordAt, type TextPos } from './textEdit.ts';
-import { addSlide, changeLayout, deleteShapes, deleteSlides, duplicateShapes, duplicateSlide, isHidden, moveSlides, newPicture, newShape, newTable, reorder, resetToLayout, setFill, setFrame, setHidden, setLine, setNotes, treeOf, type Order } from './edit.ts';
+import { addSlide, changeLayout, deleteShapes, deleteSlides, duplicateShapes, duplicateSlide, isHidden, moveSlides, newPicture, newShape, newTable, reorder, resetToLayout, setFill, setFrame, setHidden, setHighlight, setLine, setNotes, treeOf, type Order } from './edit.ts';
 import { Presenter } from './present.ts';
 import { deckPdf, sceneWithData } from './export.ts';
 import { SHAPE_CHOICES } from './shapeChoices.ts';
@@ -171,6 +172,7 @@ export class SlidesEditorView {
 
   close(): void {
     this.presenter?.close();
+    this.notesFor = null;
     this.presenter = null;
     this.deck = null;
     this.el.hidden = true;
@@ -185,8 +187,10 @@ export class SlidesEditorView {
   /** The deck as a `.pptx`. */
   async save(): Promise<Uint8Array> {
     if (!this.deck) throw new Error('no deck is open');
+    const deck = this.deck;
     this.commitNotes();
-    return this.deck.write();
+    await this.notesSaving;
+    return deck.write();
   }
 
   private fontsArrived(): void {
@@ -1774,10 +1778,7 @@ export class SlidesEditorView {
       }
       case 'setHighlight': {
         const color = action.color ? parseCss(action.color) : null;
-        this.setRunAttrs({}, label, (rPr) => {
-          rPr.children = rPr.children.filter((c) => typeof c === 'string' || c.name !== 'a:highlight');
-          if (color) rPr.children.push({ name: 'a:highlight', attrs: {}, children: [{ name: 'a:srgbClr', attrs: { val: cssColor(color).slice(1).toUpperCase() }, children: [] }] });
-        });
+        this.setRunAttrs({}, label, (rPr) => setHighlight(rPr, color));
         return true;
       }
       case 'clearFormatting':
@@ -2038,14 +2039,19 @@ export class SlidesEditorView {
     const slide = deck?.slides[this.current];
     if (!deck || !slide || this.readOnly) return;
     let bitmap: ImageBitmap;
+    let ext: string;
     try {
+      // Kept as a kind PowerPoint shows, named for what the bytes are: a HEIC or BMP picture is written as another kind.
+      const kind = sniffImage(bytes)?.type;
+      if (kind !== 'png' && kind !== 'jpeg' && kind !== 'gif' && kind !== 'webp') bytes = (await toPng(name, bytes)).bytes;
+      ext = sniffImage(bytes)?.type ?? 'png';
       bitmap = await decodeImage(bytes);
     } catch {
       this.deps.notify(t('slides.pictureUnreadable'));
       return;
     }
-    const ext = /\.(png|gif|webp)$/i.exec(name)?.[1]?.toLowerCase() ?? 'jpeg';
-    const media = deck.addMedia(bytes, ext === 'jpeg' ? 'jpeg' : ext);
+    if (this.deck !== deck) return;
+    const media = deck.addMedia(bytes, ext);
     const scale = Math.min(1, (deck.width * 0.6) / (bitmap.width * EMU_PER_PX), (deck.height * 0.6) / (bitmap.height * EMU_PER_PX));
     const w = Math.round(bitmap.width * EMU_PER_PX * scale);
     const hh = Math.round(bitmap.height * EMU_PER_PX * scale);
@@ -2113,7 +2119,8 @@ export class SlidesEditorView {
   }
 
   private cutText(): void {
-    if (!this.text || this.readOnly) return;
+    // Nothing selected: a cut takes nothing.
+    if (!this.text || this.readOnly || comparePos(this.text.anchor, this.text.focus) === 0) return;
     this.deleteKey(true, false);
   }
 
@@ -2254,6 +2261,10 @@ export class SlidesEditorView {
   }
 
   private notesFor: SlidePart | null = null;
+  /** The notes put in the box or last kept from it: only what is typed since is kept, once. */
+  private notesKept = '';
+  /** The last notes being kept (a slide's first notes take a moment: their part is made). */
+  private notesSaving: Promise<void> = Promise.resolve();
 
   private showNotes(): void {
     this.commitNotes();
@@ -2261,6 +2272,7 @@ export class SlidesEditorView {
     const slide = this.deck?.slides[this.current] ?? null;
     this.notesFor = slide;
     this.notesInput.value = slide ? this.deck!.notesText(slide).replace(/\u000b/g, '\n') : '';
+    this.notesKept = this.notesInput.value;
     this.notesInput.readOnly = this.readOnly;
   }
 
@@ -2269,11 +2281,16 @@ export class SlidesEditorView {
     const slide = this.notesFor;
     if (!deck || !slide || this.readOnly || this.notesBar.hidden) return;
     const text = this.notesInput.value;
-    if (text === deck.notesText(slide).replace(/\u000b/g, '\n')) return;
+    if (text === this.notesKept) return;
+    this.notesKept = text;
     const step = new Transaction(deck, t('slides.undo.notes'));
-    void setNotes(deck, slide, text, step).then((done) => {
-      if (done) this.commit(step);
-      else this.deps.notify(t('slides.noNotesMaster'));
+    this.notesSaving = setNotes(deck, slide, text, step).then((done) => {
+      // Another deck was opened meanwhile: this one has been saved, and its history is gone.
+      if (this.deck !== deck) return;
+      if (!done) return this.deps.notify(t('slides.noNotesMaster'));
+      this.commit(step);
+      // Shown again (the slide was left and come back to) before they were kept.
+      if (this.notesFor === slide && this.notesInput.value === this.notesKept && this.notesKept !== text) this.notesInput.value = this.notesKept = text;
     });
   }
 

@@ -16,6 +16,7 @@
 ### Fixed
 
 - Spreadsheets: a cell being edited keeps its own font, size, style, colors and alignment.
+- Desktop app: a link to a file just added to the vault folder opens it, instead of sometimes saying it isn’t there.
 
 ## 0.46.2 - 2026-11-23
 

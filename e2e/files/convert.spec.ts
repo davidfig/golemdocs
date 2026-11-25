@@ -17,6 +17,7 @@ test('Convert To lists every format in groups, with the current one disabled', a
     'Plain Text (.txt)',
     'OpenDocument Text (.odt)',
     'Rich Text Format (.rtf)',
+    'PowerPoint Presentation (.pptx)',
     'EPUB Book (.epub)',
     'FictionBook (.fb2)',
     'Web Archive (.mhtml)',

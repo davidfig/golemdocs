@@ -6,7 +6,7 @@ import { cloneElement, el, parseXml, type XmlElement } from '@golemdocs/docx';
 import { hexOf, type Rgba } from './color.ts';
 import type { Deck, LayoutPart, SlidePart } from './deck.ts';
 import type { Transaction } from './history.ts';
-import { REL_TYPE, at, emu, ensure, findAll, kid, kids, num, removeKids, replaceKid } from './ooxml.ts';
+import { REL_TYPE, at, emu, ensure, findAll, insertBefore, kid, kids, num, removeKids, replaceKid } from './ooxml.ts';
 import { cNvPr, placeholderOf, propsOf, xfrmOf, type Frame } from './shapes.ts';
 
 export const NS_ATTRS = {
@@ -154,6 +154,8 @@ const SHAPE_NAMES = /^(p:sp|p:pic|p:grpSp|p:cxnSp|p:graphicFrame|mc:AlternateCon
 
 /** Sets (or clears, with null) a shape's fill. */
 export function setFill(element: XmlElement, color: Rgba | null): void {
+  // A table's or chart's frame has no properties of its own: writing some makes a file PowerPoint has to repair.
+  if (element.name === 'p:graphicFrame') return;
   const props = propsOf(element) ?? ensure(element, 'p:spPr', ['p:style', 'p:txBody']);
   removeKids(props, FILL_NAMES);
   const fill = color ? el('a:solidFill', {}, [srgb(color)]) : el('a:noFill');
@@ -164,6 +166,8 @@ export function setFill(element: XmlElement, color: Rgba | null): void {
 
 /** Sets a shape's outline colour (null: none) and width (EMU). */
 export function setLine(element: XmlElement, color: Rgba | null | undefined, width?: number, dash?: string): void {
+  // A frame (see setFill) and a group have no outline.
+  if (element.name === 'p:graphicFrame' || element.name === 'p:grpSp') return;
   const props = propsOf(element) ?? ensure(element, 'p:spPr', ['p:style', 'p:txBody']);
   const ln = ensure(props, 'a:ln', after('a:ln'));
   if (width !== undefined) ln.attrs = { ...ln.attrs, w: emu(width) };
@@ -172,6 +176,12 @@ export function setLine(element: XmlElement, color: Rgba | null | undefined, wid
     ln.children.unshift(color ? el('a:solidFill', {}, [srgb(color)]) : el('a:noFill'));
   }
   if (dash !== undefined) replaceKid(ln, 'a:prstDash', el('a:prstDash', { val: dash }), ['a:round', 'a:bevel', 'a:miter', 'a:headEnd', 'a:tailEnd', 'a:extLst']);
+}
+
+/** Sets (or clears, with null) the highlight of run properties (`a:rPr`), in its place among their children. */
+export function setHighlight(rPr: XmlElement, color: Rgba | null): void {
+  removeKids(rPr, ['a:highlight']);
+  if (color) insertBefore(rPr, el('a:highlight', {}, [srgb(color)]), ['a:uLnTx', 'a:uLn', 'a:uFillTx', 'a:uFill', 'a:latin', 'a:ea', 'a:cs', 'a:sym', 'a:hlinkClick', 'a:hlinkMouseOver', 'a:rtl', 'a:extLst']);
 }
 
 export function srgb(color: Rgba): XmlElement {

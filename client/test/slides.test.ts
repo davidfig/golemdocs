@@ -11,7 +11,7 @@ import { defaultTheme } from '../src/slides/theme.ts';
 import { builtins, customGeometry, presetGeometry, presetNames } from '../src/slides/geometry.ts';
 import { SHAPE_CHOICES } from '../src/slides/shapeChoices.ts';
 import { History, Transaction } from '../src/slides/history.ts';
-import { addSlide, deleteShapes, deleteSlides, duplicateSlide, moveSlides, newShape, reorder, setFrame, setHidden, isHidden, setNotes, treeOf } from '../src/slides/edit.ts';
+import { addSlide, deleteShapes, deleteSlides, duplicateSlide, moveSlides, newShape, newTable, reorder, setFill, setFrame, setHidden, setHighlight, setLine, isHidden, setNotes, treeOf } from '../src/slides/edit.ts';
 import { autoNumber, bulletTexts, layoutText, ROUGH_MEASURE } from '../src/slides/textLayout.ts';
 import { deleteRange, insertMultiline, insertText, paragraphsOf, plainText, runsIn, splitParagraph, textBetween, wordAt } from '../src/slides/textEdit.ts';
 import { slideScene } from '../src/slides/scene.ts';
@@ -315,4 +315,26 @@ test('click animations: shapes come in click by click', () => {
   assert.deepEqual([...hiddenAt(builds, 1)], []);
   assert.deepEqual([...hiddenAt(builds, 2)], ['5']);
   void serializeXml;
+});
+
+test('a highlight goes in its place among run properties, and replaces the one before', () => {
+  const rPr = parseXml('<a:rPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:solidFill/><a:latin typeface="Arial"/><a:hlinkClick/></a:rPr>');
+  setHighlight(rPr, { r: 255, g: 255, b: 0, a: 1 });
+  setHighlight(rPr, { r: 0, g: 255, b: 0, a: 1 });
+  assert.deepEqual(kids(rPr).map((c) => c.name), ['a:solidFill', 'a:highlight', 'a:latin', 'a:hlinkClick']);
+  assert.equal(at(rPr, 'a:highlight/a:srgbClr')?.attrs.val, '00FF00');
+  setHighlight(rPr, null);
+  assert.deepEqual(kids(rPr).map((c) => c.name), ['a:solidFill', 'a:latin', 'a:hlinkClick']);
+});
+
+test('a table frame takes no fill or outline, and a group no outline', async () => {
+  const deck = await Deck.read(await blankDeck());
+  const table = newTable(treeOf(deck.slides[0]), 2, 2, { x: 0, y: 0, w: 1000, h: 0, rot: 0, flipH: false, flipV: false }, 'Table');
+  const before = serializeXml(table);
+  setFill(table, { r: 255, g: 0, b: 0, a: 1 });
+  setLine(table, { r: 255, g: 0, b: 0, a: 1 }, 12700);
+  assert.equal(serializeXml(table), before);
+  const group = el('p:grpSp', {}, [el('p:grpSpPr')]);
+  setLine(group, { r: 255, g: 0, b: 0, a: 1 }, 12700);
+  assert.equal(kids(kid(group, 'p:grpSpPr')).length, 0);
 });

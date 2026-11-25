@@ -3937,8 +3937,18 @@ function switchedNotice(to: Format): string {
 async function convertTo(to: DocumentKind): Promise<void> {
   // Between the grid's own formats (Excel, CSV, TSV) a workbook stays in the grid: the spreadsheet editor writes it as the other.
   const inGrid = sheetView.active && (to === 'xlsx' || to === 'csv' || to === 'tsv') ? sheetView.saveAs(to) : null;
-  // A deck as PDF is its slides, a page each (not its outline).
-  if (slidesView.active && to === 'pdf') return download();
+  if (slidesView.active && to === 'pptx') return;
+  // A deck as PDF is its slides, a page each (not its outline), downloaded: the deck stays as it is.
+  const deckPdf = slidesView.active && to === 'pdf' ? slidesView.printPdf() : null;
+  if (deckPdf) {
+    const name = `${stem(current.name)}.pdf`;
+    try {
+      if (await saveFile(name, await deckPdf, FORMATS.pdf.mime)) setStatus(t('app.downloaded', { name }));
+    } catch (e) {
+      reportError(t('app.downloadFailed', { message: (e as Error).message }));
+    }
+    return;
+  }
   if (!inGrid && !(await openAsDocument())) return;
   const from = current.kind;
   if (to === from) return;
@@ -7521,14 +7531,21 @@ async function openVaultLink(text: string): Promise<void> {
   if (!vaultMatches(link.vault, root)) return say(t('vault.link.otherVault', { vault: link.vault ?? '', name: folderName(root) }));
   const path = pathInVault(link.file, root);
   if (!path) return say(t('vault.link.outside', { file: link.file, name: folderName(root) }));
+  let known = false;
   const find = async () => {
     const found = findInManifest(await vaultEntries(root), path);
+    known = !!found;
     return found ? entryForVaultId(found.id) : undefined;
   };
   let entry = await find();
   // A file made a moment ago is in the folder but not yet a document: one sync makes it one.
   if (!entry && (service.current.state === 'idle' || service.current.state === 'waiting' || service.current.state === 'syncing')) {
     await service.syncNow().catch(() => {});
+    entry = await find();
+  }
+  // A sync under way (syncNow leaves it to finish), or one that has just made it a document the library has yet to list.
+  for (let i = 0; i < 50 && !entry && (known || service.current.state === 'syncing'); i++) {
+    await new Promise((r) => setTimeout(r, 100));
     entry = await find();
   }
   if (!entry) return say(t('vault.link.missing', { file: path }));

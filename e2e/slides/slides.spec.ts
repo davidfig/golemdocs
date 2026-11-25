@@ -102,3 +102,28 @@ test('the deck downloads as .pptx with what was typed', async ({ app, page }) =>
   expect(slide?.bytes.toString('utf8')).toContain('Quarterly review — final');
   expect(parts.some((p) => p.name === 'ppt/presentation.xml')).toBe(true);
 });
+
+test('Convert To PDF downloads the slides as a PDF and leaves the deck open', async ({ app, page }) => {
+  await open(app, page);
+  const file = await app.download(() => app.menu('File', 'Convert To', 'PDF (.pdf)'));
+  expect(file.name).toBe('review.pdf');
+  expect(file.bytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+  expect((await state(page)).slides.length).toBe(2);
+});
+
+test('the first notes of a slide are kept once when another slide is gone to', async ({ app, page }) => {
+  await open(app, page);
+  await app.menu('Slide', 'New Slide');
+  await expect.poll(async () => (await state(page)).slides.length).toBe(3);
+  await app.menu('View', 'Notes');
+  await page.locator('.wm-slides-notes-input').fill('Say hello');
+  await page.locator('.wm-slides-notes-input').press('Escape');
+  await page.keyboard.press('PageUp');
+  await expect(page.locator('.wm-slides-notes-input')).not.toHaveValue('Say hello');
+  await page.keyboard.press('PageDown');
+  await expect(page.locator('.wm-slides-notes-input')).toHaveValue('Say hello');
+  const file = await app.download(() => app.menu('File', 'Download'));
+  const parts = readZip(file.bytes);
+  expect(parts.filter((p) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(p.name) && p.bytes.toString('utf8').includes('Say hello')).length).toBe(1);
+  for (const p of parts.filter((x) => /^ppt\/slides\/_rels\//.test(x.name))) expect(p.bytes.toString('utf8').split('relationships/notesSlide"').length).toBeLessThanOrEqual(2);
+});

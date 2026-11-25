@@ -1,5 +1,19 @@
 # What’s New in Golem Docs
 
+## 0.47.0 - Unreleased
+
+### Added
+
+- Spreadsheets: ⌘; (Ctrl+; on Windows and Linux) inserts today's date.
+
+### Changed
+
+- Spreadsheets: the box you type in is the size of its cell while the text fits, then grows as you type to the full width of the window, and then taller.
+
+### Fixed
+
+- Spreadsheets: a cell being edited keeps its own font, size, style, colors and alignment.
+
 ## 0.46.2 - 2026-11-23
 
 ### Fixed

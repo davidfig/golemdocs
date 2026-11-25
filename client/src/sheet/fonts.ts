@@ -5,7 +5,15 @@
 
 import { FALLBACK_FAMILY, FontSet, describeFace, emojiPageKey, emojiSequence, isCjk } from '@golemdocs/layout';
 import type { CjkLang, FaceMetrics, ResolvedFont } from '@golemdocs/layout';
+import { FONT_BASE } from '../layout/protocol.ts';
 import type { AtlasLibrary, GpuFace } from '../webgl/text/gpuFace.ts';
+
+/** A cell's font for the page's own text (the cell editor), as CSS. */
+export interface CellCssFont {
+  fontFamily: string;
+  fontWeight: string;
+  fontStyle: string;
+}
 
 export interface CellGlyph {
   face: GpuFace;
@@ -64,6 +72,38 @@ export class CellFonts {
 
   metrics(font: ResolvedFont): FaceMetrics | undefined {
     return this.set.metrics(font.face);
+  }
+
+  /** Font files given to the browser, by path: the CSS family each has, and whether it has come. */
+  private readonly web = new Map<string, { family: string; ready: boolean }>();
+
+  private webFamily(font: ResolvedFont): string | null {
+    const path = font.face.font;
+    if (!path) return null;
+    let entry = this.web.get(path);
+    if (!entry) {
+      const made = { family: `golem-cell-${this.web.size}`, ready: false };
+      this.web.set(path, (entry = made));
+      new FontFace(made.family, `url(${FONT_BASE}${path})`).load().then(
+        (face) => {
+          document.fonts.add(face);
+          made.ready = true;
+          this.onLoad();
+        },
+        () => undefined, // unreachable: the browser's own font is used
+      );
+    }
+    return entry.ready ? entry.family : null;
+  }
+
+  /** The font files cells are drawn in, as a CSS font for the cell editor (the browser's own until they have loaded). */
+  css(name: string, bold: boolean, italic: boolean): CellCssFont {
+    const font = this.set.resolve({ font: name, bold, italic });
+    const own = this.webFamily(font);
+    const fallback = this.webFamily(this.set.resolve({ font: FALLBACK_FAMILY }));
+    // A file is one face, declared regular: bold and italic are asked for only where the canvas makes them up too.
+    const families = [own ?? JSON.stringify(name), fallback ?? FALLBACK_FAMILY, 'sans-serif'];
+    return { fontFamily: families.join(', '), fontWeight: (own ? font.syntheticBold : bold) ? '700' : '400', fontStyle: (own ? font.syntheticItalic : italic) ? 'italic' : 'normal' };
   }
 
   /** A character in a font, falling back as documents do; null if no loaded font has it (it is fetched, if any could). */

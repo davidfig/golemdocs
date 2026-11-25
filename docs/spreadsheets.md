@@ -838,7 +838,8 @@ does it in 50 ms slices (`recalculateInSlices`), answering tile requests between
 **What exists.** A workbook dropped, opened or imported opens in the spreadsheet editor: `sheet/handle.ts` is what the app holds
 (the rest is a lazy chunk), `sheet/view.ts` the page (formula bar and name box, sheet tabs, find bar, the in-cell editor, keys,
 mouse, clipboard), `sheet/renderer.ts` and `geometry.ts` the drawing (panes for frozen rows and columns, headers, cell tiles,
-the overview, the selection), `sheet/fonts.ts` the cells' fonts, `sheet/cellText.ts` where text goes in a cell, `sheet/worker.ts`
+the overview, the selection), `sheet/editorBox.ts` the in-cell editor's box (the cell's, then as wide as the view, then taller;
+its text is in the cells' own font files through `CellFonts.css`), `sheet/fonts.ts` the cells' fonts, `sheet/cellText.ts` where text goes in a cell, `sheet/worker.ts`
 the worker (protocol in `protocol.ts`) holding the workbook with `edit.ts` (edits and undo), `input.ts` (what typing means),
 `tiles.ts`, `draw.ts`, `clipboard.ts` and `find.ts`. The app's wiring is in `main.ts` (`openSheet`, `sheetEngine`), the Sheet
 menu in `ui/chrome.ts` (`SHEET_OPS`), the `xlsx` kind in `ui/formats.ts`, the memory images in IndexedDB (`images`,

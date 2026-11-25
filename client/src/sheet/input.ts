@@ -114,6 +114,9 @@ export function parseDateInput(text: string, date1904 = false): { value: number;
   return { value: serial + (time?.fraction ?? 0), format };
 }
 
+/** A date as it is typed into a cell: today's, for the key that inserts it. */
+export const dateInput = (date: Date): string => `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+
 const monthOf = (name: string): number => (name.length >= 3 ? MONTHS.indexOf(name.slice(0, 3)) : -1);
 const daysIn = (y: number, m: number): number => (y === 1900 && m === 2 ? 29 : new Date(Date.UTC(y, m, 0)).getUTCDate());
 /** Excel's two-digit years: 00-29 are 2000-2029, 30-99 are 1930-1999. */

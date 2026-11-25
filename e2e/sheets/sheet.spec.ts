@@ -855,3 +855,54 @@ test('a CSV keeps its column widths when it opens again, and still downloads as 
   expect(again.name).toBe('people.csv');
   expect(again.bytes.toString('utf8')).toBe(text);
 });
+
+/** The cell editor's box and font. */
+const editorLook = (page: Page) =>
+  page.locator('.wm-sheet-editor').evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return { width: r.width, height: r.height, right: r.right, family: s.fontFamily, size: parseFloat(s.fontSize), weight: s.fontWeight, scrollHeight: el.scrollHeight };
+  });
+
+test('the cell editor is in the cell\'s font, the size of the cell, and grows with what is typed', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 3, 4);
+  await page.keyboard.press(`${MOD}+b`);
+  await expect.poll(async () => (await state(page)).content.look?.bold).toBe(true);
+  await page.keyboard.type('a');
+  // The app's own font file, which is bold itself.
+  await expect.poll(async () => (await editorLook(page)).family).toMatch(/^golem-cell-/);
+  const cell = await editorLook(page);
+  expect(cell.weight).toBe('400');
+  expect(cell.scrollHeight).toBeLessThanOrEqual(Math.ceil(cell.height));
+  await page.keyboard.type('b');
+  expect((await editorLook(page)).width).toBe(cell.width);
+  await page.keyboard.type(' some words that are wider than the cell');
+  const wide = await editorLook(page);
+  expect(wide.width).toBeGreaterThan(cell.width);
+  expect(wide.height).toBeCloseTo(cell.height, 1);
+  await page.keyboard.insertText(' and many more words'.repeat(40));
+  const tall = await editorLook(page);
+  expect(tall.height).toBeGreaterThan(cell.height * 2);
+  expect(tall.right).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+  expect(tall.scrollHeight).toBeLessThanOrEqual(Math.ceil(tall.height) + 1);
+  await page.keyboard.press('Escape');
+});
+
+test('Mod+; inserts today\'s date, into a cell or the text being typed', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 3, 4);
+  const today = await page.evaluate(() => {
+    const d = new Date();
+    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+  });
+  await page.keyboard.press(`${MOD}+;`);
+  await expect(page.locator('.wm-sheet-editor')).toHaveValue(today);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(async () => (await state(page)).content.display).toBe(today);
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.type('On ');
+  await page.keyboard.press(`${MOD}+;`);
+  await expect(page.locator('.wm-sheet-editor')).toHaveValue(`On ${today}`);
+});

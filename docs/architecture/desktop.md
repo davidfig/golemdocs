@@ -99,6 +99,10 @@ A file changed on disk replaces the document, which the account keeps a version 
 
 Conversion runs on another thread. `convertWorker.ts` (started through `convertWorkerEntry.ts`) runs `vaultCodec.ts`; `convertClient.ts` (`ConvertWorker`, the `VaultCodec` the sync uses) sends it bytes and gets bytes back. The worker starts with the first conversion and ends after 30 seconds with nothing to do, so a vault that is only watched holds no converters in memory; one that dies fails what it was doing and the next sync retries it. The page asks only `vaultFormats.ts` (names, no converters) which files the vault keeps. Like the layout worker, the build keeps the worker's code in a chunk of its own (`vaultCore`, see `worker` in `client/vite.config.ts`), because WebKit, which Tauri uses on macOS, runs a worker's entry script again when a lazy chunk imports it. The converters are only fetched when something converts: the desktop app's sync, File › Download All and a public link's Download, which use the same worker to get real files; the sync code in the page is about 14 kB (5 kB gzipped), too small for a chunk of its own.
 
+## Media from the vault
+
+Audio and video can be gigabytes, so they don't cross the bridge as a document does (`vault_read_base64`). `vault_media_url` gives the page an address on the shell's own scheme, `golemvault://localhost/<token>/<path>` (`http://golemvault.localhost/…` on Windows), and the web view's player asks it for the ranges it needs; `media::serve` answers each with at most 4 MiB, off the main thread. The token is made at each launch, and only audio and video files inside the vault are served (`vault::resolve`). On a shell without the command the page says to update the app (`bridge.mediaUrl` gives null). See [Audio and video](media.md).
+
 ## Updates
 
 The shell updates itself through `tauri-plugin-updater`: `UpdateService` (`client/src/desktop/updateService.ts`) asks the shell shortly after start and every 6 hours whether a newer signed version exists (`update_check`, `desktop/src-tauri/src/update.rs`), the Software Update dialog (`ui/updateDialog.ts`, also Help › Check for Updates) offers it, and `update_install` replaces the app and restarts it. "Later" holds an offer back for a day per version (`word.updateSnooze`, per device). How releases are signed and published is in [Releasing the desktop app](desktop-release.md#updating-the-shell).
@@ -198,6 +202,7 @@ pnpm desktop:dev
 | `client/src/desktop/vaultCodec.ts` | stored document bytes to and from the vault's file formats (runs in the worker) |
 | `client/src/desktop/convertWorker.ts`, `convertWorkerEntry.ts`, `convertClient.ts` | the worker that runs the codec, and the page's client for it |
 | `client/src/desktop/vaultFormats.ts` | which file names the vault keeps (no converters) |
+| `desktop/src-tauri/src/media.rs` | `vault_media_url` and the `golemvault:` scheme the player reads vault files through |
 | `desktop/src-tauri/src/update.rs` | `update_check` and `update_install` over the updater plugin |
 | `client/src/desktop/updateService.ts`, `client/src/ui/updateDialog.ts` | when to look for an update, and the dialog that offers it |
 | `client/src/desktop/vaultGuest.ts` | the signed-out side: this browser's documents as a `VaultCloud` |

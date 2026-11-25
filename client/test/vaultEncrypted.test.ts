@@ -279,3 +279,21 @@ test('when a folder stops being decrypted into the vault, files the vault does n
   await w.sync();
   assert.deepEqual(w.calls.filter((c) => c.startsWith('create')), ['create Taxes/Late.md']);
 });
+
+test('audio and video too big for the account are kept when their folder stops being decrypted into the vault, and not listed while it is locked', async () => {
+  const w = world();
+  w.add('Kept.md', 'kept');
+  w.setPaths({ encryptedPaths: [], decryptedPaths: ['Taxes'] });
+  w.files.set('Taxes/call.mp4', { bytes: new Uint8Array(51 * 1024 * 1024), mtimeMs: 1 });
+  w.put('Taxes/data.zip', 'binary');
+  assert.deepEqual((await w.sync()).inPlace?.map((f) => f.path), ['Taxes/call.mp4']);
+  w.setPaths({ encryptedPaths: ['Taxes'], decryptedPaths: [] });
+  for (let i = 0; i < 2; i++) {
+    const report = await w.sync();
+    assert.deepEqual(report.inPlace, [], 'what a locked folder holds is not shown');
+    assert.deepEqual(w.paths(), ['Kept.md', 'Taxes/call.mp4'], 'the only copy of the recording stays; the zip goes');
+  }
+  w.setPaths({ encryptedPaths: [], decryptedPaths: ['Taxes'] });
+  assert.deepEqual((await w.sync()).inPlace?.map((f) => f.path), ['Taxes/call.mp4']);
+  assert.deepEqual(w.calls, [], 'never uploaded');
+});

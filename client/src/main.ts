@@ -7043,7 +7043,7 @@ function refreshWith(source: DocumentSource, changes?: number): Promise<boolean 
 /** Starts (or restarts, after signing in or out) keeping the vault folder in step. */
 let vaultWatched = false;
 async function connectVault(): Promise<void> {
-  vaultService ??= VaultService.create(() => account?.id ?? null, { settled: flushUploads, changed: (touched) => void vaultChanged(touched), openLocalId: () => current.localId, inPlace: (files) => library.setVaultEntries(vaultMediaEntries(files)) });
+  vaultService ??= VaultService.create(() => account?.id ?? null, { settled: flushUploads, changed: (touched) => void vaultChanged(touched), openLocalId: () => current.localId, inPlace: (files) => library.setVaultEntries(vaultMediaEntries((vaultMedia = files))) });
   if (vaultService && !vaultWatched) {
     vaultWatched = true;
     let last = vaultService.current.state;
@@ -7834,6 +7834,16 @@ const mediaEngine: DocumentEngine = {
   find: () => {},
   focus: () => mediaView.focus(),
 };
+
+/** The vault's files that play in place, as its last sync reported them. */
+let vaultMedia: readonly { path: string; size: number; mtimeMs: number }[] = [];
+// Placed again whenever the folders change: the sync that reports a file may have just made its folder, which the library lists only later.
+let vaultMediaFolders: unknown = null;
+library.subscribe(() => {
+  if (!vaultMedia.length || library.folders === vaultMediaFolders) return;
+  vaultMediaFolders = library.folders;
+  library.setVaultEntries(vaultMediaEntries(vaultMedia));
+});
 
 /** The vault's audio and video too big for the account, as library entries in the folders of the same names (on this computer only). */
 function vaultMediaEntries(files: readonly { path: string; size: number; mtimeMs: number }[]): LibraryEntry[] {

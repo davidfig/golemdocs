@@ -16,8 +16,10 @@ export interface Folder {
   locked?: boolean;
 }
 
-/** What says where a document is: the cloud's record when it has one, else this browser's. */
+/** What says where a document is: the cloud's record when it has one, else this browser's; a file in the vault only (audio or video too big for the account) is where its path puts it. */
 interface Placed {
+  vault?: { path: string } | null;
+  folderId?: string | null;
   cloud?: { folderId?: string | null } | null;
   local?: { folderId?: string | null } | null;
 }
@@ -37,7 +39,7 @@ export function childFolders(folders: readonly Folder[], parentId: string | null
  * device yet, counts as the top level, so a document is never lost from view.
  */
 export function folderOf(item: Placed, folders: readonly Folder[]): string | null {
-  const id = (item.cloud ? item.cloud.folderId : item.local?.folderId) ?? null;
+  const id = (item.vault ? item.folderId : item.cloud ? item.cloud.folderId : item.local?.folderId) ?? null;
   return id !== null && folders.some((f) => f.id === id) ? id : null;
 }
 

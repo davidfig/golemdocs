@@ -93,13 +93,15 @@ vault folder… in its menu, in the desktop app only, while it has a vault folde
 - **Taken out when it ends:** Stop decrypting in vault folder, Lock, or the idle timer (`endInVault` in `main.ts`, before the keys go) sync
   the vault while the folder is still decrypted into it, so a file changed or made just now reaches its document, encrypted; then the folder
   stops and the vault syncs again, which saves any change into its document, sealed, and removes every document's file (the same path as for
-  a document encrypted since, `syncVault`). Files the vault doesn't sync that are left under the folder go too (`State.decrypted`).
+  a document encrypted since, `syncVault`). Files the vault doesn't sync that are left under the folder go too (`State.decrypted`). Audio and video over 50 MB
+  ([media.md](media.md)) are the exception: no document holds them and the vault has the only copy, so they stay on disk, readable, and are
+  not listed in Files until the folder is decrypted into the vault again.
   Starting and any conversion sync the vault at once (`VaultService.syncAfterCurrent`).
 - **Never a readable document from an encrypted folder's path:** a file under an encrypted folder that isn't decrypted into the vault is
   left out of the plan, so it is never uploaded as an ordinary document; one made there after the last sync is taken in, encrypted, the
   next time the folder is decrypted into the vault.
 - **After a quit or a crash** the files are still there (the shell doesn't let the page finish first). The next start's sync, locked,
-  removes the documents' files that were not changed and the files the vault doesn't sync; a changed document is kept (not lost, not
+  removes the documents' files that were not changed and the files the vault doesn't sync (not audio and video over 50 MB); a changed document is kept (not lost, not
   uploaded readable) until the key is entered, then saved and removed, and a document made just before is kept until the folder is
   decrypted into the vault again.
 - **Limits:** a document encrypted on its own (not in an encrypted folder) is never decrypted into the vault; the folder scan doesn't see

@@ -91,6 +91,10 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 - Undo, Redo, Cut, Copy, Paste, Select All; the toolbar's character and paragraph formatting (bold, italic, underline, strikethrough, font, size, colour, highlight, alignment, bullets, numbering, indent, line spacing) on the text being edited or all the text of the selected shapes
 - Print and Download: a page per slide as a vector PDF, and the `.pptx`
 
+**Playback** (audio or video open in the player; [Audio and video](architecture/media.md))
+- Playback menu (`media`): Play/Pause, Back, Forward, Start, Mute, Slower, Faster, Normal Speed, Captions, Full Screen
+- Edit › Copy Link to This Moment (`copyMomentLink`)
+
 ## Still needs work
 
 **Standard toolbar buttons that are disabled today**

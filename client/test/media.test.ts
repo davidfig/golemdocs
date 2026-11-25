@@ -2,6 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { folderOf, itemsIn } from '../src/folders.ts';
 import { captionFilesFor, srtToVtt } from '../src/media/captions.ts';
 import { MEDIA_KEEP_LIMIT, mediaKindOf, mediaMime, playsInPlace } from '../src/media/mediaFiles.ts';
 import { formatClock, momentFragment, parseClock, parseMoment, splitMoment } from '../src/media/timecode.ts';
@@ -119,4 +120,12 @@ test('the waveform holds the loudest sample of each slice', () => {
   assert.deepEqual([...wavePeaks([new Float32Array(0)], 10)], [0]);
   assert.deepEqual([...wavePeaks([new Float32Array([0.5, 0.25])], 10)], [0.5, 0.25], 'no more slices than samples');
   assert.deepEqual([...columnPeaks(new Float32Array([0.1, 0.9, 0.3, 0.2]), 2)], [0.8999999761581421, 0.30000001192092896]);
+});
+
+test('a file in the vault only is listed in the folder its path puts it in', () => {
+  const folders = [{ id: 'f1', name: 'Talks', parentId: null, createdAt: 0, updatedAt: 0 }];
+  const entry = { vault: { path: 'Talks/keynote.mp4' }, folderId: 'f1', cloud: null, local: null };
+  assert.equal(folderOf(entry, folders), 'f1');
+  assert.deepEqual(itemsIn([entry], folders, 'f1'), [entry]);
+  assert.equal(folderOf({ ...entry, folderId: 'gone' }, folders), null);
 });

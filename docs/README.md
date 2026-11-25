@@ -12,6 +12,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [Document model and editing](architecture/document-model.md) | Commands to operations, undo and redo, selection, clipboard, find and replace, the other editors |
 | [Formats](architecture/formats.md) | `FormatHandler` registry, the `.wdoc` container, DOCX, ODT, PDF, Markdown, conversion loss, adding a format |
 | [Storage and sync](architecture/storage-and-sync.md) | IndexedDB, local and cloud copies, ownership, the upload queue, offline behavior, settings sync |
+| [Audio and video](architecture/media.md) | The player, waveform, captions, links to a moment, files over 50 MB played in place |
 | [Desktop app](architecture/desktop.md) | The Tauri shell, the vault folder and how it syncs with the account |
 | [Releasing the desktop app](architecture/desktop-release.md) | Installer builds on a tag, Apple signing and notarization, what is not done yet |
 | [Server](architecture/server.md) | Worker routing, sign-in, D1 and R2 layout, sharing, billing, search, environments |
@@ -33,7 +34,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [text-files.md](text-files.md) | The large text and log editor (50 MB files): design, status and measurements |
 | [pdf-editing.md](pdf-editing.md) | Fill In and Edit PDF modes |
 | [spreadsheets.md](spreadsheets.md) | Plan for `.xlsx`: column-major model, memory-image cache, formula engine, hashed tile pyramid zoomable to under 1% |
-| [media.md](media.md) | Plan for audio and video viewers: native playback, ranged reads of any size, waveforms, captions and links to a moment |
+| [media.md](media.md) | The plan behind the audio and video viewers, and why they only play |
 | [slides.md](slides.md) | Slides (`.pptx`), built on its branch; the plan for the rest: own model with master/layout inheritance, reusing the vector editor, document text layout and sheet charts; presenting |
 | [live-blocks.md](live-blocks.md) | Plan: computed blocks kept up to date across the vault, in every document type: sources, hosts, the vault graph, where updates run |
 | [folder-sharing.md](folder-sharing.md) | Plan: sharing a folder to view or edit, by email or public link, with links working inside it and copies in the recipient's vault |

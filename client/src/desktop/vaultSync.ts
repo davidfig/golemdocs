@@ -288,17 +288,18 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
   for (const file of local) if (under(file.path, encryptedPaths)) outOfPlan.add(file.path);
   // A folder no longer decrypted into the vault: the files left under it that the vault doesn't sync (no document holds them) are
   // readable too, and go. Documents' files went above, or are held until their changes can be saved.
+  // Audio and video too big for the account stay: the vault has the only copy, so taking one out would lose it.
   const decryptedNow = listing.decryptedPaths ?? [];
   const ended = (state.decrypted ?? []).filter((dir) => !decryptedNow.includes(dir));
   for (const file of scanned) {
-    if (!under(file.path, ended) || notes.has(file.path) || (codec.kept(baseName(file.path)) && !inPlacePaths.has(file.path))) continue;
+    if (!under(file.path, ended) || notes.has(file.path) || codec.kept(baseName(file.path))) continue;
     await disk.remove(file.path).catch(() => undefined);
     report.deletedHere++;
   }
   state.decrypted = decryptedNow.length ? decryptedNow : undefined;
   local = local.filter((f) => !outOfPlan.has(f.path));
-  // Not listed from inside an encrypted folder that isn't decrypted into the vault, nor once removed above.
-  report.inPlace = inPlace.filter((f) => !under(f.path, encryptedPaths) && !under(f.path, ended));
+  // Not listed from inside an encrypted folder that isn't decrypted into the vault: what it holds is not shown while it is locked.
+  report.inPlace = inPlace.filter((f) => !under(f.path, encryptedPaths));
   const localByPath = new Map(local.map((f) => [f.path, f]));
 
   tell({ phase: 'compare', accountDocs: report.accountDocs, folderFiles: report.folderFiles });

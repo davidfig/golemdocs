@@ -88,6 +88,9 @@ interface TextEdit {
 
 const px2emu = (v: number): number => Math.round(v * EMU_PER_PX);
 
+/** The smallest view, in CSS pixels, a deck is fitted to as it opens. */
+const MIN_FIT = 100;
+
 export class SlidesEditorView {
   readonly el = h('div', { class: 'wm-slides', attrs: { hidden: '' } });
   private readonly canvas = h('canvas', { class: 'wm-slides-canvas' });
@@ -261,10 +264,15 @@ export class SlidesEditorView {
     if (announceIt) announce(this.slideMessage(index));
   }
 
+  /** The opening fit still waits for a window with room (a tab opened behind, a pane not shown yet). */
+  private fitWaits = false;
+
   /** Fits the first slide to the window (when a deck opens). */
   fitFirst(viewW: number, viewH: number): void {
     const place = this.placed[0];
     if (!place) return;
+    this.fitWaits = viewW < MIN_FIT || viewH < MIN_FIT;
+    if (this.fitWaits) return;
     this.deps.camera.fit({ x: place.x, y: place.y, width: place.w, height: place.h }, viewW, viewH, 32);
   }
 
@@ -342,6 +350,7 @@ export class SlidesEditorView {
   draw(darkPages: boolean): void {
     const deck = this.deck;
     if (!deck) return;
+    if (this.fitWaits) this.fitFirst(this.canvas.clientWidth, this.canvas.clientHeight);
     const cam = this.deps.camera;
     const ratio = window.devicePixelRatio || 1;
     const width = Math.max(1, Math.round(this.canvas.clientWidth * ratio));

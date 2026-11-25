@@ -8,7 +8,8 @@ import { blankDeck } from '../src/slides/blank.ts';
 import { Deck, paragraphText } from '../src/slides/deck.ts';
 import { resolveColor, DEFAULT_MAP } from '../src/slides/color.ts';
 import { defaultTheme } from '../src/slides/theme.ts';
-import { builtins, customGeometry, presetGeometry, DRAWN_PRESETS } from '../src/slides/geometry.ts';
+import { builtins, customGeometry, presetGeometry, presetNames } from '../src/slides/geometry.ts';
+import { SHAPE_CHOICES } from '../src/slides/shapeChoices.ts';
 import { History, Transaction } from '../src/slides/history.ts';
 import { addSlide, deleteShapes, deleteSlides, duplicateSlide, moveSlides, newShape, reorder, setFrame, setHidden, isHidden, setNotes, treeOf } from '../src/slides/edit.ts';
 import { autoNumber, bulletTexts, layoutText, ROUGH_MEASURE } from '../src/slides/textLayout.ts';
@@ -87,16 +88,63 @@ test('custom geometry: guides, lines and arcs', () => {
   assert.equal(builtins(200, 100).get('ss'), 100);
 });
 
-test('every preset drawn here makes a closed or open outline inside its box', () => {
-  for (const name of DRAWN_PRESETS) {
-    const g = presetGeometry(name, undefined, 300, 200);
-    assert.ok(g.paths.length > 0, name);
-    for (const p of g.paths) for (const c of p.commands) for (const v of c.slice(1) as number[]) assert.ok(Number.isFinite(v), name);
+test('every preset shape draws, and its outline and text box stay near its box', () => {
+  const names = presetNames();
+  assert.equal(names.length, 187);
+  for (const name of names) {
+    for (const [w, h] of [[300, 200], [100, 400], [0, 50]]) {
+      const g = presetGeometry(name, undefined, w, h);
+      assert.ok(g.paths.length > 0, name);
+      for (const p of g.paths) {
+        assert.equal(p.commands[0]?.[0], 'M', name);
+        for (const c of p.commands) for (const v of c.slice(1) as number[]) assert.ok(Number.isFinite(v) && Math.abs(v) < 1500, `${name} ${w}x${h}: ${v}`);
+      }
+      for (const v of Object.values(g.text)) assert.ok(Number.isFinite(v), name);
+    }
   }
   assert.equal(presetGeometry('line', undefined, 10, 10).open, true);
   assert.equal(presetGeometry('rect', undefined, 10, 10).open, false);
-  // A preset not drawn here is its box.
-  assert.equal(presetGeometry('gear9', undefined, 10, 10).paths[0].commands.length, 5);
+  // A name the standard doesn't have is its box.
+  assert.equal(presetGeometry('nonesuch', undefined, 10, 10).paths[0].commands.length, 5);
+  // The gear is the standard's, not a box.
+  assert.ok(presetGeometry('gear9', undefined, 100, 100).paths[0].commands.length > 25);
+});
+
+test('every shape Insert offers is in the preset table', () => {
+  const names = new Set(presetNames());
+  for (const name of SHAPE_CHOICES) assert.ok(names.has(name), name);
+});
+
+const prstGeom = (name: string, guides: Record<string, number>) =>
+  parseXml(`<a:prstGeom xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" prst="${name}"><a:avLst>${Object.entries(guides).map(([k, v]) => `<a:gd name="${k}" fmla="val ${v}"/>`).join('')}</a:avLst></a:prstGeom>`);
+
+test('preset shapes follow their adjustments and the standard outlines', () => {
+  // A rounded rectangle's corner is its adjustment of the short side.
+  const round = presetGeometry('roundRect', prstGeom('roundRect', { adj: 25000 }), 400, 200).paths[0].commands;
+  assert.deepEqual(round[0], ['M', 0, 50]);
+  // The same adjustment under its other name.
+  assert.deepEqual(presetGeometry('roundRect', prstGeom('roundRect', { adj1: 25000 }), 400, 200).paths[0].commands, round);
+  // A guide that isn't an adjustment is not the file's to change.
+  assert.deepEqual(presetGeometry('roundRect', prstGeom('roundRect', { x1: 7 }), 400, 200), presetGeometry('roundRect', undefined, 400, 200));
+  // An up arrow (missing from the standard's file) is a down arrow the other way up.
+  const flat = (name: string, flip: boolean) => new Set(presetGeometry(name, undefined, 80, 200).paths[0].commands.filter((c) => c[0] !== 'Z').map((c) => `${c[1]},${flip ? 200 - (c[2] as number) : c[2]}`));
+  assert.deepEqual(flat('upArrow', false), flat('downArrow', true));
+  // Parts of a shape are shaded and stroked as the standard says.
+  const can = presetGeometry('can', undefined, 100, 100).paths;
+  assert.deepEqual(can.map((p) => [p.fill, p.stroke, p.shade]), [[true, false, undefined], [true, false, 'lighten'], [false, true, undefined]]);
+});
+
+test('arcs: in a stretched path space, of no height, and drawn on after a close', () => {
+  const ns = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
+  const custom = (w: string, body: string) => customGeometry(parseXml(`<a:custGeom ${ns}><a:pathLst><a:path ${w}>${body}</a:path></a:pathLst></a:custGeom>`), 400, 100).paths[0].commands;
+  const near = (c: unknown[], x: number, y: number) => assert.ok(Math.abs((c.at(-2) as number) - x) < 1e-3 && Math.abs((c.at(-1) as number) - y) < 1e-3, JSON.stringify(c));
+  // An eighth of a circle in a 100 × 100 space stretched four times as wide.
+  const eighth = custom('w="100" h="100"', '<a:moveTo><a:pt x="100" y="50"/></a:moveTo><a:arcTo wR="50" hR="50" stAng="0" swAng="2700000"/>');
+  near(eighth.at(-1)!.slice(), (50 + 50 * Math.SQRT1_2) * 4, 50 + 50 * Math.SQRT1_2);
+  // A quarter turn with no height is a line along its width.
+  near(custom('', '<a:moveTo><a:pt x="100" y="0"/></a:moveTo><a:arcTo wR="100" hR="0" stAng="5400000" swAng="5400000"/>').at(-1)!.slice(), 0, 0);
+  const on = custom('', '<a:moveTo><a:pt x="5" y="5"/></a:moveTo><a:lnTo><a:pt x="9" y="5"/></a:lnTo><a:close/><a:lnTo><a:pt x="5" y="9"/></a:lnTo>');
+  assert.deepEqual(on, [['M', 5, 5], ['L', 9, 5], ['Z'], ['M', 5, 5], ['L', 5, 9]]);
 });
 
 const style = (over: Partial<RunStyle> = {}): RunStyle => ({ font: 'Calibri', size: 20, bold: false, italic: false, underline: false, strike: false, color: { r: 0, g: 0, b: 0, a: 1 }, baseline: 0, caps: 'none', spacing: 0, highlight: null, link: null, ...over });

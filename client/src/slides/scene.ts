@@ -299,7 +299,7 @@ class Builder {
     const geometry = shapeGeometry(propsOf(shape.element), w, h);
     if (blipFill) this.blipInto(node, blipFill, shape.part, w, h, geometry);
     const line = shapeLine(shape, this.ctx);
-    if (line) for (const path of geometry.paths) node.children.push({ kind: 'path', commands: path.commands, style: { fill: 'none', ...this.lineStyle(line) }, attrs: {} });
+    if (line) for (const path of geometry.paths) if (path.stroke) node.children.push({ kind: 'path', commands: path.commands, style: { fill: 'none', ...this.lineStyle(line) }, attrs: {} });
   }
 
   // ---- Text -------------------------------------------------------------------------------------------------------

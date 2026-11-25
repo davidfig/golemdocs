@@ -197,8 +197,9 @@ All in `client/src/slides/`, one lazily loaded chunk (`view.ts` and what it impo
   shapes), each placeholder's list style, then the paragraph and run; `p:style` references into the theme's style matrix.
 - **Colours and themes** (`color.ts`, `theme.ts`): every colour kind and change (lumMod, tint, shade, alpha...), colour maps and
   their overrides.
-- **Geometry** (`geometry.ts`): the guide language and custom geometry in full (arcs included); about 90 presets drawn by hand,
-  the rest drawn as their box.
+- **Geometry** (`geometry.ts`): the guide language and custom geometry in full (arcs included), and all 187 preset shapes,
+  which are the standard's own definitions in the same language (`presetData.ts`, packed from ECMA-376's
+  `presetShapeDefinitions.xml` by `scripts/preset-shapes.ts`).
 - **Text** (`textLayout.ts`, `fonts.ts`): line breaking, bullets and automatic numbers, spacing, alignment, anchors, vertical
   text, autofit scale; measured and drawn in the app's own font files (`fonts/manifest.json` substitutes, loaded as web fonts),
   or a font the computer has.
@@ -224,14 +225,13 @@ All in `client/src/slides/`, one lazily loaded chunk (`view.ts` and what it impo
   The document editor lives in the layout worker on whole documents; giving each shape a document there and drawing it on
   the slide would have been far larger than editing DrawingML paragraphs directly, which also keeps every run's own XML.
   Documents still don't edit Word text boxes.
-- **Preset shapes**: about 90 drawn by hand. The full table (`presetShapeDefinitions.xml`, from ECMA-376) would draw all of
-  them exactly; it needs downloading, which waits for a yes.
 - **Slides are drawn on a canvas of their own** over the view (as drawings are), not by the WebGL renderer.
 
 ### Left to do
 
 - Editing animations and transitions (they are kept and played, not edited); master and layout editing; themes; charts
   edited in the sheet editor; tables' rows and columns added or removed (cells' text is edited).
+- The yellow handles that drag a shape's adjustments (the table's handles are left out until then).
 - `.odp`; Keynote stays out.
 - Rooms where several people edit a deck at once (it is watched: one edits, the others look).
 - Live blocks: a slide as a source (`#slide:3`), shapes as hosts.

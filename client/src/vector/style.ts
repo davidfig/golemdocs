@@ -30,6 +30,22 @@ export function inherited(chain: readonly Style[], property: string): string | u
   return undefined;
 }
 
+/**
+ * True when `paint-order` puts the stroke under the fill (`stroke`, `stroke fill`, `markers stroke`...).
+ * Per the SVG spec, the layers it names come first in that order and the rest follow in the normal order
+ * (fill, stroke, markers), so the stroke is under the fill exactly when it is named before `fill`, or named
+ * and `fill` is not. Markers are not drawn, so only fill and stroke matter here.
+ */
+export function strokeUnderFill(chain: readonly Style[]): boolean {
+  const value = inherited(chain, 'paint-order')?.trim().toLowerCase();
+  if (!value || value === 'normal') return false;
+  const words = value.split(/\s+/);
+  const stroke = words.indexOf('stroke');
+  if (stroke < 0) return false;
+  const fill = words.indexOf('fill');
+  return fill < 0 || stroke < fill;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Stylesheets
 

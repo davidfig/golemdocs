@@ -36,7 +36,7 @@ import {
 import { removeFolders, type FolderRow } from './folders.ts';
 import { cleanName, HttpError, ID, json } from './http.ts';
 import { describe, listDocuments, ownStorage } from './documents.ts';
-import { kickFromRoom, rejoinRoom } from './roomGate.ts';
+import { kickFromRoom, listenToRoom, rejoinRoom } from './roomGate.ts';
 import { person, userByEmail } from './sharing.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
 import { existingUserDb, type UserDb } from './userDb.ts';
@@ -310,7 +310,7 @@ export function pathsOf(root: string, folders: readonly (FolderLink & { created_
  * or someone else's token, a folder that is gone, an owner without sync and a path that is not in the tree all answer 404. Public
  * answers may be kept a minute and are never indexed.
  */
-export async function handleFolderView(request: Request, env: Env, url: URL, userId: string | null, token: string, file: boolean): Promise<Response> {
+export async function handleFolderView(request: Request, env: Env, url: URL, userId: string | null, token: string, part: 'file' | 'live' | undefined): Promise<Response> {
   if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
   const target = userId === null ? await folderPublicShare(env, token) : await folderViewShare(env, token, userId);
   if (!target) throw new HttpError(404, 'not found');
@@ -326,10 +326,12 @@ export async function handleFolderView(request: Request, env: Env, url: URL, use
   const { folders, documents } = await contents(env, target.ownerId, db, target.folderId, all);
   const tree = pathsOf(target.folderId, folders as FolderRow[], documents);
   const headers: Record<string, string> = { 'x-robots-tag': 'noindex, nofollow', ...(userId === null ? { 'cache-control': 'public, max-age=60' } : {}) };
-  if (!file) return json({ name: root.name, folders: tree.folders, files: tree.files }, 200, headers);
+  if (!part) return json({ name: root.name, folders: tree.folders, files: tree.files }, 200, headers);
   const docId = tree.byPath.get(url.searchParams.get('path') ?? '');
   const row = docId && documents.find((d) => d.id === docId);
   if (!row) throw new HttpError(404, 'not found');
+  // The WebSocket that tells the page of each save of the file it shows (`listenToRoom`).
+  if (part === 'live') return listenToRoom(env, row.id, request, userId, target.ownerId);
   const response = await documentResponse(env, row.r2_key, target.ownerId, row.id, DOCX, request.headers.get('if-none-match'));
   if (!response) throw new HttpError(404, 'not found');
   const out = new Headers(response.headers);

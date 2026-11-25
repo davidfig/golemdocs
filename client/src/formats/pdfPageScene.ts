@@ -4,14 +4,14 @@
 //
 // The page is drawn as the viewer draws it: the shapes the page paints (pdfDrawings.ts turns them into paths, with their
 // clips, gradients and patterns), its images, and its text as the outlines of the fonts it embeds (pdf's `FontProgram`),
-// or as text in a like font where it embeds none (the standard fonts, Type 3). Shapes and images painted over text come
-// after the text. Like the viewer, a glyph run is set upright at its size: text the page turns or stretches is not.
+// or as text in a like font where it embeds none (the standard fonts, Type 3). Outlined text is a shape of its glyphs'
+// outlines. Shapes and images keep the order the page painted them in, those painted over text after the text. Like the viewer, a glyph run is set upright at its size: text the page turns or stretches is not.
 
-import { interpretPage, type GlyphRun, type PdfPage } from '@golemdocs/pdf';
+import { interpretPage, type DisplayImage, type DisplayPath, type GlyphRun, type PdfPage } from '@golemdocs/pdf';
 import { FontProgram, type Outline } from '@golemdocs/pdf/fontProgram';
 import { colorText } from '../vector/style.ts';
 import { emptyScene, type PathCommand, type Scene, type SceneNode, type TextNode } from '../vector/model.ts';
-import { Definitions, imageNode, nodesOf } from './pdfDrawings.ts';
+import { Definitions, imageNode, nodesOf, strokedTextPath } from './pdfDrawings.ts';
 import { writeSvg } from '../vector/svgWrite.ts';
 
 const color = (rgb: number): string => colorText([(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 1]);
@@ -37,9 +37,8 @@ function glyphCommands(outline: Outline, x: number, y: number, size: number, out
 }
 
 /** A run of text: one path of its glyphs' outlines, or text in a like font for glyphs its font has no outline for. */
-function runNodes(page: PdfPage, run: GlyphRun, programs: Map<object, FontProgram | null>): SceneNode[] {
-  let program = programs.get(run.fontDict);
-  if (program === undefined) programs.set(run.fontDict, (program = FontProgram.load(page.doc, run.fontDict)));
+function runNodes(run: GlyphRun, programOf: (run: GlyphRun) => FontProgram | null): SceneNode[] {
+  const program = programOf(run);
   const fill: Record<string, string> = { fill: color(run.color), ...(run.alpha < 1 && { 'fill-opacity': String(round(run.alpha)) }) };
   const commands: PathCommand[] = [];
   const missing: TextNode['runs'] = [];
@@ -64,24 +63,45 @@ export function pageScene(page: PdfPage): Scene {
   const scene = emptyScene(round(display.width), round(display.height));
   const defs = new Definitions(page.doc);
   const programs = new Map<object, FontProgram | null>();
-  const images = (over: boolean): SceneNode[] => display.images.filter((i) => i.over === over).flatMap((i) => imageNode(page.doc, i) ?? []);
+  const programOf = (run: GlyphRun): FontProgram | null => {
+    let program = programs.get(run.fontDict);
+    if (program === undefined) programs.set(run.fontDict, (program = FontProgram.load(page.doc, run.fontDict)));
+    return program;
+  };
+  // Outlined text is a shape among the shapes (see pdfPages' outlineText); text only outlined is not filled too.
+  const paths: DisplayPath[] = [...display.paths];
+  const outlinedOnly = new Set<GlyphRun>();
+  for (const run of display.glyphRuns) {
+    const path = run.stroke && strokedTextPath(run, (glyph) => programOf(run)?.outline(glyph) ?? null);
+    if (!path) continue;
+    paths.push(path);
+    if (run.stroke!.only) outlinedOnly.add(run);
+  }
+  // The shapes and images under the text, or over it, in the order the page painted them.
+  const layer = (over: boolean): SceneNode[] => {
+    const items: (DisplayPath | DisplayImage)[] = [...paths.filter((p) => p.over === over), ...display.images.filter((i) => i.over === over)].sort((a, b) => a.order - b.order);
+    const nodes: SceneNode[] = [];
+    let shapes: DisplayPath[] = [];
+    const flush = (): void => {
+      if (shapes.length) nodes.push(...nodesOf(shapes, 0, 0, defs));
+      shapes = [];
+    };
+    for (const item of items) {
+      if ('subpaths' in item) shapes.push(item);
+      else {
+        flush();
+        const node = imageNode(page.doc, item);
+        if (node) nodes.push(node);
+      }
+    }
+    flush();
+    return nodes;
+  };
   scene.children = [
     { kind: 'rect', x: 0, y: 0, width: scene.width, height: scene.height, rx: 0, ry: 0, style: { fill: '#ffffff' }, attrs: {} },
-    ...nodesOf(
-      display.paths.filter((p) => !p.over),
-      0,
-      0,
-      defs,
-    ),
-    ...images(false),
-    ...display.glyphRuns.flatMap((run) => runNodes(page, run, programs)),
-    ...nodesOf(
-      display.paths.filter((p) => p.over),
-      0,
-      0,
-      defs,
-    ),
-    ...images(true),
+    ...layer(false),
+    ...display.glyphRuns.filter((run) => !outlinedOnly.has(run)).flatMap((run) => runNodes(run, programOf)),
+    ...layer(true),
   ];
   scene.defs = defs.elements;
   return scene;

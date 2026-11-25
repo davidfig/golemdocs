@@ -13,7 +13,7 @@ import { readGradient, readPattern } from './gradients.ts';
 import { fontSizeOf, findNode, localBounds, outline, viewBoxMatrix } from './geometry.ts';
 import type { Matrix, PathCommand, Scene, SceneNode, Style, TextNode } from './model.ts';
 import type { Bounds } from './pathData.ts';
-import { inherited, parseColor, parseLength, parseNumbers, urlReference } from './style.ts';
+import { inherited, parseColor, parseLength, parseNumbers, strokeUnderFill, urlReference } from './style.ts';
 import type { Rgba } from './style.ts';
 
 export type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -155,11 +155,13 @@ function paintShape(walk: Walk, node: SceneNode, chain: readonly Style[], comman
   if (!fill && !stroke) return;
   ctx.beginPath();
   tracePath(ctx, commands);
-  if (fill) {
+  const paintFill = (): void => {
+    if (!fill) return;
     ctx.fillStyle = fill;
     ctx.fill(inherited(chain, 'fill-rule') === 'evenodd' ? 'evenodd' : 'nonzero');
-  }
-  if (stroke) {
+  };
+  const paintStroke = (): void => {
+    if (!stroke) return;
     const width = parseLength(inherited(chain, 'stroke-width')) ?? 1;
     if (width > 0) {
       ctx.strokeStyle = stroke;
@@ -176,6 +178,13 @@ function paintShape(walk: Walk, node: SceneNode, chain: readonly Style[], comman
       ctx.stroke();
       ctx.setLineDash([]);
     }
+  };
+  if (strokeUnderFill(chain)) {
+    paintStroke();
+    paintFill();
+  } else {
+    paintFill();
+    paintStroke();
   }
 }
 
@@ -211,15 +220,28 @@ function paintText(walk: Walk, node: TextNode, chain: readonly Style[]): void {
     const box = { x, y: y - fontSizeOf(runChain) * 0.8, width: widths[i], height: fontSizeOf(runChain) };
     const fillOpacity = parseFloat(inherited(runChain, 'fill-opacity') ?? '1');
     const fill = paintFor(walk, inherited(runChain, 'fill') ?? 'black', runChain, box, Number.isFinite(fillOpacity) ? fillOpacity : 1);
-    if (fill) {
+    const strokeOpacity = parseFloat(inherited(runChain, 'stroke-opacity') ?? '1');
+    const stroke = paintFor(walk, inherited(runChain, 'stroke'), runChain, box, Number.isFinite(strokeOpacity) ? strokeOpacity : 1);
+    const strokeWidth = parseLength(inherited(runChain, 'stroke-width')) ?? 1;
+    const paintFill = (): void => {
+      if (!fill) return;
       ctx.fillStyle = fill;
       ctx.fillText(run.text, x, y);
-    }
-    const stroke = paintFor(walk, inherited(runChain, 'stroke'), runChain, box, 1);
-    if (stroke) {
+    };
+    const paintStroke = (): void => {
+      if (!stroke || strokeWidth <= 0) return;
       ctx.strokeStyle = stroke;
-      ctx.lineWidth = parseLength(inherited(runChain, 'stroke-width')) ?? 1;
+      ctx.lineWidth = strokeWidth;
+      const join = inherited(runChain, 'stroke-linejoin');
+      ctx.lineJoin = join === 'round' || join === 'bevel' ? join : 'miter';
       ctx.strokeText(run.text, x, y);
+    };
+    if (strokeUnderFill(runChain)) {
+      paintStroke();
+      paintFill();
+    } else {
+      paintFill();
+      paintStroke();
     }
     x += widths[i];
   });

@@ -181,6 +181,14 @@ export async function publicShare(env: Env, token: string): Promise<{ docId: str
   return row ? { docId: row.doc_id, ownerId: row.owner_id } : null;
 }
 
+/**
+ * Ends everything shared from a document that is being encrypted (docs/encrypted-folders.md): its shares and its public link. They are
+ * removed, not only refused, so decrypting it later gives nobody access again.
+ */
+export async function dropSharing(env: Env, docId: string): Promise<void> {
+  await env.DIRECTORY.batch([env.DIRECTORY.prepare('DELETE FROM shares WHERE doc_id = ?').bind(docId), env.DIRECTORY.prepare('DELETE FROM public_links WHERE doc_id = ?').bind(docId)]);
+}
+
 export async function unshare(env: Env, docId: string, granteeId: string): Promise<void> {
   await env.DIRECTORY.prepare('DELETE FROM shares WHERE doc_id = ? AND grantee_id = ?').bind(docId, granteeId).run();
 }

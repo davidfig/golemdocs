@@ -327,3 +327,36 @@ test('a public link lasts only while its owner has sync', async () => {
   assert.equal((await w.call(null, 'GET', `/api/public/${token}/file`)).status, 404);
   assert.equal((await link(id, 'POST')).status, 402, 'and none can be made without it');
 });
+
+// --- The view-only pages' live line (a WebSocket to the document's room, as a listener) -----------
+
+const upgrade = { upgrade: 'websocket' };
+const listens = () => w.roomCalls.filter((c) => c.path === '/listen');
+
+test('a view-only share\'s live line goes to the document\'s room as a listener, for its grantee only, from the site itself', async () => {
+  const id = await create();
+  await share(id, ALICE, 'viewer');
+  const token = (await viewTokenOf(id))!;
+  const { userIdFor } = await import('../src/auth.ts');
+  assert.equal((await w.call(ALICE, 'GET', `/api/view/${token}/live`, { headers: upgrade })).status, 204);
+  assert.equal(listens().length, 1);
+  assert.equal(listens()[0]!.doc, id);
+  assert.equal(listens()[0]!.headers.get('x-user'), await userIdFor(ALICE));
+  assert.equal(listens()[0]!.headers.get('x-role'), null, 'a listener has no role in the room');
+  for (const who of [BOB, OWNER]) assert.equal((await w.call(who, 'GET', `/api/view/${token}/live`, { headers: upgrade })).status, 404, who);
+  assert.equal((await w.call(ALICE, 'GET', `/api/view/${token}/live`, { headers: { ...upgrade, origin: 'https://evil.example' } })).status, 403);
+  assert.equal((await w.call(ALICE, 'GET', `/api/view/${token}/live`)).status, 426, 'not a WebSocket');
+  assert.equal(listens().length, 1);
+});
+
+test('a public link\'s live line is anyone\'s while the link works; resetting or dropping the link lets its listeners go', async () => {
+  const id = await create();
+  const token = (await tokenOf(await link(id, 'PUT')))!;
+  assert.equal((await w.call(null, 'GET', `/api/public/${token}/live`, { headers: upgrade })).status, 204);
+  assert.equal(listens()[0]!.headers.get('x-user'), null);
+  await link(id, 'POST');
+  assert.equal(w.roomCalls.filter((c) => c.path === '/unlisten-public' && c.doc === id).length, 1);
+  assert.equal((await w.call(null, 'GET', `/api/public/${token}/live`, { headers: upgrade })).status, 404, 'the old link is gone');
+  await link(id, 'DELETE');
+  assert.equal(w.roomCalls.filter((c) => c.path === '/unlisten-public' && c.doc === id).length, 2);
+});

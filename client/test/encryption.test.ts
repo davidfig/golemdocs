@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isSealed, isSealedName, paddedLength, sealedKeyId, wrappedKeyId } from '@golemdocs/ops';
+import { isSealed, isSealedName, isSealedSize, paddedLength, SEALED_HEADER_BYTES, SEALED_TAG_BYTES, sealedKeyId, wrappedKeyId } from '@golemdocs/ops';
 import { formatKey, KeyError, newItemKey, newPersonalKey, openFile, openName, openPersonalKey, parseKey, rewrapItemKey, sealFile, sealName, SealError, unwrapItemKey } from '../src/encryption/crypto.ts';
 
 const bytes = (n: number, fill = 7) => new Uint8Array(n).fill(fill);
@@ -104,4 +104,17 @@ test('the padded length: 4 KiB at least, then 16 steps per doubling', () => {
     const padded = paddedLength(n);
     assert.ok(padded >= n + 4 && padded <= (n + 4) * 1.0625 + 1, `${n} → ${padded}`);
   }
+});
+
+test('a sealed file’s size: the header and tag around a padded file, and nothing else', async () => {
+  const around = SEALED_HEADER_BYTES + SEALED_TAG_BYTES;
+  for (const n of [0, 100, 4092, 4093, 10_000, 65_536, 1_000_000, 9_999_999]) {
+    assert.equal(isSealedSize(paddedLength(n) + around), true, `${n} bytes, sealed`);
+    assert.equal(isSealedSize(paddedLength(n) + around + 1), false, `${n} bytes, sealed, and one more`);
+  }
+  assert.equal(isSealedSize(4096), false, 'too small to have been padded');
+  // What sealFile makes is that size.
+  const personal = await newPersonalKey();
+  const { keys } = await newItemKey(personal);
+  for (const n of [0, 5000, 70_000]) assert.equal(isSealedSize((await sealFile(keys, new Uint8Array(n))).byteLength), true);
 });

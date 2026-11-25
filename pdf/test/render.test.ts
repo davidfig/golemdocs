@@ -489,3 +489,33 @@ test('a paint\'s color at a point: along an axial gradient, out from a radial on
   assert.equal(paintColorAt(radial, 100, 50), 0x0000ff);
   assert.equal(paintColor(radial), 0x800080);
 });
+
+test('outlined text: with paths, a stroked run says how it is stroked and where it comes among the shapes', () => {
+  const doc = PdfDocument.create();
+  const page = doc.addPage([200, 100]);
+  const f = page.addResource('Font', doc.standardFont('Helvetica').ref, 'F');
+  page.setContent(
+    ascii(
+      [
+        '0 0 1 RG 2 w',
+        `BT /${f} 20 Tf 1 0 0 rg 1 Tr 10 70 Td (halo) Tj ET`, // stroked only
+        '0 1 0 rg 0 0 10 10 re f', // a shape after it
+        `BT /${f} 20 Tf 1 0 0 rg 2 Tr 10 40 Td (both) Tj ET`, // filled and stroked
+        `BT /${f} 20 Tf 0 Tr 10 10 Td (plain) Tj ET`,
+      ].join('\n'),
+    ),
+  );
+  const display = interpretPage(page, { paths: true });
+  const byText = (t: string) => display.glyphRuns.find((r) => r.glyphs.map((g) => g.unicode).join('') === t)!;
+  const halo = byText('halo').stroke!;
+  assert.deepEqual([halo.color, halo.width, halo.only], [0x0000ff, 2, true]);
+  assert.equal(byText('halo').color, 0x0000ff, 'stroke-only text still reports the stroke color as its color');
+  const both = byText('both');
+  assert.deepEqual([both.color, both.stroke!.only], [0xff0000, false]);
+  assert.equal(byText('plain').stroke, undefined);
+  // In painting order with the shape between them.
+  const square = display.paths.find((p) => p.fill?.color === 0x00ff00)!;
+  assert.ok(halo.order < square.order && square.order < both.stroke!.order);
+  // Without paths, nothing changes.
+  assert.equal(interpretPage(page).glyphRuns.some((r) => r.stroke), false);
+});

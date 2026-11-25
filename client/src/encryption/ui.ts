@@ -12,10 +12,11 @@ import type { LibraryEntry } from '../sync.ts';
 import { announce } from '../ui/announce.ts';
 import { h } from '../ui/dom.ts';
 import { dialogTitleBar, showChoice, showDialog } from '../ui/popup.ts';
+import { progressBar } from '../ui/progressToast.ts';
 import type { PopupItem } from '../ui/popupMenu.ts';
-import { decryptDocument, decryptFolder, encryptDocument, encryptFolder, entriesIn, type ConvertHost } from './convert.ts';
+import { decryptDocument, decryptFolder, encryptDocument, encryptFolder, entriesIn, exclusive, learnEncrypted, purgeReadableTrash, readableTrashIn, type ConvertHost } from './convert.ts';
 import { KeyError } from './crypto.ts';
-import { createKey, decryptedInVault, hasEncrypted, isEncryptedFolder, isUnlocked, lock, lockSession, setDecryptedInVault, unlock } from './session.ts';
+import { confirmKeys, createKey, currentKey, decryptedInVault, hasEncrypted, isEncryptedFolder, isUnlocked, lock, lockSession, setDecryptedInVault, unlock } from './session.ts';
 import { syncedService } from '../desktop/vaultLocation.ts';
 
 /** A modal form with the shared dialog parts: resolves with what `submit` returns, or null for Cancel, Escape or the close button. */
@@ -119,10 +120,24 @@ export async function showSetup(): Promise<boolean> {
   return done === true;
 }
 
-/** Makes sure a key is unlocked to encrypt with: the person's, if they have encrypted anything, else a new one set up now. */
+/**
+ * Makes sure a key is unlocked to encrypt with: the person's, if they have encrypted anything, else a new one set up now. What they have
+ * encrypted is checked with the account first, not taken from the library as last listed: offline, or before it is listed, it would look
+ * like nothing, and a second key would be made (or a mistyped one used) beside the one their documents need.
+ */
 export async function ensureKey(): Promise<boolean> {
-  if (isUnlocked()) return true;
-  return hasEncrypted() ? showUnlock() : showSetup();
+  if (!host) return false;
+  // A key made here or seen to open what they encrypted needs no check.
+  if (currentKey()) return true;
+  try {
+    await learnEncrypted(host.convert());
+  } catch {
+    showDialog(t('encryption.setupTitle'), h('p', { text: t('encryption.checkFailed') }));
+    return false;
+  }
+  if (isUnlocked() && (await confirmKeys())) return true;
+  if (!hasEncrypted()) return showSetup();
+  return (await showUnlock()) && confirmKeys();
 }
 
 /** Locks everything now (after saving what is open, if it is encrypted). */
@@ -153,26 +168,42 @@ export interface EncryptionHost {
 let host: EncryptionHost | null = null;
 export const setEncryptionHost = (next: EncryptionHost): void => void (host = next);
 
-/** A small dialog saying how far a conversion has gone; closed when it is done. */
-function progressDialog(title: string): { update(text: string): void; close(): void } {
-  const dialog = h('dialog', { class: 'wm-dialog wm-encryption-dialog', attrs: { 'aria-label': title } });
+/**
+ * A small dialog saying how far a conversion has gone, with the shared progress bar; closed when it is done. Modal, so nothing is moved or
+ * opened mid-way; nothing in it takes the focus, so the dialog holds it itself, without a focus ring around the whole card.
+ */
+function progressDialog(title: string): { update(done: number, total: number, text: string): void; close(): void } {
+  const dialog = h('dialog', { class: 'wm-dialog wm-encryption-dialog wm-encryption-progress', attrs: { 'aria-label': title, tabindex: '-1' } });
   const status = h('p', { attrs: { role: 'status' } });
-  dialog.append(dialogTitleBar(title, () => undefined), h('div', { class: 'wm-dialog-body' }, status));
+  const bar = progressBar(title);
+  dialog.append(dialogTitleBar(title, () => undefined), h('div', { class: 'wm-dialog-body' }, status, bar.element));
   dialog.querySelector('.wm-dialog-close')?.remove(); // it finishes, or fails, on its own
   dialog.addEventListener('cancel', (e) => e.preventDefault());
   document.body.append(dialog);
   dialog.showModal();
-  return { update: (text) => (status.textContent = text), close: () => (dialog.close(), dialog.remove()) };
+  return {
+    update: (done, total, text) => {
+      status.textContent = text;
+      bar.set(total > 0 ? done / total : 0);
+    },
+    close: () => (dialog.close(), dialog.remove()),
+  };
 }
 
 /** Runs a conversion with its progress shown, and says how it went. */
-async function converting(title: string, word: 'encrypt' | 'decrypt', entries: readonly LibraryEntry[], work: (progress: (done: number, total: number) => void) => Promise<void>): Promise<boolean> {
+async function converting(word: 'encrypt' | 'decrypt', folder: Folder | null, entries: readonly LibraryEntry[], work: (progress: (done: number, total: number) => void) => Promise<void>): Promise<boolean> {
   if (!host) return false;
+  // Named for what is happening now, not the question asked before it.
+  const name = folder?.name ?? (entries.length === 1 ? entries[0]!.name : null);
+  const title =
+    name === null
+      ? t(word === 'encrypt' ? 'encryption.encryptingManyTitle' : 'encryption.decryptingManyTitle', { count: entries.length })
+      : t(word === 'encrypt' ? 'encryption.encryptingTitle' : 'encryption.decryptingTitle', { name });
   const shown = progressDialog(title);
   let failed: unknown = null;
   try {
     await host.before(entries);
-    await work((done, total) => shown.update(t(word === 'encrypt' ? 'encryption.progress' : 'encryption.progressDecrypt', { done, total })));
+    await exclusive(() => work((done, total) => shown.update(done, total, t(word === 'encrypt' ? 'encryption.progress' : 'encryption.progressDecrypt', { done, total }))));
   } catch (error) {
     failed = error;
   } finally {
@@ -191,7 +222,7 @@ export async function encryptDocuments(entries: readonly LibraryEntry[], ask = t
   if (ask && !(await showChoice(title, h('p', { text: t('encryption.encryptIntro') }), [{ label: t('encryption.encryptButton'), value: true, primary: true }]))) return false;
   if (!(await ensureKey())) return false;
   const convert = host.convert();
-  const done = await converting(title, 'encrypt', entries, async (progress) => {
+  const done = await converting('encrypt', null, entries, async (progress) => {
     for (let i = 0; i < entries.length; i++) {
       progress(i, entries.length);
       await encryptDocument(entries[i]!, convert);
@@ -208,7 +239,7 @@ export async function decryptDocuments(entries: readonly LibraryEntry[], ask = t
   if (ask && !(await showChoice(title, h('p', { text: t('encryption.decryptIntro') }), [{ label: t('encryption.decryptButton'), value: true, primary: true }]))) return false;
   if (!isUnlocked() && !(await showUnlock())) return false;
   const convert = host.convert();
-  const done = await converting(title, 'decrypt', entries, async (progress) => {
+  const done = await converting('decrypt', null, entries, async (progress) => {
     for (let i = 0; i < entries.length; i++) {
       progress(i, entries.length);
       await decryptDocument(entries[i]!, convert);
@@ -225,9 +256,29 @@ export async function encryptFolderNow(folder: Folder, ask = true): Promise<bool
   if (ask && !(await showChoice(title, h('p', { text: t('encryption.encryptFolderIntro') }), [{ label: t('encryption.encryptButton'), value: true, primary: true }]))) return false;
   if (!(await ensureKey())) return false;
   const { convert, folders, entries } = { convert: host.convert(), folders: host.folders(), entries: host.entries() };
-  const done = await converting(title, 'encrypt', entriesIn(folder, folders, entries), (progress) => encryptFolder(folder, folders, entries, convert, progress));
+  const done = await converting('encrypt', folder, entriesIn(folder, folders, entries), (progress) => encryptFolder(folder, folders, entries, convert, progress));
   if (done) announce(t('encryption.encryptedDone'));
+  if (done) await offerToPurgeTrash(folder, folders, convert);
   return done;
+}
+
+/**
+ * After a folder is encrypted: documents deleted from it before are still readable in the trash until they are deleted for good, which
+ * encrypting doesn't reach. Says so and offers to delete them now (it can't be undone, so it asks). Nothing is said when there are none.
+ */
+async function offerToPurgeTrash(folder: Folder, folders: readonly Folder[], convert: ConvertHost): Promise<void> {
+  const trash = await readableTrashIn(folder, folders, convert).catch(() => null);
+  const count = trash ? trash.cloud.length + trash.local.length : 0;
+  if (!trash || count === 0) return;
+  const title = t('encryption.trashTitle', { name: folder.name });
+  const purge = await showChoice(title, h('p', { text: t('encryption.trashIntro', { count, name: folder.name }) }), [{ label: t('trash.deleteForever'), value: true, primary: true }]);
+  if (!purge) return;
+  try {
+    await purgeReadableTrash(trash);
+    announce(t('encryption.trashPurged', { count }));
+  } catch (error) {
+    showDialog(title, h('p', { text: t('encryption.failed', { message: (error as Error).message }) }));
+  }
 }
 
 /** Decrypt folder…: asks, unlocks if need be, and decrypts the folder and everything in it. */
@@ -237,7 +288,7 @@ export async function decryptFolderNow(folder: Folder, ask = true): Promise<bool
   if (ask && !(await showChoice(title, h('p', { text: t('encryption.decryptFolderIntro') }), [{ label: t('encryption.decryptButton'), value: true, primary: true }]))) return false;
   if (!isUnlocked() && !(await showUnlock())) return false;
   const { convert, folders, entries } = { convert: host.convert(), folders: host.folders(), entries: host.entries() };
-  const done = await converting(title, 'decrypt', entriesIn(folder, folders, entries), (progress) => decryptFolder(folder, folders, entries, convert, progress));
+  const done = await converting('decrypt', folder, entriesIn(folder, folders, entries), (progress) => decryptFolder(folder, folders, entries, convert, progress));
   if (done) announce(t('encryption.decryptedDone'));
   return done;
 }

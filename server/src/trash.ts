@@ -40,6 +40,8 @@ export const describeTrashed = (row: TrashRow) => ({
   thumbAt: row.thumb_at ?? null,
   deletedAt: row.deleted_at,
   purgeAt: row.deleted_at + TRASH_MS,
+  // Where it was (only its owner lists their trash): a folder being encrypted finds what was deleted from it, still readable.
+  folderId: row.folder_id ?? null,
   ...(row.encrypted ? { encrypted: true, ...(row.wrapped_key ? { wrappedKey: row.wrapped_key } : {}) } : {}),
 });
 

@@ -263,10 +263,8 @@ async function sealed(db: IDBDatabase, input: WriteInput, view: Uint8Array): Pro
     // A new document in an encrypted folder is encrypted from the start; one that was there before the folder was is converted (convert.ts).
     if (!existing) key = await newKey();
   }
-  if (!key) {
-    if (isSealed(view)) throw new Error('a sealed file whose key is not known');
-    return { input, view };
-  }
+  // An ordinary document stays as it is, even one whose file happens to start like a sealed one.
+  if (!key) return { input, view };
   const bytes = await sealFileWith(key, view);
   const name = await sealNameWith(key, input.name);
   return { input: { ...input, name, undo: undefined, encrypted: true, wrappedKey: key }, view: bytes };
@@ -343,7 +341,7 @@ async function letGo(tx: IDBTransaction, hashes: Iterable<string>): Promise<void
 
 /** Writes a document in one transaction: null (having written nothing) if a chunk the plan counted on is not there. */
 async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint8Array, plan: Chunked | null, cloud?: { id: string; updatedAt?: number }, previous?: DueVersion | null): Promise<SavedInfo | null | 'unsent'> {
-  const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, BASES, UNDO, UNDO_DATA], 'readwrite');
+  const tx = db.transaction([META, BYTES, MANIFESTS, CHUNKS, CHUNK_REFS, HISTORY, HISTORY_DATA, BASES, UNDO, UNDO_DATA, THUMBS, SEARCH, IMAGES], 'readwrite');
   const meta = tx.objectStore(META);
   const manifests = tx.objectStore(MANIFESTS);
   const existing = input.id ? ((await done(meta.get(input.id))) as SavedInfo | undefined) : undefined;
@@ -409,6 +407,12 @@ async function commit(db: IDBDatabase, id: string, input: WriteInput, view: Uint
     info.encrypted = true;
     if (input.wrappedKey) info.wrappedKey = input.wrappedKey;
     seen(info);
+    // Nothing readable made from it is kept beside it (docs/encrypted-folders.md): its thumbnail, search index, memory image and the
+    // readable base a merge starts from (a copy that came from the account gets its sealed one back below).
+    tx.objectStore(THUMBS).delete(id);
+    tx.objectStore(SEARCH).delete(id);
+    tx.objectStore(IMAGES).delete(id);
+    tx.objectStore(BASES).delete(id);
   } else if (input.encrypted === false) {
     delete info.encrypted;
     delete info.wrappedKey;
@@ -657,8 +661,10 @@ export async function saveThumbnail(id: string, blob: Blob, forUpdatedAt: number
 /** Keeps a document's memory image (it is only ever used while it matches the document's file; see image/container.ts). */
 export async function saveImage(id: string, image: Uint8Array): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction(IMAGES, 'readwrite');
-  tx.objectStore(IMAGES).put(new Blob([image as Uint8Array<ArrayBuffer>]), id);
+  const tx = db.transaction([META, IMAGES], 'readwrite');
+  // An encrypted document has none: the image is its contents, readable (docs/encrypted-folders.md).
+  const info = (await done(tx.objectStore(META).get(id))) as SavedInfo | undefined;
+  if (!info?.encrypted) tx.objectStore(IMAGES).put(new Blob([image as Uint8Array<ArrayBuffer>]), id);
   await finished(tx);
 }
 

@@ -2,7 +2,7 @@
   "name": "@golemdocs/script",
   "private": true,
   "description": "Golem Docs scripts: the API scripts see, the TypeScript stripper and linker, and the sandbox they run in (private workspace package, not on npm)",
-  "version": "0.44.0",
+  "version": "0.46.2",
   "license": "MIT",
   "type": "module",
   "exports": {

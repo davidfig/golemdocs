@@ -22,7 +22,7 @@ import { adoptGuestFolders, createFolder, renameEntry, setLinkKeeper } from './f
 import { encryptedDocumentKey, foldersInVault, isEncryptedFolder, isSealedCopy, isUnlocked, knowKey, onBeforeLock, onSessionChange, onVaultChange, openSealedName, setDecryptedInVault, touch as touchEncryption } from './encryption/session.ts';
 import { isSealedName } from '@golemdocs/ops';
 import { setEncryptionHost, showUnlock } from './encryption/ui.ts';
-import { finishVersions } from './encryption/convert.ts';
+import { finishEncrypting, finishVersions } from './encryption/convert.ts';
 import { conflictCopyName, keepAsConflictCopy, openFromCloud, prefetchFromCloud, uploadNewToCloud, uploadToCloud, type MergeHost } from './library.ts';
 import {
   adoptGuestDocuments,
@@ -1404,6 +1404,7 @@ function applyLayout(update: LayoutUpdate): void {
   const kept = update.keep && pagesById.get(update.keep.page);
   if (kept && isBook() && readingHold) showReadingPlace(kept, update.keep!.y);
   else if (kept) camera.y = kept.y + update.keep!.y;
+  shelf.keep(pagesInReach());
   if (newDrawingSince) {
     for (const page of pages) {
       const added = page.images.find((i) => i.svg && !newDrawingSince!.has(i.svg));
@@ -1414,6 +1415,16 @@ function applyLayout(update: LayoutUpdate): void {
       }
     }
   }
+}
+
+/** Where the pages in view and a screen either side are in `pages`. */
+function reach(): { from: number; to: number } {
+  return nearRange(pages, { top: camera.y, bottom: camera.y + camera.height / camera.scale }, 1);
+}
+
+function pagesInReach(): GpuPage[] {
+  const { from, to } = reach();
+  return pages.slice(from, to);
 }
 
 /** Positions pages; places the camera the first time, and keeps a grid fitted while it grows. */
@@ -3064,6 +3075,22 @@ setEncryptionHost({
     // The vault takes what was encrypted out, or what was decrypted in, now rather than at its next look at the account.
     void vaultService?.syncAfterCurrent();
   },
+});
+// An encrypted folder whose encryption was cut short (a tab closed, the network lost) is finished while unlocked, a moment after the
+// library lists it: what was left readable in it is encrypted now (convert.ts `finishEncrypting`).
+let finishTimer: number | undefined;
+library.subscribe(() => {
+  if (!isUnlocked()) return;
+  window.clearTimeout(finishTimer);
+  finishTimer = window.setTimeout(() => {
+    void finishEncrypting(library.folders, library.entries, { owner: account?.id, cloud: !!account })
+      .then((did) => {
+        if (!did) return;
+        void library.refresh();
+        void vaultService?.syncAfterCurrent();
+      })
+      .catch((error) => console.error('finishing encryption', error));
+  }, 2000);
 });
 // Anything done in the app keeps the session from locking for being idle.
 for (const type of ['pointerdown', 'keydown', 'wheel'] as const) window.addEventListener(type, () => touchEncryption(), { capture: true, passive: true });
@@ -5344,7 +5371,7 @@ function render(): void {
     if (renderer.flat) camera.x = bounds.x;
     renderer.forced = forcedColors();
     // The pages in view and a screen either side keep their glyphs unpacked, or get them back, and are where squiggles are found.
-    const range = nearRange(pages, { top: camera.y, bottom: camera.y + camera.height / camera.scale }, 1);
+    const range = reach();
     shelf.keep(pages.slice(range.from, range.to));
     worker.view(range.from, range.to);
     lastStats = renderer.render(camera, pages, selection, caretVisible, pagesDark());

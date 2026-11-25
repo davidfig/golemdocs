@@ -39,6 +39,9 @@ export abstract class EditorLinks extends EditorEditing {
   charUnder(page: PageLayout, x: number, y: number): { paragraph: Paragraph; offset: number } | null {
     const line = page.lines.find((l) => y >= l.y && y <= l.y + l.height && x >= l.x && x <= l.x + l.width);
     if (!line) return null;
+    // Past the line's text (the space after it, or before an indent) is over no character.
+    const stops = line.stops;
+    if (stops.length < 2 || x < line.column + stops[0] || x >= line.column + stops[stops.length - 1]) return null;
     // The character the point is over: the last caret stop at or before it (the final stop is the line's end, not a character).
     let k = 0;
     for (let i = 0; i < line.stops.length - 1; i++) if (line.column + line.stops[i] <= x) k = i;

@@ -52,6 +52,7 @@ export async function handleFolders(request: Request, id: string | undefined, db
       const body = (await request.json().catch(() => null)) as { folders?: unknown } | null;
       if (!Array.isArray(body?.folders) || body.folders.length > MAX_BATCH) throw new HttpError(400, `expected { folders: [{ id, name, parentId }] } of at most ${MAX_BATCH}`);
       const { ok, failed } = await putFolders(db, body.folders as FolderInput[]);
+      await forget(encryptedNow(ok));
       return json({ ok: ok.map((r) => r.folder), failed: failed.map((f) => failure(f.id, f.cause)) });
     }
 
@@ -72,6 +73,7 @@ export async function handleFolders(request: Request, id: string | undefined, db
     const body = (await request.json().catch(() => null)) as FolderInput | null;
     const { ok, failed } = await putFolders(db, [{ ...body, id }]);
     if (failed[0]) throw failed[0].cause;
+    await forget(encryptedNow(ok));
     return json(ok[0]!.folder, ok[0]!.created ? 201 : 200);
   }
 
@@ -86,6 +88,12 @@ export async function handleFolders(request: Request, id: string | undefined, db
 
   throw new HttpError(405, 'method not allowed');
 }
+
+/**
+ * The folders a PUT has just encrypted: what was shared from them (shares, public links) ends, so decrypting one later gives nobody access
+ * again (docs/encrypted-folders.md).
+ */
+const encryptedNow = (ok: readonly { folder: { id: string }; encryptedNow: boolean }[]): string[] => ok.filter((r) => r.encryptedNow).map((r) => r.folder.id);
 
 /**
  * One folder of a PUT: `name` and `parentId` may be left out of an update to keep them. `encrypted` (with `wrappedKey`, the folder's own
@@ -106,9 +114,9 @@ export interface Refused {
  * the changes go in one request to Cloudflare: two requests however many folders, where walking
  * each one's ancestors in the database cost a request per level per folder.
  */
-export async function putFolders(db: UserDb, items: FolderInput[]): Promise<{ ok: { folder: ReturnType<typeof describeFolder>; created: boolean }[]; failed: Refused[] }> {
+export async function putFolders(db: UserDb, items: FolderInput[]): Promise<{ ok: { folder: ReturnType<typeof describeFolder>; created: boolean; encryptedNow: boolean }[]; failed: Refused[] }> {
   const folders = new Map((await db.all<FolderRow>('SELECT * FROM folders')).map((row) => [row.id, row]));
-  const ok: { folder: ReturnType<typeof describeFolder>; created: boolean }[] = [];
+  const ok: { folder: ReturnType<typeof describeFolder>; created: boolean; encryptedNow: boolean }[] = [];
   const failed: Refused[] = [];
   const statements: { sql: string; params: unknown[] }[] = [];
   const now = Date.now();
@@ -150,7 +158,7 @@ export async function putFolders(db: UserDb, items: FolderInput[]): Promise<{ ok
         sql: `INSERT INTO folders (id, name, parent_id, created_at, updated_at, encrypted, wrapped_key) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET ${changed.join(', ')}`,
         params: [id, name, parentId, now, now, encrypted ? 1 : 0, wrapped],
       });
-      ok.push({ folder: describeFolder(row), created: !existing });
+      ok.push({ folder: describeFolder(row), created: !existing, encryptedNow: encrypted && !existing?.encrypted });
     } catch (error) {
       failed.push({ id, cause: error });
     }

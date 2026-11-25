@@ -10,7 +10,7 @@ test.use({ trace: 'off' });
 const LINES = 150_000;
 const BIG = Buffer.from(Array.from({ length: LINES }, (_, i) => `Line ${i + 1} the quick brown fox jumps over the lazy dog ${'.'.repeat(12)}`).join('\n') + '\n', 'utf8');
 
-test('two devices edit a big text file together and undo only their own changes', async ({ browser }) => {
+test('two devices edit a big text file together and undo only their own changes', { tag: '@heavy' }, async ({ browser }) => {
   const a = await newPerson(browser, 'text');
   await statusBarOn(a.context);
   const doc = await uploadDoc(a.page, 'big.txt', BIG);

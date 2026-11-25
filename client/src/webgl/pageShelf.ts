@@ -45,7 +45,11 @@ export class PageShelf {
     this.near.clear();
   }
 
-  /** The pages in or near the view: their glyphs stay, or come back (and the view is drawn again once they have). */
+  /**
+   * The pages in or near the view: their glyphs stay, or come back (and the view is drawn again once they have). Call it each frame,
+   * and as soon as a layout changes the pages (not only at the next frame): an edit makes a new page in place of the one on view, and
+   * a sweep before the frame would pack it, so it would be drawn without its text.
+   */
   keep(pages: readonly GpuPage[]): void {
     const before = this.near;
     this.near = new Set(pages);
@@ -93,6 +97,12 @@ export class PageShelf {
     }, this.delay);
   }
 
+  private async pack(page: GpuPage): Promise<void> {
+    await page.shelve().catch((e: unknown) => console.error(e));
+    // The view came near while it was being packed: nothing else may ask for it back.
+    if (this.near.has(page)) await this.bring(page);
+  }
+
   /** Packs the glyphs of new pages that are still waiting to be drawn and are not near the view. */
   private async sweep(): Promise<void> {
     this.sweeping = true;
@@ -102,7 +112,7 @@ export class PageShelf {
         if (this.near.has(page)) continue; // looked at: left as it is, and checked again later
         this.fresh.delete(page);
         if (!page.waiting) continue; // drawn already: its glyphs are on the GPU
-        batch.push(page.shelve().catch((e: unknown) => console.error(e)));
+        batch.push(this.pack(page));
         if (batch.length === SHELVE_BATCH) {
           await Promise.all(batch);
           batch = [];

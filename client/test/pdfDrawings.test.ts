@@ -7,7 +7,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { N, PdfDict, PdfDocument, PdfStream, interpretPage } from '../../pdf/src/index.ts';
-import { drawingGroups, drawingPng, drawingScene, drawingSvg, type DrawingGroup } from '../src/formats/pdfDrawings.ts';
+import { drawingGroups, drawingPng, drawingScene, drawingSvg, strokedTextPath, type DrawingGroup } from '../src/formats/pdfDrawings.ts';
+import type { GlyphRun } from '../../pdf/src/index.ts';
 import { pdfToDocument } from '../src/formats/pdfImport.ts';
 import type { Drawing, Paragraph, Run } from '@golemdocs/docx';
 
@@ -131,4 +132,32 @@ test('a pattern whose cell is an image (how Chromium fills a shape with a pictur
   // With the document to read it from, the image is in the cell; without, the cell has only its shapes.
   assert.match(compact(drawingSvg(group, saved)), /<pattern id="p\d+"[^>]*><image [^>]*href="data:image\/png;base64,[^"]+"[^>]*\/><\/pattern>/);
   assert.doesNotMatch(drawingSvg(group), /<image/);
+});
+
+test('strokedTextPath: a stroked run as the outlines of its glyphs, stroked, at its place in the painting order', () => {
+  const square = [[{ points: [0, 0, 0.5, 0] }, { points: [0.5, 0, 0.5, 0.5] }, { points: [0.5, 0.5, 0, 0.5] }, { points: [0, 0.5, 0, 0] }]];
+  const run = {
+    fontDict: {},
+    size: 20,
+    color: 0,
+    alpha: 0.6,
+    glyphs: [
+      { unicode: 'a', x: 10, y: 50, advance: 10, glyph: 1 },
+      { unicode: 'b', x: 20, y: 50, advance: 10, glyph: 2 },
+    ],
+    stroke: { color: 0, alpha: 0.6, width: 2, join: 1, miter: 10, only: true, over: false, order: 7 },
+  } as unknown as GlyphRun;
+  const path = strokedTextPath(run, () => square)!;
+  assert.equal(path.subpaths.length, 2);
+  // The first glyph: from its origin, half an em (10 points) across and up (y runs down).
+  assert.deepEqual(path.subpaths[0].pts, [10, 50, 20, 50, 20, 40, 10, 40, 10, 50]);
+  assert.deepEqual([path.x0, path.y0, path.x1, path.y1], [9, 39, 31, 51]);
+  assert.deepEqual([path.stroke?.width, path.stroke?.alpha, path.stroke?.join, path.order, path.vectorOnly, path.fill], [2, 0.6, 1, 7, true, undefined]);
+  // A glyph its font can't outline: drawn as text instead; a run with no stroke: nothing.
+  assert.equal(strokedTextPath(run, (g) => (g === 2 ? null : square)), null);
+  const broken = () => {
+    throw new Error('broken font');
+  };
+  assert.equal(strokedTextPath(run, broken), null, 'a broken font does not lose the page');
+  assert.equal(strokedTextPath({ ...run, stroke: undefined } as GlyphRun, () => square), null);
 });

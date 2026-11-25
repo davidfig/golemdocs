@@ -7,9 +7,9 @@
 import { BATCH_MAX_BYTES, BATCH_MAX_DOCUMENTS, CloudError, MAX_DOCUMENT_BYTES, createChunked, createDocument, createDocuments, downloadDocument, listDocuments, moveDocuments, saveChunked, saveCloudVersion, saveDocument, uploadThumbnail, type ChunkSource, type CloudDocument } from './cloud.ts';
 import { CHUNK_ALGO } from './storage/chunker.ts';
 import type { Manifest } from './storage/chunker.ts';
-import { getChunks, getSaved, getSavedManifest, getSyncedBase, getThumbnail, listSaved, markSynced, openInfo, rebaseSaved, saveFromCloud, saveFromCloudIfSent, setSavedFolder, type SavedInfo } from './storage/local.ts';
+import { getChunks, getSaved, getSavedManifest, getSyncedBase, getThumbnail, listSaved, markSynced, openInfo, rebaseSaved, saveFromCloud, saveFromCloudIfSent, saveSaved, setSavedFolder, type SavedInfo } from './storage/local.ts';
 import { isSealed } from '@golemdocs/ops';
-import { openSealedFile, openSealedName, sealNameWith } from './encryption/session.ts';
+import { encryptedDocumentKey, isEncryptedFolder, isUnlocked, newKey, openSealedFile, openSealedName, sealNameWith } from './encryption/session.ts';
 import { madeInAccount, makingInAccount } from './sync.ts';
 import { t } from './i18n/index.ts';
 
@@ -171,6 +171,9 @@ export async function uploadToCloud(localId: string, retry = true, host: MergeHo
 
 async function sendToCloud(localId: string, retry: boolean, host: MergeHost, merges: number): Promise<Uploaded> {
   const { info, bytes, manifest, source, known, create } = await sendable(localId);
+  // An ordinary document left in an encrypted folder (its folder's encryption cut short) is never sent readable, which the account refuses
+  // anyway: it waits here until it is encrypted (convert.ts `finishEncrypting`, while unlocked). docs/encrypted-folders.md
+  if (!info.encrypted && isEncryptedFolder(info.folderId)) throw new Error(t('encryption.finishPending'));
   let doc: CloudDocument;
   let conflictCopy = false;
   try {
@@ -183,6 +186,9 @@ async function sendToCloud(localId: string, retry: boolean, host: MergeHost, mer
     } else if (error.status === 409 && retry && (await getSaved(localId, { sealed: true }))?.info.cloudUpdatedAt !== info.cloudUpdatedAt) {
       // Another tab uploaded this copy meanwhile, so the cloud moved on from here: go again from there.
       return uploadToCloud(localId, false, host, merges);
+    } else if (error.status === 409 && !info.encrypted && (await encryptedInAccount(info.cloudId))) {
+      // Encrypted on another device meanwhile (docs/encrypted-folders.md): this copy's changes are kept, never sent readable.
+      return keepEncrypted(localId, host);
     } else if (error.status === 409 && merges > 0 && bytes && (await mergeWithCloud(info, bytes, host).catch(() => false))) {
       // Changed elsewhere too, in other paragraphs: this copy has both now, on top of the cloud's version. Sent as any other save.
       return { ...(await uploadToCloud(localId, true, host, merges - 1)), merged: true };
@@ -369,6 +375,26 @@ export async function openFromCloud(cloud: { id: string; name: string; updatedAt
   // Stored as it came; opened for whoever is opening it (an encrypted document's, while its folder is unlocked).
   if (info.encrypted) return { info: await openInfo(info), bytes: (await openSealedFile(new Uint8Array(bytes))).slice().buffer as ArrayBuffer, usedBrowserCopy: false };
   return { info, bytes, usedBrowserCopy: false };
+}
+
+/** Whether the account's copy of a document is encrypted now: as last listed, else as the account says. */
+async function encryptedInAccount(cloudId: string): Promise<boolean> {
+  if (encryptedDocumentKey(cloudId)) return true;
+  return !!(await listDocuments().catch(() => [])).find((d) => d.id === cloudId)?.encrypted;
+}
+
+/**
+ * A readable copy whose document was encrypted elsewhere since it was last synced, with changes of its own: it is encrypted here with a key
+ * of its own and sent as an encrypted conflicted copy beside the original, never as a readable one. While locked it can't be, so it stays
+ * in this browser, unsent, until the key is entered.
+ */
+async function keepEncrypted(localId: string, host: MergeHost): Promise<Uploaded> {
+  if (!isUnlocked()) throw new Error(t('encryption.conflictLocked'));
+  const saved = await getSaved(localId);
+  if (!saved) throw new Error(t('app.noLongerSaved'));
+  await saveSaved({ id: localId, name: saved.info.name, bytes: new Uint8Array(saved.bytes), wrappedKey: await newKey() });
+  // Sent again, now sealed: the account's copy has moved on, so it goes as a conflicted copy (no merge: one of them is sealed).
+  return uploadToCloud(localId, false, host, 0);
 }
 
 /** The name of a conflicted copy: an encrypted document's is opened, marked and sealed again. */

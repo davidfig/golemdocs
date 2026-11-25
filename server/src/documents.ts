@@ -5,16 +5,17 @@
 
 import { documentIndex } from './docIndex.ts';
 import { DELTA, applyDelta, deleteChunkList, deleteChunks, deltaSize, documentResponse, isChunked, previousManifest, readDocument } from './fileStore.ts';
-import { DOCX, docxKey, historyKey, thumbKey } from './keys.ts';
+import { isSealed } from '@golemdocs/ops';
+import { DOCX, docxKey, historyKey, indexKey, thumbKey } from './keys.ts';
 import type { Env } from './cf.ts';
 import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, perChunk, type Failure } from './http.ts';
 import { checkMove, type FolderRow } from './folders.ts';
-import { folderEncrypts, refuseEncrypted, requireOpen, requireSealed, sealedName, wrappedKey } from './sealed.ts';
+import { folderEncrypts, refuseEncrypted, requireOpen, requireSealedWith, sealedName, wrappedKey } from './sealed.ts';
 import { describeTrashed, purge, purgeExpired, PURGING, trashStatements, type TrashRow } from './trash.ts';
 import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, replaceVersion, retainedChunks, storedSize, versionsOf, type VersionRow } from './versions.ts';
 import { editableFolder, forgetFolders } from './folderShares.ts';
-import { accessFor, canWrite, dropPublicLink, forgetDocuments, makePublicLink, person, publicLinkOf, publicShare, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
-import { endRooms, kickFromRoom, rejoinRoom, roomAllowsSave, roomSaved } from './roomGate.ts';
+import { accessFor, canWrite, dropPublicLink, dropSharing, forgetDocuments, makePublicLink, person, publicLinkOf, publicShare, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
+import { dropPublicListeners, endRooms, kickFromRoom, listenToRoom, rejoinRoom, roomAllowsSave, roomSaved } from './roomGate.ts';
 import { requireRoom } from './storage.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
 import { cloudStorageConfigured, existingUserDb, userDb, type UserDb } from './userDb.ts';
@@ -278,9 +279,9 @@ export async function ownStorage(env: Env, userId: string, method: string): Prom
  * GET /api/view/:token and /api/view/:token/file: a document shared view-only, as the read-only viewer (/view?s=<token>) reads it:
  * its name, and its file (304 for `If-None-Match` while unchanged). The token is the share's own (`shares.view_token`), and only the
  * person it was shared with may use it; anyone else, and a token dropped by unsharing or a role change, gets 404. Nothing answered
- * names the document's id.
+ * names the document's id. GET /api/view/:token/live is the WebSocket that tells the page of each save (`listenToRoom`).
  */
-export async function handleView(request: Request, env: Env, userId: string, token: string, file: boolean): Promise<Response> {
+export async function handleView(request: Request, env: Env, userId: string, token: string, part: 'file' | 'live' | undefined): Promise<Response> {
   if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
   const share = await viewShare(env, token, userId);
   if (!share) throw new HttpError(404, 'not found');
@@ -288,7 +289,8 @@ export async function handleView(request: Request, env: Env, userId: string, tok
   const db = await userDb(env, share.ownerId);
   const row = db && (await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [share.docId]));
   if (!row) throw new HttpError(404, 'not found');
-  if (!file) return json({ name: row.name, updatedAt: row.updated_at });
+  if (!part) return json({ name: row.name, updatedAt: row.updated_at });
+  if (part === 'live') return listenToRoom(env, share.docId, request, userId, share.ownerId);
   const response = await documentResponse(env, row.r2_key, share.ownerId, share.docId, DOCX, request.headers.get('if-none-match'));
   if (!response) throw new HttpError(404, 'not found');
   return response;
@@ -299,17 +301,40 @@ export async function handleView(request: Request, env: Env, userId: string, tok
  * /view?p=<token> (and embedded in other sites, /view?p=<token>&embed), for anyone, signed in or not. The same answers as
  * `handleView`. A dropped or reset link, a deleted document and an owner whose sync ended all get 404, so a link says
  * nothing about why it stopped. Browsers may keep an answer for a minute, which is how long a dropped link can still show.
+ * GET /api/public/:token/live is the WebSocket that tells the page of each save (`listenToRoom`).
  */
-export async function handlePublic(request: Request, env: Env, token: string, file: boolean): Promise<Response> {
-  if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
+/** The document a public link opens, while its owner has sync; null for an unknown, dropped or lapsed link. */
+export async function publicDocument(env: Env, token: string): Promise<{ ownerId: string; docId: string; row: DocumentRow } | null> {
   const link = await publicShare(env, token);
-  if (!link || !(await hasSync(env, link.ownerId))) throw new HttpError(404, 'not found');
+  if (!link || !(await hasSync(env, link.ownerId))) return null;
   const db = await userDb(env, link.ownerId);
   const row = db && (await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [link.docId]));
-  if (!row) throw new HttpError(404, 'not found');
+  return row ? { ...link, row } : null;
+}
+
+/** GET /api/public/:token, /file and /thumbnail: a document's public link, for anyone. */
+export async function handlePublic(request: Request, env: Env, token: string, part: 'file' | 'thumbnail' | 'live' | undefined): Promise<Response> {
+  if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
+  const found = await publicDocument(env, token);
+  if (!found) throw new HttpError(404, 'not found');
+  const { ownerId, docId, row } = found;
+  if (part === 'live') return listenToRoom(env, docId, request, null, ownerId);
   const cache = 'public, max-age=60';
-  if (!file) return json({ name: row.name, updatedAt: row.updated_at }, 200, { 'cache-control': cache });
-  const response = await documentResponse(env, row.r2_key, link.ownerId, link.docId, DOCX, request.headers.get('if-none-match'));
+  if (part === 'thumbnail') {
+    // Link previews (sharePreview.ts) ask for it by the version in its address, so it may be kept a while.
+    const object = row.thumb_at == null ? null : await env.FILES.get(thumbKey(ownerId, docId));
+    if (!object) throw new HttpError(404, 'not found');
+    return new Response(object.body, {
+      headers: {
+        'content-type': object.httpMetadata?.contentType ?? 'image/webp',
+        'content-length': String(object.size),
+        'cache-control': 'public, max-age=3600',
+        'x-content-type-options': 'nosniff',
+      },
+    });
+  }
+  if (!part) return json({ name: row.name, updatedAt: row.updated_at }, 200, { 'cache-control': cache });
+  const response = await documentResponse(env, row.r2_key, ownerId, docId, DOCX, request.headers.get('if-none-match'));
   if (!response) throw new HttpError(404, 'not found');
   const headers = new Headers(response.headers);
   headers.set('cache-control', cache);
@@ -461,7 +486,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     const key = encrypted ? wrappedKey(url.searchParams.get('key')) : null;
     const delta = isDelta(request);
     const bytes = delta ? await readBody(request, MAX_DELTA_BYTES, 'document') : await readDocx(request);
-    if (encrypted && !delta) requireSealed(bytes);
+    if (encrypted && !delta) requireSealedWith(bytes, key);
     const docId = crypto.randomUUID();
     const name = encrypted ? sealedName(url.searchParams.get('name')) : (cleanName(url.searchParams.get('name')) ?? 'Untitled.docx');
     await requireRoom(env, owner, db, delta ? deltaSize(bytes, MAX_DELTA_BYTES) : bytes.byteLength, { own: owner === userId });
@@ -469,7 +494,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     const createdBy = owner === userId ? null : userId;
     // Bytes first: a failure leaves an unreferenced object, never a row pointing at nothing.
     let size = bytes.byteLength;
-    if (delta) size = (await applyDelta(env, owner, docId, docxKey(owner, docId), bytes, null, { maxBytes: MAX_BYTES, sealed: encrypted })).manifest.size;
+    if (delta) size = (await applyDelta(env, owner, docId, docxKey(owner, docId), bytes, null, { maxBytes: MAX_BYTES, ...(encrypted ? { sealedWith: key } : {}) })).manifest.size;
     else await env.FILES.put(docxKey(owner, docId), bytes, { httpMetadata: { contentType: DOCX } });
     if (createdBy) await db.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [docId, name, size, docxKey(owner, docId), now, now, folderId, createdBy]);
     else await db.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id, encrypted, wrapped_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [docId, name, size, docxKey(owner, docId), now, now, folderId, encrypted ? 1 : 0, key]);
@@ -636,10 +661,14 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     if (request.method === 'PUT' || request.method === 'POST') {
       refuseEncrypted(row, 'a public link');
       requireStorage();
-      return json({ token: await makePublicLink(env, id, request.method === 'POST') });
+      const token = await makePublicLink(env, id, request.method === 'POST');
+      // A new link in place of the old: the pages that came through the old one stop hearing of saves.
+      if (request.method === 'POST') await dropPublicListeners(env, id).catch((error) => console.error('telling the room failed', error));
+      return json({ token });
     }
     if (request.method === 'DELETE') {
       await dropPublicLink(env, id);
+      await dropPublicListeners(env, id).catch((error) => console.error('telling the room failed', error));
       return new Response(null, { status: 204 });
     }
     throw new HttpError(405, 'method not allowed');
@@ -702,7 +731,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
         if (role !== 'owner') throw new HttpError(403, 'only the owner can encrypt or decrypt this document');
         requireStorage();
         const bytes = new Uint8Array(await readDocx(request));
-        if (row.encrypted) requireSealed(bytes);
+        if (row.encrypted) requireSealedWith(bytes, row.wrapped_key);
         else requireOpen(bytes);
         const given = url.searchParams.get('name');
         const name = given === null ? kept.name : row.encrypted ? sealedName(given) : cleanName(given);
@@ -732,6 +761,11 @@ export async function handleDocuments(request: Request, env: Env, userId: string
       // An encrypted document's version stays sealed, with the same key, so it comes back beside the document.
       const encrypted = !!row.encrypted;
       if (encrypted && ownerId !== userId) throw new HttpError(403, 'only the owner can restore an encrypted document’s version');
+      // A version not converted yet (a conversion cut short) is not restored as the other kind: a readable one would become an
+      // encrypted document the server could read, a sealed one an ordinary document nobody could open. Opening the document with
+      // its key finishes converting its versions (docs/encrypted-folders.md).
+      if (encrypted) requireSealedWith(new Uint8Array(bytes), row.wrapped_key);
+      else if (isSealed(new Uint8Array(bytes))) throw new HttpError(409, 'this version is still encrypted: open the document with its key to finish decrypting it', 'encrypted');
       const name = encrypted ? (url.searchParams.has('name') ? sealedName(url.searchParams.get('name')) : row.name) : (cleanName(url.searchParams.get('name')) ?? row.name);
       const folderId = encrypted ? row.folder_id : null;
       const now = Date.now();
@@ -814,7 +848,14 @@ export async function handleDocuments(request: Request, env: Env, userId: string
       if (decrypting && !row.encrypted) throw new HttpError(409, 'it is not encrypted');
       if (decrypting && (await folderEncrypts(db, row.folder_id))) throw new HttpError(409, 'everything in an encrypted folder is encrypted: move it out first', 'encrypted');
     }
+    // Only its owner saves an encrypted document: nobody else can have its key, and a share of one is ended when it is encrypted.
+    if (row.encrypted && role !== 'owner') throw new HttpError(403, 'only the owner can save an encrypted document');
     const encrypted = encrypting !== null || (!!row.encrypted && !decrypting);
+    // An ordinary document left in an encrypted folder (its folder's encryption was cut short) takes no readable save: it is encrypted
+    // first (`?encrypt=`), which the browser finishes when it is next unlocked (docs/encrypted-folders.md).
+    if (!encrypted && !decrypting && row.folder_id !== null && (await folderEncrypts(db, row.folder_id))) {
+      throw new HttpError(409, 'everything in an encrypted folder is encrypted: encrypt it first', 'encrypted');
+    }
     const key = encrypting !== null ? wrappedKey(encrypting) : encrypted ? (row.wrapped_key ?? null) : null;
     // Someone editing a shared folder renames only what they added (docs/folder-sharing.md); their saves keep the name.
     const given = url.searchParams.get('name');
@@ -823,7 +864,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     if (renaming !== null && renaming !== row.name && access.folder && row.created_by !== userId) throw new HttpError(403, 'only the owner can rename this document');
     const delta = isDelta(request);
     const body = delta ? await readBody(request, MAX_DELTA_BYTES, 'document') : await readDocx(request);
-    if (encrypted && !delta) requireSealed(body);
+    if (encrypted && !delta) requireSealedWith(body, key);
     if (decrypting) requireOpen(body);
     const name = renaming ?? row.name;
     const nextSize = delta ? deltaSize(body, MAX_DELTA_BYTES) : body.byteLength;
@@ -841,7 +882,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     // Keep what this save replaces, when the rules say it is due (versions.ts). Before the bytes go in, and never a reason to refuse the save.
     if (!converting) await checkpoint(env, ownerId, db, row, { nextSize, ...(current ? { etag: current.etag } : {}) });
     if (delta) {
-      const saved = await applyDelta(env, ownerId, id, row.r2_key, body, await previousManifest(env, row.r2_key), { maxBytes: MAX_BYTES, sealed: !!row.encrypted, ...(current ? { etagMatches: current.etag } : {}) });
+      const saved = await applyDelta(env, ownerId, id, row.r2_key, body, await previousManifest(env, row.r2_key), { maxBytes: MAX_BYTES, ...(encrypted ? { sealedWith: key } : {}), ...(current ? { etagMatches: current.etag } : {}) });
       ({ added, dropped } = saved);
       size = saved.manifest.size;
       if (current && saved.written === null) {
@@ -856,7 +897,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     // base it also has to be the version the save started from; and the row may be gone (deleted
     // meanwhile), which RETURNING tells apart from success.
     const updated = await db.run<{ updated_at: number }>(
-      `UPDATE documents SET name = ?, size = ?, encrypted = ?, wrapped_key = ?, updated_at = MAX(?, updated_at + 1) WHERE id = ?${base !== null ? ' AND updated_at = ?' : ''} RETURNING updated_at`,
+      `UPDATE documents SET name = ?, size = ?, encrypted = ?, wrapped_key = ?, thumb_at = ${encrypting !== null ? 'NULL' : 'thumb_at'}, updated_at = MAX(?, updated_at + 1) WHERE id = ?${base !== null ? ' AND updated_at = ?' : ''} RETURNING updated_at`,
       [name, size, encrypted ? 1 : 0, key, Date.now(), id, ...(base !== null ? [row.updated_at] : [])],
     );
     if (!updated[0]) {
@@ -872,6 +913,14 @@ export async function handleDocuments(request: Request, env: Env, userId: string
       }
       throw new HttpError(404, 'not found');
     }
+    // Encrypted now (docs/encrypted-folders.md): nothing readable made from it stays, and nobody else keeps a way in. Its thumbnail and
+    // search index (its text) go; its shares and public link end, so decrypting it later gives no access back; a room it had is ended,
+    // which forgets the edits it kept.
+    if (encrypting !== null) {
+      await env.FILES.delete([thumbKey(ownerId, id), indexKey(ownerId, id)]);
+      await dropSharing(env, id);
+      await endRooms(env, [id]);
+    }
     // The save is in: what it replaced is cleanup, which can wait until after the response.
     // Chunks a checkpoint still names stay; then the checkpoints the rules no longer keep go.
     const cleanup = (async () => {
@@ -884,7 +933,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     await roomSaved(env, id, updated[0].updated_at).catch((error) => console.error('telling the room failed', error));
     if (defer) defer(cleanup);
     else await cleanup;
-    return json(describe({ ...row, name, size, encrypted: encrypted ? 1 : 0, wrapped_key: key, updated_at: updated[0].updated_at }, role));
+    return json(describe({ ...row, name, size, encrypted: encrypted ? 1 : 0, wrapped_key: key, ...(encrypting !== null ? { thumb_at: null } : {}), updated_at: updated[0].updated_at }, role));
   }
 
   // PATCH /api/documents/:id { folderId?, name? }: moves it to a folder (null: the top level),

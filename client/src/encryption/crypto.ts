@@ -1,7 +1,7 @@
 // The cryptography of encrypted documents and folders (docs/encrypted-folders.md), all WebCrypto.
 //
 // A person's **personal key** is 32 random bytes they keep in a password manager, written as `golem-key-1-` and Crockford base32 in groups
-// of four, ending in a checksum. It never leaves memory: it wraps (AES-KW) the **item key** of each encrypted document, and of each folder
+// of four, ending in a checksum. Only a key that cannot be read back is kept in memory, never its text: it wraps (AES-KW) the **item key** of each encrypted document, and of each folder
 // whose name is sealed, and the wrapped key is what is stored, next to the item. An item key is unwrapped straight into an HKDF key that
 // cannot be read back, and two keys are derived from it: one seals files, one seals names.
 //
@@ -23,9 +23,13 @@ const CHECK_CHARS = 8;
 const subtle = (): SubtleCrypto => globalThis.crypto.subtle;
 const encoder = new TextEncoder();
 
-/** A personal key, ready to use, with its text (kept so it can be shown again while unlocked). */
+/**
+ * A personal key, ready to use: a key that cannot be read back, and a fingerprint that tells two apart. Its text is not kept, so a script
+ * running in the page could use the key while the session is unlocked but never take it away.
+ */
 export interface PersonalKey {
-  text: string;
+  /** The first 16 bytes of the key's SHA-256, in hex: the same key typed in twice has the same one. */
+  id: string;
   key: CryptoKey;
 }
 
@@ -109,21 +113,23 @@ export async function parseKey(text: string): Promise<Uint8Array> {
   return bytes;
 }
 
-/** A new personal key, random. */
-export async function newPersonalKey(): Promise<PersonalKey> {
+/** A new personal key, random, with its text: to show once, at setup, for the person to save (the caller keeps only the key). */
+export async function newPersonalKey(): Promise<PersonalKey & { text: string }> {
   const bytes = globalThis.crypto.getRandomValues(new Uint8Array(32));
   const text = await formatKey(bytes);
-  return { text, key: await importPersonalKey(bytes) };
+  return { text, ...(await importPersonalKey(bytes)) };
 }
 
 /** Turns a personal key's text into a key that can wrap and unwrap item keys (and cannot be read back). */
 export async function openPersonalKey(text: string): Promise<PersonalKey> {
-  const bytes = await parseKey(text);
-  return { text: await formatKey(bytes), key: await importPersonalKey(bytes) };
+  return importPersonalKey(await parseKey(text));
 }
 
-function importPersonalKey(bytes: Uint8Array): Promise<CryptoKey> {
-  return subtle().importKey('raw', own(bytes), 'AES-KW', false, ['wrapKey', 'unwrapKey']);
+async function importPersonalKey(bytes: Uint8Array): Promise<PersonalKey> {
+  const digest = new Uint8Array(await subtle().digest('SHA-256', own(bytes)));
+  const key = await subtle().importKey('raw', own(bytes), 'AES-KW', false, ['wrapKey', 'unwrapKey']);
+  bytes.fill(0);
+  return { id: keyIdHex(digest.subarray(0, 16)), key };
 }
 
 /** A new item key, wrapped by the personal key: what is stored with the item, and the keys to use now. */

@@ -633,6 +633,8 @@ export interface TrashedDocument {
   deletedAt: number;
   /** When it will be deleted for good. */
   purgeAt: number;
+  /** The folder it was in when it was deleted (null: the top level). */
+  folderId?: string | null;
   /** An encrypted document's: its name is sealed with this key (docs/encrypted-folders.md). */
   encrypted?: boolean;
   wrappedKey?: string;

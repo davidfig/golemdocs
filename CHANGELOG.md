@@ -1,16 +1,63 @@
 # What’s New in Golem Docs
 
-## 0.44.1 - Unreleased
+## 0.47.0 - Unreleased
 
 ### Added
 
 - Presentations: PowerPoint decks (`.pptx`) open in a slides editor. Slides are drawn as PowerPoint draws them (layouts, masters, themes, shapes, pictures, tables, charts and SmartArt), down the page or in Slide Sorter (View › Slide Sorter), with the slides beside them to click, drag into order or delete. Type in any text box or placeholder, format text from the toolbar, move, size and turn shapes, and add slides, text boxes, shapes, pictures and tables from the Slide and Insert menus. View › Notes shows a slide's speaker notes. Slide › Present from Beginning (F5) shows the deck full screen, with click-by-click builds, fades between slides and a Presenter View. Decks save back as `.pptx`, print a page per slide, and can be made from a document's headings with File › Convert To; File › New › PowerPoint Presentation starts one.
+- Spreadsheets: ⌘; (Ctrl+; on Windows and Linux) inserts today's date.
+
+### Changed
+
+- Spreadsheets: the box you type in is the size of its cell while the text fits, then grows as you type to the full width of the window, and then taller.
+
+### Fixed
+
+- Spreadsheets: a cell being edited keeps its own font, size, style, colors and alignment.
+
+## 0.46.2 - 2026-11-23
+
+### Fixed
+
+- PDFs: text drawn over other text in a different font keeps the order the PDF painted it in, so a caption over its outline (as a browser writes outlined lettering in a PDF) shows as the caption with its outline round it, not the outline over the caption.
+- PDFs: outlined text (stroked rather than filled) is drawn as an outline instead of as solid letters.
+- Editing a document of more than a few pages no longer makes the text of the page on view blink out for a moment now and then.
+
+## 0.46.1 - 2026-11-23
+
+### Fixed
+
+- Drawings saved as PDF (and as PNG) now keep an outline drawn behind its fill (`paint-order: stroke`), as on outlined lettering, instead of drawing it over the fill; outlined text in a drawing also keeps its outline in a PDF.
+
+## 0.46.0 - 2026-11-23
+
+### Changed
+
+- A document, picture or folder shared “Can view” or by public link now follows the owner's edits: the page shows each save a few seconds after it is made, instead of checking every half minute (or every two minutes for a public link).
+- Encrypting a folder now tells you when documents deleted from it earlier are still in Trash, readable, and offers to delete them for good.
+
+### Fixed
+
+- Encryption: an earlier version of an encrypted document that was never encrypted can no longer be restored as an encrypted document the server could read, and the server checks that a large encrypted document sent in parts is the size of an encrypted file.
+- While a document or folder is being encrypted or decrypted, its dialog now says what it is doing (“Encrypting “Family””) rather than repeating the question, shows a progress bar, and no longer has a focus ring around it.
+- A picture shared “Can view” or by public link now shows the owner's changes instead of the first version it opened.
+
+## 0.45.0 - 2026-11-22
+
+### Added
+
 - Desktop app: Decrypt into vault folder… on an unlocked encrypted folder puts its documents in your vault folder, readable, for this session, so ai apps and other programs can work on them. What they change, add, rename or delete is encrypted before it reaches your account (a document moved into the folder is encrypted, and one moved out stays encrypted), and the files are removed, along with anything else left in the folder, when you lock, after 15 minutes idle, or when you choose Stop decrypting (if the app quits first, the next start removes them). It asks first, saying where copies can still end up, and isn't offered for a vault folder inside iCloud Drive, Dropbox, OneDrive, Google Drive or Box.
-- Encryption: choose Encrypt… on any document or folder (in its right-click menu in the Files pane or File › Open, or File › Encrypt document… for the one that is open), and its contents, its name and its earlier versions are encrypted on your device with a key only you keep, so the server can’t read them. Encrypting a folder encrypts everything in it and anything you add later; the folder’s own name stays readable. The first time, you save the key in your password manager. Encrypted documents stay locked until you enter the key, and lock again when you reload, choose Lock encrypted documents, or leave the app alone for 15 minutes. Decrypt… turns any of it back. Dragging a document or folder into an encrypted folder encrypts it; dragging one out asks, then decrypts it. Encrypted documents can’t be shared or edited together, and aren’t copied to the desktop app’s vault folder: a file it already had is removed (an edit made to it there is kept, encrypted), and a note stands in for each encrypted folder.
+- Encryption: choose Encrypt… on any document or folder (in its right-click menu in the Files pane or File › Open, or File › Encrypt document… for the one that is open), and its contents, its name and its earlier versions are encrypted on your device with a key only you keep, so the server can’t read them. Encrypting a folder encrypts everything in it and anything you add later; the folder’s own name stays readable. The first time, you save the key in your password manager. Encrypted documents stay locked until you enter the key, and lock again when you reload, choose Lock encrypted documents, or leave the app alone for 15 minutes. Decrypt… turns any of it back. Dragging a document or folder into an encrypted folder encrypts it; dragging one out asks, then decrypts it. Encrypting a document or folder ends its shares and public link (decrypting it later doesn’t bring them back) and removes its thumbnail and search index, and if encrypting a folder is interrupted, the rest is encrypted the next time you unlock. Encrypted documents can’t be shared or edited together, and aren’t copied to the desktop app’s vault folder: a file it already had is removed (an edit made to it there is kept, encrypted), and a note stands in for each encrypted folder.
+- Public links: a link you send or post now previews with the document’s name and a picture of its first page (in Messages, Slack, social sites and other apps that show link previews), instead of only “Golem Docs”. A public folder link shows the folder’s name.
 
 ### Changed
 
 - Files sidebar: Trash is pinned at the bottom, so it is always in view to drag onto, however many documents you have. Opening it shows what you deleted in place of your documents, with Empty Trash below and a back arrow (or Escape) to return.
+
+### Fixed
+
+- Pasting text you copied or cut in Golem Docs no longer turns a space at its start or end, or the second of two spaces, into a non-breaking space.
+- Spelling: the suggestions that appear on hover now show only while the pointer is over the misspelled word itself, not anywhere to its right on the same line.
 
 ## 0.44.0 - 2026-11-22
 

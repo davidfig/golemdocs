@@ -5,7 +5,7 @@
 // the session ends (Lock, the idle timer, or the page going away). Every encrypted item (a document, or a folder whose name is sealed) has its
 // own item key, stored wrapped next to it; whatever is sealed says which key opens it, and the key is unwrapped the first time it is needed.
 
-import { isSealed, isSealedName, sealedKeyId, sealedNameKeyId, wrappedKeyId } from '@golemdocs/ops';
+import { isSealedName, sealedKeyId, sealedNameKeyId, wrappedKeyId } from '@golemdocs/ops';
 import { newItemKey, newPersonalKey, openFile, openName, openPersonalKey, sealFile, sealName, unwrapItemKey, type ItemKeys, type PersonalKey } from './crypto.ts';
 
 /** What the session needs to know of a folder. */
@@ -34,6 +34,11 @@ const wrapped = new Map<string, string>();
 let documents = new Map<string, string>();
 /** Keys pasted in this session. */
 const personal: PersonalKey[] = [];
+/**
+ * The pasted keys known to be the person's key: made here, or seen to open something they encrypted. Only these make new item keys, so a
+ * key typed in while nothing encrypted could be checked (offline, say) never starts a second set of encrypted things beside the first.
+ */
+const verified = new Set<PersonalKey>();
 /** Item keys unwrapped so far, by key id. */
 const unlocked = new Map<string, ItemKeys>();
 /** Key ids that none of the pasted keys unwraps (made with another personal key). */
@@ -175,6 +180,7 @@ export async function keysOf(key: string): Promise<ItemKeys> {
     if (keys) {
       unlocked.set(id, keys);
       foreign.delete(id);
+      verified.add(p);
       return keys;
     }
   }
@@ -198,7 +204,7 @@ export async function opens(key: string | undefined | null): Promise<boolean> {
  */
 export async function unlock(text: string): Promise<number> {
   const key = await openPersonalKey(text);
-  if (personal.some((p) => p.text === key.text)) return Math.max(unlocked.size, 1);
+  if (personal.some((p) => p.id === key.id)) return Math.max(unlocked.size, 1);
   let opened = 0;
   for (const [id, item] of wrapped) {
     if (unlocked.has(id)) continue;
@@ -211,23 +217,45 @@ export async function unlock(text: string): Promise<number> {
   }
   if (opened === 0 && wrapped.size > 0) return 0;
   personal.push(key);
+  if (opened > 0) verified.add(key);
   for (const id of wrapped.keys()) if (!unlocked.has(id)) foreign.add(id);
   touch();
   emit();
   return Math.max(opened, 1);
 }
 
-/** A key made for the person (setup): unlocked at once, and returned so its text can be shown and saved. */
-export async function createKey(): Promise<PersonalKey> {
-  const key = await newPersonalKey();
-  personal.push(key);
+/** A key made for the person (setup): unlocked at once, and its text returned to be shown and saved. Only the key is kept, not the text. */
+export async function createKey(): Promise<{ text: string; id: string }> {
+  const { text, id, key } = await newPersonalKey();
+  const kept: PersonalKey = { id, key };
+  personal.push(kept);
+  verified.add(kept);
   touch();
   emit();
-  return key;
+  return { text, id };
 }
 
-/** The personal key new item keys are wrapped with: the first one unlocked this session. */
-export const currentKey = (): PersonalKey | null => personal[0] ?? null;
+/** The personal key new item keys are wrapped with: the first one known to be the person's (see `verified`). */
+export const currentKey = (): PersonalKey | null => personal.find((p) => verified.has(p)) ?? null;
+
+/**
+ * Settles which pasted keys are the person's, once what they have encrypted is known for certain (`learnEncrypted`, convert.ts): one that
+ * opens something they encrypted is; while they have encrypted nothing, a key they typed in is theirs to start with. Answers whether one
+ * is, to encrypt with.
+ */
+export async function confirmKeys(): Promise<boolean> {
+  if (!hasEncrypted()) for (const p of personal) verified.add(p);
+  for (const p of personal) {
+    if (verified.has(p)) continue;
+    for (const item of wrapped.values()) {
+      if (await unwrapItemKey(p, item)) {
+        verified.add(p);
+        break;
+      }
+    }
+  }
+  return currentKey() !== null;
+}
 
 /** A new item key, wrapped with the current personal key, and unlocked at once: what a newly encrypted item is sealed with. */
 export async function newKey(): Promise<string> {
@@ -258,6 +286,7 @@ export async function lockSession(): Promise<void> {
 export function lock(): void {
   if (!personal.length && !unlocked.size) return;
   personal.length = 0;
+  verified.clear();
   unlocked.clear();
   foreign.clear();
   names.clear();
@@ -280,15 +309,31 @@ function emit(): void {
 
 // --- Sealing and opening ---------------------------------------------------------------------------------------------------------
 
-/** Seals a file with an item key (as it is, if it already is sealed). */
+/**
+ * Whether something is sealed with this item key already: it names the key (`named`, from its header) and opens with it. Looking sealed
+ * is not enough: a readable file can start with `GDE1`, and a name with `gde1.`. While the key is locked it can't be opened, so naming it
+ * is taken as enough there (a readable file doesn't start with a key's random 16-byte id); nothing readable is sealed while locked anyway.
+ */
+async function sealedWith(key: string, named: string | null, open: (keys: ItemKeys) => Promise<unknown>): Promise<boolean> {
+  const id = wrappedKeyId(key);
+  if (!id || named !== id) return false;
+  const keys = await keysOf(key).catch(() => null);
+  if (!keys) return true;
+  return open(keys).then(
+    () => true,
+    () => false,
+  );
+}
+
+/** Seals a file with an item key (as it is, if it is sealed with that key already). */
 export async function sealFileWith(key: string, bytes: Uint8Array): Promise<Uint8Array> {
-  if (isSealed(bytes)) return bytes;
+  if (await sealedWith(key, sealedKeyId(bytes), (keys) => openFile(keys, bytes))) return bytes;
   return sealFile(await keysOf(key), bytes);
 }
 
-/** Seals a name with an item key (as it is, if it already is sealed). */
+/** Seals a name with an item key (as it is, if it is sealed with that key already). */
 export async function sealNameWith(key: string, name: string): Promise<string> {
-  if (isSealedName(name)) return name;
+  if (await sealedWith(key, sealedNameKeyId(name), (keys) => openName(keys, name))) return name;
   const sealed = await sealName(await keysOf(key), name);
   names.set(sealed, name);
   return sealed;

@@ -9,7 +9,8 @@ import { FontSet, describeFace, packColor } from '@golemdocs/layout';
 import { PageDrawing, PdfDocument } from '../../pdf/src/index.ts';
 import { N, PdfDict, PdfStream, PdfString } from '../../pdf/src/core/objects.ts';
 import { toUnicodeCMap } from '../../pdf/src/write/fonts.ts';
-import { cjkLangOf, openPdfView } from '../src/formats/pdfPages.ts';
+import { cjkLangOf, openPdfView, textLayers } from '../src/formats/pdfPages.ts';
+import type { GlyphRun } from '../../pdf/src/index.ts';
 
 const FONT_DIR = path.resolve(import.meta.dirname, '../public/fonts');
 const hasFonts = existsSync(path.join(FONT_DIR, 'manifest.json'));
@@ -204,4 +205,36 @@ test('curves and gradients are drawn as SVG pictures, in painting order among th
   const svg = new TextDecoder().decode((await view.media(gradient.svg!))!);
   assert.match(svg, /<linearGradient [^>]*><stop offset="0" stop-color="#ff0000"\/>/);
   assert.match(new TextDecoder().decode((await view.media(ellipse.svg!))!), /fill="#ff0000"/);
+});
+
+/** A run of `n` glyphs from x at baseline y, `size` points, in the font `font` stands for. */
+const fakeRun = (font: object, x: number, y: number, size = 10, n = 3): GlyphRun =>
+  ({ fontDict: font, size, color: 0, alpha: 1, glyphs: Array.from({ length: n }, (_, i) => ({ unicode: 'a', x: x + i * size * 0.5, y, advance: size * 0.5, glyph: 1 })) }) as unknown as GlyphRun;
+
+test('textLayers: text over earlier text of another font goes a layer up; neighbours and one font stay on layer 0', () => {
+  const [a, b] = [{}, {}];
+  const layers = (runs: GlyphRun[]) => textLayers(runs).map(([, layer]) => layer);
+  // A halo in one font, its caption in another on top of it, then the halo of the next caption.
+  assert.deepEqual(layers([fakeRun(a, 10, 20), fakeRun(b, 10, 20), fakeRun(a, 10, 60)]), [0, 1, 0]);
+  // The same font over itself keeps its order on its own layer.
+  assert.deepEqual(layers([fakeRun(a, 10, 20), fakeRun(a, 10, 20)]), [0, 0]);
+  // Words of a line in two fonts, side by side, and lines set close: no overlap.
+  assert.deepEqual(layers([fakeRun(a, 10, 20), fakeRun(b, 25, 20), fakeRun(a, 40, 20), fakeRun(b, 10, 30)]), [0, 0, 0, 0]);
+  // Three fonts stacked.
+  assert.deepEqual(layers([fakeRun(a, 10, 20), fakeRun(b, 10, 20), fakeRun({}, 10, 20)]), [0, 1, 2]);
+});
+
+test('layoutPage: text painted over text in another font is on a later glyph list', skip, async () => {
+  const doc = PdfDocument.create();
+  const page = doc.addPage([300, 200]);
+  const d = new PageDrawing(page, { origin: 'top-left' });
+  d.text('Caption', 20, 50, { font: doc.standardFont('Times-Bold'), size: 20, color: [0, 0, 0] });
+  d.text('Caption', 20, 50, { font: doc.standardFont('Helvetica-Bold'), size: 20, color: [1, 1, 1] });
+  d.text('Alone', 20, 150, { font: doc.standardFont('Helvetica-Bold'), size: 20, color: [0, 0, 0] });
+  d.finish();
+  const view = await openPdfView(await doc.save(), fonts!);
+  const lists = [...view.layoutPage(0).glyphs.values()];
+  assert.deepEqual(lists.map((l) => l.layer), [0, 0, 1]);
+  assert.equal(lists[2].count, 7, 'the white caption alone is on top');
+  assert.equal(lists[1].count, 5, 'the text of that font that overlaps nothing stays below');
 });

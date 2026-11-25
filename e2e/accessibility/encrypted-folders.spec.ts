@@ -23,8 +23,21 @@ test('a document can be encrypted, locked and unlocked from the File menu with t
   await expect(confirm).toBeFocused();
   const key = (await setup.locator('.wm-encryption-key').textContent())!;
   await page.keyboard.type(key);
+  // The progress dialog is gone as soon as one document is done, so it is recorded as it opens: named for what it is doing (not the
+  // question asked before), with a progress bar and a status line.
+  await page.evaluate(() => {
+    const seen: { name: string; bar: boolean; status: boolean }[] = [];
+    (window as unknown as { seenProgress: typeof seen }).seenProgress = seen;
+    new MutationObserver(() => {
+      const dialog = document.querySelector('dialog.wm-encryption-progress');
+      if (!dialog || seen.length) return;
+      const id = dialog.getAttribute('aria-labelledby');
+      seen.push({ name: (id && document.getElementById(id)?.textContent) || dialog.getAttribute('aria-label') || '', bar: !!dialog.querySelector('[role="progressbar"]'), status: !!dialog.querySelector('[role="status"]') });
+    }).observe(document.body, { childList: true, subtree: true, attributes: true });
+  });
   await page.keyboard.press('Enter');
   await expect(setup).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { seenProgress: unknown[] }).seenProgress[0])).toEqual({ name: expect.stringMatching(/^Encrypting “/), bar: true, status: true });
   await expect.poll(async () => (await cloudDocs(page))[0]?.name.startsWith('gde1.'), { timeout: 30_000 }).toBe(true);
 
   // Locked: said in words in the Files pane.

@@ -132,3 +132,36 @@ test('the shelf packs pages away from the view, leaves those near it, and brings
   assert.equal(pages[3].shelved, false);
   shelf.clear();
 });
+
+test('a page that comes near the view while it is being packed is brought back by itself', async () => {
+  let redraws = 0;
+  const shelf = new PageShelf(() => void redraws++, 0);
+  const far = page(5);
+  const shelve = far.shelve.bind(far);
+  // The view reaches the page midway through its packing.
+  far.shelve = async () => {
+    const packing = shelve();
+    shelf.keep([far]);
+    await packing;
+  };
+  shelf.added([far]);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(far.shelved, false);
+  assert.ok(redraws > 0, 'drawn again with its glyphs');
+  shelf.clear();
+});
+
+test('the page an edit puts in place of the one on view is not packed when it is kept as it arrives', async () => {
+  const shelf = new PageShelf(() => {}, 20);
+  const [before, far, after] = [page(0), page(9), page(0)];
+  shelf.keep([before]);
+  shelf.added([before, far]);
+  // The edit, just before the sweep, with no frame in between.
+  shelf.removed(before);
+  shelf.added([after]);
+  shelf.keep([after]);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(after.shelved, false);
+  assert.equal(far.shelved, true);
+  shelf.clear();
+});

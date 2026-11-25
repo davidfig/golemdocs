@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { findHeading, findInManifest, folderName, headingAt, headingKey, headingsAbove, makeLink, parseLink, pathInVault, placeIndex, revealPath, shownText, vaultMatches } from '../src/desktop/vaultLink.ts';
+import { findHeading, findInManifest, folderName, headingAt, headingKey, headingsAbove, makeLink, parseLink, pathInVault, placeIndex, revealPath, sectionHeadings, shownText, vaultMatches } from '../src/desktop/vaultLink.ts';
 
 const ROOT = "/Users/someone/Documents/David's Vault";
 const FILE = 'Computer Science/AI Research/Agents/Context and Memory/Preprocessing Large Documents for Agents.md';
@@ -99,4 +99,12 @@ test('Show in Finder points at the file the sync wrote, else the folder the docu
   assert.equal(revealPath(entries, folders, { ids: ['cloud-3'], folderId: null }), '', 'at the top level: the vault');
   assert.equal(revealPath(entries, folders, { folderId: 'f2' }), 'Notes/Old_ 2025');
   assert.equal(revealPath(entries, folders, { folderId: 'gone' }), '');
+});
+
+test('the headings a link’s section may mean', () => {
+  assert.deepEqual(sectionHeadings('Context and memory'), ['Context and memory']);
+  assert.deepEqual(sectionHeadings('#context-and-memory'), ['context-and-memory']);
+  assert.deepEqual(sectionHeadings('Costs#Budget'), ['Budget', 'Costs#Budget']);
+  assert.deepEqual(sectionHeadings(''), []);
+  assert.deepEqual(sectionHeadings('^block-id'), [], 'a block is not a heading');
 });

@@ -111,6 +111,17 @@ export function findInManifest<T extends { path: string }>(entries: readonly T[]
 }
 
 /**
+ * The headings a link's section may mean, best first: `Budget`, or `Costs#Budget` (Obsidian's way to name a heading under
+ * another), which is its last heading, else the text as a whole. Empty for no section, or a block (`^id`), which is not a heading.
+ */
+export function sectionHeadings(section: string): string[] {
+  const whole = section.replace(/^#+/, '').trim();
+  const last = whole.slice(whole.lastIndexOf('#') + 1).trim();
+  if (!last || last.startsWith('^')) return [];
+  return last === whole ? [whole] : [last, whole];
+}
+
+/**
  * What a heading is compared by: its letters and digits, lower case. So `Key Findings`, `#key-findings` (a GitHub or
  * Obsidian anchor) and `key findings:` are the same heading.
  */

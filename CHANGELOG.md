@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.48.0 - Unreleased
+
+### Fixed
+
+- A link to a section of a note, such as [[Note#Budget]] or [text](#budget), goes to that heading, in another document or the one that is open.
+
 ## 0.47.0 - 2026-11-25
 
 ### Added

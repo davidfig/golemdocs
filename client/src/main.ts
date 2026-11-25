@@ -136,7 +136,7 @@ import { TrashActions } from './ui/trashActions.ts';
 import { VaultDialog } from './ui/vaultDialog.ts';
 import { copyText, desktopBridge, desktopUpdater, isDesktopApp, isTouchDevice, linkBridge, macPrinter, ShellTooOldError } from './desktop/bridge.ts';
 import { vaultMemory } from './desktop/vaultMemory.ts';
-import { findInManifest, folderName, headingsAbove, makeLink, parseLink, pathInVault, revealPath, shownText, vaultMatches } from './desktop/vaultLink.ts';
+import { findInManifest, folderName, headingsAbove, makeLink, parseLink, pathInVault, revealPath, sectionHeadings, shownText, vaultMatches } from './desktop/vaultLink.ts';
 import { saveFile } from './ui/saveFile.ts';
 import { VaultService } from './desktop/vaultService.ts';
 import { excludedFolders, keepsCopy, setExcludedFolders, setKeepsCopy } from './desktop/vaultShared.ts';
@@ -4635,12 +4635,27 @@ function followLink(url: string): void {
   else if (opensLink(url)) window.open(url, '_blank', 'noopener,noreferrer');
   else if (parseDocAddress(url)) {
     const address = parseDocAddress(url)!;
-    void openDocumentLink(address.title, parseMoment(address.section));
+    void openDocumentLink(address.title, address.section);
+  }
+  // A heading of this document: [text](#heading).
+  else if (url.startsWith('#')) {
+    let section = url.slice(1);
+    try {
+      section = decodeURIComponent(section);
+    } catch {
+      // Not escaped: as written.
+    }
+    const headings = sectionHeadings(section);
+    if (!headings.length) return;
+    goToHit({ find: '', place: { headings } });
+    focusInput();
   }
   else if (parseTagAddress(url)) searchPanel.show(`#${parseTagAddress(url)}`);
 }
 
-async function openDocumentLink(title: string, moment: MediaMoment | null = null): Promise<void> {
+/** Opens the document a link names, at the `section` after its `#`: a heading, or a moment of audio or video. */
+async function openDocumentLink(title: string, section = ''): Promise<void> {
+  const moment = parseMoment(section);
   await saving;
   const found = findByTitle(title, library.entries, linkPlaces());
   if (found && moment && isMediaName(found.name)) {
@@ -4648,7 +4663,21 @@ async function openDocumentLink(title: string, moment: MediaMoment | null = null
     if (mediaView.active && sourceOf(found) === viewDocKey) return mediaView.goTo(moment);
     pendingMoment = moment;
   }
-  if (found) return openSource(sourceOf(found));
+  if (found) {
+    const source = sourceOf(found);
+    const headings = isMediaName(found.name) ? [] : sectionHeadings(section);
+    if (headings.length) {
+      const jump: Jump = { source, find: '', place: { headings } };
+      // Already open: the caret moves there, with nothing opened again.
+      if (source === (wantedDocKey ?? viewDocKey) && loaded) {
+        goToHit(jump);
+        focusInput();
+        return;
+      }
+      pendingJump = jump;
+    }
+    return openSource(source);
+  }
   const ask = document.createElement('p');
   ask.textContent = t('app.createLinkedDocument', { title });
   if (!(await showConfirm(t('app.createLinkedTitle'), ask, t('app.createLinkedAction')))) {

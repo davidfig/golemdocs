@@ -9396,11 +9396,11 @@ function focusRegions(): Region[] {
   // A workbook's own parts (formula bar, cells, sheet tabs) stand in for the document.
   // Audio or video: the player, its controls with it.
   const mediaRegion: Region = { el: audioEditor?.el ?? mediaView.el, focus: () => (mediaEngine.focus(), true) };
-  // An HTML page: its bar and its frame.
-  const pageRegion: Region = { el: pageView.view.el, focus: () => (pageView.view.focus(), true) };
+  // An HTML page: its bar and its frame. Only while one shows: its controller is made with the first page.
+  const pageRegion: Region | null = pageView.active ? { el: pageView.view.el, focus: () => (pageView.view.focus(), true) } : null;
   // HTML Source: its Page / Source bar, then the text.
   const sourceRegion: Region | null = sourceBar?.isConnected && textView.active ? { el: sourceBar, focus: () => (sourceBar!.querySelector<HTMLElement>('[tabindex="0"]')?.focus(), true) } : null;
-  const documentRegions = sheetView.active ? sheetView.regions() : slidesView.active ? slidesView.regions() : mediaView.active ? [mediaRegion] : pageView.active ? [pageRegion] : sourceRegion ? [sourceRegion, documentRegion] : [documentRegion];
+  const documentRegions = sheetView.active ? sheetView.regions() : slidesView.active ? slidesView.regions() : mediaView.active ? [mediaRegion] : pageRegion ? [pageRegion] : sourceRegion ? [sourceRegion, documentRegion] : [documentRegion];
   // The notes at the bottom of the window (a new version, reload, sign-in ran out), while they show (ui/notice.ts).
   const notices = [...document.querySelectorAll<HTMLElement>('.wm-notice:not([hidden])')].map(panel);
   return [...chrome.regions(), ...documentRegions, ...layers, panel(commentsPanel.el), panel(filesPanel.el), panel(pagesPanel.el), panel(footer.el), ...notices];

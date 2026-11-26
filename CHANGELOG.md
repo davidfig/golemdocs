@@ -4,10 +4,12 @@
 
 ### Added
 
+- Shared documents and folders can be printed from the viewer's toolbar, and shown full screen with nothing but the document.
 - View › Files Sidebar has a keyboard shortcut: ⌃⌘S on a Mac, Ctrl+Shift+L elsewhere.
 
 ### Changed
 
+- Shared documents and folders look like Golem Docs: the app's toolbar, icons, font and Files panel, your own color scheme, and a header with Golem Docs' name, the file you're looking at, and who shared it with you. A public link doesn't show the owner's name.
 - Help › Keyboard Shortcuts lists every command, by menu, with a search box, so you can give a key to any of them, not only to the ones that already have one. Your shortcuts follow your account to your other computers.
 - Format › Subscript is now ⇧⌘, (Ctrl+Shift+, on Windows and Linux), so ⌘, (Ctrl+,) opens Tools › Options as it always meant to. Subscript had been taking that key from it.
 - The Files sidebar comes back as you left it after a reload: scrolled to the same place, and still showing Trash if Trash was open.

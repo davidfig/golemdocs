@@ -27,6 +27,8 @@ import { kindFromName } from '../ui/formats.ts';
 import { LoadingScreen } from '../ui/loadingScreen.ts';
 import { showZoomList } from '../ui/zoomList.ts';
 import { CLOSE_ICON, h, iconButton, stripMnemonic } from '../ui/dom.ts';
+import { BASIC_ICONS, iconSpan } from '../ui/iconKit.ts';
+import { installFullScreen, toggleFullScreen } from '../ui/fullScreen.ts';
 import { ScreenReaderSupport } from '../screenReaderSupport.ts';
 import { scrollDragsAtEdges } from '../ui/edgeScroll.ts';
 import { announce } from '../ui/announce.ts';
@@ -55,8 +57,13 @@ export interface ViewerOptions {
   name: string;
   /** Where the fonts are: the folder holding `manifest.json`, absolute or relative to the page. */
   fontBase: string;
-  /** Dark colors around the pages, and dark pages with light letters. */
+  /** Dark colors around the pages, and dark pages with light letters (with `hostTheme`, only the pages). */
   dark?: boolean;
+  /**
+   * The host has put the person's own colors on the root element (`data-theme` and `data-scheme`, from the app's ui/theme.ts): the
+   * viewer keeps them rather than choosing from `dark` and `contrast`. The site's own pages do this, so they look as the app does.
+   */
+  hostTheme?: boolean;
   /** The language of the viewer's own words (a BCP 47 tag; default English). */
   locale?: string;
   /** Screen Reader Mode starts on for this page (the host knows its user has a screen reader), leaving the person's own
@@ -64,8 +71,12 @@ export interface ViewerOptions {
   screenReader?: boolean;
   /** The High Contrast colors around the pages. */
   contrast?: boolean;
-  /** Shown in the bar beside the page number (a shared document's name, say). */
+  /** The document's name for screen readers, and shown in the bar beside the page number (a shared document's name, say). */
   title?: string;
+  /** The title is shown in the bar (the default); a host with a header of its own showing the name turns it off. */
+  barTitle?: boolean;
+  /** More controls at the end of the bar (an embedded page's link to the site). */
+  barEnd?: Node[];
   /**
    * The editor's status bar under the document: the page, the word count, the zoom (a list of sizes) and the three views (Print Layout,
    * Flow, Page Grid). Off by default, so a host showing the viewer in a small pane (a mail client) keeps it compact; the site's pages
@@ -80,6 +91,14 @@ export interface ViewerOptions {
   waited?: boolean;
   /** Shows a Download button in the bar, which calls this (a public link's page saves the file). */
   onDownload?(): void;
+  /** Shows a Print button in the bar, which calls this (the site's pages print the document as a PDF: `Viewer.pdf`). */
+  onPrint?(): void;
+  /**
+   * Shows a Full Screen button in the bar: the page takes the whole screen and everything but the document goes (its header, the bar,
+   * a folder's files, the status bar), keeping the view as it is; Esc brings it back. The app's own full screen (ui/fullScreen.ts),
+   * which on a phone hides the chrome alone and shows a button to leave it. The site's pages turn it on.
+   */
+  fullScreen?: boolean;
   /** A link in the document was clicked (only web, mail, phone and FTP addresses are passed on). */
   onLink?(url: string): void;
   /**
@@ -102,6 +121,8 @@ export interface Viewer {
   destroy(): void;
   /** Shows a newer version of the same file in place of the one shown, at the same place and zoom (`onOpened` is told again). */
   reload(bytes: ArrayBuffer | Uint8Array): void;
+  /** The document as a PDF, as the editor's File › Print makes it (the layout worker's export); rejects if it isn't open yet. */
+  pdf(): Promise<Uint8Array>;
 }
 
 /** Points of grey between pages. */
@@ -115,10 +136,6 @@ const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 
 const ICON_UP = 'M3 7.5L6 4.5L9 7.5';
 const ICON_DOWN = 'M3 4.5L6 7.5L9 4.5';
-const ICON_MINUS = 'M3 6H9';
-const ICON_PLUS = 'M3 6H9M6 3V9';
-const ICON_DOWNLOAD = 'M6 1.5V7.5M3.5 5L6 7.5L8.5 5M2 10H10';
-const ICON_FIND = 'M7.3 7.3L10.5 10.5M8.2 5A3.2 3.2 0 1 1 1.8 5A3.2 3.2 0 1 1 8.2 5';
 
 const LIGHT_DESK: readonly [number, number, number] = [0xe5 / 255, 0xe5 / 255, 0xe5 / 255];
 
@@ -127,8 +144,10 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   const doc = el.ownerDocument;
   const win = doc.defaultView ?? window;
   const dark = options.dark ?? false;
-  doc.documentElement.dataset.theme = dark ? 'dark' : options.contrast ? 'contrast' : 'golem';
-  doc.documentElement.dataset.scheme = options.contrast ? 'contrast' : 'golem';
+  if (!options.hostTheme) {
+    doc.documentElement.dataset.theme = dark ? 'dark' : options.contrast ? 'contrast' : 'golem';
+    doc.documentElement.dataset.scheme = options.contrast ? 'contrast' : 'golem';
+  }
   const fontBase = new URL(options.fontBase, doc.baseURI).href;
 
   // --- DOM ----------------------------------------------------------------------------------------
@@ -143,24 +162,33 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   // The editor's loading screen, over the document while it opens (not while a newer save replaces it: the old pages stay).
   const loading = new LoadingScreen(view);
 
-  const tool = (path: string, label: string, run: () => void): HTMLButtonElement => {
-    const button = iconButton('wm-tbutton', path, label);
+  // A button of the bar: an arrow drawn as a stroke (a path, `iconButton`), or one of the app's toolbar icons by name (iconKit.ts).
+  const tool = (icon: string, label: string, run: () => void): HTMLButtonElement => {
+    const drawn = BASIC_ICONS[icon];
+    const button = drawn ? h('button', { class: 'wm-tbutton', title: label, attrs: { type: 'button', 'aria-label': label } }, iconSpan(drawn)) : iconButton('wm-tbutton', icon, label);
     button.addEventListener('click', () => {
       run();
       focusView();
     });
     return button;
   };
+  /** A button that says what it does beside its icon (Download, which an icon alone doesn't make plain). */
+  const withWords = (button: HTMLButtonElement, words: string): HTMLButtonElement => {
+    button.classList.add('wm-tbutton-words');
+    button.append(h('span', { text: words }));
+    return button;
+  };
   const pageField = h('input', { class: 'wm-input', attrs: { type: 'text', inputmode: 'numeric', autocomplete: 'off', spellcheck: 'false' } });
   const pageCount = h('span', { class: 'wm-viewer-count' });
   const zoomLabel = h('button', { class: 'wm-tbutton wm-viewer-zoom', attrs: { type: 'button' } });
   // The page buttons, field and count: hidden in Flow, which has no pages.
-  const pageNav = h('span', { class: 'wm-viewer-pages' });
+  const pageNav = h('div', { class: 'wm-toolbar wm-viewer-pages' });
   const query = h('input', { class: 'wm-input wm-viewer-query', attrs: { type: 'search', autocomplete: 'off', spellcheck: 'false' } });
   const findMessage = h('span', { class: 'wm-find-message', attrs: { role: 'status' } });
   const findBar = h('div', { class: 'wm-viewer-bar wm-viewer-find', attrs: { role: 'search' } });
   findBar.hidden = true;
-  const bar = h('div', { class: 'wm-viewer-bar', attrs: { role: 'toolbar' } });
+  // The bar is the app's toolbars: groups of buttons, each a `.wm-toolbar` (ui.css).
+  const bar = h('div', { class: 'wm-viewer-bar wm-viewer-tools', attrs: { role: 'toolbar' } });
   // Screen Reader Mode, from the keyboard: the first thing Tab reaches, shown only while it has the focus (as the app's skip link).
   const readerButton = h('button', { class: 'wm-sr-only', attrs: { type: 'button', 'aria-pressed': 'false' } });
 
@@ -872,6 +900,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   // --- Start ---------------------------------------------------------------------------------------
 
   el.append(root);
+  if (options.fullScreen) installFullScreen();
   root.append(readerButton, bar, findBar, view);
   if (footer) root.append(footer.el);
   bar.addEventListener('keydown', (e) => toolbarKeys(bar, e, focusView));
@@ -925,16 +954,22 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     query.setAttribute('aria-label', t('dialogs.find.findWhatLabel'));
     query.placeholder = t('viewer.find');
     pageNav.append(tool(ICON_UP, t('viewer.previousPage'), () => goToPage(currentPage() - 1)), tool(ICON_DOWN, t('viewer.nextPage'), () => goToPage(currentPage() + 1)), pageField, pageCount);
+    const group = (...items: Node[]): HTMLElement => h('div', { class: 'wm-toolbar' }, ...items);
+    const files = [...(options.onPrint ? [tool('print', t('viewer.print'), options.onPrint)] : []), ...(options.onDownload ? [withWords(tool('download', t('viewer.download'), options.onDownload), t('viewer.download'))] : [])];
+    const showTitle = options.title && options.barTitle !== false;
     bar.append(
+      ...(showTitle ? [h('span', { class: 'wm-viewer-title', text: options.title, title: options.title })] : []),
       pageNav,
-      ...(options.title ? [h('span', { class: 'wm-viewer-title', text: options.title, title: options.title })] : []),
-      h('span', { class: 'wm-viewer-spacer' }),
-      tool(ICON_MINUS, t('viewer.zoomOut'), () => zoomTo(stepZoom(camera.zoom, -1))),
-      // With a status bar the zoom is shown there, as in the editor.
-      ...(footer ? [] : [zoomLabel]),
-      tool(ICON_PLUS, t('viewer.zoomIn'), () => zoomTo(stepZoom(camera.zoom, 1))),
-      tool(ICON_FIND, t('viewer.find'), openFind),
-      ...(options.onDownload ? [tool(ICON_DOWNLOAD, t('viewer.download'), options.onDownload)] : []),
+      group(
+        tool('zoomOut', t('viewer.zoomOut'), () => zoomTo(stepZoom(camera.zoom, -1))),
+        // With a status bar the zoom is shown there, as in the editor.
+        ...(footer ? [] : [zoomLabel]),
+        tool('zoom', t('viewer.zoomIn'), () => zoomTo(stepZoom(camera.zoom, 1))),
+        tool('find', t('viewer.find'), openFind),
+        ...(options.fullScreen ? [tool('fullScreen', t('viewer.fullScreen'), () => void toggleFullScreen())] : []),
+      ),
+      ...(files.length ? [group(...files)] : []),
+      ...(options.barEnd?.length ? [h('span', { class: 'wm-viewer-spacer' }), ...options.barEnd] : []),
     );
     findBar.append(query, tool(ICON_UP, t('dialogs.find.findPrevious'), () => findNext(true)), tool(ICON_DOWN, t('dialogs.find.findNext'), () => findNext(false)), findMessage, h('span', { class: 'wm-viewer-spacer' }), tool(CLOSE_ICON, t('viewer.closeFind'), closeFind));
     // `tool` hands the focus back to the document; the find bar's own buttons keep it in the search field.
@@ -978,6 +1013,10 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   })();
 
   return {
+    pdf() {
+      if (!worker || destroyed) return Promise.reject(new Error(t('app.webglUnsupported')));
+      return worker.convert('pdf');
+    },
     reload(bytes) {
       const source = sourceFromFile(options.name, bufferOf(bytes));
       if (destroyed || !worker || !source) return;

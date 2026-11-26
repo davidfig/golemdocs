@@ -182,6 +182,7 @@ test('the viewer reads the folder by its share’s address, as paths, and names 
   for (const id of [projects, notes, plan]) assert.ok(!text.includes(id), 'no ids');
   const tree = JSON.parse(text);
   assert.equal(tree.name, 'Projects');
+  assert.equal(tree.owner.name, 'Olive', 'who shared it, for the person it was shared with');
   assert.deepEqual(tree.folders, ['Notes']);
   assert.deepEqual(tree.files.map((f: any) => f.path), ['Notes/Idea.md', 'Plan (2).md', 'Plan.md']);
   const file = await w.call(ALICE, 'GET', `/api/folder-view/${token}/file?path=${encodeURIComponent('Notes/Idea.md')}`);
@@ -208,6 +209,7 @@ test('a folder’s public link opens it for anyone, read only and not indexed; r
   assert.equal(r.status, 200);
   assert.equal(r.headers.get('x-robots-tag'), 'noindex, nofollow');
   assert.equal(r.headers.get('cache-control'), 'public, max-age=60');
+  assert.equal(((await r.clone().json()) as any).owner, undefined, 'a public link names nobody');
   assert.equal((await w.call(null, 'GET', `/api/folder-public/${token}/file?path=Plan.md`)).status, 200);
   const { token: next } = (await (await w.call(OWNER, 'POST', `/api/folders/${projects}/link`)).json()) as any;
   assert.notEqual(next, token);

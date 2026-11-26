@@ -135,7 +135,8 @@ import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { TrashActions } from './ui/trashActions.ts';
 import { VaultDialog } from './ui/vaultDialog.ts';
-import { copyText, desktopBridge, desktopUpdater, isDesktopApp, isTouchDevice, linkBridge, macPrinter, ShellTooOldError } from './desktop/bridge.ts';
+import { copyText, desktopBridge, desktopUpdater, isDesktopApp, linkBridge } from './desktop/bridge.ts';
+import { printPdf } from './ui/printPdf.ts';
 import { vaultMemory } from './desktop/vaultMemory.ts';
 import { findInManifest, folderName, headingsAbove, makeLink, parseLink, pathInVault, revealPath, shownText, vaultMatches } from './desktop/vaultLink.ts';
 import { saveFile } from './ui/saveFile.ts';
@@ -3862,10 +3863,8 @@ async function download(): Promise<void> {
 }
 
 /**
- * File ▸ Print and Print Preview. The document is exported as a PDF (the same export as
- * Download), then printed from a hidden frame, or opened in a new tab to look at first.
- * A phone or tablet can't do either: iOS prints only the first page of a PDF in a frame, Android shows none, and an app's web view has
- * no tabs. There the PDF goes to the system share sheet, whose Print has every page (`saveFile`). The Mac app opens it in Preview.
+ * File ▸ Print and Print Preview. The document is exported as a PDF (the same export as Download), then printed or opened to look at
+ * first, as ui/printPdf.ts does it on each kind of device.
  */
 async function print(preview: boolean): Promise<void> {
   // A workbook prints its active sheet as Excel does (its page setup, from the grid itself); anything else as a document.
@@ -3873,40 +3872,15 @@ async function print(preview: boolean): Promise<void> {
   const sheetPdf = sheetView.active ? sheetView.printPdf() : slidesView.active ? slidesView.printPdf() : null;
   if (!sheetPdf && !(await openAsDocument())) return;
   const name = fileName().replace(/\.[^.]*$/, '') + '.pdf'; // named now: another document may be open by the time the bytes come back
-  const bytes = sheetPdf ? await sheetPdf : await worker.convert('pdf');
-  if (isTouchDevice()) {
-    await saveFile(name, bytes as Uint8Array, FORMATS.pdf.mime);
-    return;
+  const bytes = (sheetPdf ? await sheetPdf : await worker.convert('pdf')) as Uint8Array;
+  try {
+    const outcome = await printPdf(name, bytes, preview);
+    if (outcome === 'preview') setStatus(t('app.printInPreview'));
+    else if (outcome === 'saved') setStatus(t('app.printSavedInstead', { name }));
+    else if (outcome === 'blocked') reportError(t('app.allowPopups'));
+  } catch (e) {
+    reportError(t('app.printFailed', { message: (e as Error).message }));
   }
-  // The Mac app's web view ignores print() and opens no tabs: Preview prints it. A shell without that command can still download.
-  const printer = macPrinter();
-  if (printer) {
-    try {
-      await printer.open(name, bytes as Uint8Array);
-      setStatus(t('app.printInPreview'));
-    } catch (e) {
-      if (!(e instanceof ShellTooOldError)) return reportError(t('app.printFailed', { message: (e as Error).message }));
-      if (await saveFile(name, bytes as Uint8Array, FORMATS.pdf.mime)) setStatus(t('app.printSavedInstead', { name }));
-    }
-    return;
-  }
-  const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS.pdf.mime }));
-  if (preview) {
-    if (!window.open(url, '_blank')) reportError(t('app.allowPopups'));
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    return;
-  }
-  const frame = Object.assign(document.createElement('iframe'), { src: url });
-  frame.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
-  frame.addEventListener('load', () => {
-    frame.contentWindow?.focus();
-    frame.contentWindow?.print();
-    setTimeout(() => {
-      frame.remove();
-      URL.revokeObjectURL(url);
-    }, 60_000);
-  });
-  document.body.append(frame);
 }
 
 /** Said when a PDF's own pages are shown after its text was edited as something else. */

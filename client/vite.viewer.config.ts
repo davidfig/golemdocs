@@ -37,7 +37,10 @@ function viewerFonts(): Plugin {
   };
 }
 
-/** The app's own UI font is a web font of the site's: the viewer uses the system's (viewer.css), and doesn't even declare it, or WebKit fetches it anyway. */
+/**
+ * The app's own UI font is a web font of the site's: the viewer that other apps host uses the system's (viewer.css), and doesn't even
+ * declare it, or WebKit fetches it anyway. The site's own page keeps it.
+ */
 function noUiFont(): Plugin {
   return {
     name: 'viewer-no-ui-font',
@@ -59,7 +62,8 @@ export default defineConfig(({ mode }) =>
     publicDir: false,
     ...(mode === 'site'
       ? {
-          plugins: [noUiFont()],
+          // The site serves the app's UI font (/ui-fonts/), so its page keeps it (view/index.html is `wm-app-font`, viewer.css).
+          plugins: [],
           // Into the site's own output, beside the app (whose files it leaves).
           build: { outDir: 'dist', emptyOutDir: false, rollupOptions: { input: { view: path.resolve(import.meta.dirname, 'view/index.html') } } },
         }

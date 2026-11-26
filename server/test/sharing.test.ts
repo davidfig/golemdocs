@@ -199,7 +199,11 @@ test('a view-only share has a random address of its own, which opens the documen
 
   const info = await w.call(ALICE, 'GET', `/api/view/${token}`);
   assert.equal(info.status, 200);
-  assert.deepEqual(Object.keys((await info.json()) as object).sort(), ['name', 'updatedAt']);
+  const answered = (await info.json()) as { owner: { name: string | null; picture: string | null } };
+  assert.deepEqual(Object.keys(answered).sort(), ['name', 'owner', 'updatedAt']);
+  // Who shared it, for the page's header: a name and picture, nothing that names their account.
+  assert.deepEqual(Object.keys(answered.owner).sort(), ['name', 'picture']);
+  assert.ok(answered.owner.name);
   const file = await w.call(ALICE, 'GET', `/api/view/${token}/file`);
   assert.equal(file.status, 200);
   assert.deepEqual([...new Uint8Array(await file.arrayBuffer())], [1, 2, 3]);
@@ -277,6 +281,7 @@ test('a public link opens the document read-only for anyone, signed in or not, a
   for (const who of [null, BOB, OWNER]) {
     const info = await w.call(who, 'GET', `/api/public/${token}`);
     assert.equal(info.status, 200, String(who));
+    // A public link names nobody: no `owner`.
     assert.deepEqual(Object.keys((await info.json()) as object).sort(), ['name', 'updatedAt']);
     const file = await w.call(who, 'GET', `/api/public/${token}/file`);
     assert.equal(file.status, 200);

@@ -28,6 +28,19 @@ export const CLOSE_ICON = 'M3 3L9 9M9 3L3 9';
 /** A right-pointing chevron, for `iconButton`: turn it 90° to show something is open. */
 export const CHEVRON_ICON = 'M4 2.5l4 3.5-4 3.5';
 
+/** The chevron alone, drawn at 12px, for a tree's folder rows (`.wm-files-twist` in fileRows.css turns it while the folder is open). */
+export function chevronIcon(): SVGSVGElement {
+  const icon = document.createElementNS(SVG, 'svg');
+  icon.setAttribute('viewBox', '0 0 12 12');
+  icon.setAttribute('width', '12');
+  icon.setAttribute('height', '12');
+  icon.setAttribute('aria-hidden', 'true');
+  const shape = document.createElementNS(SVG, 'path');
+  shape.setAttribute('d', CHEVRON_ICON);
+  icon.append(shape);
+  return icon;
+}
+
 /** Keeps a note at the bottom of the window above the status bar while it shows, through `--wm-footer-clearance`. */
 export function keepAboveFooter(el: HTMLElement): void {
   const footer = document.getElementById('footer');

@@ -24,10 +24,12 @@ import { loadLocale, pickLocale, t } from '../i18n/index.ts';
 import { mountSignIn } from '../ui/signIn.ts';
 import { showFolder } from './folderPage.ts';
 import { savedViewMode } from '../ui/viewMode.ts';
-import { CHECK_MS, downloader, downloading, highContrast, PAGE_TITLE, PUBLIC_CHECK_MS, say } from './page.ts';
+import { CHECK_MS, downloader, downloading, PAGE_TITLE, printShown, PUBLIC_CHECK_MS, say, siteTheme } from './page.ts';
+import { brandLink, PageHeader, type Sharer } from './pageHeader.ts';
 import { hostViewer } from './host.ts';
 import { followSaves } from './live.ts';
 import { checkOutcome } from './protocol.ts';
+import { h } from '../ui/dom.ts';
 import { mount, type Viewer } from './viewer.ts';
 
 async function start(): Promise<void> {
@@ -46,10 +48,14 @@ async function start(): Promise<void> {
   if (!/^[\w-]+$/.test(token)) return void say(gone);
   const api = `/api/${isPublic ? 'public' : 'view'}/${encodeURIComponent(token)}`;
   // Signing in comes straight back here.
-  const signInHere = (): void => void mountSignIn(say(t('viewer.signInToView')), `/view?s=${encodeURIComponent(token)}`);
+  const signInHere = (): void => void mountSignIn(say(t('viewer.signInToView'), false), `/view?s=${encodeURIComponent(token)}`);
 
   let name: string;
+  let owner: Sharer | undefined;
   let file: Response;
+  // The page: Golem Docs' header over the document (embedded in another site's page, the viewer alone).
+  const header = embedded ? null : new PageHeader();
+  const place = embedded ? document.body : h('div', { class: 'wm-site-doc' });
   // The loading screen, from when the file is asked for until its last byte is in.
   let loaded = (): boolean => false;
   try {
@@ -58,8 +64,13 @@ async function start(): Promise<void> {
     // Unknown, someone else's, or no longer shared view-only: all the same to the page.
     if (info.status === 404) return void say(gone);
     if (!info.ok) throw new Error(`HTTP ${info.status}`);
-    name = ((await info.json()) as { name: string }).name;
-    loaded = downloading(document.body, name);
+    ({ name, owner } = (await info.json()) as { name: string; owner?: Sharer });
+    if (header) {
+      header.setTitle(name);
+      header.setSharer(owner);
+      document.body.replaceChildren(h('div', { class: 'wm-viewer wm-site-page' }, header.el, place));
+    }
+    loaded = downloading(place, name);
     file = await fetch(`${api}/file`, { cache: 'no-store' });
     if (file.status === 404) return void say(gone);
     if (!file.ok) throw new Error(`HTTP ${file.status}`);
@@ -79,20 +90,34 @@ async function start(): Promise<void> {
   const download = async (): Promise<void> => {
     if (stored) await save(stored, name);
   };
-  const viewer: Viewer = mount(document.body, {
+  // Embedded, the bar ends with Golem Docs' mark, which opens the document's own page in a tab.
+  const mark = embedded ? brandLink('wm-viewer-mark') : null;
+  if (mark) {
+    mark.href = `/view?p=${encodeURIComponent(token)}`;
+    mark.target = '_blank';
+    mark.rel = 'noopener';
+    mark.title = t('viewer.openInGolemDocs');
+  }
+  const viewer: Viewer = mount(place, {
     bytes,
     name,
     fontBase: '/fonts/',
-    dark: matchMedia('(prefers-color-scheme: dark)').matches,
+    ...siteTheme(),
     locale,
     title,
-    contrast: highContrast(),
+    // The header shows the name; embedded, the bar does.
+    barTitle: embedded,
+    barEnd: mark ? [mark] : [],
     // Embedded in another site's page the viewer stays compact, as in a mail client's pane.
     statusBar: !embedded,
+    // Embedded too: the embed code's frame allows it (`allowfullscreen`, ui/shareDialog.ts).
+    fullScreen: true,
     view: savedViewMode(),
     waited,
     onError: (message) => console.error(message),
     onDownload: () => void download(),
+    // Printing opens the browser's dialog over the page: not in another site's.
+    onPrint: embedded ? undefined : () => void printShown(viewer, name, (text) => header?.tell(text)),
     // The page is the site's: a link opens in a tab of its own.
     onLink: (url) => void window.open(url, '_blank', 'noopener,noreferrer'),
   });

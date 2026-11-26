@@ -14,7 +14,7 @@ import { t } from '../i18n/index.ts';
 import type { LibraryStore } from '../libraryStore.ts';
 import type { LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
-import { CLOSE_ICON, h, iconButton, isFileDrag, PADLOCK, PADLOCK_OPEN, smallIcon, toggleClass } from './dom.ts';
+import { chevronIcon, CLOSE_ICON, h, iconButton, isFileDrag, PADLOCK, PADLOCK_OPEN, smallIcon, toggleClass } from './dom.ts';
 import { setDocumentDrag } from './documentDrag.ts';
 import { fileIcon, setFileName, splitExtension } from './fileIcons.ts';
 import { renamedFileName } from '../documentName.ts';
@@ -30,6 +30,7 @@ import { parseFilesView, ScrollRestore, type FilesView } from './scrollRestore.t
 import { iconElement } from './icons.ts';
 import type { TrashActions } from './trashActions.ts';
 import { trashKey, type TrashItem } from '../trash.ts';
+import './fileRows.css';
 import './filesPanel.css';
 
 export interface FilesPanelHost {
@@ -338,7 +339,7 @@ export class FilesPanel {
       renaming ? 'div' : 'button',
       { class: `wm-files-row ${folder ? 'wm-files-folder' : 'wm-files-file'}`, attrs: { ...(renaming ? {} : { type: 'button' }), role: 'treeitem', 'data-row': id, tabindex: '-1', 'aria-level': String(row.depth + 1) }, title: name },
       // A file's icon sits in the column of its sibling folders' chevrons, so the indent shows the hierarchy.
-      folder ? h('span', { class: 'wm-files-twist', text: row.open ? '▾' : '▸' }) : fileIcon(name),
+      folder ? h('span', { class: 'wm-files-twist' }, chevronIcon() as unknown as Node) : fileIcon(name),
       label,
       // Encrypted: a padlock, shut while locked (when the name also says so, so the padlock is not the only sign), open while unlocked.
       ...(lockOf(folder ? row.folder : row.item)),

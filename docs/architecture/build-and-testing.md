@@ -179,7 +179,7 @@ One Worker serves API and client. `pnpm --filter @golemdocs/server deploy:prod` 
 
 ## Invariants and gotchas
 
-- Do not start, restart or stop dev servers in the main checkout (worktrees may, on other ports). Do not use `git stash` in the main checkout.
+- Start the dev server yourself when it is needed (reuse one already on :5173 rather than starting a second; worktrees use other ports). Do not use `git stash` in the main checkout.
 - A static plus a dynamic import of the same module defeats chunk splitting.
 - Editing app source during a full e2e run hot-reloads running pages, causing spurious failures.
 - `wrangler.generated.jsonc` and `wrangler.local.json` are git-ignored; the committed config has `REPLACE_...` placeholders.

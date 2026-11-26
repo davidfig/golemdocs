@@ -1,6 +1,7 @@
 // A shared folder's page (/view?pf=…, src/viewer/folderPage.ts) from the keyboard and with a screen reader: the files are a
 // navigation landmark named Files, of ordinary links and disclosure sections, the file shown is marked current, the Files button says
-// whether the tree is open, F6 moves between the tree and the document, and a link that goes outside the folder is said.
+// whether the tree is open, F6 moves between the tree and the document, and a link that goes outside the folder is said. Golem Docs'
+// header is the page's banner: its links and buttons have names, and its link home comes first.
 
 import { test, expect } from '../fixtures';
 import { CLIENT_ORIGIN } from '../ports.ts';
@@ -21,6 +22,17 @@ test('the folder page’s tree is a named landmark worked from the keyboard, and
   await expect(page.getByRole('main', { name: 'README.md (view only)' })).toHaveCount(1);
   const toggle = page.getByRole('button', { name: 'Files' });
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+  // The header: a banner with Golem Docs' link first, the file as the page's heading, and named buttons.
+  const banner = page.getByRole('banner');
+  await expect(banner.getByRole('heading', { level: 1 })).toContainText('README.md');
+  await expect(banner.getByRole('button', { name: 'Download All' })).toBeVisible();
+  await expect(banner.getByRole('link', { name: 'Try Golem Docs' })).toBeVisible();
+  await expect(page.getByRole('toolbar').getByRole('button', { name: 'Print' })).toBeVisible();
+  // Golem Docs' link comes first, before the Files button.
+  await toggle.focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(banner.getByRole('link', { name: 'Golem Docs', exact: true })).toBeFocused();
 
   // F6 from the document reaches the file shown in the tree; F6 again goes back to the document.
   await page.locator('.wm-folder-doc canvas').click({ position: { x: 5, y: 5 } });

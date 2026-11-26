@@ -111,7 +111,7 @@ Every user-visible string goes through `t('area.key')` (`client/src/i18n`), neve
 
 ## Dev servers
 
-The user starts any dev server you need (`pnpm dev`, which runs Vite on :5173 and the server on :3001). Don't start, restart or stop one yourself in the main checkout: duplicate processes pile up and fight over the ports. If you need one running, or it looks down (for example `/api` calls returning 500 from the Vite proxy), ask the user.
+Start the dev server yourself whenever you need it or the user would want to see a change (`pnpm dev`, which runs Vite on :5173 and the server on :3001; `preview_start` with the `dev` entry of `.claude/launch.json`). Don't ask first. Check before starting: if something already listens on :5173 (another session may have started it) and it serves this checkout, reuse it rather than starting a second one, since duplicate processes fight over the ports. Leave it running when you finish, and give the user a link to it (`http://localhost:5173/`, plus the pages that show the change). If one looks broken (for example `/api` calls returning 500 from the Vite proxy), restart it rather than asking.
 
 **Exception: worktrees.** In a git worktree you may run and stop your own dev server, but never on the normal ports (5173, 3001). Pick other ports, pass them to both the client and the server, and stop the processes when you are done.
 

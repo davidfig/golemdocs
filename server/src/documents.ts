@@ -14,7 +14,7 @@ import { folderEncrypts, refuseEncrypted, requireOpen, requireSealedWith, sealed
 import { describeTrashed, purge, purgeExpired, PURGING, trashStatements, type TrashRow } from './trash.ts';
 import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, replaceVersion, retainedChunks, storedSize, versionsOf, type VersionRow } from './versions.ts';
 import { editableFolder, forgetFolders } from './folderShares.ts';
-import { accessFor, canWrite, dropPublicLink, dropSharing, forgetDocuments, makePublicLink, person, publicLinkOf, publicShare, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
+import { accessFor, canWrite, dropPublicLink, dropSharing, forgetDocuments, makePublicLink, person, publicLinkOf, sharer, publicShare, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
 import { dropPublicListeners, endRooms, kickFromRoom, listenToRoom, rejoinRoom, roomAllowsSave, roomSaved } from './roomGate.ts';
 import { requireRoom } from './storage.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
@@ -277,7 +277,8 @@ export async function ownStorage(env: Env, userId: string, method: string): Prom
  */
 /**
  * GET /api/view/:token and /api/view/:token/file: a document shared view-only, as the read-only viewer (/view?s=<token>) reads it:
- * its name, and its file (304 for `If-None-Match` while unchanged). The token is the share's own (`shares.view_token`), and only the
+ * its name and who shared it (`owner`: their name and picture, shown in the page's header), and its file (304 for `If-None-Match`
+ * while unchanged). The token is the share's own (`shares.view_token`), and only the
  * person it was shared with may use it; anyone else, and a token dropped by unsharing or a role change, gets 404. Nothing answered
  * names the document's id. GET /api/view/:token/live is the WebSocket that tells the page of each save (`listenToRoom`).
  */
@@ -289,7 +290,7 @@ export async function handleView(request: Request, env: Env, userId: string, tok
   const db = await userDb(env, share.ownerId);
   const row = db && (await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [share.docId]));
   if (!row) throw new HttpError(404, 'not found');
-  if (!part) return json({ name: row.name, updatedAt: row.updated_at });
+  if (!part) return json({ name: row.name, updatedAt: row.updated_at, owner: await sharer(env, share.ownerId) });
   if (part === 'live') return listenToRoom(env, share.docId, request, userId, share.ownerId);
   const response = await documentResponse(env, row.r2_key, share.ownerId, share.docId, DOCX, request.headers.get('if-none-match'));
   if (!response) throw new HttpError(404, 'not found');

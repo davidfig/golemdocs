@@ -162,8 +162,8 @@ together, and the ways out are more than `fetch`:
   and top navigation are not allowed (`allow-popups` and `allow-top-navigation` are off).
 - **Reloading.** A save of the page, or of a file it inlined, reloads the frame, keeping its scroll position.
 - **Accessibility.** The frame is ordinary HTML, so screen readers read it; the bar is an F6 region; Escape moves focus
-  from the frame to page view's region (not onto one of the bar's buttons, where a page could otherwise put the person's next
-  key).
+  from the frame to the bar's checked view (Page), never onto one of the bar's buttons (Allow, Mark as Mine), where a page could
+  otherwise put the person's next key.
 
 ## 3. Embedding documents (M2)
 

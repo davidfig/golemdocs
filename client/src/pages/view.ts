@@ -196,9 +196,9 @@ export class PageViewer {
         this.token = null;
         return;
       case 'escape':
-        // Out of the page to its region (F6 and Tab go on from there); never onto one of the bar's buttons, where a page could
-        // otherwise put the next key the person presses.
-        this.el.focus();
+        // Out of the page to the bar's checked view (Page): Tab and the arrow keys go on from there. Never onto one of the bar's
+        // buttons (Allow, Mark as Mine), where a page could otherwise put the next key the person presses.
+        (this.bar.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ?? this.el).focus();
         return;
     }
   }

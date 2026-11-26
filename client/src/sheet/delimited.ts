@@ -118,7 +118,7 @@ export class DelimitedLoad {
   }
 }
 
-/** The active sheet as the file, and whether anything the file cannot hold was left out (other sheets, formulas, charts). */
+/** The active sheet as the file, and whether anything the file cannot hold was left out (other sheets, formulas, charts, pictures and shapes). */
 export function writeDelimitedSheet(book: Workbook, format: DelimitedFormat): { bytes: Uint8Array; lossy: boolean } {
   const sheet = book.sheets[book.activeSheet];
   if (!sheet || !isWorksheet(sheet)) return { bytes: new Uint8Array(0), lossy: book.sheets.length > 1 };
@@ -146,7 +146,7 @@ export function writeDelimitedSheet(book: Workbook, format: DelimitedFormat): { 
     ...(!format.trailingNewline && { trailingNewline: false as const }),
     bom: format.bom,
   });
-  return { bytes, lossy: formulas || book.sheets.length > 1 || sheet.charts.length > 0 };
+  return { bytes, lossy: formulas || book.sheets.length > 1 || sheet.charts.length > 0 || sheet.drawings.length > 0 };
 }
 
 /**

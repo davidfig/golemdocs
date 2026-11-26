@@ -149,3 +149,12 @@ test('a protected sheet refuses changes to its pictures and shapes', async () =>
   assert.equal(history.apply(0, { kind: 'drawings', edits }).message, 'sheetProtected');
   assert.equal(sheet.drawings, before);
 });
+
+test('a CSV or TSV offers no pictures, shapes or text boxes (it can’t keep them), but a workbook does', async () => {
+  const { FORMATS, formatAllows } = await import('../src/ui/formats.ts');
+  for (const op of ['insertPicture', 'insertShape', 'insertTextBox'] as const) {
+    assert.equal(formatAllows(FORMATS.xlsx, { kind: 'sheet', op }), true, `xlsx ${op}`);
+    assert.equal(formatAllows(FORMATS.csv, { kind: 'sheet', op }), false, `csv ${op}`);
+    assert.equal(formatAllows(FORMATS.tsv, { kind: 'sheet', op }), false, `tsv ${op}`);
+  }
+});

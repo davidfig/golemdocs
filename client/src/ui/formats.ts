@@ -427,6 +427,8 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
   if (action.kind === 'copyLiveLink') return !!profile.sheetEditor || LIVE_TEXT_SOURCES.has(profile.kind);
   // The spreadsheet editor: its own editing, undo, clipboard, find and sheet commands (printing and converting open the active sheet as a document first).
   if (profile.sheetEditor) {
+    // A CSV or TSV file holds only values: pictures, shapes and text boxes would be lost on the next save.
+    if (action.kind === 'sheet' && (profile.kind === 'csv' || profile.kind === 'tsv') && (action.op === 'insertPicture' || action.op === 'insertShape' || action.op === 'insertTextBox')) return false;
     switch (action.kind) {
       case 'print':
       case 'printPreview':

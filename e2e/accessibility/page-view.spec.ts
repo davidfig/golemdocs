@@ -1,6 +1,6 @@
 // Page view (docs/html-pages.md) with a screen reader or the keyboard alone: the page is a named region with a named bar, Page and
 // Source are a radio group (Document is in the View menu only), where it came from is said in words, F6 reaches it, and Escape in
-// the page goes to the bar.
+// the page goes to the bar's checked view, never to one of its buttons (a page can send an Escape whenever it likes).
 
 import { expect, test } from '../files/fixtures';
 import { dropFile, text } from '../files/helpers';
@@ -30,5 +30,5 @@ test('page view is named, its choices are a radio group, and the keyboard reache
   await frame.locator('body[data-ran="yes"]').waitFor({ state: 'attached' });
   await frame.getByRole('button', { name: 'Inside' }).focus();
   await page.keyboard.press('Escape');
-  await expect.poll(() => bar.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+  await expect(views.getByRole('radio', { name: 'Page' })).toBeFocused();
 });

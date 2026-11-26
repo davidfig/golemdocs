@@ -110,13 +110,22 @@ test('View › HTML as Document and Source show the same file, and HTML as Page 
   await app.goto('?doc=welcome');
   await dropFile(page, text('Dashboard.html', DASHBOARD));
   await waitForPage(page, 'Dashboard.html');
-  await page.getByRole('radio', { name: 'Document' }).click();
+  await app.menu('View', 'HTML as Document');
   await expect.poll(async () => (await state(page)).active).toBe(false);
   await app.ready();
   expect(await app.text()).toContain('Dashboard');
   await app.menu('View', 'HTML Source');
   await expect.poll(() => app.inTextEditor()).toBe(true);
   await app.menu('View', 'HTML as Page');
+  await waitForPage(page, 'Dashboard.html');
+  await expect(frame(page).locator('body[data-ran="yes"]')).toHaveCount(1);
+  // Page's bar goes to Source, and Source has the same bar back to Page.
+  await page.getByRole('radio', { name: 'Source' }).click();
+  await expect.poll(() => app.inTextEditor()).toBe(true);
+  const bar = page.getByRole('toolbar', { name: 'Page' });
+  await expect(bar.getByText('Dashboard.html', { exact: true })).toBeVisible();
+  await expect(bar.getByRole('radio', { name: 'Source' })).toHaveAttribute('aria-checked', 'true');
+  await bar.getByRole('radio', { name: 'Page' }).click();
   await waitForPage(page, 'Dashboard.html');
   await expect(frame(page).locator('body[data-ran="yes"]')).toHaveCount(1);
 });

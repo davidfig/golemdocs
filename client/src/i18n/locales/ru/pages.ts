@@ -4,7 +4,6 @@ export const pages: Partial<Messages> = {
   "pages.bar": "Страница",
   "pages.view.label": "Показать как",
   "pages.view.page": "Страница",
-  "pages.view.document": "Документ",
   "pages.view.source": "Исходный код",
   "pages.menu.page": "HTML как стра&ница",
   "pages.menu.document": "HTML как доку&мент",

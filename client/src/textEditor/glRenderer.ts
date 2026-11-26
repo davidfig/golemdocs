@@ -108,6 +108,8 @@ export class LineRenderer {
   /** Overlay batches of the last frame, and chunks that were only partly built (lines not indexed yet), freed at the next. */
   private overlays: { text: TextBatch[]; rects: RectBatch[] } = { text: [], rects: [] };
   private transient: Chunk[] = [];
+  /** Syntax colors for a line's characters (0: the text's own color), or null for a plain line (syntax/colorize.ts). */
+  syntax: ((line: number, text: string) => Uint32Array | null) | null = null;
 
   constructor(
     private readonly gl: WebGL2RenderingContext,
@@ -170,6 +172,7 @@ export class LineRenderer {
       scene.settle(entry);
       const laid = scene.layout(line);
       const color = levelColor(laid.text);
+      const colors = this.syntax?.(line, laid.text) ?? null;
       const number = String(line + 1);
       for (let d = 0; d < number.length; d++) {
         const ref = fonts.glyph(number.charCodeAt(d));
@@ -181,7 +184,7 @@ export class LineRenderer {
           if (cp <= 32) return;
           // An emoji (a whole sequence) is one color glyph; one no page has shows its first character.
           const ref = (emoji ? fonts.emoji(laid.text.slice(i, i + emoji)) : null) ?? fonts.glyph(cp);
-          if (ref?.visible) put(lists, ref, scene.textLeft + cell * CELL, baseline, color);
+          if (ref?.visible) put(lists, ref, scene.textLeft + cell * CELL, baseline, colors?.[i] || color);
         });
       });
       if (laid.more) {

@@ -4,7 +4,6 @@ export const pages = {
   'pages.bar': 'Page',
   'pages.view.label': 'Show as',
   'pages.view.page': 'Page',
-  'pages.view.document': 'Document',
   'pages.view.source': 'Source',
   'pages.menu.page': 'HTML as Pa&ge',
   'pages.menu.document': 'HTML as Doc&ument',

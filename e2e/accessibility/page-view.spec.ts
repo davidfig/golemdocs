@@ -1,5 +1,6 @@
-// Page view (docs/html-pages.md) with a screen reader or the keyboard alone: the page is a named region with a named bar, Page,
-// Document and Source are a radio group, where it came from is said in words, F6 reaches it, and Escape in the page goes to the bar.
+// Page view (docs/html-pages.md) with a screen reader or the keyboard alone: the page is a named region with a named bar, Page and
+// Source are a radio group (Document is in the View menu only), where it came from is said in words, F6 reaches it, and Escape in
+// the page goes to the bar.
 
 import { expect, test } from '../files/fixtures';
 import { dropFile, text } from '../files/helpers';
@@ -13,7 +14,9 @@ test('page view is named, its choices are a radio group, and the keyboard reache
   await expect(region).toBeVisible({ timeout: 30_000 });
   const bar = region.getByRole('toolbar', { name: 'Page' });
   const views = bar.getByRole('radiogroup', { name: 'Show as' });
-  for (const name of ['Page', 'Document', 'Source']) await expect(views.getByRole('radio', { name })).toBeVisible();
+  for (const name of ['Page', 'Source']) await expect(views.getByRole('radio', { name })).toBeVisible();
+  // Document shows nothing of a page working: it is in the View menu only.
+  await expect(views.getByRole('radio', { name: 'Document' })).toHaveCount(0);
   await expect(views.getByRole('radio', { name: 'Page' })).toHaveAttribute('aria-checked', 'true');
   await expect(bar.getByText('From elsewhere', { exact: true })).toBeVisible();
   await expect(region.getByRole('status')).toContainText('came from elsewhere');

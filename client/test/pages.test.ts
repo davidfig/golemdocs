@@ -9,6 +9,7 @@ import { scopeCss, tableHtml, resultHtml } from '../src/pages/embedHtml.ts';
 import { editOps, PageRequests } from '../src/pages/requests.ts';
 import { fingerprint, PageMemory, trustOf } from '../src/pages/trust.ts';
 import { answerKey } from '../src/pages/answers.ts';
+import { openingView } from '../src/pages/detect.ts';
 import type { ScriptVault } from '../src/scripts/vault.ts';
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -18,6 +19,15 @@ test('a page is HTML with a script, an embed or a golem meta; anything else is a
   assert.equal(isPageHtml('<p>x</p><script>1</script>'), true);
   assert.equal(isPageHtml('<golem-embed src="Budget.xlsx#Total"></golem-embed>'), true);
   assert.equal(isPageHtml('<meta name="golem-reads" content="Books/">'), true);
+});
+
+test('a page opens as a page unless Source was last chosen; other HTML as it was last shown', () => {
+  const page = '<p>x</p><script>1</script>';
+  assert.equal(openingView(page, null), 'page');
+  assert.equal(openingView(page, 'document'), 'page', 'Document never sticks to a page');
+  assert.equal(openingView(page, 'source'), 'source');
+  assert.equal(openingView('<p>plain</p>', null), 'document');
+  assert.equal(openingView('<p>plain</p>', 'page'), 'page');
 });
 
 test('a page asks for folders and hosts in its metas', () => {

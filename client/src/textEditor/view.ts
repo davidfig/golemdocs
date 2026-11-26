@@ -29,6 +29,7 @@ import { TextDocument } from './textDocument.ts';
 import type { TextEncoding } from '../formats/textFiles.ts';
 import type { Change } from './textDocument.ts';
 import { LineRenderer } from './glRenderer.ts';
+import { MAX_SYNTAX_BYTES, syntaxOf } from './syntax/languages.ts';
 import type { LineFrame } from './glRenderer.ts';
 import type { MonoFonts } from './fonts.ts';
 export { MonoFonts } from './fonts.ts';
@@ -88,6 +89,11 @@ export class TextEditorView {
 
   private doc: TextDocument | null = null;
   private name = '';
+  /** A bar above the text and the find bar (`setHeader`). */
+  private header: HTMLElement | null = null;
+  /** Coloring the code: a pending parse, and which one is the latest (an older one that finishes later is dropped). */
+  private syntaxTimer: ReturnType<typeof setTimeout> | undefined;
+  private syntaxRun = 0;
   private source: { encoding: TextEncoding; bom: boolean; original: Uint8Array | null } = { encoding: 'utf-8', bom: false, original: null };
   private abort: AbortController | null = null;
   private searchAbort: AbortController | null = null;
@@ -300,10 +306,16 @@ export class TextEditorView {
         if (this.index === index) this.entriesChanged(true);
       });
     this.entriesChanged(false);
+    this.colorSyntax(0);
     this.focus();
   }
 
   close(): void {
+    this.header?.remove();
+    this.header = null;
+    clearTimeout(this.syntaxTimer);
+    this.syntaxRun++;
+    this.renderer.syntax = null;
     this.abort?.abort();
     this.searchAbort?.abort();
     clearTimeout(this.searchTimer);
@@ -353,9 +365,28 @@ export class TextEditorView {
     this.scene.rebuild();
     this.renderer.reset();
     const camera = this.deps.camera;
-    const inset = this.bar.hidden ? 0 : this.bar.offsetHeight / (camera.zoom * CSS_PX_PER_POINT);
+    const inset = this.topInset() / (camera.zoom * CSS_PX_PER_POINT);
     if (keepPosition) camera.y = this.scene.top(this.rowOfLine(line));
     else camera.y = -inset;
+    this.deps.render();
+  }
+
+  /** CSS pixels at the top the text is under: the header (an HTML file's Page / Source bar) and the find bar while open. */
+  private topInset(): number {
+    return (this.header?.offsetHeight ?? 0) + (this.bar.hidden ? 0 : this.bar.offsetHeight);
+  }
+
+  /**
+   * Puts a bar above the text (or takes it away with null), which the text starts under: HTML Source's Page / Source bar
+   * (pages/pageBar.ts). It goes when another file opens.
+   */
+  setHeader(header: HTMLElement | null): void {
+    if (header === this.header) return;
+    this.header?.remove();
+    this.header = header;
+    if (header) this.el.prepend(header);
+    const camera = this.deps.camera;
+    camera.y = -this.topInset() / (camera.zoom * CSS_PX_PER_POINT);
     this.deps.render();
   }
 
@@ -363,7 +394,7 @@ export class TextEditorView {
   bounds(): Rect {
     const content = this.scene.bounds;
     const k = this.deps.camera.zoom * CSS_PX_PER_POINT;
-    const top = this.bar.hidden ? 0 : this.bar.offsetHeight / k;
+    const top = this.topInset() / k;
     return { x: content.x, y: -top, width: content.width, height: content.height + top };
   }
 
@@ -526,7 +557,7 @@ export class TextEditorView {
     const entry = this.rowOfLine(line);
     if (mark) this.current = this.lineOfRow(entry);
     const camera = this.deps.camera;
-    const inset = this.bar.hidden ? 0 : this.bar.offsetHeight / (camera.zoom * CSS_PX_PER_POINT);
+    const inset = this.topInset() / (camera.zoom * CSS_PX_PER_POINT);
     camera.y = this.scene.top(Math.max(entry - 3, 0)) - inset;
     this.deps.render();
   }
@@ -826,10 +857,45 @@ export class TextEditorView {
     if (change) this.changed(change);
   }
 
+  /**
+   * Colors the open file's code when it is code (syntax/languages.ts), once `delay` ms pass with no other change: the file is parsed
+   * whole with its grammar (syntax/colorize.ts and the grammar are fetched the first time) and the lines are drawn again. A file too
+   * big to parse quickly, or no code, is shown plain.
+   */
+  private colorSyntax(delay: number): void {
+    clearTimeout(this.syntaxTimer);
+    const run = ++this.syntaxRun;
+    const doc = this.doc;
+    const id = syntaxOf(this.name);
+    if (!doc || !id || doc.table.length > MAX_SYNTAX_BYTES) {
+      if (this.renderer.syntax) {
+        this.renderer.syntax = null;
+        this.renderer.reset();
+        this.deps.render();
+      }
+      return;
+    }
+    this.syntaxTimer = setTimeout(() => {
+      void import('./syntax/colorize.ts')
+        .then(async ({ grammar, colorize }) => {
+          const parser = await grammar(id);
+          if (run !== this.syntaxRun || this.doc !== doc) return;
+          const colors = colorize(new TextDecoder().decode(doc.table.flatten()), parser);
+          if (run !== this.syntaxRun || this.doc !== doc) return;
+          this.renderer.syntax = (line, text) => colors.colorsOf(line, text);
+          this.renderer.reset();
+          this.deps.render();
+        })
+        .catch((e: unknown) => console.error(e));
+    }, delay);
+  }
+
   /** Brings the view up to date with a change to the text, and puts the caret where it belongs. */
   private changed(change: Change, caret = change.caret, moveCaret = true): void {
     const index = this.index;
     if (!index) return;
+    // Colored again once typing pauses (at once for a small file: its parse takes a few milliseconds).
+    if (this.renderer.syntax || syntaxOf(this.name)) this.colorSyntax((this.doc?.table.length ?? 0) < 200_000 ? 30 : 400);
     if (change.whole) {
       const searched = this.matches !== null;
       this.matches = null;
@@ -885,7 +951,7 @@ export class TextEditorView {
     const margin = REVEAL_MARGIN_PX / k;
     const viewHeight = camera.height / camera.scale;
     const viewWidth = camera.width / camera.scale;
-    const top = this.bar.hidden ? 0 : this.bar.offsetHeight / k;
+    const top = this.topInset() / k;
     // The view moves only when the caret is out of it (or under the bar), and then to leave some room around it.
     let y = camera.y;
     if (box.y < y + top) y = box.y - top - margin;

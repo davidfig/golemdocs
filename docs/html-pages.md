@@ -120,8 +120,11 @@ together, and the ways out are more than `fetch`:
 ## 2. Showing a page (M1)
 
 - **Page view.** An `.html`, `.htm` or `.xhtml` file opens as a page when it has a `<script>`, a `<golem-embed>` or a
-  `golem-*` meta; otherwise it opens as a document, as today. The bar switches between **Page**, **Document** (the current
-  reader) and **Source** (the text editor). The choice is remembered per file on the device.
+  `golem-*` meta; otherwise it opens as a document, as today. The bar switches between **Page** and **Source** (the text
+  editor), and Source shows the same bar above the text, so either way back is one click (`pages/pageBar.ts`, one bar for
+  both; `TextView.setHeader` puts it over the editor and starts the text under it). View › HTML as Document (the current reader) is in the menu only: nothing of a page works there, and a page saved
+  from it is written again from the document model, so the bar doesn't offer it. *Built:* it first offered all three, and
+  Document read as the page breaking. The choice is remembered per file on the device.
 - **The frame** is a `srcdoc` iframe as in scripts' sandbox, with the CSP of §1 set by a `<meta http-equiv>` the host puts
   first in `<head>`. The page's own CSP, if any, can only narrow it.
 - **Relative files.** An opaque origin cannot fetch from the vault. Before showing a page the host reads every relative

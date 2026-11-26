@@ -4,7 +4,6 @@ export const pages: Partial<Messages> = {
   "pages.bar": "ページ",
   "pages.view.label": "表示方法",
   "pages.view.page": "ページ",
-  "pages.view.document": "ドキュメント",
   "pages.view.source": "ソース",
   "pages.menu.page": "HTML をページで表示(&G)",
   "pages.menu.document": "HTML をドキュメントで表示(&U)",

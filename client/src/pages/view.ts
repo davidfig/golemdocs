@@ -4,7 +4,9 @@
 // no cookies, storage or account, and no way into the app but messages, which only come from this frame and are all checked.
 
 import { t } from '../i18n/index.ts';
-import { h, segmented } from '../ui/dom.ts';
+import { h } from '../ui/dom.ts';
+import { pageBar } from './pageBar.ts';
+import type { PageBar } from './pageBar.ts';
 import type { PageTrust } from './compose.ts';
 import type { PageView as PageViewKind } from './trust.ts';
 import './pages.css';
@@ -54,7 +56,7 @@ export class PageViewer {
   private readonly note: HTMLElement;
   private readonly mineButton: HTMLButtonElement;
   private readonly allowButton: HTMLButtonElement;
-  private readonly views: ReturnType<typeof segmented<PageViewKind>>;
+  private readonly views: PageBar;
   private frame: HTMLIFrameElement | null = null;
   private shown: PageShow | null = null;
   /** Loads of the frame still expected from setting its page; any other is the page moving itself on. */
@@ -69,23 +71,17 @@ export class PageViewer {
   ) {
     this.el = h('div', { class: 'wm-page-view', attrs: { role: 'region', tabindex: '-1' } });
     this.el.hidden = true;
-    this.title = h('span', { class: 'wm-page-title' });
+    this.views = pageBar((view) => this.hooks.view(view));
+    this.title = this.views.title;
     this.badge = h('span', { class: 'wm-page-badge' });
-    this.views = segmented<PageViewKind>(
-      t('pages.view.label'),
-      [
-        { value: 'page', text: t('pages.view.page') },
-        { value: 'document', text: t('pages.view.document') },
-        { value: 'source', text: t('pages.view.source') },
-      ],
-      (view) => this.hooks.view(view),
-    );
+    this.views.extras.append(this.badge);
     this.allowButton = h('button', { class: 'wm-button', text: t('pages.allowReads'), attrs: { type: 'button' } });
     this.allowButton.addEventListener('click', () => this.hooks.allowReads());
     this.mineButton = h('button', { class: 'wm-button', text: t('pages.markMine'), attrs: { type: 'button' } });
     this.mineButton.addEventListener('click', () => this.hooks.markMine());
     this.note = h('div', { class: 'wm-page-note', attrs: { role: 'status' } });
-    this.bar = h('div', { class: 'wm-page-bar', attrs: { role: 'toolbar', 'aria-label': t('pages.bar') } }, this.title, this.badge, h('span', { class: 'wm-page-spacer' }), this.allowButton, this.mineButton, this.views.el);
+    this.views.actions.append(this.allowButton, this.mineButton);
+    this.bar = this.views.el;
     this.el.append(this.bar, this.note);
     parent.append(this.el);
   }
@@ -117,13 +113,13 @@ export class PageViewer {
     this.badge.textContent = page.trust === 'own' ? t('pages.trust.own') : t('pages.trust.foreign');
     this.badge.classList.toggle('wm-page-badge-foreign', page.trust === 'foreign');
     this.badge.hidden = !!page.shared;
-    this.views.el.hidden = !!page.shared;
+    this.views.switch.hidden = !!page.shared;
     this.mineButton.hidden = page.trust === 'own' || !!page.shared;
     this.allowButton.hidden = page.trust === 'own' || page.allowed || !page.asks.length || !!page.shared;
     this.note.textContent =
       page.trust === 'own' ? '' : page.allowed ? t('pages.note.foreignReads', { folders: page.asks.map((f) => f || '/').join(', ') }) : page.asks.length ? t('pages.note.foreignAsks', { folders: page.asks.map((f) => f || '/').join(', ') }) : t('pages.note.foreign');
     this.note.hidden = page.trust === 'own' || !!page.shared;
-    this.views.set('page');
+    this.views.setView('page');
     this.frame?.remove();
     // A new frame each time: whatever the last page left running ends with it.
     const frame = h('iframe', { class: 'wm-page-frame', attrs: { title: page.name, referrerpolicy: 'no-referrer' } });

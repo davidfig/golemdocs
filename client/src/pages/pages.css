@@ -21,45 +21,8 @@
   outline-offset: -2px;
 }
 
-.wm-page-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--wm-toolbar-border);
-  background: linear-gradient(var(--wm-bar-top), var(--wm-bar-bottom));
-}
-
-.wm-page-bar [hidden],
 .wm-page-note[hidden] {
   display: none;
-}
-
-.wm-page-title {
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.wm-page-spacer {
-  flex: 1;
-}
-
-/* Where the page came from, in words (never colour alone). */
-.wm-page-badge {
-  padding: 1px 8px;
-  border: 1px solid var(--wm-border);
-  border-radius: 8px;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.wm-page-badge-foreign {
-  border-color: var(--wm-warning);
-  font-weight: 600;
 }
 
 .wm-page-note {
@@ -79,7 +42,6 @@
 }
 
 @media (forced-colors: active) {
-  .wm-page-bar,
   .wm-page-note {
     border-color: CanvasText;
   }

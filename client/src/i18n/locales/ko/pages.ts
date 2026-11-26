@@ -4,7 +4,6 @@ export const pages: Partial<Messages> = {
   "pages.bar": "페이지",
   "pages.view.label": "표시 방식",
   "pages.view.page": "페이지",
-  "pages.view.document": "문서",
   "pages.view.source": "소스",
   "pages.menu.page": "HTML을 페이지로(&G)",
   "pages.menu.document": "HTML을 문서로(&U)",

@@ -163,7 +163,8 @@ import { TextEditor } from './textEditor/handle.ts';
 import { SheetEditor } from './sheet/handle.ts';
 import { MediaViewer, spokenTime, type CaptionTrack } from './media/viewer.ts';
 import type { PageController, PageHost, PageResults } from './pages/controller.ts';
-import { isPageHtml } from './pages/detect.ts';
+import { openingView } from './pages/detect.ts';
+import { pageBar } from './pages/pageBar.ts';
 import { PageMemory } from './pages/trust.ts';
 import type { PageOrigin } from './pages/trust.ts';
 import { isMediaName, mediaMime, playsInPlace } from './media/mediaFiles.ts';
@@ -807,9 +808,12 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     const stored = new Uint8Array(source.bytes);
     void pageHtmlOf(stored, source.name).then((html) => {
       if (!latest()) return;
-      const view = pageView.viewFor(pageKeyOf(options), html);
+      const key = pageKeyOf(options);
+      // A view picked from the menu this once (HTML as Document, which a page doesn't remember), else as it opens by itself.
+      const view = (pickedHtmlView?.key === key ? pickedHtmlView.view : null) ?? pageView.viewFor(key, html);
+      pickedHtmlView = null;
       if (view === 'page') openPage(source, options, stored);
-      else if (view === 'source') void openLarge(source.name, new TextEncoder().encode(html), { localId: options.localId, cloudId: options.cloudId, shared: options.shared });
+      else if (view === 'source') void openLarge(source.name, new TextEncoder().encode(html), { localId: options.localId, cloudId: options.cloudId, shared: options.shared }).then(() => showSourceBar(source.name));
       else open(source, { ...options, pageChecked: true });
     });
     return;
@@ -8141,7 +8145,7 @@ const pageView = {
   },
   memory: pageMemory,
   /** How an HTML file opens: as it was last shown on this device, else as a page when it is one. */
-  viewFor: (key: string | null, html: string): 'page' | 'document' | 'source' => (key && pageMemory.view(key)) || (isPageHtml(html) ? 'page' : 'document'),
+  viewFor: (key: string | null, html: string): 'page' | 'document' | 'source' => openingView(html, key ? pageMemory.view(key) : null),
   open: async (spec: { key: string | null; name: string; path: string; stored: Uint8Array; origin: Omit<PageOrigin, 'hash' | 'markedHash'> }): Promise<void> => (await loadPageView()).open(spec),
   close: (): void => pageController?.close(),
   saved: (key: string): void => pageController?.saved(key),
@@ -8278,15 +8282,33 @@ function htmlViewNow(): 'page' | 'document' | 'source' | null {
   return textView.active ? 'source' : 'document';
 }
 
+/** HTML Source's bar (the page's name and the Page / Source switch, as page view has), while one shows. */
+let sourceBar: HTMLElement | null = null;
+
+/** Puts the Page / Source bar over the text editor once an HTML file shows there as its source. */
+function showSourceBar(name: string): void {
+  if (!textView.active || htmlViewNow() !== 'source' || current.name !== name) return;
+  const bar = pageBar((view) => void setHtmlView(view));
+  bar.setName(name);
+  bar.setView('source');
+  sourceBar = bar.el;
+  textView.editor?.setHeader(bar.el);
+}
+
 /** View › HTML as Page, as Document, Source: saves what was changed, then opens the file again shown that way (and remembers it). */
 async function setHtmlView(view: 'page' | 'document' | 'source'): Promise<void> {
   if (htmlViewNow() === view) return;
   await saveNow();
   const id = current.localId;
   if (!id) return;
-  pageView.memory.setView(library.entries.find((e) => e.local?.id === id)?.key ?? id, view);
+  const key = library.entries.find((e) => e.local?.id === id)?.key ?? id;
+  pageView.memory.setView(key, view);
+  pickedHtmlView = { key, view };
   await openLocal(id);
 }
+
+/** The view View › HTML as … asked for, for the open that follows it (a page shown as a document is not remembered: openingView). */
+let pickedHtmlView: { key: string; view: 'page' | 'document' | 'source' } | null = null;
 
 /** For File › Share: the documents a page showed parts of when its results were last kept (empty when it isn't a page). */
 async function pageReadsOf(entry: LibraryEntry): Promise<string[]> {
@@ -8981,7 +9003,9 @@ function focusRegions(): Region[] {
   const mediaRegion: Region = { el: mediaView.el, focus: () => (mediaView.focus(), true) };
   // An HTML page: its bar and its frame.
   const pageRegion: Region = { el: pageView.view.el, focus: () => (pageView.view.focus(), true) };
-  const documentRegions = sheetView.active ? sheetView.regions() : slidesView.active ? slidesView.regions() : mediaView.active ? [mediaRegion] : pageView.active ? [pageRegion] : [documentRegion];
+  // HTML Source: its Page / Source bar, then the text.
+  const sourceRegion: Region | null = sourceBar?.isConnected && textView.active ? { el: sourceBar, focus: () => (sourceBar!.querySelector<HTMLElement>('[tabindex="0"]')?.focus(), true) } : null;
+  const documentRegions = sheetView.active ? sheetView.regions() : slidesView.active ? slidesView.regions() : mediaView.active ? [mediaRegion] : pageView.active ? [pageRegion] : sourceRegion ? [sourceRegion, documentRegion] : [documentRegion];
   // The notes at the bottom of the window (a new version, reload, sign-in ran out), while they show (ui/notice.ts).
   const notices = [...document.querySelectorAll<HTMLElement>('.wm-notice:not([hidden])')].map(panel);
   return [...chrome.regions(), ...documentRegions, ...layers, panel(commentsPanel.el), panel(filesPanel.el), panel(pagesPanel.el), panel(footer.el), ...notices];

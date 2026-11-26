@@ -4,6 +4,7 @@
 
 ### Added
 
+- Code is in color in the text editor: HTML (with its CSS and JavaScript), CSS, Sass, JavaScript, TypeScript, JSON, YAML, XML, Python, Go, Java, Rust, C, C++, PHP and a Markdown note's source.
 - Shared documents and folders can be printed from the viewer's toolbar, and shown full screen with nothing but the document.
 - View › Files Sidebar has a keyboard shortcut: ⌃⌘S on a Mac, Ctrl+Shift+L elsewhere.
 - Slides can be restyled: Slide › Background sets a color, gradient or picture behind the slide or every slide, Slide › Theme swaps the deck's colors and fonts (from a built-in list or another presentation) and makes slides dark or light, and Slide › Edit Master opens the slide master and its layouts, where a change to a title or text style reaches every slide that uses them.

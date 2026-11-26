@@ -4,7 +4,6 @@ export const pages: Partial<Messages> = {
   "pages.bar": "页面",
   "pages.view.label": "显示为",
   "pages.view.page": "页面",
-  "pages.view.document": "文档",
   "pages.view.source": "源代码",
   "pages.menu.page": "HTML 显示为页面(&G)",
   "pages.menu.document": "HTML 显示为文档(&U)",

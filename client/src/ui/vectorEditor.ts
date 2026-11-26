@@ -320,6 +320,11 @@ export class VectorEditor {
     return this._selection;
   }
 
+  /** A drag is drawing a selection box: it scrolls at the view's edges. */
+  get isSelecting(): boolean {
+    return this.gesture?.kind === 'band';
+  }
+
   get shapeId(): ShapeId {
     return this._shapeId;
   }

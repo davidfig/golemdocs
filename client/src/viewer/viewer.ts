@@ -28,6 +28,7 @@ import { LoadingScreen } from '../ui/loadingScreen.ts';
 import { showZoomList } from '../ui/zoomList.ts';
 import { CLOSE_ICON, h, iconButton, stripMnemonic } from '../ui/dom.ts';
 import { ScreenReaderSupport } from '../screenReaderSupport.ts';
+import { scrollDragsAtEdges } from '../ui/edgeScroll.ts';
 import { announce } from '../ui/announce.ts';
 import { forcedColors, onAccessibilityChange } from '../ui/accessibilityOptions.ts';
 import { toolbarKeys } from '../ui/focusRegions.ts';
@@ -879,6 +880,16 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', onPointerUp);
   canvas.addEventListener('pointercancel', onPointerUp);
+  // A selecting drag that reaches an edge of the view scrolls it, as in the app (see ui/edgeScroll.ts).
+  const stopEdgeScroll = scrollDragsAtEdges(canvas, {
+    scroll(dx, dy) {
+      userMoved = true;
+      camera.panBy(dx, dy);
+      camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight, SIDE_PADDING, SIDE_PADDING_X);
+      requestRender();
+    },
+    selecting: () => !!press?.moved,
+  });
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('gesturestart', onGestureStart);
   canvas.addEventListener('gesturechange', onGestureChange);
@@ -977,6 +988,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      stopEdgeScroll();
       if (frame) win.cancelAnimationFrame(frame);
       win.clearTimeout(reflowTimer);
       win.clearTimeout(wordsTimer);

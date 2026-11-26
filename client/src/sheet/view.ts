@@ -1558,6 +1558,12 @@ export class SheetEditorView {
     return this.dragState !== null;
   }
 
+  /** A drag is selecting cells, columns or rows (not resizing, filling or moving a chart): it scrolls at the view's edges. */
+  get isSelecting(): boolean {
+    const kind = this.dragState?.kind;
+    return kind === 'select' || kind === 'columns' || kind === 'rows';
+  }
+
   /** Double-click on a column header's edge: the column (and the other selected whole columns with it) fits its widest text. */
   private async autofitColumns(col: number): Promise<void> {
     if (this.readOnly) return;

@@ -55,6 +55,19 @@ test('a workbook opens in the spreadsheet editor, with its sheets', async ({ app
   await expect(page.getByRole('textbox', { name: 'Formula bar' })).toHaveValue('formula');
 });
 
+test('dragging a cell selection past the bottom of the view scrolls the sheet', async ({ app, page }) => {
+  await open(app, page);
+  const pointOf = (r: number, c: number) => page.evaluate(([row, col]) => (window as unknown as { sheetEditor: { pointOf(r: number, c: number): { x: number; y: number } | null } }).sheetEditor.pointOf(row, col), [r, c] as const);
+  const first = (await pointOf(0, 0))!;
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.move(box.x + first.x, box.y + first.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + first.x, box.y + box.height + 30, { steps: 5 });
+  // The pointer stays put below the view, and the rows keep coming up.
+  await expect.poll(async () => (await pointOf(0, 0))?.y ?? -Infinity, { timeout: 10_000 }).toBeLessThan(first.y - 100);
+  await page.mouse.up();
+});
+
 test('typing into a cell keeps the value, Enter moves down, and undo takes it back', async ({ app, page }) => {
   await open(app, page);
   await clickCell(page, 1, 4);
@@ -867,6 +880,7 @@ const editorLook = (page: Page) =>
 test('the cell editor is in the cell\'s font, the size of the cell, and grows with what is typed', async ({ app, page }) => {
   await open(app, page);
   await clickCell(page, 3, 4);
+  await expect.poll(async () => (await state(page)).active).toEqual({ row: 3, col: 4 });
   await page.keyboard.press(`${MOD}+b`);
   await expect.poll(async () => (await state(page)).content.look?.bold).toBe(true);
   await page.keyboard.type('a');

@@ -890,6 +890,11 @@ export class SlidesEditorView {
     void y;
   }
 
+  /** A drag is selecting text or shapes (not moving, sizing or turning them): it scrolls at the view's edges. */
+  get isSelecting(): boolean {
+    return this.gesture?.kind === 'text' || this.gesture?.kind === 'marquee';
+  }
+
   drag(x: number, y: number, shift: boolean): void {
     const d = this.gesture;
     if (!d || !this.deck) return;

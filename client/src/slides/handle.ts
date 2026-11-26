@@ -170,6 +170,11 @@ export class SlidesEditor {
     this.view?.release();
   }
 
+  /** A drag is selecting text or shapes (not moving, sizing or turning them). */
+  get isSelecting(): boolean {
+    return this.view?.isSelecting ?? false;
+  }
+
   cursorAt(x: number, y: number): string {
     return this.view?.cursorAt(x, y) ?? 'default';
   }

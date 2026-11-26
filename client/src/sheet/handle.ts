@@ -86,6 +86,10 @@ export class SheetEditor {
     return this.view?.isDragging ?? false;
   }
 
+  get isSelecting(): boolean {
+    return this.view?.isSelecting ?? false;
+  }
+
   /** The file (.xlsx, or the CSV or TSV it was), what to store of it (see `SheetEditorView.save`) and its memory image (null when nothing is open). */
   save(): Promise<{ file: Uint8Array; stored: Uint8Array; image: Uint8Array; sha256: string }> | null {
     return this.view?.isOpen ? this.view.save() : null;

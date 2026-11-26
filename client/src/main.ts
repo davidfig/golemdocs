@@ -16,6 +16,7 @@ import { incomingBridge, watchIncoming } from './desktop/incoming.ts';
 import { importFiles, readZipFiles, sameBytes, type ZipContents } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
 import { SEAM_HIDE_CURSOR, SEAM_SHOW_CURSOR } from './ui/cursors.ts';
+import { edgeSpeed, scrollDragsAtEdges } from './ui/edgeScroll.ts';
 import { blankSource, lastNewKind, rememberNewKind } from './ui/newKinds.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
 import { adoptGuestFolders, createFolder, renameEntry, setLinkKeeper } from './folderOps.ts';
@@ -5300,6 +5301,45 @@ function requestCaretRender(): void {
   queueFrame();
 }
 
+/** Keeps the view over what the open document shows: each editor has its own bounds. */
+function clampView(): void {
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  // A big text file and a workbook run from their top-left corner however short or narrow they are.
+  if (textView.active) camera.clampToStart(textView.bounds(), width, height);
+  else if (mediaView.active) return;
+  else if (sheetView.active) camera.clampToStart(sheetView.bounds(), width, height);
+  else if (slidesView.active) camera.clamp(slidesView.bounds(), width, height, 48);
+  else {
+    if (!pendingView) camera.clamp(bounds, width, height); // a restored position may lie past the pages that have arrived so far
+    if (renderer.flat) camera.x = bounds.x;
+  }
+}
+
+// A selecting drag that reaches an edge of the view scrolls it, in every editor (see ui/edgeScroll.ts).
+scrollDragsAtEdges(canvas, {
+  scroll(dx, dy) {
+    const x = camera.x;
+    const y = camera.y;
+    camera.panBy(dx, dy);
+    clampView();
+    if (camera.x !== x || camera.y !== y) {
+      userMoved = true;
+      requestRender();
+    }
+  },
+  selecting() {
+    if (!loaded || mediaView.active) return false;
+    if (vector?.editor.active) return vector.editor.isSelecting;
+    if (drawLayer.active) return drawLayer.isSelecting;
+    if (sheetView.active) return sheetView.isSelecting;
+    if (slidesView.active) return slidesView.isSelecting;
+    // A big text file scrolls its own selection past the edges (textEditor/view.ts).
+    if (textView.active) return false;
+    return selecting && !pressed?.grab;
+  },
+});
+
 function queueFrame(): void {
   if (frameQueued) return;
   frameQueued = true;
@@ -5407,8 +5447,7 @@ function render(): void {
   renderer.joined = pagesJoined();
   if (textView.active) {
     // A big text file: its own bounds, from the top-left corner however short or narrow it is, and drawn by the large-text editor.
-    const area = textView.bounds();
-    camera.clampToStart(area, canvas.clientWidth, canvas.clientHeight);
+    clampView();
     const frame = textView.draw(pagesDark(), caretOn && document.hasFocus(), forcedColors());
     lastStats = { pages: frame?.chunks ?? 0, visiblePages: frame?.chunks ?? 0, glyphs: frame?.glyphs ?? 0, drawCalls: frame?.drawCalls ?? 0 };
   } else if (mediaView.active) {
@@ -5416,18 +5455,17 @@ function render(): void {
     lastStats = { pages: 0, visiblePages: 0, glyphs: 0, drawCalls: 0 };
   } else if (sheetView.active) {
     // A workbook: drawn by the spreadsheet editor, from the top-left of its cells.
-    camera.clampToStart(sheetView.bounds(), canvas.clientWidth, canvas.clientHeight);
+    clampView();
     sheetView.draw(pagesDark(), forcedColors());
     lastStats = { pages: 0, visiblePages: 0, glyphs: 0, drawCalls: 0 };
   } else if (slidesView.active) {
     // A deck: the desk is cleared, and the slides editor paints its slides over it on a canvas of its own.
-    camera.clamp(slidesView.bounds(), canvas.clientWidth, canvas.clientHeight, 48);
+    clampView();
     renderer.render(camera, [], undefined, false, pagesDark());
     slidesView.draw(pagesDark());
     lastStats = { pages: slidesView.slideCount(), visiblePages: 0, glyphs: 0, drawCalls: 0 };
   } else {
-    if (!pendingView) camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight); // a restored position may lie past the pages that have arrived so far
-    if (renderer.flat) camera.x = bounds.x;
+    clampView();
     renderer.forced = forcedColors();
     // The pages in view and a screen either side keep their glyphs unpacked, or get them back, and are where squiggles are found.
     const range = reach();
@@ -5751,8 +5789,6 @@ let touchPoint: { x: number; y: number } | null = null;
 let edgeFrame = 0;
 /** Within this far of the top or bottom of the view (CSS pixels), a selecting finger scrolls the document. */
 const EDGE_PX = 48;
-/** The fastest that scrolls, at the very edge (CSS pixels per frame). */
-const EDGE_SPEED = 14;
 const touches = new Map<number, { x: number; y: number }>();
 let touchTap: Press | null = null;
 /** Two or more fingers were down in this gesture: until every finger is up, nothing in it is a tap. */
@@ -5883,12 +5919,10 @@ function edgeScroll(): void {
   if (!touchSelecting) return;
   edgeFrame = requestAnimationFrame(edgeScroll);
   if (!touchPoint || grip?.anchor) return;
-  const height = canvas.clientHeight;
-  const y = touchPoint.y;
-  const speed = y < EDGE_PX ? -(EDGE_PX - Math.max(y, 0)) / EDGE_PX : y > height - EDGE_PX ? (Math.min(y, height) - (height - EDGE_PX)) / EDGE_PX : 0;
+  const speed = edgeSpeed(touchPoint.y, 0, canvas.clientHeight, EDGE_PX);
   if (!speed) return;
   userMoved = true;
-  camera.panBy(0, speed * EDGE_SPEED);
+  camera.panBy(0, speed);
   requestRender();
   dragTouchSelection();
 }

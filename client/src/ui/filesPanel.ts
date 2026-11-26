@@ -71,8 +71,6 @@ export interface FilesPanelHost {
 /** What is being dragged onto a folder. */
 /** Folders left open, kept in this browser. */
 const OPEN_KEY = 'word.filesOpen';
-/** Set once the tip about dropping files here is dismissed, kept in this browser. */
-const TIP_KEY = 'word.filesDropTipDismissed';
 /** Whether Trash was showing and how far the documents and Trash were scrolled, kept in this browser. */
 const VIEW_KEY = 'word.filesView';
 
@@ -98,8 +96,6 @@ export class FilesPanel {
   private readonly trashNote = h('p', { class: 'wm-files-empty' });
   private readonly emptyTrash = h('button', { class: 'wm-button wm-danger', text: t('trash.emptyTrash'), attrs: { type: 'button' } });
   private readonly trashView = h('div', { class: 'wm-files-trash-view' }, this.trashNote, this.trashList, h('div', { class: 'wm-files-trash-actions' }, this.emptyTrash));
-  /** How to drop files here (`dropTip`); not shown in Trash, where nothing can be dropped. */
-  private tip: HTMLElement | null = null;
   /** Looking in Trash rather than at the documents. */
   private inTrash = false;
   /** Trash was just opened before it was listed: the keyboard goes to its first document once there is one. */
@@ -150,7 +146,7 @@ export class FilesPanel {
     onContextMenu(this.trashEntry, (e) => this.menuAt(e.clientX, e.clientY, [{ label: t('panels.files.openItem'), run: () => this.enterTrash() }, this.host.trash.emptyItem()], this.trashEntry));
     this.makeTrashTarget(this.trashEntry);
     this.emptyTrash.addEventListener('click', () => void this.host.trash.emptyAll());
-    this.el.append(h('header', { class: 'wm-files-bar' }, this.back, this.title, this.collapse, close), this.notice, this.empty, this.tree, this.trashView, this.trashEntry, this.dropTip());
+    this.el.append(h('header', { class: 'wm-files-bar' }, this.back, this.title, this.collapse, close), this.notice, this.empty, this.tree, this.trashView, this.trashEntry);
     this.notice.hidden = true;
     // Right click, or a long press on a touch screen.
     onContextMenu(this.el, (e) => {
@@ -178,28 +174,6 @@ export class FilesPanel {
     }
     parent.append(this.el);
     makeResizable(this.el, { key: 'word.filesWidth', min: 140, max: 480, initial: 200 });
-  }
-
-  /** How to drop files and folders here; gone for good once dismissed. */
-  private dropTip(): HTMLElement {
-    const tip = h('div', { class: 'wm-files-tip', attrs: { role: 'note' } });
-    try {
-      if (localStorage.getItem(TIP_KEY)) tip.hidden = true;
-    } catch {
-      // Storage unavailable: shown each time.
-    }
-    const dismiss = iconButton('wm-files-close', CLOSE_ICON, t('panels.files.dismissTip'));
-    dismiss.addEventListener('click', () => {
-      tip.hidden = true;
-      try {
-        localStorage.setItem(TIP_KEY, '1');
-      } catch {
-        // Storage unavailable: it comes back next time.
-      }
-    });
-    tip.append(h('p', { text: t('panels.files.dropTip') }), dismiss);
-    this.tip = tip;
-    return tip;
   }
 
   get visible(): boolean {
@@ -404,7 +378,6 @@ export class FilesPanel {
     this.back.hidden = !trash;
     this.collapse.hidden = trash;
     this.title.textContent = trash ? t('trash.title') : t('panels.files.label');
-    this.tip?.classList.toggle('wm-files-tip-away', trash);
   }
 
   /** What was deleted, newest first, with what to say when there is nothing (or it is still being listed). */

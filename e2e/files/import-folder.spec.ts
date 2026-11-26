@@ -44,20 +44,6 @@ test('the Documents screen has an Import folder button', async ({ app, page }) =
   }
 });
 
-test('the Files sidebar tip explains dropping, and stays dismissed', async ({ app, page }) => {
-  await app.goto('?doc=welcome');
-  await app.menu('View', 'Files Sidebar');
-  const tip = page.locator('.wm-files-tip');
-  await expect(tip).toBeVisible();
-  await expect(tip).toContainText('Drop files or folders here');
-  await tip.getByRole('button', { name: 'Dismiss tip' }).click();
-  await expect(tip).toBeHidden();
-  await page.reload();
-  await app.ready();
-  await expect(page.locator('.wm-files')).toBeVisible();
-  await expect(tip).toBeHidden();
-});
-
 test('the Files sidebar right-click menu has Import folder', async ({ app, page }) => {
   const { root, folder } = makeFolder();
   try {

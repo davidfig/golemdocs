@@ -16,6 +16,7 @@
 - Help › Keyboard Shortcuts lists every command, by menu, with a search box, so you can give a key to any of them, not only to the ones that already have one. Your shortcuts follow your account to your other computers.
 - Format › Subscript is now ⇧⌘, (Ctrl+Shift+, on Windows and Linux), so ⌘, (Ctrl+,) opens Tools › Options as it always meant to. Subscript had been taking that key from it.
 - The Files sidebar comes back as you left it after a reload: scrolled to the same place, and still showing Trash if Trash was open.
+- The Files sidebar no longer opens with a tip about dropping files in. While it is empty, it says you can drop files or folders there.
 
 ### Fixed
 

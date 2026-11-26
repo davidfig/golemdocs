@@ -57,8 +57,8 @@ import './view.css';
 interface SheetFilter {
   range: CellRange;
   filtered: number[];
-  /** Header cells whose text is at the top or in the middle (their buttons stand there too). */
-  raised?: [number, 'top' | 'center'][];
+  /** Header cells' styles (column, style): each button stands level with its header's text. */
+  heads?: [number, number][];
   table?: string;
   pivot?: { index: number; fields: { field: number; name: string }[] };
 }
@@ -1597,7 +1597,7 @@ export class SheetEditorView {
   private filters(): SheetFilter[] {
     const info = this.info;
     if (!info) return [];
-    const pivots = (info.pivotButtons ?? []).map((b): SheetFilter => ({ range: { r0: b.row, c0: b.col, r1: b.row, c1: b.col }, filtered: b.filtered ? [b.col] : [], pivot: { index: b.pivot, fields: b.fields } }));
+    const pivots = (info.pivotButtons ?? []).map((b): SheetFilter => ({ range: { r0: b.row, c0: b.col, r1: b.row, c1: b.col }, filtered: b.filtered ? [b.col] : [], heads: [[b.col, b.style]], pivot: { index: b.pivot, fields: b.fields } }));
     return [...(info.filter ? [info.filter] : []), ...(info.tableFilters ?? []), ...pivots];
   }
 
@@ -1612,7 +1612,8 @@ export class SheetEditorView {
     const g = this.geometry;
     if (!filter || !g) return false;
     const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
-    const drawn = filterButton(g, row, col, 1 / scale, filter.raised?.find(([c]) => c === col)?.[1]);
+    const head = filter.heads?.find(([c]) => c === col);
+    const drawn = filterButton(g, row, col, 1 / scale, head ? this.renderer.textBand(head[1]) : undefined);
     const center = this.pointOf(row, col);
     if (!drawn || !center) return false;
     const box = dropTarget(drawn, 1 / scale);

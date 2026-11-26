@@ -175,16 +175,16 @@ export interface SheetInfo {
   charts?: number;
   /** The sheet's pivot tables: each one's place (its filters above it included). */
   pivots?: { name: string; range: CellRange }[];
-  /** The pivots' field buttons: a cell, its pivot and the fields it sorts and filters (its card chooses among several). */
-  pivotButtons?: { row: number; col: number; pivot: number; fields: { field: number; name: string }[]; filtered: boolean }[];
+  /** The pivots' field buttons: a cell, its style (the button stands level with its text), its pivot and the fields it sorts and filters (its card chooses among several). */
+  pivotButtons?: { row: number; col: number; pivot: number; style: number; fields: { field: number; name: string }[]; filtered: boolean }[];
   /** The sheet has sparklines (they come with the charts). */
   sparklines?: boolean;
   /** Protect Sheet is on; `password`: unprotecting asks for one. */
   protection?: { password: boolean };
-  /** The AutoFilter: its range, the columns it filters by values (sheet columns), and its header cells whose text is at the top or in the middle (their buttons go there too; the rest sit at the bottom). */
-  filter?: { range: CellRange; filtered: number[]; raised?: [number, 'top' | 'center'][] };
+  /** The AutoFilter: its range, the columns it filters by values (sheet columns), and its header cells' styles (column, style), so each button stands level with its header's text. */
+  filter?: { range: CellRange; filtered: number[]; heads?: [number, number][] };
   /** Tables' own AutoFilters, by table name. */
-  tableFilters?: { table: string; range: CellRange; filtered: number[]; raised?: [number, 'top' | 'center'][] }[];
+  tableFilters?: { table: string; range: CellRange; filtered: number[]; heads?: [number, number][] }[];
 }
 
 export interface BookInfo {

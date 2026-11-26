@@ -105,16 +105,16 @@ export function info(b: Workbook): BookInfo {
         pivotButtons: sheet.pivots.length
           ? sheet.pivots.flatMap((p, pivot) => {
               const look = pivotLookOf(b, p);
-              return look ? pivotButtons(p, look).map((x) => ({ ...x, pivot, fields: x.fields.map((field) => ({ field, name: p.cache.fields[field]?.name ?? '' })) })) : [];
+              return look ? pivotButtons(p, look).map((x) => ({ ...x, pivot, style: cellStyleAt(sheet, x.row, x.col), fields: x.fields.map((field) => ({ field, name: p.cache.fields[field]?.name ?? '' })) })) : [];
             })
           : undefined,
         protection: isProtected(sheet.protection) ? { password: hasPassword(sheet.protection) } : undefined,
         notes: sheet.notes.length ? sheet.notes.slice(0, 20000).map((n): [number, number] => [n.row, n.col]) : undefined,
-        filter: sheet.autoFilter ? { range: sheet.autoFilter.range, filtered: sheet.autoFilter.columns.map((c) => sheet.autoFilter!.range.c0 + c.col), raised: raisedHeaders(sheet, sheet.autoFilter.range) } : undefined,
+        filter: sheet.autoFilter ? { range: sheet.autoFilter.range, filtered: sheet.autoFilter.columns.map((c) => sheet.autoFilter!.range.c0 + c.col), heads: headerStyles(sheet, sheet.autoFilter.range) } : undefined,
         tableFilters: sheet.tables.some((t) => tableFilter(t))
           ? sheet.tables.flatMap((t) => {
               const f = tableFilter(t);
-              return f ? [{ table: t.displayName, range: f.range, filtered: f.columns.filter((c) => c.values !== null).map((c) => f.range.c0 + c.col), raised: raisedHeaders(sheet, f.range) }] : [];
+              return f ? [{ table: t.displayName, range: f.range, filtered: f.columns.filter((c) => c.values !== null).map((c) => f.range.c0 + c.col), heads: headerStyles(sheet, f.range) }] : [];
             })
           : undefined,
       };
@@ -268,19 +268,19 @@ function columnTexts(sheet: Worksheet, col: number): [string, number][] {
   return out;
 }
 
-/** A filter's header cells whose text is not at the bottom (top or middle), so their buttons stand beside the text. */
-function raisedHeaders(sheet: Worksheet, range: CellRange): [number, 'top' | 'center'][] | undefined {
-  const out: [number, 'top' | 'center'][] = [];
+/** A filter's header cells' styles, so each button can stand level with its header's text. */
+function headerStyles(sheet: Worksheet, range: CellRange): [number, number][] {
+  const out: [number, number][] = [];
   const row = range.r0;
-  for (let col = range.c0; col <= Math.min(range.c1, range.c0 + 4096); col++) {
-    const column = sheet.grid.columns[col];
-    const kind = column?.kind(row) ?? Kind.Empty;
-    const style = kind === Kind.Empty ? (sheet.rowStyles.get(row) ?? sheet.colStyles.get(col) ?? 0) : (column?.style(row) ?? 0);
-    const vertical = style ? book!.styles.format(style)?.alignment?.vertical : undefined;
-    if (vertical === 'top') out.push([col, 'top']);
-    else if (vertical && vertical !== 'bottom') out.push([col, 'center']);
-  }
-  return out.length ? out : undefined;
+  for (let col = range.c0; col <= Math.min(range.c1, range.c0 + 4096); col++) out.push([col, cellStyleAt(sheet, row, col)]);
+  return out;
+}
+
+/** The style a cell is drawn with: its own, or its row's or column's when it is empty. */
+function cellStyleAt(sheet: Worksheet, row: number, col: number): number {
+  const column = sheet.grid.columns[col];
+  const kind = column?.kind(row) ?? Kind.Empty;
+  return kind === Kind.Empty ? (sheet.rowStyles.get(row) ?? sheet.colStyles.get(col) ?? 0) : (column?.style(row) ?? 0);
 }
 
 function cellContent(sheet: Worksheet, row: number, col: number): CellContent {

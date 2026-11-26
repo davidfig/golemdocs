@@ -158,7 +158,7 @@ export interface SheetFrame {
   /** The range the fill handle is being dragged over. */
   filling: CellRange | null;
   /** AutoFilters (the sheet's, tables'): buttons on their first rows (blue on columns they filter). */
-  filters: { range: CellRange; filtered: number[]; raised?: [number, 'top' | 'center'][] }[];
+  filters: { range: CellRange; filtered: number[]; heads?: [number, number][] }[];
   /** A cell whose list validation offers choices: its arrow, beside it. */
   choices: { row: number; col: number } | null;
   /** The sheet's charts, laid out (drawn over the cells). */
@@ -349,6 +349,16 @@ export class SheetRenderer {
       }
     }
     return { glyphs, ready };
+  }
+
+  /** Where a style puts one line of text in its cell: its vertical alignment and the line's height (points), or undefined while unknown. */
+  textBand(index: number): TextBand | undefined {
+    const style = this.styles.get(index);
+    if (!style) return undefined;
+    const font = this.fonts.font(style.font, style.bold, style.italic);
+    const metrics = font && this.fonts.metrics(font);
+    if (!metrics) return undefined;
+    return { vertical: style.vertical === 'top' ? 'top' : style.vertical === 'bottom' ? 'bottom' : 'center', height: (metrics.ascent + metrics.descent) * style.size };
   }
 
   rememberStyle(index: number, style: DrawStyle): void {
@@ -952,11 +962,12 @@ export class SheetRenderer {
   }
 
   /** The AutoFilter's buttons: a framed square with a down arrow at the right of each cell of its first row. */
-  private filterButtons(list: RectList, filter: { range: CellRange; filtered: number[]; raised?: [number, 'top' | 'center'][] }, g: SheetGeometry, cssPx: number, view: Camera): void {
+  private filterButtons(list: RectList, filter: { range: CellRange; filtered: number[]; heads?: [number, number][] }, g: SheetGeometry, cssPx: number, view: Camera): void {
     const row = filter.range.r0;
-    const raised = new Map(filter.raised);
+    const heads = new Map(filter.heads);
     for (let col = filter.range.c0; col <= filter.range.c1; col++) {
-      const box = filterButton(g, row, col, cssPx, raised.get(col));
+      const style = heads.get(col);
+      const box = filterButton(g, row, col, cssPx, style === undefined ? undefined : this.textBand(style));
       if (box) dropButton(list, box, cssPx, filter.filtered.includes(col), view);
     }
   }
@@ -1177,17 +1188,26 @@ export const DROP_BUTTON_POINTS = 11.25;
 /** The smallest a drop button's clickable area gets (CSS pixels), however small it is drawn when zoomed out. */
 const MIN_DROP_TARGET_CSS = 10;
 
+/** One line of a cell's text: where the cell puts it (as `placeText` does) and how tall it is (points). */
+export interface TextBand {
+  vertical: 'top' | 'center' | 'bottom';
+  height: number;
+}
+
 /**
  * Where a cell's filter button is (sheet points): a square at its right, `DROP_BUTTON_POINTS` wide, never more than the cell,
- * level with the cell's text: at the bottom, or at the top or in the middle when the text is (`vertical`).
+ * its middle level with the middle of the cell's line of text (`text`: the first line when at the top, the last at the bottom),
+ * or at the bottom when the text is not known.
  */
-export function filterButton(g: SheetGeometry, row: number, col: number, cssPx: number, vertical: 'top' | 'center' | 'bottom' = 'bottom'): { x0: number; y0: number; x1: number; y1: number } | null {
+export function filterButton(g: SheetGeometry, row: number, col: number, cssPx: number, text?: TextBand): { x0: number; y0: number; x1: number; y1: number } | null {
   const x1 = g.x(col + 1) - cssPx;
   const top = g.y(row);
   const bottom = g.y(row + 1);
   const size = Math.min(DROP_BUTTON_POINTS, bottom - top - 2 * cssPx, g.x(col + 1) - g.x(col) - 2 * cssPx);
   if (size <= 0) return null;
-  const y0 = vertical === 'top' ? top + cssPx : vertical === 'center' ? (top + bottom - size) / 2 : bottom - cssPx - size;
+  // The line's middle, placed as placeText places it: 1 point in from the top or bottom, or centred.
+  const middle = !text ? bottom - cssPx - size / 2 : text.vertical === 'top' ? top + 1 + text.height / 2 : text.vertical === 'bottom' ? bottom - 1 - text.height / 2 : (top + bottom) / 2;
+  const y0 = Math.max(top + cssPx, Math.min(bottom - cssPx - size, middle - size / 2));
   return { x0: x1 - size, y0, x1, y1: y0 + size };
 }
 

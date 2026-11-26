@@ -47,16 +47,27 @@ test('a small button keeps a clickable area of at least 10 CSS pixels', () => {
   assert.deepEqual(dropTarget(big, cssPx(2)), big);
 });
 
-test('the filter button stands level with its cell\'s text: bottom, top or middle', () => {
+test('the filter button stands level with its cell\'s line of text: bottom, top or middle', () => {
   const px = cssPx(1);
   const g = grid(40);
-  const bottom = filterButton(g, 0, 0, px)!;
-  const top = filterButton(g, 0, 0, px, 'top')!;
-  const middle = filterButton(g, 0, 0, px, 'center')!;
-  assert.ok(Math.abs(bottom.y1 - (40 - px)) < 1e-9);
-  assert.ok(Math.abs(top.y0 - px) < 1e-9);
-  assert.ok(Math.abs((middle.y0 + middle.y1) / 2 - 20) < 1e-9);
+  const line = 13.2;
+  const mid = (b: { y0: number; y1: number }): number => (b.y0 + b.y1) / 2;
+  const bottom = filterButton(g, 0, 0, px, { vertical: 'bottom', height: line })!;
+  const top = filterButton(g, 0, 0, px, { vertical: 'top', height: line })!;
+  const middle = filterButton(g, 0, 0, px, { vertical: 'center', height: line })!;
+  // placeText puts a line 1 point in from the top or bottom.
+  assert.ok(Math.abs(mid(bottom) - (40 - 1 - line / 2)) < 1e-9);
+  assert.ok(Math.abs(mid(top) - (1 + line / 2)) < 1e-9);
+  assert.ok(Math.abs(mid(middle) - 20) < 1e-9);
   for (const b of [top, middle]) assert.equal(b.y1 - b.y0, bottom.y1 - bottom.y0);
+  // Without its text known, it sits at the bottom.
+  assert.ok(Math.abs(filterButton(g, 0, 0, px)!.y1 - (40 - px)) < 1e-9);
+});
+
+test('a filter button never leaves its cell, even beside a tall line of text', () => {
+  const px = cssPx(1);
+  const box = filterButton(grid(20), 0, 0, px, { vertical: 'bottom', height: 30 })!;
+  assert.ok(box.y0 >= px - 1e-9 && box.y1 <= 20 - px + 1e-9);
 });
 
 test('the arrow\'s rows sit on whole device pixels and narrow to a point', () => {

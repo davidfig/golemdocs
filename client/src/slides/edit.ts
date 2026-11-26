@@ -3,61 +3,20 @@
 // writes only what changed, so a placeholder keeps inheriting everything it was not given.
 
 import { cloneElement, el, parseXml, type XmlElement } from '@golemdocs/docx';
-import { hexOf, type Rgba } from './color.ts';
+import { NS_ATTRS, newPicture as pictureElement, nextShapeId } from '../drawingml/build.ts';
 import type { Deck, DeckPart, LayoutPart, SlidePart } from './deck.ts';
 import type { Transaction } from './history.ts';
-import { REL_TYPE, at, emu, ensure, findAll, insertBefore, kid, kids, num, removeKids, replaceKid } from './ooxml.ts';
+import { REL_TYPE, at, emu, ensure, findAll, kid, kids, num } from './ooxml.ts';
 import { cNvPr, placeholderOf, propsOf, xfrmOf, type Frame } from './shapes.ts';
 
-export const NS_ATTRS = {
-  'xmlns:a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
-  'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
-  'xmlns:p': 'http://schemas.openxmlformats.org/presentationml/2006/main',
-};
-
-/** Order of children in `p:spPr` (and `p:grpSpPr`), for adding one in its place. */
-const SPPR_ORDER = ['a:xfrm', 'a:custGeom', 'a:prstGeom', 'a:noFill', 'a:solidFill', 'a:gradFill', 'a:blipFill', 'a:pattFill', 'a:grpFill', 'a:ln', 'a:effectLst', 'a:effectDag', 'a:scene3d', 'a:sp3d', 'a:extLst'];
-const FILL_NAMES = ['a:noFill', 'a:solidFill', 'a:gradFill', 'a:blipFill', 'a:pattFill', 'a:grpFill'];
-const after = (name: string): string[] => SPPR_ORDER.slice(SPPR_ORDER.indexOf(name) + 1);
+export { NS_ATTRS, newShape, nextShapeId, setFill, setFrame, setHighlight, setLine, srgb } from '../drawingml/build.ts';
 
 /** The slide's shape tree. */
 export function treeOf(slide: DeckPart): XmlElement {
   return at(slide.xml, 'p:cSld/p:spTree')!;
 }
 
-/** A shape id not used on the slide. */
-export function nextShapeId(tree: XmlElement): number {
-  let max = 1;
-  for (const e of findAll(tree, (x) => x.name === 'p:cNvPr')) max = Math.max(max, Number(e.attrs.id) || 0);
-  return max + 1;
-}
-
 // ---- Shapes -------------------------------------------------------------------------------------------------------------
-
-/** Sets a shape's frame (EMU, in its parent's coordinates), writing an `a:xfrm` on the shape itself. */
-export function setFrame(element: XmlElement, frame: Frame): void {
-  let xfrm: XmlElement;
-  if (element.name === 'p:graphicFrame') xfrm = ensure(element, 'p:xfrm', ['a:graphic']);
-  else {
-    const props = propsOf(element) ?? ensure(element, element.name === 'p:grpSp' ? 'p:grpSpPr' : 'p:spPr', ['p:style', 'p:txBody']);
-    xfrm = ensure(props, 'a:xfrm', after('a:xfrm'));
-  }
-  const rot = Math.round((((frame.rot % 360) + 360) % 360) * 60000);
-  const attrs: Record<string, string> = { ...xfrm.attrs };
-  if (rot) attrs.rot = String(rot);
-  else delete attrs.rot;
-  if (frame.flipH) attrs.flipH = '1';
-  else delete attrs.flipH;
-  if (frame.flipV) attrs.flipV = '1';
-  else delete attrs.flipV;
-  xfrm.attrs = attrs;
-  replaceKid(xfrm, 'a:off', el('a:off', { x: emu(frame.x), y: emu(frame.y) }), ['a:ext', 'a:chOff', 'a:chExt']);
-  replaceKid(xfrm, 'a:ext', el('a:ext', { cx: emu(Math.max(0, frame.w)), cy: emu(Math.max(0, frame.h)) }), ['a:chOff', 'a:chExt']);
-  // A group made smaller keeps its child space: its shapes shrink with it.
-  if (element.name === 'p:grpSp' && !kid(xfrm, 'a:chOff')) {
-    xfrm.children.push(el('a:chOff', { x: emu(frame.x), y: emu(frame.y) }), el('a:chExt', { cx: emu(frame.w), cy: emu(frame.h) }));
-  }
-}
 
 /** The shapes' list (the tree, or a group) that holds an element. */
 export function parentOf(root: XmlElement, element: XmlElement): XmlElement | null {
@@ -152,85 +111,10 @@ export function reorder(slide: DeckPart, elements: readonly XmlElement[], order:
 
 const SHAPE_NAMES = /^(p:sp|p:pic|p:grpSp|p:cxnSp|p:graphicFrame|mc:AlternateContent)$/;
 
-/** Sets (or clears, with null) a shape's fill. */
-export function setFill(element: XmlElement, color: Rgba | null): void {
-  // A table's or chart's frame has no properties of its own: writing some makes a file PowerPoint has to repair.
-  if (element.name === 'p:graphicFrame') return;
-  const props = propsOf(element) ?? ensure(element, 'p:spPr', ['p:style', 'p:txBody']);
-  removeKids(props, FILL_NAMES);
-  const fill = color ? el('a:solidFill', {}, [srgb(color)]) : el('a:noFill');
-  const index = props.children.findIndex((c) => typeof c !== 'string' && after('a:grpFill').includes(c.name));
-  if (index < 0) props.children.push(fill);
-  else props.children.splice(index, 0, fill);
-}
-
-/** Sets a shape's outline colour (null: none) and width (EMU). */
-export function setLine(element: XmlElement, color: Rgba | null | undefined, width?: number, dash?: string): void {
-  // A frame (see setFill) and a group have no outline.
-  if (element.name === 'p:graphicFrame' || element.name === 'p:grpSp') return;
-  const props = propsOf(element) ?? ensure(element, 'p:spPr', ['p:style', 'p:txBody']);
-  const ln = ensure(props, 'a:ln', after('a:ln'));
-  if (width !== undefined) ln.attrs = { ...ln.attrs, w: emu(width) };
-  if (color !== undefined) {
-    removeKids(ln, FILL_NAMES);
-    ln.children.unshift(color ? el('a:solidFill', {}, [srgb(color)]) : el('a:noFill'));
-  }
-  if (dash !== undefined) replaceKid(ln, 'a:prstDash', el('a:prstDash', { val: dash }), ['a:round', 'a:bevel', 'a:miter', 'a:headEnd', 'a:tailEnd', 'a:extLst']);
-}
-
-/** Sets (or clears, with null) the highlight of run properties (`a:rPr`), in its place among their children. */
-export function setHighlight(rPr: XmlElement, color: Rgba | null): void {
-  removeKids(rPr, ['a:highlight']);
-  if (color) insertBefore(rPr, el('a:highlight', {}, [srgb(color)]), ['a:uLnTx', 'a:uLn', 'a:uFillTx', 'a:uFill', 'a:latin', 'a:ea', 'a:cs', 'a:sym', 'a:hlinkClick', 'a:hlinkMouseOver', 'a:rtl', 'a:extLst']);
-}
-
-export function srgb(color: Rgba): XmlElement {
-  return el('a:srgbClr', { val: hexOf(color) }, color.a < 1 ? [el('a:alpha', { val: String(Math.round(color.a * 100000)) })] : []);
-}
-
-/** A new shape (`p:sp`) of a preset geometry, with the theme's look for shapes (accent fill, darker outline, light text). */
-export function newShape(tree: XmlElement, preset: string, frame: Frame, name: string, textBox = false): XmlElement {
-  const id = nextShapeId(tree);
-  const spPr = el('p:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: emu(frame.x), y: emu(frame.y) }), el('a:ext', { cx: emu(frame.w), cy: emu(frame.h) })]), el('a:prstGeom', { prst: preset }, [el('a:avLst')])]);
-  if (textBox) spPr.children.push(el('a:noFill'));
-  const style = textBox
-    ? null
-    : el('p:style', {}, [
-        el('a:lnRef', { idx: '2' }, [el('a:schemeClr', { val: 'accent1' }, [el('a:shade', { val: '15000' })])]),
-        el('a:fillRef', { idx: '1' }, [el('a:schemeClr', { val: 'accent1' })]),
-        el('a:effectRef', { idx: '0' }, [el('a:schemeClr', { val: 'accent1' })]),
-        el('a:fontRef', { idx: 'minor' }, [el('a:schemeClr', { val: 'lt1' })]),
-      ]);
-  const isLine = preset === 'line' || preset.endsWith('Connector1') || preset.startsWith('straightConnector');
-  const body = el('p:txBody', {}, [
-    el('a:bodyPr', textBox ? { wrap: 'square', rtlCol: '0' } : { rtlCol: '0', anchor: 'ctr' }, textBox ? [el('a:spAutoFit')] : []),
-    el('a:lstStyle'),
-    el('a:p', {}, textBox ? [el('a:endParaRPr', { lang: 'en-US', dirty: '0' })] : [el('a:pPr', { algn: 'ctr' }), el('a:endParaRPr', { lang: 'en-US', dirty: '0' })]),
-  ]);
-  if (isLine) {
-    return el('p:cxnSp', {}, [
-      el('p:nvCxnSpPr', {}, [el('p:cNvPr', { id: String(id), name }), el('p:cNvCxnSpPr'), el('p:nvPr')]),
-      spPr,
-      el('p:style', {}, [
-        el('a:lnRef', { idx: '1' }, [el('a:schemeClr', { val: 'accent1' })]),
-        el('a:fillRef', { idx: '0' }, [el('a:schemeClr', { val: 'accent1' })]),
-        el('a:effectRef', { idx: '0' }, [el('a:schemeClr', { val: 'accent1' })]),
-        el('a:fontRef', { idx: 'minor' }, [el('a:schemeClr', { val: 'tx1' })]),
-      ]),
-    ]);
-  }
-  return el('p:sp', {}, [el('p:nvSpPr', {}, [el('p:cNvPr', { id: String(id), name }), el('p:cNvSpPr', textBox ? { txBox: '1' } : {}), el('p:nvPr')]), spPr, ...(style ? [style] : []), body]);
-}
-
 /** A new picture (`p:pic`) of a media part already in the deck, related from the slide. */
 export function newPicture(slide: DeckPart, media: string, frame: Frame, name: string, descr: string): XmlElement {
   const rId = slide.rels.add(REL_TYPE.image, media);
-  const tree = treeOf(slide);
-  return el('p:pic', {}, [
-    el('p:nvPicPr', {}, [el('p:cNvPr', { id: String(nextShapeId(tree)), name, descr }), el('p:cNvPicPr', {}, [el('a:picLocks', { noChangeAspect: '1' })]), el('p:nvPr')]),
-    el('p:blipFill', {}, [el('a:blip', { 'r:embed': rId }), el('a:stretch', {}, [el('a:fillRect')])]),
-    el('p:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: emu(frame.x), y: emu(frame.y) }), el('a:ext', { cx: emu(frame.w), cy: emu(frame.h) })]), el('a:prstGeom', { prst: 'rect' }, [el('a:avLst')])]),
-  ]);
+  return pictureElement(nextShapeId(treeOf(slide)), rId, frame, name, descr);
 }
 
 /** A new table of rows × columns filling a frame, in the deck's default table style. */

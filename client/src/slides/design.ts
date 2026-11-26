@@ -3,12 +3,14 @@
 // and touches only the elements it is about, so everything else in those parts is written back as it came.
 
 import { el, type XmlElement } from '@golemdocs/docx';
-import { hexOf } from './color.ts';
+import { hexOf } from '../drawingml/color.ts';
 import { Deck, isLayoutPart, isMasterPart, isSlidePart, type DeckPart, type MasterPart, type PagePart } from './deck.ts';
 import type { Transaction } from './history.ts';
 import { REL_TYPE, at, findAll, insertBefore, kid, kids, replaceKid } from './ooxml.ts';
 import { placeholderOf } from './shapes.ts';
 import { masterStyleFor } from './textStyle.ts';
+
+export { levelOf, levelRunOf, levelsIn } from '../drawingml/textEdit.ts';
 
 // ---- Backgrounds ----------------------------------------------------------------------------------------------------
 
@@ -182,7 +184,7 @@ export function setDarkPages(master: MasterPart, dark: boolean, tx: Transaction)
 /** The colours and fonts of another deck's (or a theme file's) theme, to apply to this one. Null if it has none. */
 export async function readOtherTheme(bytes: Uint8Array, name: string): Promise<{ colors: ColorScheme; fonts: FontPair } | null> {
   const { OpcPackage, parseXml } = await import('@golemdocs/docx');
-  const { readTheme } = await import('./theme.ts');
+  const { readTheme } = await import('../drawingml/theme.ts');
   const pkg = await OpcPackage.read(bytes);
   // A theme file (.thmx) points at its theme from the package; a deck, from its first master.
   const root = await pkg.relationships('');
@@ -217,11 +219,6 @@ const isRelOf = (type: string, wanted: string): boolean => type === wanted || ty
 
 // ---- Master and layout text styles ------------------------------------------------------------------------------------
 
-/** Children of a list style (`a:lstStyle`, `p:titleStyle`...), in schema order. */
-const LIST_ORDER = ['a:defPPr', ...Array.from({ length: 9 }, (_, i) => `a:lvl${i + 1}pPr`), 'a:extLst'];
-/** Children of a level's paragraph properties, in schema order. */
-const PPR_ORDER = ['a:lnSpc', 'a:spcBef', 'a:spcAft', 'a:buClrTx', 'a:buClr', 'a:buSzTx', 'a:buSzPct', 'a:buSzPts', 'a:buFontTx', 'a:buFont', 'a:buNone', 'a:buAutoNum', 'a:buChar', 'a:buBlip', 'a:tabLst', 'a:defRPr', 'a:extLst'];
-
 /**
  * The list style that a placeholder on a master or layout passes to every slide that inherits it: on a master, its text
  * style for that kind of placeholder (`p:titleStyle`, `p:bodyStyle`, `p:otherStyle`); on a layout, the placeholder's own list
@@ -248,25 +245,4 @@ function addKid(parent: XmlElement, name: string, before: readonly string[]): Xm
   const made = el(name);
   insertBefore(parent, made, before);
   return made;
-}
-
-/** A level's paragraph properties in a list style (`a:lvl2pPr` for level 1), made when missing. */
-export function levelOf(list: XmlElement, level: number): XmlElement {
-  const name = `a:lvl${Math.max(0, Math.min(8, level)) + 1}pPr`;
-  return kid(list, name) ?? addKid(list, name, LIST_ORDER.slice(LIST_ORDER.indexOf(name) + 1));
-}
-
-/** A level's default run properties (`a:defRPr`), made when missing. */
-export function levelRunOf(list: XmlElement, level: number): XmlElement {
-  const lvl = levelOf(list, level);
-  return kid(lvl, 'a:defRPr') ?? addKid(lvl, 'a:defRPr', PPR_ORDER.slice(PPR_ORDER.indexOf('a:defRPr') + 1));
-}
-
-/** The levels (0 to 8) of a text body's paragraphs, from `first` to `last` (all of them when not given). */
-export function levelsIn(body: XmlElement, first = 0, last = Infinity): Set<number> {
-  const out = new Set<number>();
-  kids(body, 'a:p').forEach((p, i) => {
-    if (i >= first && i <= last) out.add(Math.max(0, Math.min(8, Number(kid(p, 'a:pPr')?.attrs.lvl ?? 0) || 0)));
-  });
-  return out;
 }

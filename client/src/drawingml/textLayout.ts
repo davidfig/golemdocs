@@ -4,7 +4,7 @@
 // the same code lays out text for drawing, for the editor's caret and for fitting text to its shape.
 
 import { EMU_PER_PX } from './ooxml.ts';
-import type { Paragraph, RunStyle, Spacing } from './textStyle.ts';
+import type { Paragraph, RunStyle, Spacing } from './text.ts';
 
 export const PX_PER_PT = 96 / 72;
 

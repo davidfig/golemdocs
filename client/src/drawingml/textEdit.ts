@@ -1,9 +1,9 @@
-// Editing the text of a shape (docs/slides.md): positions are a paragraph and a character offset in it (a line break and a
+// Editing the text of a shape (docs/architecture/drawingml.md): positions are a paragraph and a character offset in it (a line break and a
 // field count as their text), and every change is made to the `a:p` / `a:r` / `a:t` XML directly, keeping each run's own
 // properties. Typing joins the run before the caret, as PowerPoint does; a new run takes the paragraph's end properties.
 
 import { cloneElement, el, type XmlElement } from '@golemdocs/docx';
-import { ensure, kid, kids, ownText, replaceKid } from './ooxml.ts';
+import { ensure, insertBefore, kid, kids, localKid, ownText, prefixOf, replaceKid } from './ooxml.ts';
 
 export interface TextPos {
   p: number;
@@ -239,13 +239,47 @@ export function wordAt(text: string, o: number): [number, number] {
   return [s, e];
 }
 
-/** Makes sure a shape has a text body to type into. */
+/** Makes sure a shape has a text body (`p:txBody`, `xdr:txBody`: its own prefix) to type into. */
 export function ensureBody(shape: XmlElement): XmlElement {
-  let body = kid(shape, 'p:txBody');
+  let body = localKid(shape, 'txBody');
   if (!body) {
-    body = el('p:txBody', {}, [el('a:bodyPr'), el('a:lstStyle'), el('a:p', {}, [el('a:endParaRPr', { lang: 'en-US', dirty: '0' })])]);
+    body = el(`${prefixOf(shape.name)}:txBody`, {}, [el('a:bodyPr'), el('a:lstStyle'), el('a:p', {}, [el('a:endParaRPr', { lang: 'en-US', dirty: '0' })])]);
     shape.children.push(body);
   }
   if (!paragraphsOf(body).length) body.children.push(el('a:p', {}, [el('a:endParaRPr', { lang: 'en-US', dirty: '0' })]));
   return body;
+}
+
+// ---- List styles: the settings of each level -----------------------------------------------------------------------------
+
+/** Children of a list style (`a:lstStyle`, `p:titleStyle`...), in schema order. */
+const LIST_ORDER = ['a:defPPr', ...Array.from({ length: 9 }, (_, i) => `a:lvl${i + 1}pPr`), 'a:extLst'];
+/** Children of a level's paragraph properties, in schema order. */
+const PPR_ORDER = ['a:lnSpc', 'a:spcBef', 'a:spcAft', 'a:buClrTx', 'a:buClr', 'a:buSzTx', 'a:buSzPct', 'a:buSzPts', 'a:buFontTx', 'a:buFont', 'a:buNone', 'a:buAutoNum', 'a:buChar', 'a:buBlip', 'a:tabLst', 'a:defRPr', 'a:extLst'];
+
+function addKid(parent: XmlElement, name: string, before: readonly string[]): XmlElement {
+  const made = el(name);
+  insertBefore(parent, made, before);
+  return made;
+}
+
+/** A level's paragraph properties in a list style (`a:lvl2pPr` for level 1), made when missing. */
+export function levelOf(list: XmlElement, level: number): XmlElement {
+  const name = `a:lvl${Math.max(0, Math.min(8, level)) + 1}pPr`;
+  return kid(list, name) ?? addKid(list, name, LIST_ORDER.slice(LIST_ORDER.indexOf(name) + 1));
+}
+
+/** A level's default run properties (`a:defRPr`), made when missing. */
+export function levelRunOf(list: XmlElement, level: number): XmlElement {
+  const lvl = levelOf(list, level);
+  return kid(lvl, 'a:defRPr') ?? addKid(lvl, 'a:defRPr', PPR_ORDER.slice(PPR_ORDER.indexOf('a:defRPr') + 1));
+}
+
+/** The levels (0 to 8) of a text body's paragraphs, from `first` to `last` (all of them when not given). */
+export function levelsIn(body: XmlElement, first = 0, last = Infinity): Set<number> {
+  const out = new Set<number>();
+  kids(body, 'a:p').forEach((p, i) => {
+    if (i >= first && i <= last) out.add(Math.max(0, Math.min(8, Number(kid(p, 'a:pPr')?.attrs.lvl ?? 0) || 0)));
+  });
+  return out;
 }

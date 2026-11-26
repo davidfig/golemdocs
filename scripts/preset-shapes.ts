@@ -1,5 +1,5 @@
-// Packs DrawingML's preset shape definitions into the table the slides editor draws from (client/src/slides/presetData.ts,
-// read by client/src/slides/geometry.ts).
+// Packs DrawingML's preset shape definitions into the table slides and sheets draw from (client/src/drawingml/presetData.ts,
+// read by client/src/drawingml/geometry.ts).
 //
 //   pnpm preset-shapes <presetShapeDefinitions.xml>
 //
@@ -78,7 +78,7 @@ if (!lines.has('upArrow')) {
   lines.set('upArrow', ['upArrow', 'adj1=val 50000;adj2=val 50000', guides, 'x1 y1 x2 b', ':M l y2 L hc t L r y2 L x2 y2 L x2 b L x1 b L x1 y2 Z'].join('\t'));
 }
 
-const out = path.join(path.dirname(fileURLToPath(import.meta.url)), '../client/src/slides/presetData.ts');
+const out = path.join(path.dirname(fileURLToPath(import.meta.url)), '../client/src/drawingml/presetData.ts');
 const body = [...lines.values()].join('\n');
 if (/[`\\$]/.test(body)) throw new Error('a value would need escaping');
 writeFileSync(

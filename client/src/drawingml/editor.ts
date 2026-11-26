@@ -388,8 +388,8 @@ export class ShapeEditor<P> {
     const element = view.shape.element;
     if (handle === 8) {
       const [cx, cy] = apply(view.matrix, view.w / 2, view.h / 2);
-      this.gesture = { kind: 'turn', element, frame: { ...view.shape.frame }, centre: [cx, cy], change: this.host.change(page, t('slides.undo.turn')) };
-    } else this.gesture = { kind: 'resize', handle, element, frame: { ...view.shape.frame }, matrix: view.matrix, w: view.w, h: view.h, change: this.host.change(page, t('slides.undo.resize')), picture: view.shape.kind === 'picture' };
+      this.gesture = { kind: 'turn', element, frame: { ...view.shape.frame }, centre: [cx, cy], change: this.host.change(page, t('shapes.undo.turn')) };
+    } else this.gesture = { kind: 'resize', handle, element, frame: { ...view.shape.frame }, matrix: view.matrix, w: view.w, h: view.h, change: this.host.change(page, t('shapes.undo.resize')), picture: view.shape.kind === 'picture' };
     return true;
   }
 
@@ -453,7 +453,7 @@ export class ShapeEditor<P> {
       const v = this.viewOf(page, e);
       if (v) frames.set(e, { ...v.shape.frame });
     }
-    this.gesture = { kind: 'move', start: at, frames, moved: false, change: this.host.change(page, t('slides.undo.move')) };
+    this.gesture = { kind: 'move', start: at, frames, moved: false, change: this.host.change(page, t('shapes.undo.move')) };
     this.host.redraw();
   }
 
@@ -558,8 +558,8 @@ export class ShapeEditor<P> {
   /** The Fill and Outline menus for the selected shapes: the theme's colours, and none. */
   colorMenus(): PopupItem[] {
     return [
-      { label: t('slides.fill'), items: this.colorItems((c) => this.setShapeFill(c)) },
-      { label: t('slides.outline'), items: this.colorItems((c) => this.setShapeLine(c)) },
+      { label: t('shapes.fill'), items: this.colorItems((c) => this.setShapeFill(c)) },
+      { label: t('shapes.outline'), items: this.colorItems((c) => this.setShapeLine(c)) },
     ];
   }
 
@@ -568,8 +568,8 @@ export class ShapeEditor<P> {
     const theme = page === undefined ? undefined : this.host.theme(page);
     if (!theme) return [];
     const names = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'dk1', 'lt1', 'dk2', 'lt2'];
-    const items: PopupItem[] = names.filter((n) => theme.colors[n]).map((n) => ({ label: `${t(`slides.color.${n}` as MessageKey)} (${cssColor(theme.colors[n])})`, run: () => set(theme.colors[n]) }));
-    items.push('separator', { label: t('slides.noColor'), run: () => set(null) });
+    const items: PopupItem[] = names.filter((n) => theme.colors[n]).map((n) => ({ label: `${t(`shapes.color.${n}` as MessageKey)} (${cssColor(theme.colors[n])})`, run: () => set(theme.colors[n]) }));
+    items.push('separator', { label: t('shapes.noColor'), run: () => set(null) });
     return items;
   }
 
@@ -615,7 +615,7 @@ export class ShapeEditor<P> {
         if (this.host.readOnly) return true;
         const dx = e.key === 'ArrowLeft' ? -nudge : e.key === 'ArrowRight' ? nudge : 0;
         const dy = e.key === 'ArrowUp' ? -nudge : e.key === 'ArrowDown' ? nudge : 0;
-        const change = this.host.change(page, t('slides.undo.move'));
+        const change = this.host.change(page, t('shapes.undo.move'));
         change.touch();
         for (const element of this.selected) {
           const view = this.viewOf(page, element);
@@ -782,7 +782,7 @@ export class ShapeEditor<P> {
     }
     const edit = this.text!;
     this.textChange(
-      t('slides.undo.typing'),
+      t('shapes.undo.typing'),
       (body) => {
         let at = deleteRange(body, edit.anchor, edit.focus);
         if (edit.pending) {
@@ -807,7 +807,7 @@ export class ShapeEditor<P> {
     }
     if (this.host.readOnly) return;
     this.textChange(
-      t('slides.undo.typing'),
+      t('shapes.undo.typing'),
       (body) => {
         const ps = paragraphsOf(body);
         let from = edit.anchor;
@@ -839,7 +839,7 @@ export class ShapeEditor<P> {
     const edit = this.text;
     if (!edit) return false;
     if (this.host.readOnly) return true;
-    this.textChange(t('slides.undo.typing'), (body) => {
+    this.textChange(t('shapes.undo.typing'), (body) => {
       let at = deleteRange(body, edit.anchor, edit.focus);
       if (shift) {
         insertBreak(paragraphsOf(body)[at.p], at.o);
@@ -853,7 +853,7 @@ export class ShapeEditor<P> {
   private changeLevel(by: number): void {
     const edit = this.text;
     if (!edit) return;
-    this.textChange(t('slides.undo.format'), (body) => {
+    this.textChange(t('shapes.undo.format'), (body) => {
       const ps = paragraphsOf(body);
       const from = minPos(edit.anchor, edit.focus).p;
       const to = maxPos(edit.anchor, edit.focus).p;
@@ -886,7 +886,7 @@ export class ShapeEditor<P> {
     this.selected = [owner];
     const body = element.name === 'a:tc' ? kid(element, 'a:txBody') : txBodyOf(element);
     if (!body) {
-      const change = this.host.change(page, t('slides.undo.typing'));
+      const change = this.host.change(page, t('shapes.undo.typing'));
       change.touch();
       if (element.name === 'a:tc') element.children.unshift({ name: 'a:txBody', attrs: {}, children: [{ name: 'a:bodyPr', attrs: {}, children: [] }, { name: 'a:lstStyle', attrs: {}, children: [] }, { name: 'a:p', attrs: {}, children: [] }] });
       else ensureBody(element);
@@ -915,7 +915,7 @@ export class ShapeEditor<P> {
     this.caretBlink();
     this.host.state();
     this.host.redraw();
-    announce(t('slides.editingText'));
+    announce(t('shapes.editingText'));
   }
 
   leaveText(): void {
@@ -974,7 +974,7 @@ export class ShapeEditor<P> {
     const style = this.runStyleAtCaret();
     const isOn = name === 'b' ? style?.bold : name === 'i' ? style?.italic : name === 'u' ? style?.underline : style?.strike;
     const value = isOn ? (name === 'u' ? 'none' : name === 'strike' ? 'noStrike' : '0') : name === 'strike' ? 'sngStrike' : on;
-    this.setRunAttrs({ [name]: value }, t('slides.undo.format'));
+    this.setRunAttrs({ [name]: value }, t('shapes.undo.format'));
   }
 
   /** Sets run attributes on the selected text (or, with no text in hand, all the text of the selected shapes). */
@@ -1060,13 +1060,13 @@ export class ShapeEditor<P> {
   }
 
   private setAlign(algn: string): void {
-    this.setParagraphs(t('slides.undo.format'), (pPr) => {
+    this.setParagraphs(t('shapes.undo.format'), (pPr) => {
       pPr.attrs = { ...pPr.attrs, algn };
     });
   }
 
   private setList(kind: 'bullet' | 'number' | null): void {
-    this.setParagraphs(t('slides.undo.format'), (pPr) => {
+    this.setParagraphs(t('shapes.undo.format'), (pPr) => {
       pPr.children = pPr.children.filter((c) => typeof c === 'string' || !['a:buNone', 'a:buChar', 'a:buAutoNum', 'a:buBlip', 'a:buFont'].includes(c.name));
       const insertAt = pPr.children.findIndex((c) => typeof c !== 'string' && ['a:tabLst', 'a:defRPr', 'a:extLst'].includes(c.name));
       const add = (...nodes: XmlElement[]): void => void (insertAt < 0 ? pPr.children.push(...nodes) : pPr.children.splice(insertAt, 0, ...nodes));
@@ -1133,7 +1133,7 @@ export class ShapeEditor<P> {
   formatAction(action: Action): boolean {
     if (this.host.readOnly) return false;
     if (!this.text && !this.selected.length) return false;
-    const label = t('slides.undo.format');
+    const label = t('shapes.undo.format');
     switch (action.kind) {
       case 'toggleMark':
         if (action.mark === 'bold') this.toggleRunAttr('b');
@@ -1228,11 +1228,11 @@ export class ShapeEditor<P> {
   }
 
   setShapeFill(color: Rgba | null): void {
-    this.shapeChange(t('slides.undo.format'), (element) => setFill(element, color));
+    this.shapeChange(t('shapes.undo.format'), (element) => setFill(element, color));
   }
 
   setShapeLine(color: Rgba | null): void {
-    this.shapeChange(t('slides.undo.format'), (element) => setLine(element, color, color ? 12700 : undefined));
+    this.shapeChange(t('shapes.undo.format'), (element) => setLine(element, color, color ? 12700 : undefined));
   }
 
   private shapeChange(label: string, change: (element: XmlElement) => void): void {
@@ -1263,7 +1263,7 @@ export class ShapeEditor<P> {
   pasteText(text: string): boolean {
     if (!this.text) return false;
     const edit = this.text;
-    this.textChange(t('slides.undo.paste'), (body) => {
+    this.textChange(t('shapes.undo.paste'), (body) => {
       const atPos = deleteRange(body, edit.anchor, edit.focus);
       edit.anchor = edit.focus = insertMultiline(body, atPos, text);
     });
@@ -1290,7 +1290,7 @@ export class ShapeEditor<P> {
   announceSelection(): void {
     const page = this.host.page();
     if (page === undefined || !this.selected.length) return;
-    if (this.selected.length > 1) return announce(t('slides.selectedMany', { count: this.selected.length }));
+    if (this.selected.length > 1) return announce(t('shapes.selectedMany', { count: this.selected.length }));
     const view = this.viewOf(page, this.selected[0]);
     if (!view) return;
     announce(describeShape(view.shape));
@@ -1325,7 +1325,7 @@ export class ShapeEditor<P> {
 
 /** What a shape is, for a screen reader: its kind, its name or alt text, and its text. */
 export function describeShape(shape: DrawingShape): string {
-  const kind = t(`slides.kind.${shape.kind}` as MessageKey);
+  const kind = t(`shapes.kind.${shape.kind}` as MessageKey);
   const text = kids(txBodyOf(shape.element), 'a:p').map(paragraphPlain).join(' ').trim();
   const name = shape.descr || cNvPr(shape.element)?.attrs.name || '';
   return [kind, name, text].filter(Boolean).join(', ');

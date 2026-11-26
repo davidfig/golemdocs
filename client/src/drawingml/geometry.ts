@@ -1,4 +1,4 @@
-// Shape outlines (docs/slides.md): DrawingML's custom geometry (`a:custGeom`: guides, then paths of moves, lines, arcs and
+// Shape outlines (docs/architecture/drawingml.md): DrawingML's custom geometry (`a:custGeom`: guides, then paths of moves, lines, arcs and
 // curves) and its preset shapes (`a:prstGeom`), which are the same thing written in the standard (`presetData.ts`, packed from
 // ECMA-376 by scripts/preset-shapes.ts). Everything is in the shape's own box: (0, 0) to (w, h), in whatever unit w and h are in.
 

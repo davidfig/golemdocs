@@ -29,3 +29,26 @@ test('the slides are reached and edited from the keyboard', async ({ app, page }
   await page.keyboard.press('Escape');
   await expect.poll(async () => (await state(page)).presenting).toBe(null);
 });
+
+test('Insert › Shape is worked from the keyboard: named rows, pictures hidden from readers, the shape announced', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, { ...fixture('slides/review.pptx'), name: 'review.pptx' });
+  await waitForOpen(app, 'review.pptx');
+  await app.menu('Insert', 'Shape');
+  const menu = page.getByRole('menu', { name: 'Shape' });
+  // The keyboard is in the picker, on its first shape; each row is named, and its picture is not read out.
+  await expect(menu.getByRole('menuitem', { name: 'Rectangle', exact: true })).toBeFocused();
+  await expect(menu.locator('svg.wm-shape-preview[aria-hidden="true"]').first()).toBeAttached();
+  await page.keyboard.press('ArrowDown');
+  await expect(menu.getByRole('menuitem', { name: 'Rounded Rectangle' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await state(page)).selected).toEqual(['Rounded Rectangle']);
+  // The keyboard is back in the slides, and the new shape is said.
+  await expect(page.getByRole('textbox', { name: 'Slides' })).toBeFocused();
+  await expect(page.locator('.wm-sr-only[aria-live]').filter({ hasText: /Inserted|Shape/ }).first()).toBeAttached();
+  // Escape lets the shape go; Tab comes back to it, read out by its kind and name.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Shift+Tab');
+  await expect.poll(async () => (await state(page)).selected).toEqual(['Rounded Rectangle']);
+  await expect(page.locator('.wm-sr-only[aria-live]').filter({ hasText: 'Shape, Rounded Rectangle' }).first()).toBeAttached();
+});

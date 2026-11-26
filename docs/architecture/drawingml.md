@@ -78,8 +78,8 @@ toolbar, `colorMenus()` for the context menu, `copyText`, `cutText`, `pasteText`
 ratio)` to draw the selection, handles, caret and marquee over the page. Page-level keys and commands (slides added, moved,
 presented, master view) stay in the host.
 
-The editor's strings are still the `slides.*` keys (undo labels, the colour names, the shape kinds read out); they move to a
-neutral area when the sheet editor starts using it.
+The editor's strings (undo labels, the Fill and Outline menus and their colour names, the shape kinds read out) are the
+`shapes.*` area (`i18n/en/shapes.ts`), shared by every host.
 
 ## Shapes to insert
 

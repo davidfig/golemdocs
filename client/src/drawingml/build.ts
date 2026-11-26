@@ -6,6 +6,7 @@ import { el, type XmlElement } from '@golemdocs/docx';
 import { hexOf, type Rgba } from './color.ts';
 import { emu, ensure, findAll, insertBefore, kid, localName, prefixOf, removeKids, replaceKid } from './ooxml.ts';
 import { propsOf, type Frame } from './shape.ts';
+import { isLinePreset } from './shapeChoices.ts';
 
 export const NS_ATTRS = {
   'xmlns:a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
@@ -112,7 +113,7 @@ export function newShape(tree: XmlElement, preset: string, frame: Frame, name: s
         el('a:effectRef', { idx: '0' }, [el('a:schemeClr', { val: 'accent1' })]),
         el('a:fontRef', { idx: 'minor' }, [el('a:schemeClr', { val: 'lt1' })]),
       ]);
-  const isLine = preset === 'line' || preset.endsWith('Connector1') || preset.startsWith('straightConnector');
+  const isLine = isLinePreset(preset);
   const body = el(`${ns}:txBody`, {}, [
     el('a:bodyPr', textBox ? { wrap: 'square', rtlCol: '0' } : { rtlCol: '0', anchor: 'ctr' }, textBox ? [el('a:spAutoFit')] : []),
     el('a:lstStyle'),

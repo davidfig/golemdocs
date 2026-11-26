@@ -234,7 +234,7 @@ export class SlidesEditor {
     return this.view?.debugState() ?? null;
   }
 
-  screenOf(name: string): { x: number; y: number } | null {
+  screenOf(name: string): { x: number; y: number; corner: { x: number; y: number } } | null {
     return this.view?.screenOf(name) ?? null;
   }
 }

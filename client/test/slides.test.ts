@@ -9,7 +9,8 @@ import { Deck, paragraphText } from '../src/slides/deck.ts';
 import { resolveColor, DEFAULT_MAP } from '../src/drawingml/color.ts';
 import { defaultTheme } from '../src/drawingml/theme.ts';
 import { builtins, customGeometry, presetGeometry, presetNames } from '../src/drawingml/geometry.ts';
-import { SHAPE_CHOICES } from '../src/slides/shapeChoices.ts';
+import { SHAPE_CHOICES } from '../src/drawingml/shapeChoices.ts';
+import { shapePath } from '../src/vector/shapes.ts';
 import { History, Transaction } from '../src/slides/history.ts';
 import { addSlide, deleteShapes, deleteSlides, duplicateSlide, moveSlides, newShape, newTable, reorder, setFill, setFrame, setHidden, setHighlight, setLine, isHidden, setNotes, treeOf } from '../src/slides/edit.ts';
 import { autoNumber, bulletTexts, layoutText, ROUGH_MEASURE } from '../src/drawingml/textLayout.ts';
@@ -112,7 +113,10 @@ test('every preset shape draws, and its outline and text box stay near its box',
 
 test('every shape Insert offers is in the preset table', () => {
   const names = new Set(presetNames());
-  for (const name of SHAPE_CHOICES) assert.ok(names.has(name), name);
+  for (const { preset } of SHAPE_CHOICES) assert.ok(names.has(preset), preset);
+  // Each is drawn for its picture in the picker, and offered once.
+  for (const { id } of SHAPE_CHOICES) assert.ok(shapePath(id, 0, 0, 10, 10).length > 1, id);
+  assert.equal(new Set(SHAPE_CHOICES.map((c) => c.id)).size, SHAPE_CHOICES.length);
 });
 
 const prstGeom = (name: string, guides: Record<string, number>) =>

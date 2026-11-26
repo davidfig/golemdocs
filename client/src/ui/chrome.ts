@@ -33,6 +33,7 @@ import { BRUSH_GROUPS, BRUSH_PRESETS, DASHES } from '../vector/brushPresets.ts';
 import { brushPreview } from './brushPreview.ts';
 import { dropdown, lineSample } from './dropdown.ts';
 import { shapePreview } from './shapePreview.ts';
+import { shapeListBox, shapeName } from './shapePicker.ts';
 import { SHAPE_IDS } from '../vector/shapes.ts';
 import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, PICTURE_KINDS, VECTOR_CONVERT_ORDER, VECTOR_KINDS, convertTargets, formatGroup } from './formats.ts';
 import { billingPanel } from './billingPanel.ts';
@@ -1756,18 +1757,11 @@ export class Chrome {
     });
     caret.addEventListener('click', () => {
       if (popupOpenFor(el)) return closePopup();
-      const list = h('div', { class: 'wm-list wm-shape-list', attrs: { role: 'listbox', 'aria-label': label } });
-      for (const id of SHAPE_IDS) {
-        const chosen = id === current;
-        const name = t(`vector.shape.${id}` as MessageKey);
-        const row = h('div', { class: chosen ? 'wm-option wm-shape-row chosen' : 'wm-option wm-shape-row', title: name, attrs: { role: 'option', 'aria-selected': String(chosen), 'aria-label': name } }, shapePreview(id));
-        row.addEventListener('click', () => {
-          closePopup();
-          r.perform({ kind: 'vector', op: `shape:${id}` }, label);
-          r.focusEditor();
-        });
-        list.append(row);
-      }
+      const list = shapeListBox(SHAPE_IDS, current, label, (id) => {
+        closePopup();
+        r.perform({ kind: 'vector', op: `shape:${id}` }, label);
+        r.focusEditor();
+      });
       openPopup(el, list);
     });
     return {
@@ -1775,7 +1769,7 @@ export class Chrome {
       refresh: (state) => {
         current = state.vector.shape;
         main.replaceChildren(shapePreview(current as (typeof SHAPE_IDS)[number]));
-        main.title = `${label}: ${t(`vector.shape.${current}` as MessageKey)}`;
+        main.title = `${label}: ${shapeName(current as (typeof SHAPE_IDS)[number])}`;
         main.setAttribute('aria-pressed', String(state.vector.tool === 'shape'));
         main.disabled = caret.disabled = !r.allows({ kind: 'vector', op: 'shape' });
       },
@@ -1842,18 +1836,11 @@ export class Chrome {
     });
     caret.addEventListener('click', () => {
       if (popupOpenFor(el)) return closePopup();
-      const list = h('div', { class: 'wm-list wm-shape-list', attrs: { role: 'listbox', 'aria-label': label } });
-      for (const id of SHAPE_IDS) {
-        const chosen = id === current;
-        const name = t(`vector.shape.${id}` as MessageKey);
-        const row = h('div', { class: chosen ? 'wm-option wm-shape-row chosen' : 'wm-option wm-shape-row', title: name, attrs: { role: 'option', 'aria-selected': String(chosen), 'aria-label': name } }, shapePreview(id));
-        row.addEventListener('click', () => {
-          closePopup();
-          r.perform({ kind: 'image', op: `shape:${id}` }, label);
-          r.focusEditor();
-        });
-        list.append(row);
-      }
+      const list = shapeListBox(SHAPE_IDS, current, label, (id) => {
+        closePopup();
+        r.perform({ kind: 'image', op: `shape:${id}` }, label);
+        r.focusEditor();
+      });
       openPopup(el, list);
     });
     return {
@@ -1861,7 +1848,7 @@ export class Chrome {
       refresh: (state) => {
         current = state.draw.shape;
         main.replaceChildren(shapePreview(current as (typeof SHAPE_IDS)[number]));
-        main.title = `${label}: ${t(`vector.shape.${current}` as MessageKey)}`;
+        main.title = `${label}: ${shapeName(current as (typeof SHAPE_IDS)[number])}`;
         main.setAttribute('aria-pressed', String(state.draw.tool === 'shape'));
         main.disabled = caret.disabled = !r.allows({ kind: 'image', op: 'shape' });
       },

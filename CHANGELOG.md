@@ -22,11 +22,13 @@
 - The Files sidebar no longer opens with a tip about dropping files in. While it is empty, it says you can drop files or folders there.
 - Spreadsheets: the Insert menu lists everything a sheet can insert: rows, columns and a new sheet, Table (moved from the Sheet menu), PivotTable, Chart, Sparklines, a note and a page break. Ctrl+T makes a table, as in Excel (on a Mac, and on Windows and Linux in the desktop app; a browser there keeps Ctrl+T for a new tab).
 - Spreadsheets: filter buttons and list arrows grow and shrink with the zoom like the cells around them, rather than staying one size. They stay easy to click when you zoom far out, their arrows are smooth at any zoom, and a filter button sits level with its header's text when that text is at the top or in the middle of the cell.
+- Slides: Insert › Shape shows a picture of each shape, in groups, with the same shapes and names as the drawing tools' Shapes list, and adds a 4- and 6-point star, a plus, a moon, a cloud, a lightning bolt and a speech bubble.
 
 ### Fixed
 
 - Shared spreadsheets, CSV files, presentations, audio and video open as themselves in a shared link: in the spreadsheet, slides and media views, read-only, instead of being turned into a document. HTML pages in a shared folder show as the page they make.
 - Desktop app: a folder moved or renamed in the vault folder (in Finder or with `mv`) is moved in your account as a whole, at once, and stays the same folder, still shared with the same people and by the same links. Before, each of its files was moved one by one into a new folder, the folder list showed the old place until that was done, and the old folder's sharing was lost with it. Copies of the same file in several moved folders also keep their history now, instead of being made again.
+- Slides: on a high-resolution screen, the round handle above a selected shape turns it when you grab the handle itself, not a spot beside it.
 
 ## 0.48.0 - 2026-11-25
 

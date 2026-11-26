@@ -21,6 +21,8 @@ import { SLIDE_ONLY_OPS, type Action, type FormatState, type SlidesOp } from '..
 import { readClipboard } from '../ui/clipboard.ts';
 import { hexOf } from '../drawingml/color.ts';
 import { ShapeEditor, type ShapeChange } from '../drawingml/editor.ts';
+import { isLinePreset, SHAPE_GROUPS } from '../drawingml/shapeChoices.ts';
+import { shapeMenuItems, shapeName } from '../ui/shapePicker.ts';
 import { Deck, isSlidePart, masterOfPage, paragraphText, type LayoutPart, type PagePart, type SlidePart } from './deck.ts';
 import { History, Transaction } from './history.ts';
 import { EMU_PER_PX, at, kid, kids } from './ooxml.ts';
@@ -32,7 +34,6 @@ import { Presenter } from './present.ts';
 import { backgroundOf, currentDesign, inheritedStyleOf, readOtherTheme, setBackground, setBackgroundEverywhere, setDarkPages, setThemeColors, setThemeFonts } from './design.ts';
 import { showBackgroundDialog, showThemeDialog } from './designDialogs.ts';
 import { deckPdf, sceneWithData } from './export.ts';
-import { SHAPE_CHOICES } from './shapeChoices.ts';
 import { deckLines } from './outline.ts';
 import './view.css';
 
@@ -879,7 +880,7 @@ export class SlidesEditorView {
         if (op === 'shape') {
           const rect = this.canvas.getBoundingClientRect();
           showPopupMenu(
-            SHAPE_CHOICES.map((c) => ({ label: t(`slides.shape.${c}` as MessageKey), run: () => this.insertShape(c) })),
+            shapeMenuItems(SHAPE_GROUPS, (c) => this.insertShape(c.preset, shapeName(c.id))),
             rect.left + 40,
             rect.top + 40,
             t('slides.op.shape'),
@@ -977,19 +978,19 @@ export class SlidesEditorView {
     await this.slidesOp('deleteSlide');
   }
 
-  /** A new shape in the middle of the slide in hand. */
-  private insertShape(preset: string): void {
+  /** A new shape (or, for "textBox", a text box) in the middle of the slide in hand, named `name`. */
+  private insertShape(preset: string, name = ''): void {
     const deck = this.deck;
     const slide = this.pages[this.current];
     if (!deck || !slide || this.readOnly) return;
     const textBox = preset === 'textBox';
     const w = textBox ? Math.round(deck.width * 0.4) : Math.round(Math.min(deck.width, deck.height) * 0.3);
-    const hh = textBox ? 369332 : preset === 'line' || preset === 'straightConnector1' ? 0 : w;
+    const hh = textBox ? 369332 : isLinePreset(preset) ? 0 : w;
     const frame: Frame = { x: Math.round((deck.width - w) / 2), y: Math.round((deck.height - hh) / 2), w, h: hh, rot: 0, flipH: false, flipV: false };
     const step = new Transaction(deck, t('slides.undo.insert'));
     step.touch(slide);
     const tree = treeOf(slide);
-    const element = newShape(tree, textBox ? 'rect' : preset, frame, textBox ? t('slides.textBoxName') : t(`slides.shape.${preset}` as MessageKey), textBox);
+    const element = newShape(tree, textBox ? 'rect' : preset, frame, textBox ? t('slides.textBoxName') : name, textBox);
     tree.children.push(element);
     this.shapes.selected = [element];
     this.commit(step);
@@ -1423,16 +1424,19 @@ export class SlidesEditorView {
     };
   }
 
-  /** Where a shape of the slide in hand is on screen (CSS px of the canvas), by name: for tests. */
-  screenOf(name: string): { x: number; y: number } | null {
+  /** Where a shape of the slide in hand is on screen (CSS px of the canvas), by name: its middle, and its bottom right corner (a handle). For tests. */
+  screenOf(name: string): { x: number; y: number; corner: { x: number; y: number } } | null {
     const p = this.placed[this.current];
     if (!p) return null;
     const view = this.viewsOf(p.slide).find((v) => cNvPr(v.shape.element)?.attrs.name === name);
     if (!view) return null;
-    const [sx, sy] = apply(view.matrix, view.w / 2, view.h / 2);
     const cam = this.deps.camera;
     const scale = cam.zoom * CSS_PX_PER_POINT;
-    return { x: (p.x + sx * 0.75 - cam.x) * scale, y: (p.y + sy * 0.75 - cam.y) * scale };
+    const screen = (x: number, y: number): { x: number; y: number } => {
+      const [sx, sy] = apply(view.matrix, x, y);
+      return { x: (p.x + sx * 0.75 - cam.x) * scale, y: (p.y + sy * 0.75 - cam.y) * scale };
+    };
+    return { ...screen(view.w / 2, view.h / 2), corner: screen(view.w, view.h) };
   }
 
   get presenting(): boolean {

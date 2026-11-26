@@ -79,6 +79,7 @@ Details: [Document model](architecture/document-model.md), [Layout](architecture
 | Add a menu item, dialog or language | [UI](architecture/ui.md), [localization.md](localization.md) |
 | Build, test, release | [Build and testing](architecture/build-and-testing.md) |
 | Drive the running app from an agent or a test | [Automation API](architecture/automation.md) |
+| Change shapes, pictures or text boxes on slides or sheets | [DrawingML shapes](architecture/drawingml.md) |
 
 ## Cross-cutting rules
 

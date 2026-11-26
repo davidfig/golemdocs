@@ -46,6 +46,10 @@ export class Workbook {
    * or missing (a file written by a program that does not calculate). */
   fullCalcOnLoad = false;
   activeSheet = 0;
+  /** The theme part's XML (colours, fonts and styles a drawing's shapes refer to), or null. */
+  themeXml: string | null = null;
+  /** Pictures added here and not yet written, by the name their relationship has for them until then (`media:<n>.<ext>`). */
+  media = new Map<string, Uint8Array>();
   /** What it was read from, and where each part is in it; null for a workbook made here. */
   source: {
     pkg: OpcPackage;

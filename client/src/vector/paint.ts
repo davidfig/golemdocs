@@ -31,9 +31,11 @@ export interface PaintOptions {
   fonts?: FontAliases;
   /** Nodes not to paint (the editor hides the one it is drawing itself while it is being changed). */
   skip?: (node: SceneNode) => boolean;
+  /** Every colour of a fill, line or text as it is shown (a sheet's drawings under Dark Pages); pictures are left as they are. */
+  recolor?: (color: Rgba) => Rgba;
 }
 
-const rgba = ([r, g, b, a]: Rgba, opacity = 1): string => `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a * opacity))})`;
+const rgbaOf = ([r, g, b, a]: Rgba, opacity = 1): string => `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a * opacity))})`;
 
 /** Adds a path's commands to the context's current path. */
 export function tracePath(ctx: Context2D, commands: readonly PathCommand[]): void {
@@ -104,6 +106,8 @@ function patternFor(walk: Walk, id: string, box: Bounds | null, opacity: number)
 function paintFor(walk: Walk, value: string | undefined, chain: readonly Style[], box: Bounds | null, opacity: number): string | CanvasGradient | CanvasPattern | null {
   const { ctx, scene } = walk;
   if (value === undefined || value === 'none') return null;
+  const recolor = walk.options.recolor;
+  const rgba = (c: Rgba, o: number) => rgbaOf(recolor ? recolor(c) : c, o);
   const current = (): Rgba | null => parseColor(inherited(chain, 'color') ?? 'black');
   const reference = urlReference(value);
   if (reference) {

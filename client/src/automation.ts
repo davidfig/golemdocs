@@ -31,6 +31,15 @@ export interface AutomationContext {
   opensBegun: () => number;
   /** Resolves once the layout worker has handled every message sent so far. */
   ping: () => Promise<void>;
+  /** The open document's word history (wordHistory.ts), once loaded, or null when its writing is not kept. */
+  wordHistory: () => Promise<WordHistoryInfo | null>;
+}
+
+export interface WordHistoryInfo {
+  /** Today, on this computer's calendar. */
+  today: string;
+  /** Each day with writing, oldest first: its count at the end of the day, and when the day's writing began. */
+  days: { day: string; words: number; start: number | null }[];
 }
 
 export interface CommandInfo {
@@ -92,6 +101,7 @@ export interface GolemAutomation {
     markdown(): Promise<string>;
     select(paragraph: number, from?: number, to?: number): Promise<void>;
     open(source: string, timeoutMs?: number): Promise<void>;
+    wordHistory(): Promise<WordHistoryInfo | null>;
   };
   selection(): { text: string; caret: unknown };
   dialogs(): DialogInfo[];
@@ -108,6 +118,7 @@ golem.doc.text()                  the whole document as plain text
 golem.doc.markdown()              the whole document as Markdown (word processing documents)
 golem.doc.select(p, from?, to?)   selects in paragraph p (an outline index), from/to as offsets in it; waits for it
 golem.doc.open(source)            opens a document ("welcome", "local:<id>", ...) and waits until it is laid out
+golem.doc.wordHistory()           the words at the end of each day written in it ({ today, days }), or null if not kept
 golem.selection()                 the selected text and the caret
 golem.dialogs()                   open dialogs and cards: title, fields (label, value), buttons
 golem.waitIdle(timeoutMs?)        resolves once the document is loaded, the layout worker has caught up and a frame is drawn
@@ -307,6 +318,7 @@ export function createAutomation(context: AutomationContext): GolemAutomation {
         }
         await waitIdle(Math.max(until - performance.now(), 1000));
       },
+      wordHistory: () => context.wordHistory(),
     },
     selection: () => context.selection(),
     dialogs: () => listDialogs(),

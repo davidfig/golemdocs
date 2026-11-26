@@ -15,6 +15,7 @@ It lives in `client/src/automation.ts` and is installed by `main.ts` at start-up
 | `golem.doc.text()` / `golem.doc.markdown()` | The whole document as the `.txt` / `.md` exporters write it (`worker.convert`); a text file's own text |
 | `golem.doc.select(paragraph, from?, to?)` | Selects in a paragraph (offsets are model offsets in it) and waits for the worker |
 | `golem.doc.open(source)` | Opens a document by source (`welcome`, `local:<id>`, …) and waits until it is laid out |
+| `golem.doc.wordHistory()` | The open document's word history once loaded (`wordHistory.ts`): `{ today, days: [{ day, words, start }] }`, or null when its writing is not kept |
 | `golem.selection()` | The selected text and the caret |
 | `golem.dialogs()` | The open dialogs and in-document cards (`dialog[open]`, `role="dialog"`): title, `modal`, fields (accessible name, type or role, value, checked) and buttons |
 | `golem.waitIdle(timeoutMs?)` | Resolves once the document is loaded, the worker has handled every message sent so far, and two frames are drawn |

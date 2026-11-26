@@ -439,6 +439,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'download':
           return app.download();
         case 'insertLink':
+          if (app.engine()?.link) return app.engine()!.link!();
           return app.showLinkDialog();
         case 'insertMath':
           return app.showMathDialog();

@@ -21,6 +21,7 @@ import { parseAround, writeAround } from './worksheetXml.ts';
 import { rangeName } from '../refs.ts';
 import { tableXml } from '../tables.ts';
 import { newNoteParts, removeNoteParts, writeNotes } from '../notes.ts';
+import { linkRelationships } from '../links.ts';
 
 const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -74,6 +75,8 @@ export async function writeWorkbook(book: Workbook, options: WriteOptions = {}):
       return { ...table, part, rId: sheetRels.add(`${REL}/table`, part) };
     });
     for (const table of sheet.tables) pkg.set(table.part, serializeXml(tableXml(table)), `${TYPE}.table+xml`);
+    // Links out of the workbook keep their addresses in the sheet's relationships.
+    sheet.links = linkRelationships(sheet.links, sheetRels);
     if (sheet.dirty.layout && sheet.notes.length && !sheet.noteParts) {
       // The sheet's first note: its parts are made, and every note gets a shape in the new drawing.
       sheet.noteParts = newNoteParts(pkg, sheetRels);
@@ -84,7 +87,7 @@ export async function writeWorkbook(book: Workbook, options: WriteOptions = {}):
       sheet.noteParts = null;
     }
     if (sheet.noteParts && sheet.dirty.layout) await writeNotes(pkg, sheet.notes, sheet.noteParts);
-    if (sheet.dirty.layout) await writeCharts(pkg, entry.part, sheet, book.theme.colors);
+    if (sheet.dirty.layout) await writeCharts(pkg, entry.part, sheet, book.theme.colors, book.media);
     if (sheet.pivots.some((p) => p.refreshed)) await writePivots(pkg, book, entry.part, sheet);
     const pieces = sheetPieces(book, sheet, sharedCount);
     const deflated = await deflatePieces(options.pause ? withPauses(pieces, options.pause) : pieces);

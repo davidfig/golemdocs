@@ -12,6 +12,15 @@ import type { PopupItem } from '../ui/popupMenu.ts';
 import { onContextMenu } from '../ui/contextMenu.ts';
 import { IS_MAC, altGraph, formatShortcut, parseShortcut } from '../ui/shortcuts.ts';
 import { announce } from '../ui/announce.ts';
+import type { LinkDraft, LinkTarget } from '../ui/linkPopover.ts';
+import type { LinkChoice } from '../ui/linkDialog.ts';
+import { hyperlinkArgument, linkFromAddress } from './links.ts';
+import { FormulaHint } from './formulaHint.ts';
+import { askFunction } from './functionDialog.ts';
+import type { DrawingLayer } from './drawingLayer.ts';
+import { IMAGE_REL } from './drawings.ts';
+import type { XmlElement } from '@golemdocs/docx';
+import { sniffImage } from '../formats/images.ts';
 import { onScreenReaderChange, SCREEN_READER_SHORTCUT, screenReaderOn } from '../ui/screenReader.ts';
 import type { Region } from '../ui/focusRegions.ts';
 import { darkPageColor } from '../webgl/program.ts';
@@ -46,9 +55,9 @@ import { sheetThumbnail } from './thumbnail.ts';
 import { parseCells } from './scenarios.ts';
 import type { NewChartKind } from './charts/make.ts';
 import type { AnchorPoint } from './charts/model.ts';
-import { cellName, parseRange, rangeName } from './refs.ts';
+import { cellName, parseCell, parseRange, rangeName } from './refs.ts';
 import { parseTabbed } from './clipboard.ts';
-import type { BookInfo, CellContent, Changed, ChartChange, ChartScene, EditOp, FromWorker, SheetInfo, TileKey, ToWorker } from './protocol.ts';
+import type { BookInfo, CellContent, Changed, ChartChange, ChartScene, DrawnPicture, EditOp, FromWorker, SheetInfo, TileKey, ToWorker } from './protocol.ts';
 import type { DelimitedKind } from './delimited.ts';
 import type { SheetLayout } from '../formats/wdoc.ts';
 import './view.css';
@@ -84,6 +93,18 @@ export interface SheetEditorDeps {
   liveAdded?(source: string): void;
   /** A `by` for a live block made now (live/owner.ts): whose it is. */
   blockBy?(): Promise<string>;
+  /** Insert › Picture: a picture file the person picks, or null. */
+  pickImage?(): Promise<File | null>;
+  /**
+   * Hyperlinks: the app's link form (ui/linkPopover.ts), opened by Insert › Hyperlink and over a linked cell, and following
+   * a link out of the workbook.
+   */
+  links?: {
+    edit(draft: LinkDraft, at: { clientX: number; clientY: number }): Promise<LinkChoice | null | undefined>;
+    show(target: LinkTarget): void;
+    leave(): void;
+    open(url: string): void;
+  };
 }
 
 /** Bars over the canvas, in CSS pixels: the formula bar at the top, the sheet tabs at the bottom. */
@@ -183,13 +204,20 @@ export class SheetEditorView {
   private copied: CellRange | null = null;
   /** The sheet the copied range is on, and the text it put on the clipboard (to know a paste is of it). */
   private copiedFrom: { sheet: number; text: string } | null = null;
-  private dragState: { kind: 'select' | 'columns' | 'rows' | 'resizeColumn' | 'resizeRow' | 'fill' | 'chart' | 'chartResize'; index?: number; start?: number; size?: number } | null = null;
+  private dragState: {
+    kind: 'select' | 'columns' | 'rows' | 'resizeColumn' | 'resizeRow' | 'fill' | 'chart' | 'chartResize' | 'drawing';
+    index?: number;
+    start?: number;
+    size?: number;
+  } | null = null;
   /** While the fill handle is dragged: the range it would fill. */
   private filling: CellRange | null = null;
   private filterCard: FilterCard | null = null;
   private noteCard: NoteCard | null = null;
   private noteEditor: NoteEditor | null = null;
   private noteHover = '';
+  /** The linked cells the pointer is on (sheet, range and address), or ''. */
+  private linkHover = '';
   private noteTimer = 0;
   private resizeTo: number | null = null;
   private progress: string | null = null;
@@ -381,6 +409,7 @@ export class SheetEditorView {
     this.book = null;
     this.geometry = null;
     this.editing = null;
+    this.formulaHint?.hide();
     this.copied = null;
     this.cellEditor.hidden = true;
     this.el.hidden = true;
@@ -423,7 +452,15 @@ export class SheetEditorView {
   /** The active sheet's top left as a thumbnail picture (a file card's), or null. */
   async thumbnail(): Promise<Blob | null> {
     const reply = await this.ask<Extract<FromWorker, { t: 'thumbnail' }>>({ t: 'thumbnail', id: this.id(), sheet: this.sheetIndex }).catch(() => null);
-    return reply?.tile ? sheetThumbnail(reply.tile, reply.cols, reply.rows) : null;
+    if (!reply?.tile) return null;
+    return sheetThumbnail(reply.tile, reply.cols, reply.rows, await this.drawnPictures(1));
+  }
+
+  /** The active sheet's pictures and shapes drawn for a thumbnail or a printout (`perPoint` pixels a point), if it has any. */
+  private async drawnPictures(perPoint: number): Promise<DrawnPicture[]> {
+    if (!this.info?.drawings) return [];
+    const layer = await this.loadLayer().catch(() => null);
+    return (await layer?.drawn(this.sheetIndex, perPoint).catch(() => null)) ?? [];
   }
 
   /** The active sheet as a PDF, as it prints: its pages from the worker, drawn in the app's fonts (sheetPdf.ts, loaded
@@ -431,7 +468,8 @@ export class SheetEditorView {
   async printPdf(): Promise<Uint8Array> {
     const reply = await this.ask<Extract<FromWorker, { t: 'print' }>>({ t: 'print', id: this.id(), sheet: this.sheetIndex });
     const { printSheet } = await import('./sheetPdf.ts');
-    return printSheet(reply.data, this.fileName);
+    const pictures = await this.drawnPictures(3);
+    return printSheet(pictures.length ? { ...reply.data, pictures } : reply.data, this.fileName);
   }
 
   /** A cell of the active sheet, as typed and as shown. */
@@ -516,6 +554,13 @@ export class SheetEditorView {
       forced,
     });
     if (pending) requestAnimationFrame(() => this.deps.render());
+    // Pictures and shapes, over the cells.
+    const layer = this.drawingLayer;
+    if (info.drawings && !layer) void this.loadLayer().then(() => this.deps.render());
+    if (layer) {
+      layer.sync(this.sheetIndex, info.drawings);
+      layer.paint(this.renderer.regions, top, camera.zoom * CSS_PX_PER_POINT, camera.width / camera.dpr, camera.height / camera.dpr - TABS_BAR, darkPages, forced);
+    }
     this.darkPages = darkPages;
     this.placeEditor();
   }
@@ -632,6 +677,7 @@ export class SheetEditorView {
           formula: content.isFormula ? content.input : null,
           merged,
           note: note?.note?.text ?? null,
+          link: this.linkOn(at.row, at.col)?.address ?? (await this.formulaLink(at.row, at.col, content.input)),
           list: content.list,
           filter: !!this.filterOf(at.row, at.col),
           pivot: this.pivotAt(at.row, at.col) !== null,
@@ -739,6 +785,7 @@ export class SheetEditorView {
     const e = this.editing;
     if (!e) return;
     this.editing = null;
+    this.formulaHint?.hide();
     const text = this.cellEditor.value;
     this.cellEditor.hidden = true;
     this.renderer.rebuild(this.sheetIndex, single(e.row, e.col));
@@ -834,9 +881,24 @@ export class SheetEditorView {
   /** Picks the next chart over the cells (or the one before), from the keyboard, and scrolls it into view. */
   private stepChart(step: 1 | -1): void {
     const scenes = this.chartScenes();
-    if (!scenes.length) return void (screenReaderOn() && announce(t('a11y.sheet.noCharts')));
-    const n = scenes.length;
-    const next = this.chart === null ? (step > 0 ? 0 : n - 1) : (this.chart + step + n) % n;
+    // The charts, then the pictures and shapes, one after another.
+    const layer = this.drawingLayer;
+    const shapes = layer?.page ? layer.page.tree.children.filter((e): e is XmlElement => typeof e !== 'string') : [];
+    if (!scenes.length && !shapes.length) return void (screenReaderOn() && announce(t('a11y.sheet.noCharts')));
+    const n = scenes.length + shapes.length;
+    const picked = layer?.editor.selected.length ? shapes.indexOf(layer.editor.selected[0]) : -1;
+    const current = this.chart !== null ? this.chart : picked >= 0 ? scenes.length + picked : null;
+    const next = current === null ? (step > 0 ? 0 : n - 1) : (current + step + n) % n;
+    if (next >= scenes.length && layer?.page) {
+      this.pickChart(null);
+      if (layer.editor.text) layer.editor.leaveText();
+      layer.editor.selected = [shapes[next - scenes.length]];
+      announce(this.drawingKit!.describeShape(this.drawingKit!.readShape(shapes[next - scenes.length])));
+      this.onState?.();
+      this.deps.render();
+      return;
+    }
+    this.leaveDrawings();
     const s = scenes[next];
     const corner = this.anchorPoint(s.x, s.y);
     this.reveal({ row: corner.row, col: corner.col });
@@ -847,6 +909,13 @@ export class SheetEditorView {
   /** The menu key: the picked chart's menu beside it, or the active cell's (a pivot's commands first, as a right click). */
   private keyboardMenu(): void {
     const box = this.el.getBoundingClientRect();
+    // The picked picture's or shape's menu, at its top left corner.
+    const layer = this.drawingLayer;
+    if (layer?.page && layer.editor.selected.length && !layer.editor.text) {
+      const f = this.drawingKit!.readShape(layer.editor.selected[0]).frame;
+      const [x, y] = layer.toScreen(f.x / 9525, f.y / 9525);
+      return this.menu(box.left + x, box.top + y, this.drawingItems());
+    }
     if (this.chart !== null) {
       const s = this.chartScenes()[this.chart];
       const p = s ? this.screenOf(s.x, s.y) : null;
@@ -1024,7 +1093,13 @@ export class SheetEditorView {
     input.addEventListener('keydown', (e) => this.key(e));
     attachTextInput(input, {
       insert: (text) => this.typed(text),
-      key: () => {},
+      // In a shape's text: Backspace, Delete and Enter (the cells take theirs as keys).
+      key: (k) => {
+        const shapes = this.drawingLayer?.editor;
+        if (!shapes?.text || this.readOnly) return;
+        if (k.kind === 'delete') shapes.deleteKey(k.direction === 'backward', k.unit === 'word');
+        else if (k.kind === 'enter') shapes.enter(k.shift);
+      },
       copy: () => null,
       cut: () => {},
       paste: (clip) => void this.pasteClip(clip.text ?? '', clip.html ?? ''),
@@ -1032,6 +1107,14 @@ export class SheetEditorView {
     for (const name of ['copy', 'cut'] as const) {
       input.addEventListener(name, (e) => {
         e.preventDefault();
+        // A shape's text: its selected text.
+        const shapes = this.drawingLayer?.editor;
+        if (shapes?.text) {
+          const text = shapes.copyText();
+          if (text !== null) e.clipboardData?.setData('text/plain', text);
+          if (name === 'cut' && !this.readOnly) shapes.cutText();
+          return;
+        }
         void this.copy(name === 'cut');
       });
     }
@@ -1040,6 +1123,8 @@ export class SheetEditorView {
       this.formulaInput.value = this.cellEditor.value;
       this.placeEditor();
     });
+    // The hint under a formula follows the caret, in the cell or the formula bar.
+    for (const editor of [this.cellEditor, this.formulaInput]) for (const type of ['input', 'keyup', 'click', 'focus']) editor.addEventListener(type, () => this.updateHint());
     this.formulaInput.addEventListener('focus', () => {
       if (!this.editing) {
         this.editing = { ...this.active, mode: 'edit' };
@@ -1071,12 +1156,37 @@ export class SheetEditorView {
 
   /** Text typed while a cell is selected: it replaces the cell's contents, and editing begins. */
   private typed(text: string): void {
+    // Typing into a shape's text, or with one shape picked: into its text (as Excel does).
+    const layer = this.drawingLayer;
+    if (layer?.page && !this.readOnly) {
+      if (layer.editor.text) return layer.editor.typed(text);
+      if (layer.editor.selected.length === 1 && /:sp$/.test(layer.editor.selected[0].name)) {
+        layer.editor.editText(layer.page, layer.editor.selected[0], layer.editor.selected[0], 'end');
+        return layer.editor.typed(text);
+      }
+    }
     if (this.editing || this.readOnly) return;
     this.startEdit('enter', text);
   }
 
   private key(e: KeyboardEvent): void {
     if (this.deps.viewKey(e)) return;
+    // With a shape's text being edited, or shapes picked, keys are theirs (Escape leaves them for the cells).
+    const layer = this.drawingLayer;
+    if (layer?.page && (layer.editor.text || layer.editor.selected.length)) {
+      if (e.key === 'Escape' && !layer.editor.text) {
+        e.preventDefault();
+        this.leaveDrawings();
+        return;
+      }
+      if (layer.editor.text ? layer.editor.textKey(e) : layer.editor.shapeKey(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.onState?.();
+        this.deps.render();
+        return;
+      }
+    }
     const mod0 = IS_MAC ? e.metaKey : e.ctrlKey;
     // Mod+Alt+5 picks a chart from the keyboard (Excel's Ctrl+Alt+5 goes to the objects over the cells): the next one.
     if (mod0 && e.altKey && !altGraph(e) && e.code === 'Digit5') {
@@ -1370,9 +1480,44 @@ export class SheetEditorView {
       void this.showChoices();
       return;
     }
+    // Ctrl+click (⌘ on a Mac) on a linked cell follows the link, as in a document; elsewhere it adds a range.
+    const link = additive && hit.kind === 'cell' && !shift ? this.linkOn(hit.row, hit.col) : undefined;
+    if (link) {
+      this.followCellLink(link.address);
+      return;
+    }
+    // A `=HYPERLINK()` cell is followed too, once its formula has come (the range the click added is taken back).
+    if (additive && hit.kind === 'cell' && !shift) {
+      // Ctrl/⌘-click adds a range or follows a link: never a double click that edits the cell.
+      clicks = 1;
+      const { row, col } = hit;
+      const known = row === this.active.row && col === this.active.col ? this.content.input : undefined;
+      void this.formulaLink(row, col, known).then((url) => {
+        if (!url) return;
+        if (this.ranges.length > 1) this.ranges.pop();
+        this.followCellLink(url);
+        this.deps.render();
+      });
+    }
     if (this.editing) this.commitEdit(true);
     this.focus();
     const g = this.geometry;
+    // Pictures and shapes lie over the cells (and the charts): a press on one, or on the picked one's handles, is theirs.
+    const layer = this.drawingLayer;
+    if (layer?.page && hit.kind === 'cell') {
+      const on = layer.hit(x, y);
+      if (on) {
+        if (this.editing) this.commitEdit(true);
+        this.pickChart(null);
+        this.focus();
+        if (on === 'shape') layer.editor.press(layer.page, layer.toPage(x, y), shift, clicks, additive);
+        this.dragState = { kind: 'drawing' };
+        this.onState?.();
+        this.deps.render();
+        return;
+      }
+      this.leaveDrawings();
+    }
     // A picked chart's corner handle: dragging it resizes the chart.
     const handle = hit.kind === 'cell' && !this.readOnly ? this.chartHandleAt(x, y) : null;
     if (handle !== null && this.chart !== null) {
@@ -1449,6 +1594,11 @@ export class SheetEditorView {
     const d = this.dragState;
     const g = this.geometry;
     if (!d || !g) return;
+    if (d.kind === 'drawing') {
+      const layer = this.drawingLayer;
+      if (layer?.page) layer.editor.drag(layer.page, layer.toPage(x, y), false);
+      return;
+    }
     const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
     if (d.kind === 'chartResize') {
       const r = this.chartResize;
@@ -1509,6 +1659,11 @@ export class SheetEditorView {
   release(): void {
     const d = this.dragState;
     this.dragState = null;
+    if (d?.kind === 'drawing') {
+      this.drawingLayer?.editor.release();
+      this.onState?.();
+      return;
+    }
     if (d?.kind === 'chartResize') {
       const r = this.chartResize;
       this.chartResize = null;
@@ -1837,6 +1992,367 @@ export class SheetEditorView {
     return { x: canvas.left + center.x + ((g.x(col + 1) - g.x(col)) / 2) * scale, y: canvas.top + center.y - ((g.y(row + 1) - g.y(row)) / 2) * scale };
   }
 
+  // --- Pictures and shapes (drawings.ts, drawingLayer.ts) ---
+
+  /** Draws and edits the sheet's pictures and shapes; made when a sheet first has some, or one is added. */
+  private drawingLayer: DrawingLayer | null = null;
+
+  /** The drawing code (drawingLayer.ts and the shared DrawingML it uses), loaded with the layer. */
+  private drawingKit: typeof import('./drawingLayer.ts') | null = null;
+  private layerLoading: Promise<DrawingLayer> | null = null;
+
+  /** The layer, its code fetched the first time a sheet has drawings or one is added. */
+  private loadLayer(): Promise<DrawingLayer> {
+    return (this.layerLoading ??= import('./drawingLayer.ts').then((kit) => {
+      this.drawingKit = kit;
+      return this.makeLayer(kit);
+    }));
+  }
+
+  private makeLayer(kit: typeof import('./drawingLayer.ts')): DrawingLayer {
+    this.drawingLayer ??= new kit.DrawingLayer({
+      host: this.el,
+      fontBase: this.deps.fontBase,
+      ask: <T>(m: { t: 'drawings'; sheet: number } | { t: 'media'; part: string }) =>
+        this.ask({ ...m, id: this.id() } as ToWorker & {
+          id: number;
+        }) as Promise<T & FromWorker>,
+      edit: async (op) => {
+        const changed = await this.edit(op);
+        return !!changed && !changed.message;
+      },
+      version: (sheet) => this.book?.sheets[sheet]?.drawings?.version ?? 0,
+      render: () => this.deps.render(),
+      readOnly: () => this.readOnly,
+      input: this.input,
+      undo: () => void this.undo(),
+      redo: () => void this.redo(),
+      state: () => this.onState?.(),
+    });
+    return this.drawingLayer;
+  }
+
+  /** The active cell's top left corner on the canvas (CSS px): where a new shape goes, and where a menu for it opens. */
+  private activeCorner(): { x: number; y: number } {
+    const g = this.geometry;
+    const center = this.pointOf(this.active.row, this.active.col);
+    const box = this.el.getBoundingClientRect();
+    if (!g || !center) return { x: box.left + 60, y: box.top + 80 };
+    const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
+    const { row, col } = this.active;
+    return {
+      x: box.left + center.x - ((g.x(col + 1) - g.x(col)) / 2) * scale,
+      y: box.top + center.y - ((g.y(row + 1) - g.y(row)) / 2) * scale,
+    };
+  }
+
+  /** Insert › Shapes or Text Box: a new shape at the active cell, picked; a text box takes the typing at once. */
+  private async insertShape(preset: string, name = ''): Promise<void> {
+    if (this.readOnly) return;
+    if (this.editing) this.commitEdit(true);
+    const layer = await this.loadLayer();
+    const kit = this.drawingKit!;
+    await layer.ready();
+    layer.place(this.sheetIndex, this.renderer.regions, this.offsetTop, this.deps.camera.zoom * CSS_PX_PER_POINT);
+    const textBox = preset === 'textBox';
+    // Page pixels (96 an inch): a text box one line tall, a line flat, a shape square.
+    const w = textBox ? 192 : 120;
+    const h = textBox ? 28 : kit.isLinePreset(preset) ? 0 : 120;
+    const box = this.el.getBoundingClientRect();
+    const at = this.activeCorner();
+    const frame = layer.frameAt(at.x - box.left + w / 2 + 4, at.y - box.top + h / 2 + 4, w, h);
+    const element = kit.newShape(layer.tree, textBox ? 'rect' : preset, frame, textBox ? t('slides.textBoxName') : name, textBox, 'xdr');
+    // A sheet's text is 11 points, as Excel's shapes and text boxes start.
+    for (const p of element.children.flatMap((c) => (typeof c !== 'string' && /:txBody$/.test(c.name) ? c.children : []))) {
+      if (typeof p === 'string' || p.name !== 'a:p') continue;
+      for (const r of p.children) if (typeof r !== 'string' && r.name === 'a:endParaRPr') r.attrs.sz = '1100';
+    }
+    layer.add(element, {});
+    // The keyboard comes back to the sheet, whose typing goes into the text box.
+    this.focus();
+    if (textBox && layer.page) layer.editor.editText(layer.page, element, element, 'end');
+    announce(t('slides.inserted'));
+    this.onState?.();
+  }
+
+  /** Insert › Picture: a picture file picked, put at the active cell at its own size (at most a little smaller than the view). */
+  private async insertPicture(): Promise<void> {
+    if (this.readOnly || !this.deps.pickImage) return;
+    const file = await this.deps.pickImage();
+    if (!file) return this.focus();
+    let bytes: Uint8Array = new Uint8Array(await file.arrayBuffer());
+    const layer = await this.loadLayer();
+    const kit = this.drawingKit!;
+    let bitmap: ImageBitmap;
+    let ext: string;
+    try {
+      // Kept as a kind Excel shows: another (HEIC, BMP) is made a PNG.
+      const kind = sniffImage(bytes)?.type;
+      if (kind !== 'png' && kind !== 'jpeg' && kind !== 'gif' && kind !== 'webp') bytes = (await kit.toPng(file.name, bytes)).bytes;
+      ext = sniffImage(bytes)?.type === 'jpeg' ? 'jpeg' : (sniffImage(bytes)?.type ?? 'png');
+      bitmap = await kit.decodeImage(bytes);
+    } catch {
+      this.deps.notify(t('slides.pictureUnreadable'));
+      return;
+    }
+    if (this.editing) this.commitEdit(true);
+    await layer.ready();
+    layer.place(this.sheetIndex, this.renderer.regions, this.offsetTop, this.deps.camera.zoom * CSS_PX_PER_POINT);
+    const { camera } = this.deps;
+    const fit = Math.min(1, ((camera.width / camera.dpr) * 0.6) / bitmap.width, ((camera.height / camera.dpr) * 0.6) / bitmap.height);
+    const w = bitmap.width * fit;
+    const h = bitmap.height * fit;
+    const box = this.el.getBoundingClientRect();
+    const at = this.activeCorner();
+    const frame = layer.frameAt(at.x - box.left + w / 2 + 4, at.y - box.top + h / 2 + 4, w, h);
+    // Named for the picture until it is saved, when it becomes the workbook's own image part.
+    const name = `media:${Date.now().toString(36)}.${ext}`;
+    const element = kit.newPicture(kit.nextShapeId(layer.tree), 'rId1', frame, file.name.replace(/\.[^.]*$/, ''), '', 'xdr');
+    layer.addImage(name, bitmap);
+    layer.add(element, { rId1: { type: IMAGE_REL, target: name, external: false } }, [{ name, bytes: bytes.slice().buffer }]);
+    this.focus();
+    announce(t('slides.inserted'));
+    this.onState?.();
+  }
+
+  /** The menu of the picked pictures and shapes: delete, their fill and outline, and their order. */
+  private drawingItems(): PopupItem[] {
+    const layer = this.drawingLayer;
+    if (!layer || this.readOnly) return [];
+    return [{ label: t('slides.op.deleteShape'), run: () => layer.deleteSelection() }, 'separator', ...layer.editor.colorMenus(), 'separator', { label: t('slides.op.bringToFront'), run: () => layer.reorder(true) }, { label: t('slides.op.sendToBack'), run: () => layer.reorder(false) }];
+  }
+
+  /** Back to the cells: the shape's text left, no shape picked. */
+  private leaveDrawings(): void {
+    const layer = this.drawingLayer;
+    if (!layer) return;
+    if (layer.editor.text) layer.editor.leaveText();
+    if (layer.editor.selected.length) layer.editor.selected = [];
+    layer.flush();
+    this.onState?.();
+    this.deps.render();
+  }
+
+  // --- Functions (functionDialog.ts, formulaHint.ts) ---
+
+  /** The hint under a formula being typed (made when first needed). */
+  private formulaHint: FormulaHint | null = null;
+
+  /** Shows the hint for the function the caret is in, under the cell editor or the formula bar; hides it otherwise. */
+  private updateHint(): void {
+    const editor = document.activeElement === this.formulaInput ? this.formulaInput : this.cellEditor;
+    if (!this.editing || !editor.value.startsWith('=') || (editor === this.cellEditor && editor.hidden)) {
+      this.formulaHint?.hide();
+      return;
+    }
+    // Under the cell being edited, or under the formula bar when that cell is out of view (or the caret is there).
+    const cell = editor.getBoundingClientRect();
+    const canvas = this.el.getBoundingClientRect();
+    const box = editor === this.cellEditor && cell.bottom > canvas.top + this.offsetTop && cell.top < canvas.bottom ? cell : this.formulaInput.getBoundingClientRect();
+    this.formulaHint ??= new FormulaHint(() => this.deps.locale());
+    this.formulaHint.update(editor.value, editor.selectionStart ?? editor.value.length, { left: box.left, top: box.bottom });
+  }
+
+  /**
+   * Insert › Function (⇧F3): the chosen function is typed where the caret is in a formula being edited, or starts a new
+   * formula in the active cell.
+   */
+  private async insertFunction(): Promise<void> {
+    if (this.readOnly) return;
+    const editor = document.activeElement === this.formulaInput ? this.formulaInput : this.cellEditor;
+    const inFormula = !!this.editing && editor.value.startsWith('=');
+    const at = {
+      start: editor.selectionStart ?? editor.value.length,
+      end: editor.selectionEnd ?? editor.value.length,
+    };
+    const cell = { ...this.active };
+    const sheet = this.sheetIndex;
+    this.formulaHint?.hide();
+    const name = await askFunction(this.deps.locale());
+    if (!name || sheet !== this.sheetIndex || cell.row !== this.active.row || cell.col !== this.active.col) {
+      this.focus();
+      return;
+    }
+    if (inFormula && this.editing) {
+      editor.focus();
+      editor.setRangeText(`${name}(`, at.start, at.end, 'end');
+      (editor === this.cellEditor ? this.formulaInput : this.cellEditor).value = editor.value;
+      this.placeEditor();
+      this.updateHint();
+      return;
+    }
+    this.insert(`=${name}(`);
+    this.updateHint();
+  }
+
+  // --- Hyperlinks (links.ts) ---
+
+  /** The link on a cell (the last one over it wins, as in Excel). */
+  private linkOn(row: number, col: number): { ref: CellRange; address: string; tooltip?: string } | undefined {
+    const links = this.info?.links;
+    if (!links) return undefined;
+    for (let i = links.length - 1; i >= 0; i--) {
+      const r = links[i].ref;
+      if (row >= r.r0 && row <= r.r1 && col >= r.c0 && col <= r.c1) return links[i];
+    }
+    return undefined;
+  }
+
+  /** Where a cell's `=HYPERLINK()` formula goes (its address, or the text of the cell it names), or null. */
+  private async formulaLink(row: number, col: number, input?: string): Promise<string | null> {
+    const sheet = this.sheetIndex;
+    const text =
+      input ??
+      (
+        await this.ask<Extract<FromWorker, { t: 'cell' }>>({
+          t: 'cell',
+          id: this.id(),
+          sheet,
+          row,
+          col,
+        }).catch(() => null)
+      )?.content.input;
+    const arg = text ? hyperlinkArgument(text) : null;
+    if (!arg) return null;
+    if ('address' in arg) return arg.address;
+    const at = parseCell(arg.cell);
+    if (!at) return null;
+    const held = await this.ask<Extract<FromWorker, { t: 'cell' }>>({
+      t: 'cell',
+      id: this.id(),
+      sheet,
+      row: at.row,
+      col: at.col,
+    }).catch(() => null);
+    return held?.content.display.trim() || null;
+  }
+
+  /** A cell's bottom left corner, in window pixels (where the link form goes). */
+  private cellBottomLeft(row: number, col: number): { clientX: number; clientY: number } | null {
+    const g = this.geometry;
+    const center = this.pointOf(row, col);
+    if (!g || !center) return null;
+    const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
+    const canvas = this.el.getBoundingClientRect();
+    return {
+      clientX: canvas.left + center.x - ((g.x(col + 1) - g.x(col)) / 2) * scale,
+      clientY: canvas.top + center.y + ((g.y(row + 1) - g.y(row)) / 2) * scale,
+    };
+  }
+
+  /** Insert › Hyperlink (Ctrl+K): the link form under the active cell, for its link, or a new one on the selected cells. */
+  editLink(): void {
+    const links = this.deps.links;
+    if (this.readOnly || !this.info || !links) return;
+    if (this.editing) this.commitEdit(true);
+    const { row, col } = this.active;
+    const existing = this.linkOn(row, col);
+    const range = existing?.ref ?? { ...this.selection };
+    const at = this.cellBottomLeft(range.r1, range.c0) ?? this.cellBottomLeft(row, col);
+    if (!at) return;
+    const display = this.content.display;
+    const sheet = this.sheetIndex;
+    void (existing ? Promise.resolve(existing.address) : this.formulaLink(row, col, this.content.input))
+      .then((url) => links.edit({ url: url ?? '', text: display, existing: !!url }, at))
+      .then((choice) => {
+        this.afterCard();
+        if (choice !== undefined && sheet === this.sheetIndex) this.applyLink(range, choice, display, existing?.tooltip);
+      });
+  }
+
+  /** The link form's answer for `range`: a link (its first cell showing `choice.text` if that changed), or none. */
+  private applyLink(range: CellRange, choice: LinkChoice | null, display: string, tooltip?: string): void {
+    if (!choice) {
+      void this.edit({ kind: 'link', range, link: null });
+      return;
+    }
+    // The cell keeps what it shows unless other text was typed; an empty cell shows the address, as in Excel.
+    const text = choice.text.trim() ? (choice.text === display ? undefined : choice.text) : display ? undefined : choice.url;
+    void this.edit({
+      kind: 'link',
+      range,
+      link: { ...linkFromAddress(choice.url), ...(tooltip && { tooltip }) },
+      ...(text !== undefined && { text }),
+    });
+  }
+
+  /** Opens a link: a place in the workbook (`#Sheet2!A1`) is gone to here; anything else the app opens. */
+  followCellLink(address: string): void {
+    if (address.startsWith('#')) this.goTo(address.slice(1));
+    else this.deps.links?.open(address);
+  }
+
+  /** The pointer rests on a linked cell: the link form shows under it after a moment; leaving it hides the form. */
+  private hoverLink(cell: { row: number; col: number } | null): void {
+    const link = cell ? this.linkOn(cell.row, cell.col) : undefined;
+    const key = link ? `${this.sheetIndex}:${rangeName(link.ref)}:${link.address}` : cell ? `${this.sheetIndex}:${cell.row}:${cell.col}:formula` : '';
+    if (key === this.linkHover) return;
+    this.linkHover = key;
+    const links = this.deps.links;
+    if (!links) return;
+    if (!link) {
+      links.leave();
+      // A `=HYPERLINK()` cell: its card once its formula has come.
+      return this.hoverFormulaLink(cell, key);
+    }
+    const at = this.cellBottomLeft(link.ref.r1, link.ref.c0);
+    if (!at) return;
+    const { ref } = link;
+    void this.ask<Extract<FromWorker, { t: 'cell' }>>({
+      t: 'cell',
+      id: this.id(),
+      sheet: this.sheetIndex,
+      row: ref.r0,
+      col: ref.c0,
+    })
+      .catch(() => null)
+      .then((reply) => {
+        if (this.linkHover !== key) return;
+        const display = reply?.content.display ?? '';
+        links.show({
+          url: link.address,
+          text: display,
+          ...at,
+          apply: (choice) => this.applyLink(ref, choice, display, link.tooltip),
+        });
+      });
+  }
+
+  /** The pointer rests on a cell with no link of its own: if its formula is `=HYPERLINK()`, the link form shows its address. */
+  private hoverFormulaLink(cell: { row: number; col: number } | null, key: string): void {
+    if (!cell) return;
+    // After a moment on the cell, as a note's card: not a question to the worker for every cell the pointer crosses.
+    window.setTimeout(() => {
+      if (this.linkHover === key)
+        void this.formulaLink(cell.row, cell.col).then((url) => {
+          if (!url || this.linkHover !== key) return;
+          const at = this.cellBottomLeft(cell.row, cell.col);
+          if (!at) return;
+          const range = {
+            r0: cell.row,
+            c0: cell.col,
+            r1: cell.row,
+            c1: cell.col,
+          };
+          void this.ask<Extract<FromWorker, { t: 'cell' }>>({
+            t: 'cell',
+            id: this.id(),
+            sheet: this.sheetIndex,
+            row: cell.row,
+            col: cell.col,
+          }).then((reply) => {
+            if (this.linkHover !== key) return;
+            this.deps.links?.show({
+              url,
+              text: reply.content.display,
+              ...at,
+              apply: (choice) => this.applyLink(range, choice, reply.content.display),
+            });
+          });
+        });
+    }, 300);
+  }
+
   /** The pointer rests on a cell: its note, if it has one, shows after a moment; leaving the cell hides it. */
   private hoverNote(cell: { row: number; col: number } | null): void {
     const key = cell ? `${this.sheetIndex}:${cell.row}:${cell.col}` : '';
@@ -1906,8 +2422,11 @@ export class SheetEditorView {
 
   /** The pointer's shape over a point: a resize arrow over a header's edge. */
   cursorAt(x: number, y: number): string {
+    const layer = this.drawingLayer;
+    if (layer?.page && layer.onDrawing(x, y)) return layer.editor.cursorAt(layer.page, layer.toPage(x, y));
     const hit = this.hit(x, y);
     this.hoverNote(hit?.kind === 'cell' ? hit : null);
+    this.hoverLink(hit?.kind === 'cell' && !this.dragState ? hit : null);
     if (hit?.edge?.col !== undefined) return 'col-resize';
     if (hit?.edge?.row !== undefined) return 'row-resize';
     if (hit?.kind === 'cell' && this.onFillHandle(x, y)) return 'crosshair';
@@ -1923,6 +2442,15 @@ export class SheetEditorView {
   contextMenu(clientX: number, clientY: number, x: number, y: number): void {
     const hit = this.hit(x, y);
     if (!hit) return;
+    // A picture or shape: its own menu (it is picked first).
+    const layer = this.drawingLayer;
+    if (layer?.page && hit.kind === 'cell' && !layer.editor.text && layer.onDrawing(x, y)) {
+      const view = layer.editor.shapeAt(layer.page, layer.toPage(x, y));
+      if (view && !layer.editor.selected.includes(view.top.element)) layer.editor.selected = [view.top.element];
+      this.pickChart(null);
+      this.deps.render();
+      return this.menu(clientX, clientY, this.drawingItems());
+    }
     const chart = hit.kind === 'cell' && !this.readOnly ? this.chartAt(x, y) : null;
     this.pickChart(chart);
     if (chart !== null) return this.menu(clientX, clientY, this.chartItems(chart));
@@ -2178,6 +2706,8 @@ export class SheetEditorView {
 
   /** How the active cell looks, as the toolbar shows a selection's formatting. */
   formatState(): FormatState {
+    const layer = this.drawingLayer;
+    if (layer?.page && (layer.editor.text || layer.editor.selected.length)) return layer.editor.formatState();
     const look = this.content.look;
     if (!look) return {};
     const hex = (n: number | null) => (n === null ? null : '#' + n.toString(16).padStart(6, '0').toUpperCase());
@@ -2187,6 +2717,9 @@ export class SheetEditorView {
 
   /** The app's formatting commands (Format menu, Formatting toolbar), applied to the selected cells. False for one cells don't have. */
   formatAction(action: Action): boolean {
+    // Formatting the text of a shape, or the picked shapes' text.
+    const layer = this.drawingLayer;
+    if (layer?.page && (layer.editor.text || layer.editor.selected.length)) return layer.editor.formatAction(action);
     const look = this.content.look;
     const color = (c: string | null) => (c === null ? null : parseInt(c.replace('#', ''), 16));
     switch (action.kind) {
@@ -2324,6 +2857,20 @@ export class SheetEditorView {
       }
       case 'deleteNote':
         void this.edit({ kind: 'note', row: this.active.row, col: this.active.col, text: null, author: '' });
+        return;
+      case 'insertPicture':
+        void this.insertPicture();
+        return;
+      case 'insertShape': {
+        const at = this.activeCorner();
+        void import('./drawingLayer.ts').then((kit) => showPopupMenu(kit.shapeMenuItems(kit.SHAPE_GROUPS, (c) => void this.insertShape(c.preset, kit.shapeName(c.id))), at.x, at.y, t('sheet.op.insertShape'), () => this.focus()));
+        return;
+      }
+      case 'insertTextBox':
+        void this.insertShape('textBox');
+        return;
+      case 'insertFunction':
+        void this.insertFunction();
         return;
       case 'insertTable':
         void this.edit({ kind: 'createTable', range: this.ranges.length === 1 ? sel : { r0: this.active.row, c0: this.active.col, r1: this.active.row, c1: this.active.col } });
@@ -2533,7 +3080,37 @@ export class SheetEditorView {
   }
 
   debugState(): unknown {
-    return { fromImage: this.fromImage, loaded: !this.progress, sheet: this.sheetIndex, active: this.active, ranges: this.ranges, editing: this.editing, content: this.content, info: this.info && { name: this.info.name, rows: this.info.rows, cols: this.info.cols }, sheets: this.book?.sheets.map((s) => s.name) ?? [], canUndo: this.canUndo, canRedo: this.canRedo, filter: this.info?.filter ?? null, tableFilters: this.info?.tableFilters ?? null, charts: this.charts.scenes.map((s) => s.texts.map((t) => t.text)), chart: this.chart, sparklines: Math.round(this.charts.sparklines?.points.reduce((a, b) => a + b, 0) ?? 0), chartBoxes: this.charts.scenes.map((s) => [Math.round(s.x), Math.round(s.y), Math.round(s.width), Math.round(s.height)]), outline: this.info?.outline ?? null, protection: this.info?.protection ?? null, locked: !!this.content.locked, hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0, emoji: this.renderer.emojiDrawn() };
+    return {
+      fromImage: this.fromImage,
+      loaded: !this.progress,
+      sheet: this.sheetIndex,
+      active: this.active,
+      ranges: this.ranges,
+      editing: this.editing,
+      content: this.content,
+      info: this.info && {
+        name: this.info.name,
+        rows: this.info.rows,
+        cols: this.info.cols,
+      },
+      sheets: this.book?.sheets.map((s) => s.name) ?? [],
+      canUndo: this.canUndo,
+      canRedo: this.canRedo,
+      filter: this.info?.filter ?? null,
+      tableFilters: this.info?.tableFilters ?? null,
+      links: this.info?.links ?? null,
+      drawingBoxes: this.drawingLayer?.boxes() ?? [],
+      drawingsPicked: this.drawingLayer?.editor.selected.length ?? 0,
+      charts: this.charts.scenes.map((s) => s.texts.map((t) => t.text)),
+      chart: this.chart,
+      sparklines: Math.round(this.charts.sparklines?.points.reduce((a, b) => a + b, 0) ?? 0),
+      chartBoxes: this.charts.scenes.map((s) => [Math.round(s.x), Math.round(s.y), Math.round(s.width), Math.round(s.height)]),
+      outline: this.info?.outline ?? null,
+      protection: this.info?.protection ?? null,
+      locked: !!this.content.locked,
+      hiddenRows: this.info?.rowSizes.hidden?.reduce((n, h) => n + (h ? 1 : 0), 0) ?? 0,
+      emoji: this.renderer.emojiDrawn(),
+    };
   }
 
   /** The active sheet's size (rows and columns in use), for the status bar; null until it is known. */

@@ -222,6 +222,20 @@ export class SheetEditor {
     return this.view?.screenOf(x, y) ?? null;
   }
 
+  /** Insert › Hyperlink: the link form for the active cell. */
+  editLink(): void {
+    this.view?.editLink();
+  }
+
+  /** Follows a cell's link (`#Sheet2!A1` goes to that cell). */
+  followCellLink(address: string): void {
+    this.view?.followCellLink(address);
+  }
+
+  get readOnly(): boolean {
+    return this.view?.readOnly ?? false;
+  }
+
   set readOnly(value: boolean) {
     if (this.view) this.view.readOnly = value;
   }

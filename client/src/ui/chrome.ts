@@ -639,7 +639,7 @@ export class Chrome {
 
     // Excel's Ctrl+T makes a table (Control on a Mac too, where ⌘T is the browser's). A browser elsewhere keeps Ctrl+T for a
     // new tab and never hands it to the page, so there only the desktop app has it.
-    const SHEET_KEYS: Partial<Record<(typeof SHEET_OPS)[number], ShortcutSpec>> = { insertTable: { mac: 'Ctrl+T', ...(isDesktopApp() && { other: 'Ctrl+T' }) } };
+    const SHEET_KEYS: Partial<Record<(typeof SHEET_OPS)[number], ShortcutSpec>> = { insertTable: { mac: 'Ctrl+T', ...(isDesktopApp() && { other: 'Ctrl+T' }) }, insertFunction: 'Shift+F3' };
     for (const op of SHEET_OPS) r.add(a(`sheet.${op}`, t(`sheet.op.${op}`), { kind: 'sheet', op }, { ...(SHEET_ICONS[op] && { icon: SHEET_ICONS[op] }), ...(SHEET_KEYS[op] && { shortcut: SHEET_KEYS[op] }) }));
 
     // Slides: the Slide menu, Insert's slide items and View's (the editor's own keys and context menus do the rest; see slides/view.ts).
@@ -1010,9 +1010,13 @@ export class Chrome {
           cmd('slides.table'),
           cmd('sheet.insertTable'),
           cmd('sheet.insertPivot'),
+          cmd('sheet.insertPicture'),
+          cmd('sheet.insertShape'),
+          cmd('sheet.insertTextBox'),
           sub(t('sheet.chart'), [cmd('sheet.chartColumn'), cmd('sheet.chartBar'), cmd('sheet.chartLine'), cmd('sheet.chartArea'), cmd('sheet.chartPie'), cmd('sheet.chartDoughnut'), cmd('sheet.chartScatter')]),
           sub(t('sheet.sparklines'), [cmd('sheet.sparklineLine'), cmd('sheet.sparklineColumn'), cmd('sheet.sparklineWinLoss'), sep, cmd('sheet.clearSparklines')]),
           sep,
+          cmd('sheet.insertFunction'),
           cmd('sheet.newNote'),
           cmd('sheet.insertPageBreak'),
           sep,

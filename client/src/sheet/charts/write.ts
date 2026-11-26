@@ -3,6 +3,8 @@
 // else in the parts kept as it was. A chart made here (`generate`) has its part written whole from the model (`chartXml`). A new chart gets a chart part and an anchor, and the sheet a
 // drawing part if it had none; a chart taken away takes its anchor, part and relationship with it.
 
+import { contentTypeForExtension } from '@golemdocs/docx';
+import { allIds, writeDrawings } from '../drawings.ts';
 import { el, elements, serializeXml, textContent } from '@golemdocs/docx';
 import type { OpcPackage, XmlElement } from '@golemdocs/docx';
 import type { Worksheet } from '../model/worksheet.ts';
@@ -125,7 +127,7 @@ function anchorElement(c: SheetChart, id: number): XmlElement {
 const chartIdOf = (a: XmlElement): string | undefined => kid(kid(kid(kid(a, 'graphicFrame'), 'graphic'), 'graphicData'), 'chart')?.attrs['r:id'];
 
 /** Writes a sheet's charts into its parts (see the top of the file). Sets the sheet's `<drawing>` for a new drawing part. */
-export async function writeCharts(pkg: OpcPackage, sheetPart: string, sheet: Worksheet, theme: number[]): Promise<void> {
+export async function writeCharts(pkg: OpcPackage, sheetPart: string, sheet: Worksheet, theme: number[], media?: Map<string, Uint8Array>): Promise<void> {
   const sheetRels = await pkg.relationships(sheetPart);
   let drawingPart = sheet.charts.find((c) => c.drawingPart)?.drawingPart ?? '';
   if (!drawingPart) {
@@ -133,7 +135,7 @@ export async function writeCharts(pkg: OpcPackage, sheetPart: string, sheet: Wor
     if (existing) drawingPart = sheetRels.partName(existing);
   }
   if (!drawingPart) {
-    if (!sheet.charts.length) return;
+    if (!sheet.charts.length && !sheet.drawings.length) return;
     drawingPart = pkg.uniqueName('xl/drawings/drawing', 'xml');
     sheet.drawingRId = sheetRels.add(`${REL}/drawing`, drawingPart);
   }
@@ -154,8 +156,29 @@ export async function writeCharts(pkg: OpcPackage, sheetPart: string, sheet: Wor
     }
     return false;
   });
-  const ids = [...elements(drawing)].flatMap((a) => [...elements(kid(kid(a, 'graphicFrame'), 'nvGraphicFramePr') ?? a)]).map((e) => +(e.attrs.id ?? 0));
-  let nextId = Math.max(1, ...ids) + 1;
+  // Pictures and shapes, when they changed: their anchors written from the model, new pictures' images made parts.
+  if (sheet.drawingsChanged) {
+    // A picture added here becomes a part the first time it is written; every drawing that shows it then names that part.
+    const made = new Map<string, string>();
+    sheet.drawings = sheet.drawings.map((d) => {
+      const rels = Object.entries(d.rels).map(([id, r]): [string, typeof r] => {
+        if (!r.target.startsWith('media:')) return [id, r];
+        let part = made.get(r.target);
+        const bytes = media?.get(r.target);
+        if (!part && bytes) {
+          part = pkg.uniqueName('xl/media/image', r.target.slice(r.target.lastIndexOf('.') + 1));
+          pkg.set(part, bytes, contentTypeForExtension(part.slice(part.lastIndexOf('.') + 1)));
+          made.set(r.target, part);
+        }
+        return [id, part ? { ...r, target: part } : r];
+      });
+      return { ...d, rels: Object.fromEntries(rels) };
+    });
+    writeDrawings(drawing, drawingRels, sheet.drawings);
+    sheet.drawingsChanged = false;
+  }
+  // Every shape in the drawing has its own id: a new chart's comes after the highest of them all (pictures', shapes').
+  let nextId = Math.max(1, ...allIds(drawing)) + 1;
   sheet.charts = sheet.charts.map((c) => {
     if (c.rId) return { ...c, drawingPart };
     const part = pkg.uniqueName('xl/charts/chart', 'xml');
@@ -181,6 +204,12 @@ export async function writeCharts(pkg: OpcPackage, sheetPart: string, sheet: Wor
     };
     put(kid(anchor, 'from'), c.anchor.from);
     put(kid(anchor, 'to'), c.anchor.to);
+    // An absolute anchor has no corners: its position is written instead.
+    const pos = kid(anchor, 'pos');
+    if (pos && !kid(anchor, 'from')) {
+      pos.attrs.x = String(Math.round(c.anchor.from.dx * EMU_PER_POINT));
+      pos.attrs.y = String(Math.round(c.anchor.from.dy * EMU_PER_POINT));
+    }
     // A chart anchored by a corner and a size: its size, from its corners as they now are.
     const ext = anchor && !kid(anchor, 'to') ? kid(anchor, 'ext') : undefined;
     if (ext && c.anchor.to) {

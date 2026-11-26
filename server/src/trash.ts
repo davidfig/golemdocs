@@ -11,6 +11,7 @@ import { perChunk } from './http.ts';
 import type { Env } from './cf.ts';
 import { deleteMedia } from './roomMedia.ts';
 import { deleteHistory, TRASH_MS } from './versions.ts';
+import { deleteWordCounts } from './wordCounts.ts';
 import type { UserDb } from './userDb.ts';
 
 export interface TrashRow {
@@ -71,6 +72,7 @@ export async function purge(env: Env, ownerId: string, db: UserDb, rows: readonl
   }
   for (const row of rows) if (row.size >= CHUNKED_FROM || chunkedVersions.has(row.id)) await deleteChunks(env, ownerId, row.id);
   await deleteHistory(env, ownerId, db, ids);
+  await deleteWordCounts(db, ids);
   await db.runAll(perChunk(ids, (marks) => `DELETE FROM trash WHERE id IN (${marks})`));
 }
 

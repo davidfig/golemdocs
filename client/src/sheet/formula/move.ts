@@ -273,6 +273,18 @@ export function moveValidations(book: Workbook, move: Move): void {
   });
 }
 
+/** The moved sheet's links follow their cells; a link whose cells were all deleted goes. */
+export function moveLinks(book: Workbook, move: Move): void {
+  const sheet = book.sheets[move.sheet];
+  if (!isWorksheet(sheet) || !sheet.links.length) return;
+  const name = sheet.name;
+  sheet.links = sheet.links.flatMap((l) => {
+    const moved = moveText(rangeName(l.ref), name, name, move.axis, move.at, move.n);
+    const ref = moved.includes('#REF!') ? null : parseRange(moved);
+    return ref ? [{ ...l, ref }] : [];
+  });
+}
+
 /** The moved sheet's notes follow their cells (a note whose cell was deleted goes, as in Excel). */
 /** A sheet's charts with their references rewritten (the sheet is written again when one changed). */
 function rewriteCharts(sheet: Worksheet, fn: (text: string) => string): void {

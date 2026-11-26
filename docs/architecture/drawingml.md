@@ -81,6 +81,14 @@ presented, master view) stay in the host.
 The editor's strings (undo labels, the Fill and Outline menus and their colour names, the shape kinds read out) are the
 `shapes.*` area (`i18n/en/shapes.ts`), shared by every host.
 
+## In a sheet
+
+A sheet's pictures and shapes are one page of the editor: `sheet/drawingLayer.ts` holds a `wsDr` of the shapes (placed at
+their anchors' boxes), builds their scene with `ShapeBuilder`, paints it over the cells and drives `ShapeEditor` through its
+host. A change goes to the sheet's worker as the sheet's whole list of drawings, one undoable edit (typing: one a burst);
+see `docs/spreadsheets.md`. `paintScene`'s `recolor` option shows a line's or an unfilled shape's colours as Dark Pages and
+contrast themes show the cells'.
+
 ## Shapes to insert
 
 The shapes Insert › Shape offers come from the vector editor's catalogue (`vector/shapes.ts`): one id, name

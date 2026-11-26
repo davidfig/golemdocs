@@ -123,4 +123,16 @@ export const USER_MIGRATIONS: string[][] = [
   // 12: who saved a document's file last, when that was not the owner (an editor it is shared with, or one of a shared folder). Null: the
   // owner, or before this was kept. The owner's app treats an HTML page another account changed as from elsewhere (docs/html-pages.md §1).
   [`ALTER TABLE documents ADD COLUMN saved_by TEXT`],
+  // 13: each document's word history (wordCounts.ts): its word count at the end of each day someone wrote in it, on the writer's
+  // calendar (`day` is yyyy-mm-dd), and `start`, the count when that day's writing began, when known.
+  [
+    `CREATE TABLE word_counts (
+       doc_id     TEXT NOT NULL,
+       day        TEXT NOT NULL,
+       words      INTEGER NOT NULL,
+       start      INTEGER,
+       updated_at INTEGER NOT NULL,
+       PRIMARY KEY (doc_id, day)
+     )`,
+  ],
 ];

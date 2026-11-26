@@ -58,3 +58,10 @@ test('footer: a book says its page and how much of it has been read, not its wor
 test('footer: says nothing when no document is open', () => {
   assert.deepEqual(footerSegments({ ...base, none: true }), []);
 });
+
+test('footer: counts the words written in a period, and a selection still against the whole document', () => {
+  const info: FooterInfo = { ...base, written: { period: 'week', words: 340 } };
+  assert.deepEqual(footerSegments(info)[1], { key: 'panels.footer.week', params: { count: 340 } });
+  assert.deepEqual(footerSegments({ ...info, selection: stats(30, true) })[1], { key: 'panels.footer.selection', params: { count: 1200, selected: 30 } });
+  assert.deepEqual(footerSegments({ ...info, written: null })[1], { key: 'panels.footer.words', params: { count: 1200 } });
+});

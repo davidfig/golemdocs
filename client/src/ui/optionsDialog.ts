@@ -13,6 +13,8 @@ import { desktopMenu } from '../desktop/bridge.ts';
 import { IS_MAC } from './shortcuts.ts';
 import { inAppMenuOnMac, keepMenuInFullScreen, setInAppMenuOnMac, setKeepMenuInFullScreen } from './fullScreen.ts';
 import { scrollPastEndOn, setScrollPastEnd } from './scrollOptions.ts';
+import { footerWordPeriod, setFooterWordPeriod } from './footerWords.ts';
+import { WORD_PERIODS, type WordPeriod } from '../wordHistory.ts';
 import { showDialog } from './popup.ts';
 import { showReplacements } from './replacementsDialog.ts';
 import { LIVE_LIMIT_CHOICES, liveLimitMb, setLiveLimitMb } from '../live/backgroundLimit.ts';
@@ -51,6 +53,11 @@ export function optionsPanel(): HTMLElement {
     },
   );
   widths.set(String(caretWidth()));
+  const footerWords = choiceButton({ label: t('wordCount.footer'), groups: () => [{ values: [...WORD_PERIODS] }], name: (v) => t(`wordCount.footer.${v as WordPeriod}`), width: 200 }, (v) => {
+    footerWords.set(v);
+    setFooterWordPeriod(v as WordPeriod);
+  });
+  footerWords.set(footerWordPeriod());
   return h(
     'div',
     { class: 'wm-options' },
@@ -62,7 +69,7 @@ export function optionsPanel(): HTMLElement {
       check(t('a11y.options.caretBlink'), caretBlinks(), setCaretBlinks),
       h('div', { class: 'wm-options-row' }, h('span', { text: t('a11y.options.caretWidth') }), widths.el),
     ),
-    h('fieldset', {}, h('legend', { text: t('dialogs.options.view') }), check(t('dialogs.options.fullScreenMenu'), keepMenuInFullScreen(), setKeepMenuInFullScreen), check(t('dialogs.options.scrollPastEnd'), scrollPastEndOn(), setScrollPastEnd), ...(IS_MAC && desktopMenu() ? [check(t('dialogs.options.macInAppMenu'), inAppMenuOnMac(), setInAppMenuOnMac)] : [])),
+    h('fieldset', {}, h('legend', { text: t('dialogs.options.view') }), check(t('dialogs.options.fullScreenMenu'), keepMenuInFullScreen(), setKeepMenuInFullScreen), check(t('dialogs.options.scrollPastEnd'), scrollPastEndOn(), setScrollPastEnd), h('div', { class: 'wm-options-row' }, h('span', { text: t('wordCount.footer') }), footerWords.el), ...(IS_MAC && desktopMenu() ? [check(t('dialogs.options.macInAppMenu'), inAppMenuOnMac(), setInAppMenuOnMac)] : [])),
     h('fieldset', {}, h('legend', { text: t('dialogs.options.autocorrect') }), ...AUTOCORRECT_KEYS.map((rule) => check(t(`dialogs.options.${rule}`), autoCorrectOptions()[rule], (on) => setAutoCorrect(rule, on))), editList),
     h(
       'fieldset',

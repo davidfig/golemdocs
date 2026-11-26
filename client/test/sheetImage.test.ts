@@ -21,6 +21,8 @@ function describe(book: Workbook): unknown {
   return {
     active: book.activeSheet,
     names: book.names,
+    // A drawing's shapes take their fills and fonts from the theme's XML.
+    theme: book.themeXml,
     sheets: book.sheets.map((sheet) => {
       if (!isWorksheet(sheet)) return sheet;
       const cells: unknown[] = [];

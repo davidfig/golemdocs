@@ -4,6 +4,7 @@ export const a11ySheet: Partial<Messages> = {
   'a11y.sheet.blank': '空白',
   'a11y.sheet.formula': '数式 {formula}',
   'a11y.sheet.merged': '結合 {from} から {to}',
+  'a11y.sheet.link': 'リンク先: {address}',
   'a11y.sheet.note': 'メモ: {text}',
   'a11y.sheet.list': 'リスト、Alt+↓ で選択肢',
   'a11y.sheet.filter': 'フィルター、Alt+↓ でフィルター',

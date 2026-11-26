@@ -149,6 +149,9 @@ import { TrashStore, type TrashDeps, type TrashItem } from './trash.ts';
 import { TRASH_MS } from '@golemdocs/ops';
 import { deviceVersionBytes, restoreFromAccount, restoredName, type HistoryEntry, type HistoryTarget } from './history.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
+import { DocumentWords, periodWords, type WordPlace } from './wordHistory.ts';
+import { browserWordStore } from './storage/wordStore.ts';
+import { footerWordPeriod, onFooterWordPeriodChange, rereadFooterWordPeriod } from './ui/footerWords.ts';
 import { showOptions } from './ui/optionsDialog.ts';
 import { Footer } from './ui/footer.ts';
 import { Ruler } from './ui/ruler.ts';
@@ -346,6 +349,9 @@ try {
 
 /** The counts of the whole document and of the selection, as the worker last gave them (null: none, or not asked for yet). */
 let footerWords: WordStats | null = null;
+/** The open document's word history (wordHistory.ts), when its writing is kept; and the account id it was opened with. */
+let docWords: DocumentWords | null = null;
+let docWordsCloudId: string | null = null;
 let footerSelection: WordStats | null = null;
 let footerTimer = 0;
 /** The pixel size of the open picture, found once per opening (and which are being looked up). */
@@ -777,6 +783,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   canUndo = canRedo = false;
   footerWords = footerSelection = null;
   window.clearTimeout(footerTimer);
+  startWordHistory(options);
   // One renderer for every document: clear() drops the old textures and any loads still under way.
   renderer.images?.clear();
   renderer.images ??= new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, assetLoaded, requestRender);
@@ -902,6 +909,8 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     },
     done(count, times) {
       loaded = true;
+      // The words it opened with, before anything is typed: where today's writing starts (wordHistory.ts).
+      if (docWords) send({ kind: 'countWords', whole: true, footer: true });
       // A book's place should have come with the last pages (or just after, when it was asked for late): if it hasn't, there is none to show.
       const hold = readingHold;
       if (hold?.y === null)
@@ -1387,6 +1396,7 @@ const sharedLive = (): boolean => current.room?.mode === 'shared';
 window.addEventListener('pagehide', () => {
   rememberView();
   void reading?.send(true);
+  void docWords?.flush(true);
   saveIfEdited();
   worker.leave();
   letPageGo();
@@ -1997,6 +2007,7 @@ const SETTING_APPLIED: Record<SyncedKey, (() => void) | null> = {
   'golem.mediaCaptions': () => mediaView.refreshCaptions(),
   'word.collapsePages': rereadViewOptions,
   'word.footer': rereadViewOptions,
+  'word.footerWords': rereadFooterWordPeriod,
   'word.toolbarsShown': rereadViewOptions,
   'word.fullScreenMenus': rereadFullScreenOptions,
   'golem.macInAppMenu': rereadFullScreenOptions,
@@ -5161,9 +5172,12 @@ function applySelection(update: SelectionUpdate): void {
   }
   if (update.footerStats !== undefined) {
     if (update.footerStats?.selection) footerSelection = update.footerStats;
-    else footerWords = update.footerStats;
+    else {
+      footerWords = update.footerStats;
+      if (footerWords && !footerWords.table && loaded) noteWords(footerWords.words);
+    }
     requestRender();
-  } else if (footerOn) refreshFooterSoon();
+  } else if (footerOn || docWords) refreshFooterSoon();
   formLayer.update(update.fields ?? null);
   pdfTextLayer.update(update.pdfText ?? null);
   pdfTools.update(update.pdfText ?? null, update.pdfObject ?? null);
@@ -6138,11 +6152,13 @@ window.addEventListener('keyup', linkKeyChanged, true);
 window.addEventListener('blur', () => linkKeyChanged({ metaKey: false, ctrlKey: false }));
 /** The form that opens over a link: its text and address to change, or to take the link off. */
 const linkPopover = new LinkPopover({
-  editable: () => FORMATS[current.kind].editable && current.shared?.role !== 'viewer' && !annotating,
-  open: followLink,
+  editable: () => (FORMATS[current.kind].editable || (!!FORMATS[current.kind].sheetEditor && !sheetView.readOnly)) && current.shared?.role !== 'viewer' && !annotating,
+  // A sheet's link to a place in the workbook (#Sheet2!A1) is followed by the sheet.
+  open: (url) => (sheetView.active && url.startsWith('#') ? sheetView.followCellLink(url) : followLink(url)),
   focusEditor: focusInput,
   apply: (target, choice) => {
     // The caret goes into the link (the commands run in order), so the change is to that link.
+    if (target.page === undefined || target.x === undefined || target.y === undefined) return;
     send({ kind: 'pointer', page: target.page, x: target.x, y: target.y });
     send(choice ? { kind: 'setLink', url: choice.url, text: choice.text } : { kind: 'removeLink' });
     focusInput();
@@ -7129,7 +7145,7 @@ async function connectVault(): Promise<void> {
 
 
 // Tools ▸ Word Count.
-const wordCountDialog = new WordCountDialog({ send, focusEditor: focusInput });
+const wordCountDialog = new WordCountDialog({ send, focusEditor: focusInput, words: () => docWords });
 
 // Tools ▸ Spelling and Grammar. The words the user adds to the dictionary are kept in this browser.
 const USER_WORDS_KEY = 'word.userDictionary.v1';
@@ -7805,6 +7821,15 @@ Object.assign(window, {
 });
 textView.onState = () => requestRender();
 
+/** A picture file the person picks (Insert › Picture on a slide or a sheet), or null. */
+function pickImageFile(): Promise<File | null> {
+  return new Promise((resolve) => {
+    const picker = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/heic,image/heif,.heic,.heif' });
+    picker.addEventListener('change', () => resolve(picker.files?.[0] ?? null));
+    picker.addEventListener('cancel', () => resolve(null));
+    picker.click();
+  });
+}
 const sheetView: SheetEditor = new SheetEditor(document.getElementById('viewport')!, {
   camera,
   gl: gl!,
@@ -7817,6 +7842,14 @@ const sheetView: SheetEditor = new SheetEditor(document.getElementById('viewport
   openFailed: (message) => void reportOpenFailure(message),
   appKey: () => false,
   author: () => commentAuthor(),
+  pickImage: () => pickImageFile(),
+  // Insert › Hyperlink and the card over a linked cell: the same form as a document's links.
+  links: {
+    edit: (draft, at) => linkPopover.edit(draft, at),
+    show: (target) => linkPopover.show(target),
+    leave: () => linkPopover.leave(),
+    open: (url) => followLink(url),
+  },
   // A live link pasted into the sheet: saved, then filled from its source at once.
   liveAdded: (source) => void updateLiveNow(source),
   blockBy: newBlockBy,
@@ -7845,6 +7878,7 @@ const sheetEngine: DocumentEngine = {
   find: (tab) => sheetView.find(tab === 'replace'),
   focus: () => sheetView.focus(),
   format: (action) => sheetView.formatAction(action),
+  link: () => sheetView.editLink(),
 };
 sheetView.onEdit = () => {
   documentEdited();
@@ -8358,13 +8392,7 @@ const slidesView: SlidesEditor = new SlidesEditor(document.getElementById('viewp
   appKey: () => false,
   notify: (message) => reportError(message),
   openFailed: (message) => void reportOpenFailure(message),
-  pickImage: () =>
-    new Promise((resolve) => {
-      const picker = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/heic,image/heif,.heic,.heif' });
-      picker.addEventListener('change', () => resolve(picker.files?.[0] ?? null));
-      picker.addEventListener('cancel', () => resolve(null));
-      picker.click();
-    }),
+  pickImage: () => pickImageFile(),
   pickDeck: () =>
     new Promise((resolve) => {
       const picker = Object.assign(document.createElement('input'), { type: 'file', accept: '.pptx,.potx,.pptm,.potm,.thmx' });
@@ -8713,6 +8741,45 @@ const footer = new Footer(document.getElementById('footer')!, {
   label: (action) => (action === 'zoom' ? t('chrome.control.zoom') : action === 'canvasSize' ? chrome.registry.get('vector.canvasSize').plainLabel : chrome.registry.get(action === 'goTo' ? 'edit.goTo' : 'tools.wordCount').plainLabel),
 });
 
+// --- Word history (wordHistory.ts) ---------------------------------------------------------
+
+/** The kinds whose writing is kept: documents of flowing text. Not a book, a PDF, a table, a picture or a plain text file. */
+const WORD_HISTORY_KINDS: ReadonlySet<DocumentKind> = new Set<DocumentKind>(['docx', 'odt', 'rtf', 'md', 'html', 'mhtml', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2']);
+
+/** Where the open document's history is kept: by its account id once it has one, else by this browser's id. */
+function wordPlace(): WordPlace {
+  const cloudId = current.shared?.id ?? (current.localId ? library.local.find((d) => d.id === current.localId)?.cloudId : undefined) ?? docWordsCloudId;
+  return { key: cloudId ? `cloud:${cloudId}` : current.localId ? `local:${current.localId}` : null, cloudId: cloudId ?? null };
+}
+
+/** A document opened: its word history, when its writing is kept (not one only read here, or the app's own documents). */
+function startWordHistory(options: OpenOptions): void {
+  docWords?.close();
+  docWords = null;
+  docWordsCloudId = options.cloudId ?? options.shared?.id ?? null;
+  const doc = current;
+  if (doc.builtIn || doc.none || doc.detour || doc.inPlace || doc.shared?.role === 'viewer' || !WORD_HISTORY_KINDS.has(doc.kind)) return;
+  const words = new DocumentWords(wordPlace(), browserWordStore, () => account !== null && !doc.encrypted);
+  words.onChange(requestRender);
+  docWords = words;
+}
+
+/** The open document's words now. */
+function noteWords(words: number): void {
+  if (!docWords) return;
+  void docWords.moved(wordPlace()); // first saved here, or first uploaded, since it was opened
+  docWords.count(words);
+}
+
+/** What the status bar says of the words written lately, when it is set to (null: the document's words). */
+function writtenForFooter(): { period: 'today' | 'week' | 'month' | 'year'; words: number } | null {
+  const period = footerWordPeriod();
+  if (period === 'total' || !docWords || !footerWords || footerWords.table || isBook()) return null;
+  return { period, words: periodWords(period, docWords.history(), footerWords.words, docWords.today()) };
+}
+
+onFooterWordPeriodChange(requestRender);
+
 /** Asks the worker for the counts, once the document has been still for a moment. */
 function refreshFooterSoon(): void {
   window.clearTimeout(footerTimer);
@@ -8720,7 +8787,7 @@ function refreshFooterSoon(): void {
 }
 
 function refreshFooter(): void {
-  if (!footerOn || !loaded || isPicture() || isDrawing() || textView.active) return;
+  if ((!footerOn && !docWords) || !loaded || isPicture() || isDrawing() || textView.active) return;
   send({ kind: 'countWords', whole: true, footer: true });
   if (selection.text.length > 0) send({ kind: 'countWords', footer: true });
   else footerSelection = null;
@@ -8846,6 +8913,7 @@ function updateFooter(): void {
     zoom: camera.zoom,
     // A book says how far through it the reader is, not how many words it has.
     words: isBook() ? null : footerWords,
+    written: writtenForFooter(),
     ...(isBook() && loaded && { progress: bookProgress() }),
     selection: selection.text.length > 0 ? footerSelection : null,
     picture,
@@ -9065,6 +9133,12 @@ window.addEventListener('drop', (e) => {
 // The automation API (`window.golem`, see automation.ts): how agents and tests drive the app and read what it shows.
 installAutomation({
   registry: chrome.registry,
+  wordHistory: async () => {
+    const words = docWords;
+    if (!words) return null;
+    await words.ready();
+    return { today: words.today(), days: words.history() };
+  },
   loaded: () => loaded,
   status: () => status,
   selection: () => ({ text: selection.text, caret: selection.caret }),

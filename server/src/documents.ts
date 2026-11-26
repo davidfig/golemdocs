@@ -12,6 +12,7 @@ import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, 
 import { checkMove, type FolderRow } from './folders.ts';
 import { folderEncrypts, refuseEncrypted, requireOpen, requireSealedWith, sealedName, wrappedKey } from './sealed.ts';
 import { describeTrashed, purge, purgeExpired, PURGING, trashStatements, type TrashRow } from './trash.ts';
+import { handleWordCounts, versionWords } from './wordCounts.ts';
 import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, replaceVersion, retainedChunks, storedSize, versionsOf, type VersionRow } from './versions.ts';
 import { editableFolder, forgetFolders } from './folderShares.ts';
 import { accessFor, canWrite, dropPublicLink, dropSharing, forgetDocuments, makePublicLink, person, publicLinkOf, sharer, publicShare, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
@@ -257,11 +258,14 @@ export interface DocumentRoute {
   collection: 'documents' | 'shared' | 'trash';
   /** The document, or `batch` for the batch upload; undefined for the collection itself. */
   id?: string;
-  sub?: 'thumbnail' | 'index' | 'shares' | 'versions' | 'link' | 'page';
+  sub?: 'thumbnail' | 'index' | 'shares' | 'versions' | 'link' | 'page' | 'words';
   /** Whose share a DELETE /api/documents/:id/shares/:userId removes, or which version /api/documents/:id/versions/:version is. */
   granteeId?: string;
-  /** `restore` for /api/documents/:id/versions/:version/restore and /api/trash/:id/restore; `file` for /api/trash/:id/file. */
-  action?: 'restore' | 'file';
+  /**
+   * `restore` for /api/documents/:id/versions/:version/restore and /api/trash/:id/restore; `file` for /api/trash/:id/file; `words` for
+   * /api/documents/:id/versions/:version/words.
+   */
+  action?: 'restore' | 'file' | 'words';
 }
 
 /** The user's own storage: whether they sync, and their database if they have one (or get one now). */
@@ -698,6 +702,12 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     return documentIndex(env, ownerId, row);
   }
 
+  // /api/documents/:id/words: its word history, day by day (wordCounts.ts). Anyone who can open it may look; anyone who can edit adds to it.
+  if (sub === 'words') {
+    if (granteeId !== undefined) throw new HttpError(404, 'not found');
+    return handleWordCounts(request, db, id, !!row.encrypted, canWrite(role), requireStorage);
+  }
+
   // /api/documents/:id/versions[/:version[/restore]]: the document's history (versions.ts). Anyone who can open the document may look
   // at it; anyone who can edit may save a version, rename or restore one. Restoring never touches the document: it makes a new one, in
   // the restorer's own account, from the version's bytes.
@@ -724,6 +734,11 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     const version = Number(rest);
     const kept = await db.first<VersionRow>('SELECT * FROM versions WHERE doc_id = ? AND version = ?', [id, version]);
     if (!kept) throw new HttpError(404, 'not found');
+    // GET .../words: how many words it had, to fill in the word history for the days before it was kept (wordCounts.ts).
+    if (action === 'words') {
+      if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
+      return versionWords(env, ownerId, id, version, !!row.encrypted);
+    }
     if (!action) {
       if (request.method === 'GET') {
         const response = await documentResponse(env, historyKey(ownerId, id, version), ownerId, id, DOCX);

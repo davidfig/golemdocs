@@ -24,6 +24,8 @@ export interface SpokenCell {
   merged?: CellRange | null;
   /** Its note's text, if it has one. */
   note?: string | null;
+  /** Where its hyperlink goes, if it has one. */
+  link?: string | null;
   /** A list validation offers choices (Alt+Down). */
   list?: boolean;
   /** It is on a filter's header row (Alt+Down opens the filter). */
@@ -41,6 +43,7 @@ export function cellMessage(cell: SpokenCell): string {
   const parts = [cellName(cell.row, cell.col), cell.display ? cut(cell.display) : t('a11y.sheet.blank')];
   if (cell.formula) parts.push(t('a11y.sheet.formula', { formula: cut(cell.formula) }));
   if (cell.merged && (cell.merged.r0 !== cell.merged.r1 || cell.merged.c0 !== cell.merged.c1)) parts.push(t('a11y.sheet.merged', { from: cellName(cell.merged.r0, cell.merged.c0), to: cellName(cell.merged.r1, cell.merged.c1) }));
+  if (cell.link) parts.push(t('a11y.sheet.link', { address: cut(cell.link) }));
   if (cell.note) parts.push(t('a11y.sheet.note', { text: cut(cell.note) }));
   if (cell.list) parts.push(t('a11y.sheet.list'));
   if (cell.filter) parts.push(t('a11y.sheet.filter'));

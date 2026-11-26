@@ -440,6 +440,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       case 'paste':
       case 'selectAll':
       case 'insertText':
+      case 'insertLink':
       case 'sheet':
       case 'setFont':
       case 'setFontSize':

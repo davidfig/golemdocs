@@ -15,6 +15,7 @@ import { readScenarios, scenariosElement } from '../scenarios.ts';
 import { readPageSetup, writePageSetup } from '../print.ts';
 import { readSparklines, writeSparklines } from '../sparklines.ts';
 import { readValidations, validationsElement } from '../validation.ts';
+import { linksElement, readLinks } from '../links.ts';
 
 const decoder = new TextDecoder();
 
@@ -80,6 +81,7 @@ export function readAround(sheet: Worksheet, root: XmlElement): void {
   sheet.conditional = readConditional(root);
   sheet.autoFilter = readAutoFilter(root);
   sheet.validations = readValidations(root);
+  sheet.links = readLinks(root);
   sheet.protection = readProtection(root);
   sheet.scenarios = readScenarios(root);
   sheet.pageSetup = readPageSetup(root);
@@ -138,9 +140,10 @@ export function writeAround(sheet: Worksheet, root: XmlElement): { head: string;
   writePageSetup(root, sheet.pageSetup, set);
   writeSparklines(root, sheet.sparklines);
   set('dataValidations', validationsElement(sheet.validations));
+  set('hyperlinks', linksElement(sheet.links));
   if (sheet.drawingRId) set('drawing', el('drawing', { 'r:id': sheet.drawingRId }));
   if (sheet.legacyDrawing !== undefined) set('legacyDrawing', sheet.legacyDrawing ? el('legacyDrawing', { 'r:id': sheet.legacyDrawing }) : null);
-  if ((sheet.legacyDrawing || sheet.drawingRId || sheet.tables.length) && !root.attrs['xmlns:r']) root.attrs['xmlns:r'] = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  if ((sheet.legacyDrawing || sheet.drawingRId || sheet.tables.length || sheet.links.some((l) => l.rId)) && !root.attrs['xmlns:r']) root.attrs['xmlns:r'] = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
   // Conditional formats, from the model (their ranges and formulas move with inserted and deleted rows and columns).
   const cfAt = root.children.findIndex((c) => typeof c !== 'string' && c.name === 'conditionalFormatting');
   root.children = root.children.filter((c) => typeof c === 'string' || c.name !== 'conditionalFormatting');

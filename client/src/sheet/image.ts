@@ -6,6 +6,8 @@
 
 import type { Table } from './tables.ts';
 import type { Note, NoteParts } from './notes.ts';
+import type { SheetLink } from './links.ts';
+import type { SheetDrawing } from './drawings.ts';
 import type { SheetProtection } from './protection.ts';
 import type { SheetChart } from './charts/model.ts';
 import type { SparklineGroup } from './sparklines.ts';
@@ -29,7 +31,7 @@ import { Worksheet } from './model/worksheet.ts';
 import type { CellRange, Pane, SheetState } from './model/worksheet.ts';
 
 export const KIND = 'sheet';
-export const SCHEMA = 1;
+export const SCHEMA = 3;
 
 /** Fields per chunk in the chunk table. */
 const FIELDS = 9;
@@ -51,9 +53,12 @@ interface SheetJson {
   merges: CellRange[];
   tables?: Table[];
   notes?: Note[];
+  /** Hyperlinks with their addresses (from the sheet's relationships, which the image does not keep). */
+  links?: SheetLink[];
   noteParts?: NoteParts | null;
   protection?: SheetProtection | null;
   charts?: SheetChart[];
+  drawings?: SheetDrawing[];
   sparklines?: SparklineGroup[];
   pivots?: PivotTable[];
   pane: Pane | null;
@@ -140,9 +145,11 @@ export function workbookImage(book: Workbook, source: Fingerprint): Uint8Array {
       merges: sheet.merges,
       tables: sheet.tables,
       notes: sheet.notes,
+      links: sheet.links,
       noteParts: sheet.noteParts,
       protection: sheet.protection,
       charts: sheet.charts,
+      drawings: sheet.drawings,
       sparklines: sheet.sparklines,
       pivots: sheet.pivots,
       pane: sheet.pane,
@@ -195,7 +202,11 @@ async function fromImage(image: Image, xlsx: Uint8Array): Promise<Workbook> {
   if (json.stylesPart && pkg.has(json.stylesPart)) book.styles = StyleTable.parse(await pkg.text(json.stylesPart));
   const rels = await pkg.relationships(json.workbookPart);
   const themeRel = rels.list.find((r) => r.type.endsWith('/theme'));
-  if (themeRel && pkg.has(rels.partName(themeRel))) book.theme = readTheme(await pkg.text(rels.partName(themeRel)));
+  if (themeRel && pkg.has(rels.partName(themeRel))) {
+    // Its XML too: a drawing's shapes take their fills, lines and fonts from it.
+    book.themeXml = await pkg.text(rels.partName(themeRel));
+    book.theme = readTheme(book.themeXml);
+  }
   book.activeSheet = json.activeSheet;
   book.date1904 = json.date1904;
   book.names = json.names;
@@ -256,12 +267,14 @@ async function fromImage(image: Image, xlsx: Uint8Array): Promise<Workbook> {
     // Images from before tables kept their filter's columns: read from the table's XML.
     sheet.tables = (j.tables ?? []).map((t) => (t.filterColumns === undefined ? { ...t, filterColumns: readAutoFilter(t.xml)?.columns ?? null } : t));
     sheet.notes = j.notes ?? [];
+    sheet.links = j.links ?? [];
     sheet.noteParts = j.noteParts ?? null;
     sheet.protection = j.protection ?? null;
     sheet.sparklines = j.sparklines ?? [];
     sheet.pivots = j.pivots ?? [];
     // Charts from images made before charts kept their relationship are left out (they would be written as new ones).
     sheet.charts = (j.charts ?? []).filter((c) => c.rId !== undefined);
+    sheet.drawings = j.drawings ?? [];
     sheet.pane = j.pane;
     sheet.view = j.view;
     if (j.hasXml) {

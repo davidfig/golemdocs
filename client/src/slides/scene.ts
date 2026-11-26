@@ -1,69 +1,42 @@
 // A slide as a drawing scene (docs/slides.md): the vector editor's model (vector/model.ts), so a slide is painted, written as
-// SVG and as a vector PDF page by the code that does it for drawings. Each shape becomes a group placed by its transform,
-// holding its outline paths, its picture and its text, laid out here. Next to the scene comes where each shape and its text
-// lines ended up, for the editor's hit testing, selection and caret.
+// SVG and as a vector PDF page by the code that does it for drawings. Its shapes are drawn by DrawingML's ShapeBuilder
+// (drawingml/scene.ts); here are the slide's own parts: its background, placeholders' inherited text and prompts, tables,
+// charts and SmartArt. Next to the scene comes where each shape and its text lines ended up, for the editor.
 //
 // Units are CSS pixels (9525 EMU each), the slide's top left at (0, 0). Pictures are named `pptx:<part>` and decoded by the
 // caller (the view keeps them as bitmaps; an export turns them into data: URIs).
 
-import { el, type XmlElement } from '@golemdocs/docx';
-import { IDENTITY, type GroupNode, type Matrix, type PathCommand, type Scene, type SceneNode, type Style, type TextRun } from '../vector/model.ts';
+import type { XmlElement } from '@golemdocs/docx';
+import { IDENTITY, type GroupNode, type Matrix, type Scene, type SceneNode } from '../vector/model.ts';
 import { readSvg } from '../vector/svgRead.ts';
-import { multiply, rotation, scaling, translation } from '../vector/matrix.ts';
+import { multiply, scaling, translation } from '../vector/matrix.ts';
 import { readChart } from '../sheet/charts/model.ts';
 import { defaultColor, layoutChart, type Resolved } from '../sheet/charts/scene.ts';
 import { chartSvg } from '../sheet/charts/svg.ts';
-import { cssColor, resolveColor, colorChild, type ColorContext, type Rgba } from './color.ts';
+import { resolveColor, colorChild, type ColorContext } from '../drawingml/color.ts';
+import { px, ShapeBuilder, type ShapeSceneOptions, type ShapeText, type ShapeView as DrawingShapeView } from '../drawingml/scene.ts';
+import { layoutText, type LaidText, type TextMeasure } from '../drawingml/textLayout.ts';
 import { masterOfPage, type Deck, type DeckPart, type PagePart } from './deck.ts';
-import { shapeGeometry, type Geometry } from './geometry.ts';
-import { EMU_PER_PX, at, kid, kids, num, pct } from './ooxml.ts';
-import { backgroundFill, propsOf, resolveTree, shapeFill, shapeLine, slideShapes, type ResolvedFill, type ResolvedLine, type ResolvedShape } from './shapes.ts';
-import { bulletTexts, layoutText, PX_PER_PT, type FontSpec, type LaidText, type TextMeasure } from './textLayout.ts';
-import { hasText, promptText, readBody, shapeText, type BodySettings, type Paragraph, type TextBody, type TextContext } from './textStyle.ts';
+import { at, kid, kids, num } from './ooxml.ts';
+import { backgroundFill, resolveTree, slideShapes, type ResolvedFill, type ResolvedLine, type ResolvedShape } from './shapes.ts';
+import { promptText, readBody, shapeText, slideTextContext, type BodySettings, type Paragraph, type TextBody, type TextContext } from './textStyle.ts';
 import { tableStyle, type CellStyle } from './tables.ts';
 
-export interface SceneOptions {
-  measure: TextMeasure;
-  /** The CSS font family list a font is drawn in. */
-  family(font: FontSpec): string;
-  /** Show empty placeholders' prompts ("Click to add title"): the editor does, a show and an export don't. */
-  prompts?: boolean;
+
+export interface SceneOptions extends ShapeSceneOptions {
   /** The slide's number (1-based), for slide number fields. */
   number: number;
   date?: Date;
-  /** Leave out a shape's text (the editor draws the text it is editing itself). */
-  skipText?: (element: XmlElement) => boolean;
-  /** The shape whose text is being edited: an empty one shows no prompt. */
-  editing?: XmlElement;
 }
 
-export interface ShapeText {
-  body: TextBody;
-  laid: LaidText;
-  /** The text's origin (where lines are laid from) in the shape's own pixels, and the box it is laid in. */
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  /** Text turned within the shape (vertical text): its own transform after the shape's. */
-  turn: Matrix;
-  prompt: boolean;
-}
+/** A slide's shape where it is drawn, and its text. */
+export type ShapeView = DrawingShapeView<ResolvedShape>;
+export type { ShapeText };
 
-export interface ShapeView {
-  shape: ResolvedShape;
-  /** The shape's pixels to the slide's. */
-  matrix: Matrix;
-  /** Its own size in pixels. */
-  w: number;
-  h: number;
-  text: ShapeText | null;
-  /** A table's cells: each cell's box in the shape's pixels and its text. */
-  cells?: { row: number; col: number; x: number; y: number; w: number; h: number; text: ShapeText; element: XmlElement }[];
-  /** The shape the slide owns, that it is part of (itself, or the group it is in): what a click selects. */
-  top: ResolvedShape;
-  /** Shown from the layout or master (not the slide's own). */
-  inherited: boolean;
+/** A picture's href in a slide's scene: `pptx:<part>`, decoded by the caller. */
+function embedHref(deck: Deck, part: DeckPart, rId: string | undefined): string | null {
+  const target = deck.target(part, rId);
+  return target ? `pptx:${target}` : null;
 }
 
 export interface SlideScene {
@@ -71,324 +44,45 @@ export interface SlideScene {
   views: ShapeView[];
 }
 
-const px = (emu: number): number => emu / EMU_PER_PX;
-
-/** A shape's transform: its box moved into place, turned about its centre and flipped. */
-export function frameMatrix(frame: ResolvedShape['frame']): Matrix {
-  const w = px(frame.w);
-  const h = px(frame.h);
-  let m: Matrix = translation(px(frame.x), px(frame.y));
-  if (frame.rot || frame.flipH || frame.flipV) {
-    m = multiply(m, translation(w / 2, h / 2));
-    if (frame.rot) m = multiply(m, rotation(frame.rot));
-    if (frame.flipH || frame.flipV) m = multiply(m, scaling(frame.flipH ? -1 : 1, frame.flipV ? -1 : 1));
-    m = multiply(m, translation(-w / 2, -h / 2));
-  }
-  return m;
-}
-
-/** A group's child coordinates (EMU) to its own pixels. */
-function childMatrix(shape: ResolvedShape): Matrix {
-  const c = shape.childFrame!;
-  const sx = c.w ? shape.frame.w / c.w : 1;
-  const sy = c.h ? shape.frame.h / c.h : 1;
-  return multiply(scaling(sx, sy), translation(-px(c.x), -px(c.y)));
-}
-
-class Builder {
-  readonly defs: XmlElement[] = [];
-  private ids = 0;
-  readonly views: ShapeView[] = [];
-
+/** A slide's shapes: DrawingML's (drawingml/scene.ts), with placeholders' inherited text and prompts, tables, charts and SmartArt. */
+class Builder extends ShapeBuilder<ResolvedShape> {
   constructor(
     readonly deck: Deck,
     readonly part: PagePart,
     readonly options: SceneOptions,
-    readonly ctx: ColorContext,
-    readonly tc: TextContext,
-  ) {}
-
-  id(prefix: string): string {
-    return `${prefix}${++this.ids}`;
+    ctx: ColorContext,
+    readonly stc: TextContext,
+  ) {
+    super(options, ctx, stc, (rId, shape) => embedHref(deck, shape.part, rId));
   }
 
-  // ---- Paint ------------------------------------------------------------------------------------------------------
-
-  /** The style that paints a fill (with a gradient's definition added). */
-  fillStyle(fill: ResolvedFill, shade?: string): Style {
-    switch (fill.kind) {
-      case 'solid': {
-        const c = shade ? shadeColor(fill.color!, shade) : fill.color!;
-        return { fill: cssColor(c), ...(c.a < 1 && { 'fill-opacity': String(c.a) }) };
-      }
-      case 'gradient': {
-        const id = this.id('g');
-        const stops = fill.stops!.map((s) => {
-          const c = shade ? shadeColor(s.color, shade) : s.color;
-          return el('stop', { offset: String(s.pos), 'stop-color': cssColor(c), ...(c.a < 1 && { 'stop-opacity': String(c.a) }) });
-        });
-        if (fill.path) this.defs.push(el('radialGradient', { id, cx: '0.5', cy: '0.5', r: fill.path === 'rect' ? '0.71' : '0.5' }, stops));
-        else {
-          const a = ((fill.angle ?? 90) * Math.PI) / 180;
-          const cos = Math.cos(a) / 2;
-          const sin = Math.sin(a) / 2;
-          this.defs.push(el('linearGradient', { id, x1: String(0.5 - cos), y1: String(0.5 - sin), x2: String(0.5 + cos), y2: String(0.5 + sin) }, stops));
-        }
-        return { fill: `url(#${id})` };
-      }
-      case 'pattern': {
-        const p = fill.pattern!;
-        const m = /(\d+)$/.exec(p.preset);
-        const share = m ? Number(m[1]) / 100 : 0.5;
-        const mix = { r: p.fg.r * share + p.bg.r * (1 - share), g: p.fg.g * share + p.bg.g * (1 - share), b: p.fg.b * share + p.bg.b * (1 - share), a: 1 };
-        return { fill: cssColor(mix) };
-      }
-      default:
-        return { fill: 'none' };
-    }
+  protected override textOf(shape: ResolvedShape): TextBody {
+    return shapeText(shape, this.stc);
   }
 
-  lineStyle(line: ResolvedLine | null): Style {
-    if (!line || !line.color) return { stroke: 'none' };
-    const width = Math.max(px(line.width), 0.5);
-    const style: Style = { stroke: cssColor(line.color), 'stroke-width': String(width), 'stroke-linecap': line.cap, 'stroke-linejoin': line.join };
-    if (line.color.a < 1) style['stroke-opacity'] = String(line.color.a);
-    const dash = DASHES[line.dash];
-    if (dash) style['stroke-dasharray'] = dash.map((d) => String(d * width)).join(' ');
-    return style;
+  /** Only the page's own placeholders show their prompt. */
+  protected override promptOf(shape: ResolvedShape): Paragraph[] | null {
+    return shape.part === this.part ? promptText(shape, this.stc) : null;
   }
 
-  // ---- Shapes -----------------------------------------------------------------------------------------------------
-
-  shape(shape: ResolvedShape, parent: Matrix, top: ResolvedShape | null, group?: ResolvedFill): SceneNode | null {
-    if (shape.hidden) return null;
-    const own = frameMatrix(shape.frame);
-    const matrix = multiply(parent, own);
-    const w = px(shape.frame.w);
-    const h = px(shape.frame.h);
-    const inherited = shape.part !== this.part;
-    // The slide's own shapes are named by id, so a show can hide those its animations bring in later.
-    const node: GroupNode = { kind: 'group', tag: 'g', transform: own, style: {}, attrs: inherited || top ? {} : { 'data-shape': shape.id }, children: [] };
-    const view: ShapeView = { shape, matrix, w, h, text: null, top: top ?? shape, inherited };
-    this.views.push(view);
-    switch (shape.kind) {
-      case 'group': {
-        const fill = shapeFill(shape, this.ctx);
-        const inner: GroupNode = { kind: 'group', tag: 'g', transform: childMatrix(shape), style: {}, attrs: {}, children: [] };
-        const childParent = multiply(matrix, inner.transform!);
-        for (const child of shape.children) {
-          const made = this.shape(child, childParent, top ?? shape, fill);
-          if (made) inner.children.push(made);
-        }
-        node.children.push(inner);
-        break;
-      }
-      case 'shape':
-      case 'connector':
-        this.drawGeometry(node, shape, w, h, group);
-        view.text = this.text(node, shape, w, h);
-        break;
-      case 'picture':
-        this.picture(node, shape, w, h);
-        break;
-      case 'table':
-        this.table(node, view, shape);
-        break;
-      case 'chart':
-        this.chart(node, shape, w, h);
-        break;
-      case 'diagram':
-        this.diagram(node, shape, matrix, top ?? shape);
-        break;
-      default:
-        node.children.push({ kind: 'rect', x: 0, y: 0, width: w, height: h, rx: 0, ry: 0, style: { fill: '#f2f2f2', stroke: '#bfbfbf' }, attrs: {} });
-    }
-    return node;
+  protected override alwaysHasText(shape: ResolvedShape): boolean {
+    return !!shape.placeholder;
   }
 
-  drawGeometry(node: GroupNode, shape: ResolvedShape, w: number, h: number, group?: ResolvedFill): Geometry {
-    const geometry = shapeGeometry(propsOf(shape.element) ?? shape.inherits.map(propsOf).find((p) => kid(p, 'a:prstGeom') || kid(p, 'a:custGeom')), w, h);
-    const fill = geometry.open ? ({ kind: 'none' } as ResolvedFill) : shapeFill(shape, this.ctx, group);
-    const line = shapeLine(shape, this.ctx, shape.kind === 'connector' || geometry.open ? 9525 : 12700);
-    const fillStyleBase = fill.kind === 'picture' ? { fill: 'none' } : this.fillStyle(fill);
-    const lineStyle = this.lineStyle(line);
-    if (fill.kind === 'picture' && fill.blip) this.blipInto(node, fill.blip, shape.part, w, h, geometry);
-    for (const path of geometry.paths) {
-      const style: Style = { ...(path.fill ? (path.shade ? this.fillStyle(fill, path.shade) : fillStyleBase) : { fill: 'none' }), ...(path.stroke ? lineStyle : { stroke: 'none' }) };
-      if (style.fill === 'none' && style.stroke === 'none') continue;
-      node.children.push({ kind: 'path', commands: path.commands, style, attrs: {} });
-    }
-    if (line?.color && (line.head || line.tail)) this.arrowheads(node, geometry, line);
-    return geometry;
+  protected override inherited(shape: ResolvedShape): boolean {
+    return shape.part !== this.part;
   }
 
-  arrowheads(node: GroupNode, geometry: Geometry, line: ResolvedLine): void {
-    const commands = geometry.paths.find((p) => p.stroke)?.commands;
-    if (!commands || commands.length < 2) return;
-    const width = Math.max(px(line.width), 0.75);
-    const points: [number, number][] = [];
-    for (const c of commands) if (c[0] !== 'Z') points.push(c[0] === 'C' ? [c[5], c[6]] : [c[1], c[2]]);
-    const controls = (index: number): [number, number] => {
-      const c = commands[index];
-      return c[0] === 'C' ? (index === commands.length - 1 ? [c[3], c[4]] : [c[1], c[2]]) : points[Math.max(0, index - 1)];
-    };
-    const end = (tip: [number, number], from: [number, number], spec: { type: string; w: string; len: string }): void => {
-      const dx = tip[0] - from[0];
-      const dy = tip[1] - from[1];
-      const d = Math.hypot(dx, dy) || 1;
-      const ux = dx / d;
-      const uy = dy / d;
-      const size = (s: string): number => (s === 'sm' ? 2 : s === 'lg' ? 5 : 3);
-      const len = Math.max(size(spec.len) * width, 3);
-      const half = (Math.max(size(spec.w) * width, 3)) / 2;
-      const bx = tip[0] - ux * len;
-      const by = tip[1] - uy * len;
-      const nx = -uy * half;
-      const ny = ux * half;
-      const style: Style = { fill: cssColor(line.color!), stroke: 'none' };
-      let commandsOut: PathCommand[];
-      switch (spec.type) {
-        case 'oval':
-          node.children.push({ kind: 'ellipse', cx: tip[0], cy: tip[1], rx: half, ry: half, style, attrs: {} });
-          return;
-        case 'diamond':
-          commandsOut = [['M', tip[0] + ux * len / 2, tip[1] + uy * len / 2], ['L', tip[0] + nx, tip[1] + ny], ['L', tip[0] - ux * len / 2, tip[1] - uy * len / 2], ['L', tip[0] - nx, tip[1] - ny], ['Z']];
-          break;
-        case 'arrow':
-          node.children.push({ kind: 'path', commands: [['M', bx + nx, by + ny], ['L', tip[0], tip[1]], ['L', bx - nx, by - ny]], style: { fill: 'none', stroke: cssColor(line.color!), 'stroke-width': String(width), 'stroke-linejoin': 'miter' }, attrs: {} });
-          return;
-        case 'stealth':
-          commandsOut = [['M', tip[0], tip[1]], ['L', bx + nx, by + ny], ['L', tip[0] - ux * len * 0.6, tip[1] - uy * len * 0.6], ['L', bx - nx, by - ny], ['Z']];
-          break;
-        default:
-          commandsOut = [['M', tip[0], tip[1]], ['L', bx + nx, by + ny], ['L', bx - nx, by - ny], ['Z']];
-      }
-      node.children.push({ kind: 'path', commands: commandsOut, style, attrs: {} });
-    };
-    if (line.head) end(points[0], commands[1][0] === 'C' ? [(commands[1] as readonly ['C', number, number, number, number, number, number])[1], (commands[1] as readonly ['C', number, number, number, number, number, number])[2]] : points[1], line.head);
-    if (line.tail) end(points[points.length - 1], controls(commands.length - 1), line.tail);
+  /** The slide's own shapes are named by id, so a show can hide those its animations bring in later. */
+  protected override nodeAttrs(shape: ResolvedShape, top: ResolvedShape | null): Record<string, string> {
+    return shape.part !== this.part || top ? {} : { 'data-shape': shape.id };
   }
 
-  /** A picture (`a:blipFill`) stretched over a box, cut to the shape's outline. */
-  blipInto(node: GroupNode, blipFill: XmlElement, part: DeckPart, w: number, h: number, geometry?: Geometry): void {
-    const blip = kid(blipFill, 'a:blip');
-    const embed = this.deck.target(part, blip?.attrs['r:embed']);
-    if (!embed) return;
-    const src = kid(blipFill, 'a:srcRect');
-    const l = pct(src, 'l') ?? 0;
-    const t = pct(src, 't') ?? 0;
-    const r = pct(src, 'r') ?? 0;
-    const b = pct(src, 'b') ?? 0;
-    const fw = w / Math.max(0.001, 1 - l - r);
-    const fh = h / Math.max(0.001, 1 - t - b);
-    const alpha = pct(kid(blip, 'a:alphaModFix'), 'amt');
-    const clipId = this.id('c');
-    const outline = geometry?.paths.filter((p) => p.fill).flatMap((p) => p.commands) ?? [];
-    this.defs.push(el('clipPath', { id: clipId }, [outline.length ? el('path', { d: pathData(outline) }) : el('rect', { x: '0', y: '0', width: String(w), height: String(h) })]));
-    node.children.push({
-      kind: 'group',
-      tag: 'g',
-      style: { 'clip-path': `url(#${clipId})`, ...(alpha !== undefined && alpha < 1 && { opacity: String(alpha) }) },
-      attrs: {},
-      children: [{ kind: 'image', x: -l * fw, y: -t * fh, width: fw, height: fh, href: `pptx:${embed}`, style: {}, attrs: {} }],
-    });
-  }
-
-  picture(node: GroupNode, shape: ResolvedShape, w: number, h: number): void {
-    const blipFill = kid(shape.element, 'p:blipFill');
-    const geometry = shapeGeometry(propsOf(shape.element), w, h);
-    if (blipFill) this.blipInto(node, blipFill, shape.part, w, h, geometry);
-    const line = shapeLine(shape, this.ctx);
-    if (line) for (const path of geometry.paths) if (path.stroke) node.children.push({ kind: 'path', commands: path.commands, style: { fill: 'none', ...this.lineStyle(line) }, attrs: {} });
-  }
-
-  // ---- Text -------------------------------------------------------------------------------------------------------
-
-  /** Lays out and draws a shape's text; the editor's record of it. */
-  text(node: GroupNode, shape: ResolvedShape, w: number, h: number): ShapeText | null {
-    const geometry = shapeGeometry(propsOf(shape.element) ?? shape.inherits.map(propsOf).find(Boolean), w, h);
-    const body = shapeText(shape, this.tc);
-    let paragraphs = body.paragraphs;
-    let prompt = false;
-    if (!hasText(body.element ?? undefined)) {
-      const prompted = this.options.prompts && shape.part === this.part && shape.element !== this.options.editing ? promptText(shape, this.tc) : null;
-      if (prompted) {
-        paragraphs = prompted;
-        prompt = true;
-      } else if (!body.element && !shape.placeholder) return null;
-    }
-    const placed = this.placeText(paragraphs, body.settings, geometry.text);
-    const text: ShapeText = { body: prompt ? { ...body, paragraphs } : body, ...placed, prompt };
-    if (!this.options.skipText?.(shape.element)) node.children.push(...this.drawText(text, prompt ? 0.5 : 1));
-    return text;
-  }
-
-  placeText(paragraphs: Paragraph[], settings: BodySettings, rect: Geometry['text']): Omit<ShapeText, 'body' | 'prompt'> {
-    const ins = settings.insets;
-    let bx = rect.l + px(ins.l);
-    let by = rect.t + px(ins.t);
-    let bw = Math.max(0, rect.r - rect.l - px(ins.l) - px(ins.r));
-    let bh = Math.max(0, rect.b - rect.t - px(ins.t) - px(ins.b));
-    let turn: Matrix = IDENTITY;
-    const vertical = settings.vert === 'vert' || settings.vert === 'eaVert' || settings.vert === 'vert270' || settings.vert === 'wordArtVert';
-    if (vertical) {
-      // Laid out across the box's height, then turned a quarter about the box's centre.
-      const cx = bx + bw / 2;
-      const cy = by + bh / 2;
-      turn = multiply(translation(cx, cy), multiply(rotation(settings.vert === 'vert270' ? -90 : 90), translation(-cx, -cy)));
-      [bx, by, bw, bh] = [cx - bh / 2, cy - bw / 2, bh, bw];
-    }
-    const laid = layoutText(paragraphs, { width: settings.wrap ? bw : Infinity, measure: this.options.measure, bullets: bulletTexts(paragraphs) });
-    if (!settings.wrap) {
-      // Unwrapped lines are aligned in the box as if it were their width.
-      for (const line of laid.lines) {
-        const p = paragraphs[line.paragraph];
-        const used = line.right - line.left;
-        const room = bw - used - (line.left);
-        const shift = p.align === 'ctr' ? room / 2 : p.align === 'r' ? room : 0;
-        if (shift) {
-          line.left += shift;
-          line.right += shift;
-          for (const s of line.segments) s.x += shift;
-        }
-      }
-    }
-    const dy = settings.anchor === 'ctr' ? (bh - laid.height) / 2 : settings.anchor === 'b' ? bh - laid.height : 0;
-    return { laid, x: bx, y: by + dy, width: bw, height: bh, turn };
-  }
-
-  drawText(text: ShapeText, opacity: number): SceneNode[] {
-    const out: SceneNode[] = [];
-    const { laid, x: ox, y: oy } = text;
-    for (const line of laid.lines) {
-      const runs: TextRun[] = [];
-      for (const s of line.segments) {
-        if (s.text === '\t' || !s.text.trim()) continue;
-        const style = s.style;
-        if (style.color.a === 0) continue;
-        const shown = style.caps === 'all' || style.caps === 'small' ? s.text.toUpperCase() : s.text;
-        const size = style.caps === 'small' ? s.font.size * 0.8 : s.font.size;
-        const lift = style.baseline ? style.baseline * style.size * PX_PER_PT : 0;
-        const y = oy + line.baseline - lift;
-        if (style.highlight) out.push({ kind: 'rect', x: ox + s.x, y: oy + line.top, width: s.width, height: line.height, rx: 0, ry: 0, style: { fill: cssColor(style.highlight) }, attrs: {} });
-        const runStyle: Style = {
-          fill: cssColor(style.color),
-          'font-family': this.options.family(s.font),
-          'font-size': String(size),
-          ...(s.font.bold && { 'font-weight': 'bold' }),
-          ...(s.font.italic && { 'font-style': 'italic' }),
-          ...((style.color.a < 1 || opacity < 1) && { 'fill-opacity': String(style.color.a * opacity) }),
-          ...(style.spacing && { 'letter-spacing': String(style.spacing * PX_PER_PT) }),
-        };
-        runs.push({ text: shown, x: ox + s.x, y, style: runStyle });
-        const thick = Math.max(s.font.size / 18, 0.75);
-        if (style.underline) out.push({ kind: 'rect', x: ox + s.x, y: y + s.font.size * 0.1, width: s.width - (/\s$/.test(s.text) ? s.font.size * 0.25 : 0), height: thick, rx: 0, ry: 0, style: { fill: cssColor(style.color), ...(opacity < 1 && { 'fill-opacity': String(opacity) }) }, attrs: {} });
-        if (style.strike) out.push({ kind: 'rect', x: ox + s.x, y: y - s.font.size * 0.3, width: s.width, height: thick, rx: 0, ry: 0, style: { fill: cssColor(style.color) }, attrs: {} });
-      }
-      if (runs.length) out.push({ kind: 'text', x: runs[0].x ?? 0, y: runs[0].y ?? 0, runs, style: {}, attrs: {} });
-    }
-    if (text.turn !== IDENTITY) return [{ kind: 'group', tag: 'g', transform: text.turn, style: {}, attrs: {}, children: out }];
-    return out;
+  protected override other(node: GroupNode, view: ShapeView, shape: ResolvedShape, matrix: Matrix, top: ResolvedShape): void {
+    if (shape.kind === 'table') this.table(node, view, shape);
+    else if (shape.kind === 'chart') this.chart(node, shape, view.w, view.h);
+    else if (shape.kind === 'diagram') this.diagram(node, shape, matrix, top);
+    else super.other(node, view, shape, matrix, top);
   }
 
   // ---- Tables, charts, diagrams -----------------------------------------------------------------------------------------
@@ -424,7 +118,7 @@ class Builder {
           rot: 0,
           columns: 1,
         };
-        const paragraphs = readBody(kid(tc, 'a:txBody'), [base, cell.text], settings, this.tc);
+        const paragraphs = readBody(kid(tc, 'a:txBody'), [base, cell.text], settings, this.stc);
         const width = cols.slice(c, c + span).reduce((a, b) => a + b, 0);
         const laid = layoutText(paragraphs, { width: Math.max(0, width - px(settings.insets.l) - px(settings.insets.r)), measure: this.options.measure });
         const needed = laid.height + px(settings.insets.t) + px(settings.insets.b);
@@ -525,31 +219,6 @@ function renamePrefix(element: XmlElement, prefix: string): XmlElement {
   return { name, attrs: element.attrs, children: element.children.map((c) => (typeof c === 'string' ? c : renamePrefix(c, prefix))) };
 }
 
-const DASHES: Record<string, number[]> = {
-  dash: [4, 3],
-  sysDash: [3, 1],
-  dot: [1, 3],
-  sysDot: [1, 1],
-  lgDash: [8, 3],
-  dashDot: [4, 3, 1, 3],
-  sysDashDot: [3, 1, 1, 1],
-  lgDashDot: [8, 3, 1, 3],
-  lgDashDotDot: [8, 3, 1, 3, 1, 3],
-  sysDashDotDot: [3, 1, 1, 1, 1, 1],
-};
-
-function shadeColor(c: Rgba, shade: string): Rgba {
-  const f = shade === 'darken' ? 0.6 : shade === 'darkenLess' ? 0.8 : shade === 'lighten' ? -0.4 : -0.2;
-  if (f > 0) return { r: c.r * f, g: c.g * f, b: c.b * f, a: c.a };
-  const k = -f;
-  return { r: c.r + (255 - c.r) * k, g: c.g + (255 - c.g) * k, b: c.b + (255 - c.b) * k, a: c.a };
-}
-
-export function pathData(commands: readonly PathCommand[]): string {
-  const r = (n: number): string => String(Math.round(n * 100) / 100);
-  return commands.map((c) => (c[0] === 'Z' ? 'Z' : c[0] + c.slice(1).map((v) => r(v as number)).join(' '))).join('');
-}
-
 /** The colour context a slide's shapes use. */
 export function colorContext(deck: Deck, slide: PagePart): ColorContext {
   return { theme: masterOfPage(slide).theme, map: deck.colorMap(slide) };
@@ -558,7 +227,7 @@ export function colorContext(deck: Deck, slide: PagePart): ColorContext {
 /** A slide drawn as a scene, with where its shapes and text are. */
 export function slideScene(deck: Deck, slide: PagePart, options: SceneOptions): SlideScene {
   const ctx = colorContext(deck, slide);
-  const tc: TextContext = { deck, ctx, slideNumber: options.number, date: options.date ?? new Date(), part: slide };
+  const tc = slideTextContext(deck, slide, ctx, options.number, options.date ?? new Date());
   const builder = new Builder(deck, slide, options, ctx, tc);
   const width = px(deck.width);
   const height = px(deck.height);
@@ -568,7 +237,7 @@ export function slideScene(deck: Deck, slide: PagePart, options: SceneOptions): 
     const group: GroupNode = { kind: 'group', tag: 'g', style: {}, attrs: {}, children: [] };
     const chain: DeckPart[] = 'layout' in slide ? [slide, slide.layout, slide.layout.master] : 'master' in slide ? [slide, slide.master] : [slide];
     const owner = chain.find((p) => at(p.xml, 'p:cSld/p:bg/p:bgPr/a:blipFill')) ?? slide;
-    builder.blipInto(group, bg.blip, owner, width, height);
+    builder.blipInto(group, bg.blip, embedHref(deck, owner, kid(bg.blip, 'a:blip')?.attrs['r:embed']), width, height);
     children.push({ kind: 'rect', x: 0, y: 0, width, height, rx: 0, ry: 0, style: { fill: '#ffffff' }, attrs: { 'data-bg': '1' } }, { ...group, attrs: { 'data-bg': '1' } });
   } else children.push({ kind: 'rect', x: 0, y: 0, width, height, rx: 0, ry: 0, style: bg.kind === 'none' ? { fill: '#ffffff' } : builder.fillStyle(bg), attrs: { 'data-bg': '1' } });
   for (const shape of slideShapes(deck, slide)) {

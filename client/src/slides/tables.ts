@@ -3,7 +3,7 @@
 // `ppt/tableStyles.xml`; PowerPoint's default (Medium Style 2, Accent 1) is built in, since decks name it without writing it.
 
 import { parseXml, type XmlElement } from '@golemdocs/docx';
-import { colorChild, resolveColor, type ColorContext } from './color.ts';
+import { colorChild, resolveColor, type ColorContext } from '../drawingml/color.ts';
 import type { Deck } from './deck.ts';
 import { kid, kids, num, ownText } from './ooxml.ts';
 import type { ResolvedFill, ResolvedLine } from './shapes.ts';

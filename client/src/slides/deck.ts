@@ -7,8 +7,8 @@
 
 import { OpcPackage, Relationships, cloneElement, el, isRelType, parseXml, serializeXml, type Relationship, type XmlElement } from '@golemdocs/docx';
 import { CONTENT, REL_TYPE, at, kid, kids, num } from './ooxml.ts';
-import { DEFAULT_MAP } from './color.ts';
-import { defaultTheme, readTheme, type Theme } from './theme.ts';
+import { DEFAULT_MAP } from '../drawingml/color.ts';
+import { defaultTheme, readTheme, type Theme } from '../drawingml/theme.ts';
 
 export interface DeckPart {
   name: string;

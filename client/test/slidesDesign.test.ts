@@ -12,7 +12,7 @@ import { treeOf } from '../src/slides/edit.ts';
 import { at, kid, kids } from '../src/slides/ooxml.ts';
 import { backgroundFill, slideShapes } from '../src/slides/shapes.ts';
 import { colorContext, slideScene } from '../src/slides/scene.ts';
-import { ROUGH_MEASURE } from '../src/slides/textLayout.ts';
+import { ROUGH_MEASURE } from '../src/drawingml/textLayout.ts';
 import { placeholderOf } from '../src/slides/shapes.ts';
 import {
   COLOR_SCHEMES,

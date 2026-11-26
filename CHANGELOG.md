@@ -29,6 +29,7 @@
 - Shared spreadsheets, CSV files, presentations, audio and video open as themselves in a shared link: in the spreadsheet, slides and media views, read-only, instead of being turned into a document. HTML pages in a shared folder show as the page they make.
 - Desktop app: a folder moved or renamed in the vault folder (in Finder or with `mv`) is moved in your account as a whole, at once, and stays the same folder, still shared with the same people and by the same links. Before, each of its files was moved one by one into a new folder, the folder list showed the old place until that was done, and the old folder's sharing was lost with it. Copies of the same file in several moved folders also keep their history now, instead of being made again.
 - Slides: on a high-resolution screen, the round handle above a selected shape turns it when you grab the handle itself, not a spot beside it.
+- Slides: Shift+Tab with nothing selected selects the slide's last shape, rather than the one before it.
 
 ## 0.48.0 - 2026-11-25
 

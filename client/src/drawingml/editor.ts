@@ -588,7 +588,8 @@ export class ShapeEditor<P> {
         const views = this.pickable(page);
         if (!views.length) return true;
         const i = views.findIndex((v) => v.shape.element === this.selected[0]);
-        const next = views[(i + (e.shiftKey ? -1 : 1) + views.length) % views.length];
+        // With nothing selected, Tab starts at the first shape and Shift+Tab at the last.
+        const next = i < 0 ? views[e.shiftKey ? views.length - 1 : 0] : views[(i + (e.shiftKey ? -1 : 1) + views.length) % views.length];
         this.selected = [next.shape.element];
         this.announceSelection();
         this.host.redraw();

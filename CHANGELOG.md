@@ -7,6 +7,9 @@
 - Shared documents and folders can be printed from the viewer's toolbar, and shown full screen with nothing but the document.
 - View › Files Sidebar has a keyboard shortcut: ⌃⌘S on a Mac, Ctrl+Shift+L elsewhere.
 - Slides can be restyled: Slide › Background sets a color, gradient or picture behind the slide or every slide, Slide › Theme swaps the deck's colors and fonts (from a built-in list or another presentation) and makes slides dark or light, and Slide › Edit Master opens the slide master and its layouts, where a change to a title or text style reaches every slide that uses them.
+- HTML pages: an HTML file with a script opens as the page it makes, right in Golem Docs, so an ai agent can write you a dashboard or a report as a file in your vault instead of hosting it somewhere else. A page can show parts of your other documents with `<golem-embed>` (a sheet's totals, a note's section, a chart) and read and change your notes from its scripts, and it keeps up as those documents change. View › HTML as Page, HTML as Document and HTML Source switch between the page, editing it as a document, and its HTML.
+- Pages run walled off from your account. A page that came from somewhere else (a download, an email, someone else's change) can't read your documents until you allow it, and then runs none of its scripts, so nothing it shows can leave your computer. Mark as Mine trusts a page you wrote yourself.
+- A shared page shows the people you share it with what it last showed you, and File › Share lists the documents it shows parts of.
 
 ### Changed
 
@@ -14,6 +17,7 @@
 - Help › Keyboard Shortcuts lists every command, by menu, with a search box, so you can give a key to any of them, not only to the ones that already have one. Your shortcuts follow your account to your other computers.
 - Format › Subscript is now ⇧⌘, (Ctrl+Shift+, on Windows and Linux), so ⌘, (Ctrl+,) opens Tools › Options as it always meant to. Subscript had been taking that key from it.
 - The Files sidebar comes back as you left it after a reload: scrolled to the same place, and still showing Trash if Trash was open.
+- The Files sidebar no longer opens with a tip about dropping files in. While it is empty, it says you can drop files or folders there.
 
 ### Fixed
 

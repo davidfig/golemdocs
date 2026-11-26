@@ -27,9 +27,10 @@ import { table } from './table.ts';
 import { vault } from './vault.ts';
 import { vector } from './vector.ts';
 import { viewer } from './viewer.ts';
+import { pages } from './pages.ts';
 import { pageSetup } from './pageSetup.ts';
 import { pasteSpecial } from './pasteSpecial.ts';
 import { properties } from './properties.ts';
 import { wordCount } from './wordCount.ts';
 
-export const messages: Catalog = { ...a11y, ...a11ySheet, ...app, ...chrome, ...columns, ...dialogs, ...encryption, ...history, ...textEditor, ...sheet, ...slides, ...link, ...live, ...scripts, ...math, ...media, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };
+export const messages: Catalog = { ...a11y, ...a11ySheet, ...app, ...chrome, ...columns, ...dialogs, ...encryption, ...history, ...textEditor, ...sheet, ...slides, ...link, ...live, ...scripts, ...math, ...media, ...menus, ...panels, ...picture, ...spelling, ...table, ...vault, ...vector, ...viewer, ...wordCount, ...pages, ...pageSetup, ...properties, ...pasteSpecial, ...format, ...paragraph };

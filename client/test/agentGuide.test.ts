@@ -47,7 +47,7 @@ test('the guide is written where it is missing, older or changed, and a newer ap
 
 test('the guide tells an agent how the folder syncs, what each format becomes, and how to show the person a note', () => {
   const text = guideText();
-  for (const needed of ['The file wins', 'trash for 30 days', 'ten or more files', 'golemdocs://open?file=', '[[Note]]', 'golem:live', '.golemdocs/']) assert.ok(text.includes(needed), needed);
+  for (const needed of ['The file wins', 'trash for 30 days', 'ten or more files', 'golemdocs://open?file=', '[[Note]]', 'golem:live', '.golemdocs/', '<golem-embed', 'golem.notes(']) assert.ok(text.includes(needed), needed);
 });
 
 test('the person’s instruction files that lack the line are found, in any language, by the guide’s path', async () => {

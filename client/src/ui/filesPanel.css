@@ -49,28 +49,6 @@
   background: var(--wm-hot);
 }
 
-.wm-files-tip {
-  display: flex;
-  flex: none;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 0 8px 8px;
-  padding: 6px 4px 6px 8px;
-  border: 1px solid var(--wm-border);
-  border-radius: 4px;
-  color: var(--wm-text);
-  font-size: 12px;
-}
-
-.wm-files-tip[hidden] {
-  display: none;
-}
-
-.wm-files-tip p {
-  flex: 1;
-  margin: 0;
-}
-
 /* Trash: pinned below the tree, so it is always in view (and there to drag onto), set off by a line. */
 .wm-files-trash-entry {
   display: flex;
@@ -133,9 +111,4 @@
 /* Being deleted for good: shown until it is gone. */
 .wm-files-going {
   opacity: 0.5;
-}
-
-/* The drop tip, while Trash is open: nothing can be dropped there. */
-.wm-files-tip.wm-files-tip-away {
-  display: none;
 }

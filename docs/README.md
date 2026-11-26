@@ -37,6 +37,7 @@ Start with the [architecture overview](architecture.md): the goals, the packages
 | [media.md](media.md) | The plan behind the audio and video viewers, and why they only play |
 | [slides.md](slides.md) | Slides (`.pptx`), built on its branch; the plan for the rest: own model with master/layout inheritance, reusing the vector editor, document text layout and sheet charts; presenting |
 | [live-blocks.md](live-blocks.md) | Plan: computed blocks kept up to date across the vault, in every document type: sources, hosts, the vault graph, where updates run |
+| [html-pages.md](html-pages.md) | Plan: HTML pages that run in the app in a sandbox, embed parts of other documents by live-block addresses, and can be shared; own and foreign pages and what each may do |
 | [folder-sharing.md](folder-sharing.md) | Plan: sharing a folder to view or edit, by email or public link, with links working inside it and copies in the recipient's vault |
 | [encrypted-folders.md](encrypted-folders.md) | Encrypting documents and folders you have: sealed in the browser with per-item keys, synced as blobs, unlocked per session with a key the person keeps |
 | [localization.md](localization.md) | Strings, languages, spelling dictionaries, adding a language |

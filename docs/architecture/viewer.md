@@ -46,6 +46,10 @@ A document shared with someone as "Can view" (File › Share; `viewer` in `share
 - **Built with the site.** The client's `build` runs the viewer config a second time in `site` mode (`vite.viewer.config.ts`), which writes `view/index.html` and its chunks into the site's `dist/` beside the app, without touching the app's chunks or its `build.json`. In development Vite serves it at `/view/`. Its address has no slash after `view` (`/view?s=…`, `/view?p=…`): Cloudflare serves a folder's `index.html` there and redirects `/view/` to it, so a link with the slash costs a redirect; the dev server is handed `/view/` for it (`viewerAddress` in `vite.config.ts`).
 - **Who may share view-only** is who may share at all: the owner, while they have sync. The one schema change is the share's viewer address (`shares.view_token`).
 
+### HTML pages
+
+A shared HTML page that is a page (`isPageHtml`: a script, an embed or a `golem-*` meta) is shown as one, not as a document: `viewer/sharedPage.ts` puts it in page view's sandboxed frame (`pages/view.ts`, an opaque origin, under a bar with its name) with the policy of an own page. The reader can't read the owner's vault, so its `<golem-embed>` elements and its `golem` reads are answered from what the owner's app kept when it last showed the page (`/api/view/<token>/page` or `/api/public/<token>/page`, `PageResults`); anything else it asks for is refused, and it changes nothing. A newer save shows the page again with what was kept for it. There is no Download button in this view yet, and a shared folder's page (`folderPage.ts`) still shows an HTML file as a document. See [html-pages.md](../html-pages.md) §5.
+
 ## Public links and embedding
 
 A document may also have one **public link** (File › Share, *Public link*): `/view?p=<token>`, the same page, for anyone, signed in or not. The token is `public_links.token` ([Server](server.md#sharing)), random and naming nothing, and the page reads `/api/public/<token>` and `/api/public/<token>/file`, which need no session. What differs from a person's view-only share (`src/viewer/share.ts`):

@@ -58,6 +58,11 @@ export interface DesktopBridge {
    * where the system can't set one (Linux). Returns the file's modification time after, or null when the shell is too old to date files.
    */
   setTimes(path: string, times: { created?: number; modified?: number }): Promise<number | null>;
+  /**
+   * Whether the system marks a vault file as downloaded from the internet (macOS quarantine, Windows' Zone.Identifier): an HTML page so
+   * marked is from elsewhere (docs/html-pages.md §1). False in a shell too old to tell, and where the system has no such mark.
+   */
+  downloaded(path: string): Promise<boolean>;
   /** Adds a line to the app's log file (desktop/src-tauri/src/log.rs). Never rejects: a shell too old to keep a log, or a failed write, is skipped. */
   log?(line: string): Promise<void>;
 }
@@ -195,6 +200,14 @@ export function desktopBridge(): DesktopBridge | null {
       return core.invoke<number>('vault_write', data as unknown as Record<string, unknown>, { headers: { path: encodeURIComponent(path).replace(/%2F/gi, '/') } });
     },
     remove: (path) => core.invoke<void>('vault_remove', { path }),
+    downloaded: (path) =>
+      core.invoke<boolean>('vault_downloaded', { path }).then(
+        (marked) => marked === true,
+        (error: unknown) => {
+          if (isMissingCommand(error)) return false;
+          throw error;
+        },
+      ),
     mediaUrl: (path) =>
       core.invoke<string>('vault_media_url', { path }).catch((error: unknown) => {
         if (isMissingCommand(error)) return null;

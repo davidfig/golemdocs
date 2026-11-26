@@ -6,6 +6,7 @@
 // The app's side (where documents are kept, the open one, uploads) comes in as `KeeperDeps`, so this is testable alone.
 
 import type { LiveOptions, LiveOwner } from './owner.ts';
+import { sourceTitle } from '@golemdocs/docx';
 import { builtinReads } from './builtinAddress.ts';
 import { buttonScript, isScriptSource, scriptPathOf } from './scriptAddress.ts';
 import type { SourceFile } from './sources.ts';
@@ -115,13 +116,28 @@ export class LiveKeeper<E extends KeeperEntry> {
 
   /**
    * What a block of this address shows, its document found from the top of the vault (`/Books/Budget.xlsx#Total`): a
-   * script reads a sheet so. Seen from `from`, or from any document.
+   * script reads a sheet so. Seen from `from`, or from the top of the vault.
    */
   async produce(address: string, from?: E): Promise<LiveResult> {
-    const at = from ?? this.deps.entries()[0];
+    const at = from ?? this.topOfVault();
     if (!at) return { kind: 'error', code: 'missing', detail: address };
     const { resultOf, sourceLookupOf } = await import('./stored.ts');
     return resultOf(address, sourceLookupOf(this.lookup(at, await this.deps.links()), (bytes) => this.deps.drawing(bytes)));
+  }
+
+  /** The documents a block of this address in `from` reads: the file it names, or a built-in block's folder or document (an HTML page's embed, docs/html-pages.md §3). */
+  sourcesFor(address: string, from?: E): E[] {
+    const at = from ?? this.topOfVault();
+    return at ? this.reads(sourceTitle(address), at) : [];
+  }
+
+  /**
+   * Where an address is seen from when no document asks (a script, a page not yet kept): a stand-in at the top of the vault
+   * that is no document, so no source can be it or show it (a real document there would look like a cycle when it is the source).
+   */
+  private topOfVault(): E | undefined {
+    const any = this.deps.entries()[0];
+    return any && ({ ...any, key: '\u0000top', name: '', folderId: null, local: null, cloud: null, vault: undefined } as E);
   }
 
   /** Whether a document has live blocks (so opening it is worth a check). */

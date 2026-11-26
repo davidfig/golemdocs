@@ -301,6 +301,8 @@ export type Action =
   | { kind: 'toggleFormattingMarks' }
   /** A Markdown document's text as its file has it, to edit as Markdown (and back). */
   | { kind: 'toggleMarkdownSource' }
+  /** An HTML file as the page it makes, as a document, or as its HTML (docs/html-pages.md §2). */
+  | { kind: 'htmlView'; view: 'page' | 'document' | 'source' }
   /** A PDF shown as its pages: fill in its form, or edit the form itself. */
   | { kind: 'setFormMode'; mode: FormMode }
   // Character formatting
@@ -391,7 +393,7 @@ export type Action =
 export type ActionKind = Action['kind'];
 
 /** Kinds of document the chrome knows how to present. */
-export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'txt' | 'xlsx' | 'pptx' | 'audio' | 'video';
+export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'txt' | 'xlsx' | 'pptx' | 'audio' | 'video' | 'page';
 
 /**
  * Formatting at the selection, for toolbar state. `undefined` means unknown or mixed (the
@@ -599,6 +601,8 @@ export interface ChromeState {
   formattingMarks: boolean;
   /** A Markdown document is shown as its Markdown source, in the text editor. */
   markdownSource: boolean;
+  /** An HTML file: shown as a page, a document or its source; null for anything else. */
+  htmlView: 'page' | 'document' | 'source' | null;
   trackChanges: boolean;
   format: FormatState;
   /** A PDF shown as its pages: whether its form is being filled in or edited; null otherwise. */
@@ -663,6 +667,7 @@ export const DEFAULT_STATE: ChromeState = {
   toolbars: true,
   formattingMarks: false,
   markdownSource: false,
+  htmlView: null,
   trackChanges: false,
   format: {},
   formMode: null,

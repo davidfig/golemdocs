@@ -1,6 +1,7 @@
 // The media viewer: audio and video played with the browser's own <video> and <audio>, over the document area (#viewport), with a
 // control bar built from the toolbar's buttons. It reads the file through a URL (a blob, or the desktop shell's ranged vault
-// address), so a file of any size plays without being held in memory. Nothing here edits a file. See docs/media.md.
+// address), so a file of any size plays without being held in memory. Nothing here edits a file: audio is edited in edit/audioEditor.ts,
+// which lies over this. See docs/media.md.
 
 import { t } from '../i18n/index.ts';
 import { announce } from '../ui/announce.ts';
@@ -40,6 +41,9 @@ export interface MediaViewerHooks {
   /** Whether captions should show when there are any (a setting that follows the account). */
   captionsOn(): boolean;
   setCaptionsOn(on: boolean): void;
+  /** Whether the open file can be edited (audio/edit), and editing it. */
+  canEdit(): boolean;
+  edit(): void;
 }
 
 /** Seconds that J and L, and the Back and Forward buttons, jump; the arrow keys jump half as far. */
@@ -72,6 +76,7 @@ export class MediaViewer {
   private readonly muteButton: HTMLButtonElement;
   private readonly captionsButton: HTMLButtonElement;
   private readonly fullButton: HTMLButtonElement;
+  private readonly editButton: HTMLButtonElement;
   private readonly seek: HTMLInputElement;
   private readonly volume: HTMLInputElement;
   private readonly time: HTMLElement;
@@ -130,6 +135,7 @@ export class MediaViewer {
       this.showCaptions(true);
     });
     this.fullButton = button('mediaFullScreen', t('media.op.fullScreen'), 'F', () => this.op('fullScreen'));
+    this.editButton = button('pencil', t('media.audio.edit'), '', () => this.hooks.edit());
     this.bar = h(
       'div',
       { class: 'wm-media-bar', attrs: { role: 'toolbar', 'aria-label': t('media.controls') } },
@@ -144,6 +150,7 @@ export class MediaViewer {
       this.captionsButton,
       this.language.el,
       this.fullButton,
+      this.editButton,
     );
     this.el.append(this.stage, this.message, this.bar);
     container.append(this.el);
@@ -324,6 +331,17 @@ export class MediaViewer {
     this.el.hidden = true;
   }
 
+  /** Out of the way (and quiet) while the file is edited. */
+  set covered(on: boolean) {
+    if (on) this.media?.pause();
+    this.el.hidden = on || !this.spec;
+  }
+
+  /** Whether the file can be edited changed. */
+  refresh(): void {
+    this.showButtons();
+  }
+
   focus(): void {
     this.el.focus({ preventScroll: true });
   }
@@ -376,11 +394,14 @@ export class MediaViewer {
     }
   }
 
-  /** A still of the video for the Files sidebar and Documents screen (a frame a little way in), or the waveform for audio. Null when there is neither. */
-  async thumbnail(): Promise<Blob | null> {
+  /** A still of the video for the Files sidebar and Documents screen (a frame a little way in), or the waveform for audio (`edited`: its peaks, as it is being edited). Null when there is neither. */
+  async thumbnail(edited?: Float32Array): Promise<Blob | null> {
     const spec = this.spec;
     if (!spec) return null;
-    if (!this.showsVideo) return this.peaks ? this.waveImage() : null;
+    if (!this.showsVideo) {
+      this.peaks = edited ?? this.peaks;
+      return this.peaks ? this.waveImage() : null;
+    }
     const still = h('video');
     still.muted = true;
     still.preload = 'auto';
@@ -525,6 +546,7 @@ export class MediaViewer {
     this.captionsButton.hidden = !hasCaptions;
     this.captionsButton.setAttribute('aria-pressed', String(this.captionsShown));
     this.fullButton.hidden = !this.showsVideo;
+    this.editButton.hidden = !this.hooks.canEdit();
     this.fullButton.setAttribute('aria-pressed', String(document.fullscreenElement === this.el));
   }
 

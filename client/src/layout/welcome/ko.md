@@ -51,6 +51,8 @@
 
 도움말 메뉴에 있는 [개인정보 처리방침](/privacy)과 [이용 약관](/terms)을 읽어 보십시오. Golem Docs에 대해 더 알아보려면 [Golem Docs 웹사이트](https://golemdocs.com/home/)를 방문하십시오.
 
+MP3 파일은 [자체 라이선스](/licenses/lame/COPYING.txt)를 따르는 자유 소프트웨어 [LAME](https://lame.sourceforge.io/)로 저장됩니다.
+
 ## 개발자 소개
 
 저는 [David Figatner](https://yopeyopey.com/about/) 및 [Claude](https://claude.ai/)입니다. Golem Docs는 제가 매일 쓰는 두 가지를 대체하려고 시작했습니다. 제 삶을 이끄는 Obsidian, 그리고 PDF를 변환하거나 편집하려고 늘 찾아 헤매던 도구들입니다. ZIP 파일 때문에 더 흥미로워졌습니다. 압축 파일에는 무엇이든 들어 있을 수 있으니, ZIP을 여는 편집기라면 그 안의 무엇이든 열어야 하니까요. 그러다 세상의 모든 문서를 열 수 있다면 재미있겠다고 생각했고, 지금도 그 방향으로 만들고 있습니다. 코드의 상당 부분은 Claude와 함께 썼고, 방향은 제가 잡았습니다(직접 짤 수도 있었다고 장담하지만, 몇 년은 걸렸을 겁니다).

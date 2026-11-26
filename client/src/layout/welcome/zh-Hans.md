@@ -51,6 +51,8 @@
 
 请阅读[隐私政策](/privacy)和[服务条款](/terms)，两者都在“帮助”菜单中。如需进一步了解 Golem Docs，请访问 [Golem Docs 网站](https://golemdocs.com/home/)。
 
+MP3 文件使用 [LAME](https://lame.sourceforge.io/) 保存，它是采用[自有许可证](/licenses/lame/COPYING.txt)的自由软件。
+
 ## 关于开发者
 
 我是 [David Figatner](https://yopeyopey.com/about/) 和 [Claude](https://claude.ai/)。Golem Docs 最初是为了取代我每天都用的两样东西：打理我生活的 Obsidian，以及我老得到处找的、用来转换或编辑 PDF 的工具。ZIP 文件让事情更有意思，因为压缩包里什么都可能有，所以能打开它的编辑器，就得能打开里面的一切。后来我想，要是它能打开世上所有类型的文档，那该多好玩，我现在还在朝这个方向做。大部分代码是和 Claude 一起写的，由我掌舵（我保证自己也能写，只是得花上好几年）。

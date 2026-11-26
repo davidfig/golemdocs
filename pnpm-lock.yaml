@@ -53,6 +53,9 @@ importers:
       polygon-clipping:
         specifier: ^0.15.7
         version: 0.15.7
+      wasm-media-encoders:
+        specifier: 0.7.0
+        version: 0.7.0
     devDependencies:
       typescript:
         specifier: ^5.9.0
@@ -1039,6 +1042,9 @@ packages:
   '@speed-highlight/core@1.2.24':
     resolution: {integrity: sha512-qeW2e1l78afw8VhRPfPQ1Gjj+KU5XFQ/OFV5ti6eTa9bruO7mJyZtA4vw0ofqmA3tKCkROE9xLk3VZoeRc98nw==}
 
+  '@swc/helpers@0.5.24':
+    resolution: {integrity: sha512-6tcXo4kA8HgGO7AVmawB57RYi/piBPYVHVcO6dXjX+SZw8GoHmi262sp4v2Ha2kNP9Cx84qei27yT+fjS1lxgg==}
+
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
@@ -1239,6 +1245,10 @@ packages:
         optional: true
       yaml:
         optional: true
+
+  wasm-media-encoders@0.7.0:
+    resolution: {integrity: sha512-Sp4wUasgxOK/IFfNhpon6LQQgYGwtpxyV4isjGIe1rvhnJL3w2KYr4f+CdqDNtGPDcgCDRY+uBanVfSx6Si0WQ==}
+    engines: {node: '>= 10'}
 
   workerd@1.20260926.1:
     resolution: {integrity: sha512-YojhsWBuZwk3Jk9OC0QfTgVbLeQOD1tK1olC9ZXAUcmeip8z4NE/xtttpxCsuTvQBRqppvy7Tkac0kxPYMjIXA==}
@@ -1780,6 +1790,8 @@ snapshots:
 
   '@speed-highlight/core@1.2.24': {}
 
+  '@swc/helpers@0.5.24': {}
+
   '@types/estree@1.0.9': {}
 
   '@types/node@22.20.4':
@@ -2047,6 +2059,10 @@ snapshots:
       '@types/node': 22.20.4
       fsevents: 2.3.3
       tsx: 4.23.15
+
+  wasm-media-encoders@0.7.0:
+    dependencies:
+      '@swc/helpers': 0.5.24
 
   workerd@1.20260926.1:
     optionalDependencies:

@@ -18,7 +18,7 @@ import type { GpuPage } from './webgl/gpuPage.ts';
 import { CSS_PX_PER_POINT, type Camera } from './view/camera.ts';
 import type { FindTab } from './ui/findDialog.ts';
 import { blankSource, lastNewKind } from './ui/newKinds.ts';
-import { acceptList, worksWithoutDocument, type ImageOp, type SheetOp, type SlidesOp, type MediaOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type ListedDocument, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
+import { acceptList, worksWithoutDocument, type ImageOp, type SheetOp, type SlidesOp, type MediaOp, type AudioOp, type VectorOp, type Action, type DocumentKind, type ActionKind, type ChromeHost, type FormMode, type ListedDocument, type Sample, type ViewMode, type ZoomTarget } from './ui/index.ts';
 import { t } from './i18n/index.ts';
 
 export interface AppHooks {
@@ -119,6 +119,10 @@ export interface AppHooks {
   sheetAction(op: SheetOp): void;
   /** The media viewer's commands (Playback menu). */
   mediaAction(op: MediaOp): void;
+  /** The audio editor's commands (Audio menu). */
+  audioAction(op: AudioOp): void;
+  /** File › New Audio Recording. */
+  newRecording(): Promise<void>;
   /** Edit › Copy Link to This Moment, for the open audio or video. */
   copyMomentLink(): Promise<void>;
   slidesAction(op: SlidesOp): void;
@@ -216,9 +220,11 @@ const LEAVES_SOURCE = new Set<ActionKind>(['print', 'printPreview', 'convert', '
 const SUPPORTED = new Set<ActionKind>([
   'sheet',
   'media',
+  'audio',
   'copyMomentLink',
   'slides',
   'new',
+  'newRecording',
   'open',
   'close',
   'import',
@@ -421,6 +427,9 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
             }
           }
           return;
+        case 'newRecording':
+          await app.prepareNew(undefined);
+          return app.newRecording();
         case 'open':
           return app.dashboard();
         case 'close':
@@ -516,6 +525,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.sheetAction(action.op);
         case 'media':
           return app.mediaAction(action.op);
+        case 'audio':
+          return app.audioAction(action.op);
         case 'copyMomentLink':
           return app.copyMomentLink();
         case 'slides':

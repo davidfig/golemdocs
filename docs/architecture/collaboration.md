@@ -48,6 +48,7 @@ The first person into an empty room says what its changes are (`RoomKind`, store
 | `objects` / `layers` / `nodes` | `put`/`del` of keyed objects (`ops/src/objects.ts`): PDF markup, picture shapes, drawing nodes | `applyObjects` rewrites one `.wdoc` extension entry |
 | `cells` | none: a workbook's room is watched (`ROOM_POLICY`), one session edits and saves the `.xlsx` | `applyLog` returns the file as it is |
 | `slides` | none: a deck's room is watched the same way, one session edits and saves the `.pptx` (`sheet/sheetSync.ts` with `kind: 'slides'`) | `applyLog` returns the file as it is |
+| `audio` | none: an audio file that can be edited (a WAV) is watched the same way (`sheet/sheetSync.ts` with `kind: 'audio'`) | `applyLog` returns the file as it is |
 
 Presence (`presence` carets as `Selection` with paragraph ids, `pointer` mouse positions) is relayed and never logged. Carets are mapped through incoming changes in the worker (`Replica.mapSelection`).
 

@@ -50,7 +50,7 @@ export interface FormatProfile {
   textEditor: boolean;
   /** A workbook, shown in the spreadsheet editor (see ../sheet): its own cells, editing, undo and clipboard. */
   sheetEditor: boolean;
-  /** Audio or video, shown in the media viewer (see ../media): played, never edited. */
+  /** Audio or video, shown in the media viewer (see ../media): played; audio can be edited too (../media/edit). */
   mediaViewer: boolean;
   /** A deck, shown in the slides editor (see ../slides): its own shapes, text, undo and clipboard. */
   slidesEditor?: boolean;
@@ -400,7 +400,7 @@ export function acceptList(): string {
 }
 
 /** What can still be done with no document open: opening or making one, the account, and the app's own settings and views. */
-const WITHOUT_DOCUMENT = new Set<Action['kind']>(['new', 'open', 'scripts', 'runScript', 'import', 'importFolder', 'openSample', 'openSaved', 'syncNow', 'signIn', 'signOut', 'subscribe', 'manageSubscription', 'clearLocalData', 'downloadAll', 'toggleFilesPanel', 'toggleFooter', 'toggleToolbars']);
+const WITHOUT_DOCUMENT = new Set<Action['kind']>(['new', 'newRecording', 'open', 'scripts', 'runScript', 'import', 'importFolder', 'openSample', 'openSaved', 'syncNow', 'signIn', 'signOut', 'subscribe', 'manageSubscription', 'clearLocalData', 'downloadAll', 'toggleFilesPanel', 'toggleFooter', 'toggleToolbars']);
 const DIALOGS_WITHOUT_DOCUMENT = new Set<string>(['options', 'trash', 'vault', 'updates', 'searchAll']);
 
 /** Whether the action means anything with no document open (after File › Close). */
@@ -453,6 +453,15 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
   // The media viewer plays the file: its own playback commands, copying a link to the moment, and what any file can do (close, share, download).
   if (profile.mediaViewer) {
     switch (action.kind) {
+      // The audio editor has its own editing, undo and clipboard.
+      case 'audio':
+      case 'undo':
+      case 'redo':
+      case 'cut':
+      case 'copy':
+      case 'paste':
+      case 'selectAll':
+        return profile.kind === 'audio';
       case 'media':
       case 'copyMomentLink':
       case 'close':
@@ -530,6 +539,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'importFolder':
     case 'convert':
     case 'new':
+    case 'newRecording':
     case 'open':
     case 'close':
     case 'openSample':
@@ -574,6 +584,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'sheet':
       return profile.sheetEditor;
     case 'media':
+    case 'audio':
     case 'copyMomentLink':
       return profile.mediaViewer;
     case 'slides':

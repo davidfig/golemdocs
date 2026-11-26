@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Merged into the Mac app's Info.plist by the bundler. golemdocs:// links open a note (src/link.rs). -->
+<!-- Merged into the Mac app's Info.plist by the bundler. golemdocs:// links open a note (src/link.rs); the microphone is for recording in the audio editor. -->
 <plist version="1.0">
 <dict>
   <key>CFBundleURLTypes</key>
@@ -14,5 +14,7 @@
       </array>
     </dict>
   </array>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Golem Docs records sound into the audio file you are editing.</string>
 </dict>
 </plist>

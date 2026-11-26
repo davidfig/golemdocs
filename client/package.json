@@ -23,7 +23,8 @@
     "@golemdocs/pdf": "workspace:*",
     "@golemdocs/script": "workspace:*",
     "libheif-js": "^1.23.5",
-    "polygon-clipping": "^0.15.7"
+    "polygon-clipping": "^0.15.7",
+    "wasm-media-encoders": "0.7.0"
   },
   "devDependencies": {
     "typescript": "^5.9.0",

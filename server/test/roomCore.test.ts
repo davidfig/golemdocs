@@ -447,7 +447,7 @@ const holderOf = (p: { inbox: MultiplayerServerMessage[] }) => {
 };
 
 test('a watched room never goes shared: the first session holds the document, the next watches, and the holder saves for them', async () => {
-  for (const kind of ['objects', 'layers', 'cells'] as const) {
+  for (const kind of ['objects', 'layers', 'cells', 'audio'] as const) {
     const t = await setup();
     const a = await t.join('a', 'editor', kind);
     assert.equal(holderOf(a), 'a');

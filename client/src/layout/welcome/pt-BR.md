@@ -51,6 +51,8 @@ Um documento é muito parecido: algo sem forma que as palavras trazem à vida. O
 
 Leia a [Política de Privacidade](/privacy) e os [Termos de Serviço](/terms), ambos no menu Ajuda. Para saber mais sobre o Golem Docs, visite o [site do Golem Docs](https://golemdocs.com/home/).
 
+Os arquivos MP3 são salvos com o [LAME](https://lame.sourceforge.io/), software livre com sua [própria licença](/licenses/lame/COPYING.txt).
+
 ## Sobre o desenvolvedor
 
 Eu sou o [David Figatner](https://yopeyopey.com/about/) e [Claude](https://claude.ai/). O Golem Docs nasceu como substituto de duas coisas que uso todos os dias: o Obsidian, que organiza a minha vida, e as ferramentas que eu vivia procurando para converter ou editar PDFs. Os arquivos ZIP deixaram tudo mais interessante, porque um arquivo compactado pode guardar qualquer coisa, então um editor que abre um ZIP precisa abrir tudo o que há dentro. Aí achei que seria divertido se ele abrisse todo tipo de documento que existe, e continuo construindo nessa direção. Boa parte do código foi escrita com o Claude, comigo no comando (juro que eu mesmo conseguiria programar tudo, mas levaria anos).

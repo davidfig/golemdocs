@@ -2,6 +2,7 @@ import type { Catalog } from '../../index.ts';
 
 export const chrome: Catalog = {
   'chrome.file.new': '&Создать',
+  'chrome.file.newRecording': 'Новая &аудиозапись',
   'chrome.file.open': '&Открыть…',
   'chrome.file.close': '&Закрыть',
   'chrome.file.import': '&Импорт…',

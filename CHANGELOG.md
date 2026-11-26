@@ -2,6 +2,14 @@
 
 ## 0.48.0 - Unreleased
 
+### Added
+
+- Audio: sound files can be edited. Audio › Edit Audio shows the waveform to select, cut, copy, paste, delete, trim or silence, with zoom, undo and playing the selection. WAV and FLAC files are saved as you edit, with the same rate, sample format and tags. An MP3 is saved as an MP3 when you choose Save, and other kinds as a new FLAC beside the original; until then your edits are kept on this device.
+- Audio: Audio › Effects has Change Volume, Normalize, fades, Reverse, Speed and Pitch, Equalizer, Compressor and Reduce Noise, with a preview; Audio › Generate adds silence or a tone.
+- Audio: record from the microphone with Audio › Record, or start with File › New Audio Recording.
+- Audio: label parts of a sound with Audio › Label. Labels are kept as captions in a .vtt file beside it.
+- Audio: Audio › Spectrogram shows the pitches in a sound.
+
 ### Fixed
 
 - A link to a section of a note, such as [[Note#Budget]] or [text](#budget), goes to that heading, in another document or the one that is open.

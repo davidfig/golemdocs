@@ -14,7 +14,7 @@ export type MediaLookup = (hash: string) => Promise<Uint8Array | null>;
 export async function applyLog(base: Uint8Array, transactions: readonly Transaction[], media?: MediaLookup, kind: RoomKind = 'doc'): Promise<Uint8Array> {
   // A workbook's room is watched (one session edits and saves it): it never has changes to apply.
   // A watched file (a workbook, a deck) is saved whole by whoever holds it: nothing to apply.
-  if (kind === 'cells' || kind === 'slides') return base;
+  if (kind === 'cells' || kind === 'slides' || kind === 'audio') return base;
   const apply = kind === 'doc' ? (b: Uint8Array, txs: readonly Transaction[]) => applyAll(b, txs, media) : kind === 'text' ? (b: Uint8Array, txs: readonly Transaction[]) => applyText(b, txs) : (b: Uint8Array, txs: readonly Transaction[]) => applyObjects(b, txs, kind);
   try {
     return await apply(base, transactions);
@@ -65,7 +65,7 @@ const OBJECT_ENTRIES = {
  * `base` (a .wdoc) with changes to the objects of its lists applied. Only the one entry that holds the lists is written again: the
  * PDF or picture itself, and everything else, are copied as they are.
  */
-async function applyObjects(base: Uint8Array, transactions: readonly Transaction[], kind: Exclude<RoomKind, 'doc' | 'text' | 'cells' | 'slides'>): Promise<Uint8Array> {
+async function applyObjects(base: Uint8Array, transactions: readonly Transaction[], kind: Exclude<RoomKind, 'doc' | 'text' | 'cells' | 'slides' | 'audio'>): Promise<Uint8Array> {
   const { entry: entryName, layers: names } = OBJECT_ENTRIES[kind];
   const zip = ZipArchive.read(base);
   const entry = zip.entries.get(entryName);

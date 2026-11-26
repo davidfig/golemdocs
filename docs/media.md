@@ -2,6 +2,8 @@
 
 **Status.** Built: steps 1–6 of the work list; how it works now is in [architecture/media.md](architecture/media.md). Changed from the plan: media joins no room at all (nothing is edited), and vault files over 50 MB are listed in the library as `vault:` entries (open and Show in Finder only). Not done: step 7 (video frames as live-block pictures, optional), and trying the `golemvault:` scheme on Windows and iOS (it works in the Mac app).
 
+**Changed 2026-11-25:** audio is to be edited in the app after all ([audio-editing.md](audio-editing.md)). Video stays a viewer.
+
 **Goal.** Open and play audio and video files, and tie them to notes (captions, links to a moment). **Viewers only: no editing.** Cutting, converting and joining media is done by the external agents people point at their vault (an agent with ffmpeg does it in seconds, with every codec), the same way the app leaves ai to them. To match that in the app we would have to write our own MP4/WebM containers and an encoder pipeline, and still not cover every codec. We'll look at this again if people keep asking for simple trims. If they do, a keyframe-only trim (copying the data across without re-encoding) is the one edit worth building.
 
 ## Principles

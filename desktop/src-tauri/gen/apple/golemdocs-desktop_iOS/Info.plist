@@ -51,6 +51,8 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Golem Docs records sound into the audio file you are editing.</string>
 	<key>NSUbiquitousContainers</key>
 	<dict>
 		<key>iCloud.com.golemdocs.mobile</key>

@@ -1,5 +1,6 @@
 export const chrome = {
   'chrome.file.new': '&New',
+  'chrome.file.newRecording': 'New Audio &Recording',
   'chrome.file.open': '&Open…',
   'chrome.file.close': '&Close',
   'chrome.file.import': '&Import…',

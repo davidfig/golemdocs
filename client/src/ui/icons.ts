@@ -320,6 +320,14 @@ export const ICONS: Record<string, string> = {
   // Spreadsheets (the Sheet toolbar).
   // The Playback menu (audio and video).
   mediaPlay: svg(`<path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z" fill="${GREEN}"/>`),
+  audioZoomIn: svg(`<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5M7.5 10.5h6M10.5 7.5v6"/>`),
+  audioZoomOut: svg(`<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5M7.5 10.5h6"/>`),
+  audioZoomSelection: svg(`<rect x="8" y="4" width="8" height="16" fill="${YELLOW}"/><path d="M2.5 12H6M4.5 10l2 2-2 2M21.5 12H18M19.5 10l-2 2 2 2"/>`),
+  audioZoomAll: svg(`<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M6 12h12M8 10l-2 2 2 2M16 10l2 2-2 2"/>`),
+  audioRecord: svg(`<circle cx="12" cy="12" r="7.5" fill="${RED}"/>`),
+  audioStop: svg(`<rect x="5.5" y="5.5" width="13" height="13" rx="1.5" fill="${RED}"/>`),
+  audioLabel: svg(`<path d="M3 6.5h10.5l7 5.5-7 5.5H3z" fill="${YELLOW}"/><path d="M6.5 12h6"/>`),
+  audioSpectrogram: svg(`<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M6.5 17v-3M10 17V9.5M14 17v-5M17.5 17V7" stroke="${BLUE}" stroke-width="2"/>`),
   mediaPause: svg(`<rect x="5.5" y="4.5" width="4.5" height="15" rx="1" fill="${BLUE}"/><rect x="14" y="4.5" width="4.5" height="15" rx="1" fill="${BLUE}"/>`),
   mediaVolume: svg(`<path d="M3.5 9h3.5l5-4.5v15l-5-4.5H3.5z" fill="${YELLOW}"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" stroke="${BLUE}" stroke-width="2"/>`),
   mediaBack: svg(`<path d="M12 5.5v13L3.5 12z" fill="${BLUE}"/><path d="M20.5 5.5v13L12 12z" fill="${SKY}"/>`),

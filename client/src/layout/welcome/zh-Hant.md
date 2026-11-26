@@ -51,6 +51,8 @@
 
 請閱讀[隱私權政策](/privacy)和[服務條款](/terms)，兩者都在「說明」功能表中。若想進一步了解 Golem Docs，請造訪 [Golem Docs 網站](https://golemdocs.com/home/)。
 
+MP3 檔案使用 [LAME](https://lame.sourceforge.io/) 儲存，它是採用[自有授權條款](/licenses/lame/COPYING.txt)的自由軟體。
+
 ## 關於開發者
 
 我是 [David Figatner](https://yopeyopey.com/about/) 和 [Claude](https://claude.ai/)。Golem Docs 一開始是為了取代我每天都在用的兩樣東西：打理我生活的 Obsidian，以及我老是在找的、用來轉換或編輯 PDF 的工具。ZIP 檔讓事情更有意思，因為壓縮檔裡什麼都可能有，所以能開啟壓縮檔的編輯器，就得能開啟裡面的任何東西。後來我覺得，如果它能開啟所有種類的文件，應該會很好玩，我現在還在朝這個方向努力。大部分程式碼是和 Claude 一起寫的，由我掌舵（我保證我自己也寫得出來，只是得花上好幾年）。

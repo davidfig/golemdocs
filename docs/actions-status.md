@@ -94,6 +94,8 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 **Playback** (audio or video open in the player; [Audio and video](architecture/media.md))
 - Playback menu (`media`): Play/Pause, Back, Forward, Start, Mute, Slower, Faster, Normal Speed, Captions, Full Screen
 - Edit › Copy Link to This Moment (`copyMomentLink`)
+- File › New Audio Recording (`newRecording`)
+- Audio menu (`audio`; a kept audio file): Edit Audio, Save (MP3 and other lossy files), Record, Delete, Trim to and Silence Selection, Label, Generate (Silence, Tone), Effects (Change Volume, Normalize, Fade In, Fade Out, Reverse, Speed and Pitch, Equalizer, Compressor, Take Noise Sample, Reduce Noise), Zoom In, Out, to Selection and to Whole File, Spectrogram; Undo, Redo, Cut, Copy, Paste and Select All while editing ([audio-editing.md](audio-editing.md))
 
 ## Still needs work
 

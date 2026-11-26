@@ -1,0 +1,50 @@
+/* The audio editor (audioEditor.ts): the waveform over the player, and its tools in the player's bar. */
+
+.wm-audio-editor {
+  --wm-media-wave: var(--wm-border);
+  --wm-media-played: var(--wm-accent);
+  --wm-audio-back: var(--wm-desk);
+  --wm-audio-selected: color-mix(in srgb, var(--wm-accent) 25%, transparent);
+  --wm-audio-over: rgb(255 255 255 / 30%);
+  z-index: 3;
+}
+
+.wm-audio-wave {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  cursor: text;
+  outline: none;
+  touch-action: none;
+}
+
+.wm-audio-wave:focus-visible {
+  outline: 2px solid var(--wm-accent);
+  outline-offset: -2px;
+}
+
+.wm-audio-wave canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.wm-audio-status {
+  flex: 1;
+  padding: 0 6px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (forced-colors: active) {
+  .wm-audio-editor {
+    --wm-media-wave: GrayText;
+    --wm-media-played: CanvasText;
+    --wm-audio-back: Canvas;
+    --wm-audio-selected: Canvas;
+    --wm-audio-over: transparent;
+  }
+}

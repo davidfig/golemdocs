@@ -51,6 +51,8 @@ A document is much the same: a shapeless thing that words bring to life. Golem D
 
 Read the [Privacy Policy](/privacy) and the [Terms of Service](/terms), both in the Help menu. To learn more about Golem Docs, visit the [Golem Docs website](https://golemdocs.com/home/).
 
+MP3 files are saved with [LAME](https://lame.sourceforge.io/), free software under its [own license](/licenses/lame/COPYING.txt).
+
 ## About the developer
 
 I'm [David Figatner](https://yopeyopey.com/about/) and [Claude](https://claude.ai/). Golem Docs began as a replacement for two things I use every day: Obsidian, which runs my life, and the tools I kept hunting for to convert or edit PDFs. ZIP files made it more interesting, because an archive can hold anything, so an editor that opens one has to open whatever is inside. Then I thought it would be fun if it could open every kind of document there is, and I'm still building toward that. Much of the code was written with Claude, with me steering (I promise I could have coded it myself, but it would have taken years).

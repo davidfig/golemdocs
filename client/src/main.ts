@@ -81,6 +81,7 @@ import { checkoutUrl, fetchSubscription, portalUrl, sellsSubscriptions, Subscrip
 import { Dashboard } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
 import { showChoice, showConfirm } from './ui/popup.ts';
+import { uniqueName } from './storage/uniqueName.ts';
 import { askToRun, pickScript, showScriptsDialog } from './ui/scriptDialogs.ts';
 import { ScriptsApp } from './scripts/app.ts';
 import { buttonScript } from './live/scriptAddress.ts';
@@ -159,6 +160,7 @@ import { askDuplicate } from './ui/duplicateDialog.ts';
 import type { DocumentEngine } from './documentEngine.ts';
 import { TextEditor } from './textEditor/handle.ts';
 import { SheetEditor } from './sheet/handle.ts';
+import type { AudioEditor } from './media/edit/audioEditor.ts';
 import { MediaViewer, spokenTime, type CaptionTrack } from './media/viewer.ts';
 import { isMediaName, mediaMime, playsInPlace } from './media/mediaFiles.ts';
 import { formatClock, momentFragment, parseMoment, type MediaMoment } from './media/timecode.ts';
@@ -200,6 +202,7 @@ import { decodeImage, encodeCanvas, makeCanvas, toPng, transcode } from './forma
 import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
 import { formatAllows } from './ui/formats.ts';
 import { DEFAULT_STATE, FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
+import type { AudioOp, MediaOp } from './ui/actions.ts';
 import { h, modalOpen, stripMnemonic } from './ui/dom.ts';
 import { ScreenReaderSupport } from './screenReaderSupport.ts';
 import { cycleRegions, focusFirst, type Region } from './ui/focusRegions.ts';
@@ -1192,16 +1195,18 @@ function leaveSheetRoom(): void {
 
 /**
  * A workbook or a deck in the account has a room of its own, watched (see sheet/sheetSync.ts): one session edits it, the others
- * look. A workbook's is a `cells` room, a deck's a `slides` room.
+ * look. A workbook's is a `cells` room, a deck's a `slides` room, an audio file's (one that can be edited) an `audio` room.
  */
 async function joinSheetRoom(doc: OpenDocument, cloudId: string): Promise<void> {
   const room = networkRoom(cloudId);
   const deck = slidesView.active;
-  if (!room || doc.roomRequested || current !== doc || !(sheetView.active || deck)) return;
+  const audio = mediaView.active;
+  const still = (): boolean => (audio ? mediaView.active : deck ? slidesView.active : sheetView.active);
+  if (!room || doc.roomRequested || current !== doc || !still()) return;
   doc.roomRequested = true;
   // The room client is loaded with the first workbook that has a room.
   const { sheetRoom } = await import('./sheet/sheetSync.ts');
-  if (current !== doc || !(deck ? slidesView.active : sheetView.active)) {
+  if (current !== doc || !still()) {
     doc.roomRequested = false;
     return;
   }
@@ -1213,14 +1218,15 @@ async function joinSheetRoom(doc: OpenDocument, cloudId: string): Promise<void> 
     client: crypto.randomUUID(),
     name: room.user,
     color: room.color,
-    kind: deck ? 'slides' : 'cells',
-    serialize: async () => (deck ? await slidesView.save() : (await sheetView.save())?.stored) ?? new Uint8Array(0),
+    kind: audio ? 'audio' : deck ? 'slides' : 'cells',
+    serialize: async () => (audio ? await mediaBytes() : deck ? await slidesView.save() : (await sheetView.save())?.stored) ?? new Uint8Array(0),
     changed: (state) => {
       const d = open();
       if (!d) return;
       // Watching (someone else holds it), or only allowed to look: read-only.
       const readOnly = state.role === 'viewer' || state.watching || state.catchingUp || d.shared?.role === 'viewer';
-      if (deck) slidesView.readOnly = readOnly;
+      if (audio) setAudioReadOnly(readOnly);
+      else if (deck) slidesView.readOnly = readOnly;
       else sheetView.readOnly = readOnly;
       roomStateChanged(state);
     },
@@ -1709,6 +1715,9 @@ function saveIfEdited(): void {
     if (current.shared.dirty) void uploadShared();
     return;
   }
+  // What is being recorded is part of the document, and a lossy file's edits are kept here.
+  if (audioEditor?.recording) void audioEditor.finishRecording();
+  audioEditor?.flushDraft();
   if (current.unsavedSince) void saveInBrowser();
 }
 
@@ -1743,7 +1752,8 @@ async function uploadShared(): Promise<void> {
     // being opened). The whole document goes, so what it is edited as (Markdown...) is kept.
     const sheetSave = sheetView.save();
     const deckSave = slidesView.save();
-    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).stored : null) ?? (deckSave ? await deckSave : null) ?? (await worker.save());
+    const mediaSave = mediaBytes();
+    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).stored : null) ?? (deckSave ? await deckSave : null) ?? (await mediaSave) ?? (await worker.save());
     if (bytes.length >= CHUNK_MIN_FILE) {
       // A big document goes as chunks, and after the first save of this session only those that changed.
       const { manifest, fresh } = await traced('chunkBytes', () => chunkBytes(bytes));
@@ -2157,8 +2167,8 @@ function flushUploads(): Promise<void> {
 /** Joins the open document's room, unless it is in one or has asked: a text file's is its own (see joinTextRoom), a document's the layout worker's. */
 function joinRoomOf(doc: OpenDocument, cloudId: string): void {
   if (current !== doc || doc.roomRequested) return;
-  // Nothing in audio or video is edited, so there is nothing to share a room for (see docs/media.md).
-  if (mediaView.active) return;
+  // Audio that can be edited has a watched room; the rest is only played, so there is nothing to share a room for (see docs/media.md).
+  if (mediaView.active) return editableAudio() ? void joinSheetRoom(doc, cloudId) : undefined;
   if (textView.active && !markdownSource) return void joinTextRoom(doc, cloudId);
   if (sheetView.active || slidesView.active) return void joinSheetRoom(doc, cloudId);
   const room = networkRoom(cloudId);
@@ -2536,7 +2546,7 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
 async function makeThumbnail(info: SavedInfo): Promise<void> {
   // A video's is a frame a little way in; audio's its waveform.
   if (mediaView.active) {
-    const blob = await mediaView.thumbnail().catch(() => null);
+    const blob = await mediaView.thumbnail(audioEditor?.peaks()).catch(() => null);
     if (blob) await saveThumbnail(info.id, blob, info.updatedAt).catch(() => undefined);
     return;
   }
@@ -2596,7 +2606,7 @@ function saveInBrowser(): Promise<string | null> {
   const source = markdownSource?.doc === doc ? markdownSource : null;
   const sheetSave = sheetView.save();
   // Audio and video are kept as the files themselves.
-  const mediaSave = mediaView.active && mediaInput?.blob ? mediaInput.blob.arrayBuffer().then((b) => new Uint8Array(b)) : null;
+  const mediaSave = mediaBytes();
   const deckSave = slidesView.save();
   const marked = large || sheetSave || deckSave || mediaSave ? null : worker.saveMarked();
   const bytes = source ? sourceMerged(source, textView.snapshot()!) : large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.stored) : deckSave ? deckSave : mediaSave ? mediaSave : marked!.then((saved) => saved.bytes);
@@ -2752,7 +2762,9 @@ async function signOutQuietly(): Promise<boolean> {
   uploads.backOnline();
   await flushUploads();
   // The same copies the Documents page lists (not those of documents already deleted from the account).
-  const unsent = ((await localCopies(user)) ?? []).filter(hasUnsentChanges);
+  const unsent: { name: string }[] = ((await localCopies(user)) ?? []).filter(hasUnsentChanges);
+  const drafts = localStorage.getItem('golem.audioDrafts') ? await import('./media/edit/audioEditor.ts').catch(() => null) : null;
+  for (const name of (await drafts?.draftNames(user.id).catch(() => null)) ?? []) if (!unsent.some((u) => u.name === name)) unsent.push({ name });
   if (unsent.length) {
     const key = uploads.offline ? 'app.signOutLossOffline' : uploads.signedOut ? 'app.signOutLossExpired' : 'app.signOutLoss';
     const body = document.createElement('p');
@@ -2774,6 +2786,7 @@ async function signOutQuietly(): Promise<boolean> {
   uploads.clear();
   await saving.catch(() => {});
   await deleteOwnedBy(user.id).catch(() => {});
+  await drafts?.removeDraftsOf(user.id).catch(() => {});
   forgetCatalogue();
   try {
     localStorage.setItem(SIGNED_OUT_KEY, String(Date.now())); // tells this page's other tabs
@@ -2920,6 +2933,8 @@ async function clearLocalData(): Promise<void> {
   try {
     await saving.catch(() => {}); // a save still writing would otherwise land after the wipe
     await clearAllSaved();
+    // The audio editor's (media/edit/pageStore.ts).
+    indexedDB.deleteDatabase('golemdocs-audio');
     searchLibrary.reset();
     try {
       localStorage.clear();
@@ -3717,7 +3732,8 @@ async function newInSharedFolder(share: SharedFolder, folderId: string, docKind?
     if (current !== doc || !doc.shared) return;
     const sheetSave = sheetView.save();
     const deckSave = slidesView.save();
-    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).stored : null) ?? (deckSave ? await deckSave : null) ?? (await worker.save());
+    const mediaSave = mediaBytes();
+    const bytes = (textView.active ? textEngine.snapshot() : null) ?? (sheetSave ? (await sheetSave).stored : null) ?? (deckSave ? await deckSave : null) ?? (await mediaSave) ?? (await worker.save());
     const made = await createInSharedFolder(share.ownerId, folderId, fileName(), bytes);
     sharedDocs.set(made.id, sharedFolderDoc(share, made));
     if (current !== doc || !doc.shared) return;
@@ -3842,8 +3858,9 @@ async function download(): Promise<void> {
     // Audio and video: the file as it is. One played from the vault is there already (File › Show in Finder).
     if (mediaView.active) {
       const name = fileName();
-      if (!mediaInput?.blob) return notify(t('media.vaultOnlyTip'));
-      if (await saveFile(name, new Uint8Array(await mediaInput.blob.arrayBuffer()), mediaMime(name))) setStatus(t('app.downloaded', { name }));
+      const bytes = mediaBytes();
+      if (!bytes) return notify(t('media.vaultOnlyTip'));
+      if (await saveFile(name, await bytes, mediaMime(name))) setStatus(t('app.downloaded', { name }));
       return;
     }
     // The large-text editor holds the text, and gives it back in the encoding it came in.
@@ -5308,7 +5325,7 @@ function focusInput(): void {
   if (!focusAllowed || current.none) return;
   if (textView.active) return textEngine.focus();
   if (sheetView.active) return sheetEngine.focus();
-  if (mediaView.active) return mediaView.focus();
+  if (mediaView.active) return mediaEngine.focus();
   if (slidesView.active) return slidesEngine.focus();
   focusTextInput(input);
 }
@@ -5491,7 +5508,7 @@ function render(): void {
     painting,
     draw: { ...drawStyle, tool: drawLayer.tool, hasSelection: drawLayer.selection.length > 0, layers: layersOpen },
     vector: vector ? vector.state(layersOpen) : { ...DEFAULT_STATE.vector, layers: layersOpen },
-    media: mediaView.state(),
+    media: mediaState(),
     inTable,
     formattingMarks,
     markdownSource: markdownSource !== null,
@@ -6812,9 +6829,11 @@ const chromeHost = createChromeHost({
   documentReady: nextDocumentReady,
   imageAction: pictureAction,
   sheetAction: (op) => sheetView.sheetOp(op),
-  mediaAction: (op) => mediaView.op(op),
+  mediaAction: (op) => mediaOp(op),
   copyMomentLink: () => copyMomentLink(),
   openMediaFile: (file) => openMediaFile(file),
+  audioAction: (op) => void audioOp(op),
+  newRecording: () => newRecording(),
   slidesAction: (op) => slidesView.slidesOp(op),
   engine: () => (textView.active ? textEngine : sheetView.active ? sheetEngine : slidesView.active ? slidesEngine : mediaView.active ? mediaEngine : null),
   openSelection,
@@ -6883,11 +6902,13 @@ const chromeHost = createChromeHost({
  * What the open editor can undo and redo, and whether something is selected: read every frame, and again just before a command runs
  * (see ChromeOptions.liveState), because a key pressed right after an edit can arrive before the next frame.
  */
-function editingState(): Pick<ChromeState, 'canUndo' | 'canRedo' | 'hasSelection'> {
+function editingState(): Pick<ChromeState, 'canUndo' | 'canRedo' | 'hasSelection' | 'media'> {
   return {
-    hasSelection: textView.active ? textEngine.hasSelection : sheetView.active ? sheetEngine.hasSelection : slidesView.active ? slidesEngine.hasSelection : selection.text.length > 0,
-    canUndo: textView.active ? textEngine.canUndo : sheetView.active ? sheetEngine.canUndo : slidesView.active ? slidesEngine.canUndo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
-    canRedo: textView.active ? textEngine.canRedo : sheetView.active ? sheetEngine.canRedo : slidesView.active ? slidesEngine.canRedo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
+    // Whether audio is being edited, so Select All and Paste work at once.
+    media: mediaState(),
+    hasSelection: mediaView.active ? mediaEngine.hasSelection : textView.active ? textEngine.hasSelection : sheetView.active ? sheetEngine.hasSelection : slidesView.active ? slidesEngine.hasSelection : selection.text.length > 0,
+    canUndo: mediaView.active ? mediaEngine.canUndo : textView.active ? textEngine.canUndo : sheetView.active ? sheetEngine.canUndo : slidesView.active ? slidesEngine.canUndo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canUndo : isDrawing() || embeddedDrawing ? (vector?.editor.canUndo ?? false) : isPicture() ? layerSteps.canUndo || pictureHistory.undo.length > 0 : canUndo,
+    canRedo: mediaView.active ? mediaEngine.canRedo : textView.active ? textEngine.canRedo : sheetView.active ? sheetEngine.canRedo : slidesView.active ? slidesEngine.canRedo : isDrawing() && sharedLive() && isVectorFormat(current.kind as Format) ? vectorSteps.canRedo : isDrawing() || embeddedDrawing ? (vector?.editor.canRedo ?? false) : isPicture() ? layerSteps.canRedo || pictureHistory.redo.length > 0 : canRedo,
   };
 }
 
@@ -7861,25 +7882,284 @@ const mediaView = new MediaViewer(document.getElementById('viewport')!, {
       /* not remembered: captions start off next time */
     }
   },
+  canEdit: () => editableAudio() && !audioReadOnly,
+  edit: () => void audioOp('edit'),
 });
 
-/** The media viewer as the chrome sees it (see documentEngine.ts): nothing to select, undo or type into. */
+/** The media viewer as the chrome sees it (see documentEngine.ts): nothing to select, undo or type into, but for audio being edited. */
 const mediaEngine: DocumentEngine = {
-  canUndo: false,
-  canRedo: false,
-  hasSelection: false,
+  get canUndo() {
+    return audioEditor?.canUndo ?? false;
+  },
+  get canRedo() {
+    return audioEditor?.canRedo ?? false;
+  },
+  get hasSelection() {
+    return audioEditor?.hasSelection ?? false;
+  },
   snapshot: () => null,
   bounds: () => ({ x: 0, y: 0, width: 0, height: 0 }),
-  undo: () => {},
-  redo: () => {},
-  selectAll: () => {},
+  undo: () => audioEditor?.undo(),
+  redo: () => audioEditor?.redo(),
+  selectAll: () => audioEditor?.selectAll(),
   insert: () => {},
-  copy: () => copyMomentLink(),
-  cut: async () => {},
-  paste: async () => {},
+  copy: async () => audioEditor?.copy(),
+  cut: async () => audioEditor?.cut(),
+  paste: async () => audioEditor?.paste(),
   find: () => {},
-  focus: () => mediaView.focus(),
+  focus: () => (audioEditor ?? mediaView).focus(),
 };
+
+/** The audio editor, while the open audio is edited, and the open it is being fetched for. Its file can't be changed while another session holds it, or by someone who may only look. */
+let audioEditor: AudioEditor | null = null;
+let audioOpening: OpenDocument | null = null;
+let audioReadOnly = false;
+
+/** Whether the open file is audio that can be edited: one kept here. */
+function editableAudio(): boolean {
+  return mediaView.active && current.kind === 'audio' && !!mediaInput?.blob && !current.inPlace;
+}
+
+function setAudioReadOnly(on: boolean): void {
+  audioReadOnly = on;
+  if (audioEditor) audioEditor.readOnly = on;
+  mediaView.refresh();
+  requestRender();
+}
+
+function mediaState(): ReturnType<typeof mediaView.state> {
+  const state = mediaView.state();
+  if (!state) return null;
+  const editor = audioEditor;
+  return { ...state, ...(editor && { playing: editor.playing }), canEdit: editableAudio() && !audioReadOnly, editing: !!editor, selected: !!editor?.hasSelection, readOnly: audioReadOnly || !!editor?.working, recording: !!editor?.recording, spectrogram: !!editor?.spectrogramShown, unsaved: !!editor?.unsaved };
+}
+
+/** The open audio or video's file, as edited (but for a lossy file's edits, which are saved only when asked); null when it is not kept here. Asked for now, so a document opened next doesn't change it. */
+function mediaBytes(): Promise<Uint8Array<ArrayBuffer>> | null {
+  if (!mediaView.active || !mediaInput?.blob) return null;
+  const input = mediaInput;
+  if (audioEditor?.dirty && !audioEditor.lossy) {
+    const type = mediaMime(mediaView.name);
+    return audioEditor.save().then((bytes) => {
+      // What plays when editing is done, unless it was edited again (that is saved, and kept, later).
+      input.edited = new Blob([bytes], { type });
+      return bytes;
+    });
+  }
+  return (input.edited ?? input.blob!).arrayBuffer().then((b) => new Uint8Array(b));
+}
+
+/** The Playback menu's commands: the editor's, while the audio is edited. */
+function mediaOp(op: MediaOp): void {
+  if (!audioEditor) return mediaView.op(op);
+  if (op === 'playPause') audioEditor.playPause();
+  else if (op === 'start') audioEditor.jumpToStart();
+  else if (op === 'back' || op === 'forward') audioEditor.jump(op === 'back' ? -10 : 10);
+}
+
+async function audioOp(op: AudioOp): Promise<void> {
+  if (audioEditor) return op === 'edit' ? finishAudioEditing() : audioEditor.op(op);
+  if (op === 'edit') await editAudio();
+}
+
+/** Edits the open audio. `selectAll`: a new recording, to be recorded over. */
+async function editAudio(selectAll = false): Promise<void> {
+  if (audioEditor || audioOpening || !editableAudio() || audioReadOnly) return;
+  const doc = (audioOpening = current);
+  const input = mediaInput!;
+  const name = mediaView.name;
+  const still = (): boolean => current === doc && mediaInput === input && !audioReadOnly;
+  try {
+    const { AudioEditor, CantEdit } = await import('./media/edit/audioEditor.ts');
+    const bytes = new Uint8Array(await (input.edited ?? input.blob!).arrayBuffer());
+    const labels = await readLabelFile(doc, name);
+    if (!still()) return;
+    try {
+      const editor = await AudioEditor.open(
+        document.getElementById('viewport')!,
+        name,
+        bytes,
+        mediaView.currentTime,
+        { encrypted: !!doc.encrypted, owner: account?.id, labels, selectAll },
+        {
+          edited: () => {
+            if (current === doc) documentEdited();
+          },
+          labelsEdited: (text) => writeLabelFile(doc, name, text),
+          changed: () => requestRender(),
+          notify: (message) => reportError(message),
+          save: () => void saveLossyAudio(),
+          done: () => void finishAudioEditing(),
+          draftKey: () => (doc.shared ? null : doc.localId),
+        },
+        still,
+      );
+      if (!editor) return;
+      audioEditor = editor;
+    } catch (e) {
+      if (!(e instanceof CantEdit)) throw e;
+      return reportError(t(e.reason === 'long' ? 'media.audio.tooLong' : 'media.audio.cantEdit', { name }));
+    }
+    mediaView.covered = true;
+    focusInput();
+  } catch (e) {
+    reportError((e as Error).message);
+  } finally {
+    if (audioOpening === doc) audioOpening = null;
+    requestRender();
+  }
+}
+
+/** Plays the open audio's file in place of what was opened, as it was edited. */
+function showEditedAudio(at: number): void {
+  const input = mediaInput!;
+  const name = mediaView.name;
+  URL.revokeObjectURL(input.url);
+  input.blob = input.edited!;
+  input.url = URL.createObjectURL(input.blob);
+  const captions = input.captions;
+  input.captions = [];
+  mediaView.open({ name, kind: 'audio', url: input.url, size: input.blob.size, resumeAt: at });
+  for (const url of captions) URL.revokeObjectURL(url);
+  watchCaptions(current, name, { localId: current.localId ?? undefined });
+}
+
+/** Back to the player, with the sound as edited. */
+async function finishAudioEditing(): Promise<void> {
+  const editor = audioEditor;
+  const input = mediaInput;
+  if (!editor || !input?.blob) return;
+  await editor.finishRecording();
+  if (audioEditor !== editor) return;
+  if (editor.unsaved) {
+    const body = h('p', { text: t(editor.savesCopy ? 'media.audio.askCopy' : 'media.audio.askSave', { name: mediaView.name }) });
+    const choice = await showChoice(t('media.audio.save'), body, [
+      { label: t('media.audio.dontSave'), value: 'discard' },
+      { label: t('media.audio.save'), value: 'save' },
+    ]);
+    if (audioEditor !== editor || choice === null) return focusInput();
+    if (choice === 'discard') editor.discardDraft();
+    else if (!(await saveLossyAudio()) || audioEditor !== editor) return;
+  }
+  const at = editor.currentTime;
+  const edited = !editor.lossy && editor.dirty;
+  if (edited) {
+    const type = mediaMime(mediaView.name);
+    const bytes = await editor.save().catch((e: unknown) => void reportError((e as Error).message));
+    if (!bytes || audioEditor !== editor || mediaInput !== input) return;
+    input.edited = new Blob([bytes], { type });
+    if (current.unsavedSince) void saveInBrowser();
+  }
+  audioEditor = null;
+  editor.close();
+  if (input.edited && input.edited !== input.blob) showEditedAudio(at);
+  else mediaView.covered = false;
+  focusInput();
+  requestRender();
+}
+
+/** Saves a lossy file's edits: an MP3 as itself, encoded once; any other as a new FLAC beside it, which opens. Resolves true when it is done. */
+async function saveLossyAudio(): Promise<boolean> {
+  const editor = audioEditor;
+  const input = mediaInput;
+  if (!editor?.unsaved || !input?.blob) return false;
+  const doc = current;
+  const name = mediaView.name;
+  try {
+    const bytes = await editor.save();
+    if (audioEditor !== editor) return false;
+    if (!editor.savesCopy) {
+      input.edited = new Blob([bytes], { type: mediaMime(name) });
+      await editor.keptInFile(bytes);
+      if (current === doc) documentEdited();
+      setStatus(t('media.audio.saved', { name }));
+      return true;
+    }
+    const self = doc.localId ? library.entries.find((e) => e.local?.id === doc.localId) : undefined;
+    const folderId = self ? folderOf(self, library.folders) : doc.newFolder;
+    const taken = new Set(library.entries.filter((e) => folderOf(e, library.folders) === folderId).map((e) => e.name.toLowerCase()));
+    const stem = name.replace(/\.[^.]*$/, '');
+    // A name of its own when there are labels: a `.vtt` goes by its file's name, and the original's must stay as it is.
+    const labels = editor.labelText;
+    if (labels !== null) taken.add(`${stem}.flac`.toLowerCase()).add(`${stem}.vtt`.toLowerCase());
+    const info = await saveSaved({ name: uniqueName(`${stem}.flac`, taken), bytes, owner: account?.id, ...(folderId && { folderId }) });
+    library.putLocal(info);
+    if (account) scheduleUpload(info.id);
+    editor.discardDraft();
+    if (labels !== null) writeLabelFile(doc, info.name, labels);
+    setStatus(t('media.audio.savedCopy', { name: info.name }));
+    if (current === doc) openSource(`local:${info.id}`);
+    return false; // another document is open now
+  } catch (e) {
+    reportError((e as Error).message);
+    return false;
+  }
+}
+
+/** The `.vtt` of this name beside a media file, whose cues are its labels. */
+function labelEntry(doc: OpenDocument, name: string): { name: string; entry: LibraryEntry | undefined; folderId: string | null } {
+  const vtt = `${name.replace(/\.[^.]*$/, '')}.vtt`;
+  const self = doc.localId ? library.entries.find((e) => e.local?.id === doc.localId) : undefined;
+  const folderId = self ? folderOf(self, library.folders) : doc.newFolder;
+  return { name: vtt, folderId, entry: library.entries.find((e) => !e.vault && e.name.toLowerCase() === vtt.toLowerCase() && folderOf(e, library.folders) === folderId) };
+}
+
+async function readLabelFile(doc: OpenDocument, name: string): Promise<string | null> {
+  if (doc.shared) return null;
+  const { entry } = labelEntry(doc, name);
+  if (!entry) return null;
+  const stored = await storedBytes(entry).catch(() => null);
+  if (!stored) return null;
+  const converter = new ConvertWorker(startConvertWorker);
+  try {
+    const bytes = (await import('./formats/wdoc.ts')).isWdoc(new Uint8Array(stored)) ? await converter.toFile(new Uint8Array(stored), entry.name) : new Uint8Array(stored);
+    return bytes && new TextDecoder().decode(bytes);
+  } finally {
+    converter.stop();
+  }
+}
+
+/** Label writes, one after another: each waits a moment, and only the last of them is written. */
+let labelWrites: Promise<void> = Promise.resolve();
+const labelsWaiting = new Map<OpenDocument, string>();
+
+function writeLabelFile(doc: OpenDocument, name: string, text: string): void {
+  // Someone else's folder: nothing can be put beside the file.
+  if (doc.shared) return reportError(t('media.audio.labelsShared'));
+  const waiting = labelsWaiting.has(doc);
+  labelsWaiting.set(doc, text);
+  if (waiting) return;
+  labelWrites = labelWrites.then(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const latest = labelsWaiting.get(doc)!;
+    labelsWaiting.delete(doc);
+    const converter = new ConvertWorker(startConvertWorker);
+    try {
+      const { entry, name: vtt, folderId } = labelEntry(doc, name);
+      const previous = entry && (await storedBytes(entry).catch(() => null));
+      const bytes = await converter.fromFile(new TextEncoder().encode(latest), vtt, previous ? new Uint8Array(previous) : undefined);
+      const owner = account?.id;
+      if (entry?.cloud && !entry.local) await saveFromCloud({ id: entry.cloud.id, cloudId: entry.cloud.id, cloudUpdatedAt: entry.cloud.updatedAt, name: entry.name, owner, bytes, ...(folderId && { folderId }) });
+      const info = await saveSaved({ id: entry?.local?.id ?? entry?.cloud?.id, name: entry?.name ?? vtt, bytes, owner, ...(!entry && folderId && { folderId }) });
+      library.putLocal(info);
+      if (owner) scheduleUpload(info.id);
+    } catch (e) {
+      reportError((e as Error).message);
+    } finally {
+      converter.stop();
+    }
+  });
+}
+
+/** File › New Audio Recording: a moment of silence, opened in the editor with all of it selected, for what is recorded to take its place. */
+async function newRecording(): Promise<void> {
+  const taken = new Set(library.entries.map((e) => e.name.toLowerCase()));
+  const { writeWav } = await import('./media/edit/audioEditor.ts');
+  const bytes = writeWav({ rate: 48000, format: 'pcm16', channels: [new Float32Array(4800)] });
+  setUrl(new URLSearchParams(), true);
+  openMedia(uniqueName(`${t('media.audio.recordingName')}.wav`, taken), 'audio', { blob: new Blob([bytes], { type: 'audio/wav' }) });
+  await editAudio(true);
+}
 
 /** The vault's files that play in place, as its last sync reported them. */
 let vaultMedia: readonly { path: string; size: number; mtimeMs: number }[] = [];
@@ -7902,13 +8182,16 @@ function vaultMediaEntries(files: readonly { path: string; size: number; mtimeMs
 }
 
 /** What the open audio or video plays from: a blob of its bytes (kept when saved), or a vault file's address; and the caption blobs to let go of. */
-let mediaInput: { blob: Blob | null; url: string; captions: string[]; key: string | null } | null = null;
+let mediaInput: { blob: Blob | null; /** The file as last saved from the audio editor. */ edited?: Blob; url: string; captions: string[]; key: string | null } | null = null;
 /** A link's moment for the audio or video about to open (`[[talk.mp4#t=12:30]]`). */
 let pendingMoment: MediaMoment | null = null;
 
 /** Puts the open audio or video away and lets go of its blobs (and so of the memory they hold). */
 function closeMedia(): void {
   if (!mediaView.active && !mediaInput) return;
+  audioEditor?.close();
+  audioEditor = null;
+  audioOpening = null;
   mediaView.close();
   if (mediaInput) {
     if (mediaInput.blob) URL.revokeObjectURL(mediaInput.url);
@@ -7949,7 +8232,9 @@ function rememberMediaPosition(seconds: number, duration: number): void {
  */
 function openMedia(name: string, kind: 'audio' | 'video', input: { blob: Blob } | { url: string; size: number }, options: OpenOptions & { vaultPath?: string } = {}): void {
   openRequests++;
-  const { opening } = beginOpen({ kind, name, bytes: new ArrayBuffer(0) }, options);
+  // Opened again in place of itself (watching, it was saved): it keeps its room.
+  const keptRoom = options.keepRoom && sheetRoomHandle ? current.room : null;
+  const { opening } = beginOpen({ kind, name, bytes: new ArrayBuffer(0) }, { ...options, keepRoom: keptRoom !== null });
   worker.close();
   const blob = 'blob' in input ? input.blob : null;
   const url = blob ? URL.createObjectURL(blob) : (input as { url: string }).url;
@@ -7957,12 +8242,24 @@ function openMedia(name: string, kind: 'audio' | 'video', input: { blob: Blob } 
   mediaInput = { blob, url, captions: [], key: viewDocKey };
   // Too big to keep, or a vault file the account doesn't have: it plays from where it is and is saved nowhere.
   opening.inPlace = !!options.vaultPath || playsInPlace(name, size);
-  // Nothing in it is edited, so no room is ever asked for (see joinRoomOf).
-  opening.roomRequested = true;
+  // What is only played has no room (see joinRoomOf); audio that can be edited has one.
   const moment = pendingMoment;
   pendingMoment = null;
   const resumeAt = viewDocKey ? mediaPositions()[viewDocKey] : undefined;
   mediaView.open({ name, kind, url, size, moment, resumeAt });
+  audioReadOnly = opening.shared?.role === 'viewer';
+  if (keptRoom) {
+    opening.room = keptRoom;
+    opening.roomRequested = true;
+    audioReadOnly ||= !!(keptRoom.watching || keptRoom.catchingUp);
+    sheetRoomDoc = opening;
+    sheetRoomHandle?.client.refreshed(options.version);
+  } else if (!editableAudio()) opening.roomRequested = true;
+  else {
+    const cloudId = options.cloudId ?? options.shared?.id;
+    if (cloudId) void accountKnown.then(() => joinSheetRoom(opening, cloudId));
+  }
+  mediaView.refresh();
   loaded = true;
   documentReady();
   loadingScreen.hide();
@@ -8081,7 +8378,8 @@ Object.assign(window, {
       video: mediaView.showsVideo,
       failed: mediaView.failed,
       inPlace: !!current.inPlace,
-      ...mediaView.state(),
+      ...mediaState(),
+      canUndo: mediaEngine.canUndo,
     }),
   },
 });
@@ -8738,7 +9036,7 @@ function focusRegions(): Region[] {
   );
   // A workbook's own parts (formula bar, cells, sheet tabs) stand in for the document.
   // Audio or video: the player, its controls with it.
-  const mediaRegion: Region = { el: mediaView.el, focus: () => (mediaView.focus(), true) };
+  const mediaRegion: Region = { el: audioEditor?.el ?? mediaView.el, focus: () => (mediaEngine.focus(), true) };
   const documentRegions = sheetView.active ? sheetView.regions() : slidesView.active ? slidesView.regions() : mediaView.active ? [mediaRegion] : [documentRegion];
   // The notes at the bottom of the window (a new version, reload, sign-in ran out), while they show (ui/notice.ts).
   const notices = [...document.querySelectorAll<HTMLElement>('.wm-notice:not([hidden])')].map(panel);

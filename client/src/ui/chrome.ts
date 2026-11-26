@@ -8,6 +8,8 @@ import {
   SHEET_OPS,
   MEDIA_OPS,
   type MediaOp,
+  AUDIO_OPS,
+  type AudioOp,
   SLIDES_OPS,
   type Action,
   type Alignment,
@@ -327,6 +329,7 @@ export class Chrome {
     // File
     r.add(
       a('file.new', t('chrome.file.new'), { kind: 'new' }, { icon: 'new', tooltip: t('chrome.file.new.tip') }),
+      a('file.newRecording', t('chrome.file.newRecording'), { kind: 'newRecording' }, { icon: 'audioRecord' }),
       a('file.open', t('chrome.file.open'), { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O', tooltip: t('chrome.file.open.tip') }),
       // Only the desktop app gets Mod+W: in a browser the key closes the tab, and a page can't take it.
       a('file.close', t('chrome.file.close'), { kind: 'close' }, { tooltip: t('chrome.file.close.tip'), ...(isDesktopApp() && { shortcut: 'Mod+W' }) }),
@@ -371,9 +374,9 @@ export class Chrome {
       a('edit.copy', t('chrome.edit.copy'), { kind: 'copy' }, { icon: 'copy', shortcut: 'Mod+C', nativeShortcut: true, enabled: (s) => s.hasSelection }),
       a('edit.copyLiveLink', t('chrome.edit.copyLiveLink'), { kind: 'copyLiveLink' }),
       a('edit.copyMomentLink', t('chrome.edit.copyMomentLink'), { kind: 'copyMomentLink' }),
-      a('edit.paste', t('chrome.edit.paste'), { kind: 'paste' }, { icon: 'paste', shortcut: 'Mod+V', nativeShortcut: true }),
+      a('edit.paste', t('chrome.edit.paste'), { kind: 'paste' }, { icon: 'paste', shortcut: 'Mod+V', nativeShortcut: true, enabled: (s) => !s.media || (!!s.media.editing && !s.media.readOnly) }),
       dialog('edit.pasteSpecial', t('chrome.edit.pasteSpecial'), 'pasteSpecial'),
-      a('edit.selectAll', t('chrome.edit.selectAll'), { kind: 'selectAll' }, { shortcut: 'Mod+A' }),
+      a('edit.selectAll', t('chrome.edit.selectAll'), { kind: 'selectAll' }, { shortcut: 'Mod+A', enabled: (s) => !s.media || !!s.media.editing }),
       dialog('edit.find', t('chrome.edit.find'), 'find', { icon: 'find', shortcut: 'Mod+F' }),
       dialog('edit.replace', t('chrome.edit.replace'), 'replace', { shortcut: { other: 'Mod+H', mac: 'Ctrl+H' } }),
       dialog('edit.goTo', t('chrome.edit.goTo'), 'goTo', { shortcut: 'Mod+G' }),
@@ -625,9 +628,39 @@ export class Chrome {
     // Audio and video: the Playback menu (the player's own keys do the same: see media/viewer.ts).
     const MEDIA_ICONS: Partial<Record<MediaOp, string>> = { playPause: 'mediaPlay', back: 'mediaBack', forward: 'mediaForward', mute: 'mediaMute', captions: 'mediaCaptions', fullScreen: 'mediaFullScreen' };
     const MEDIA_CHECKED: Partial<Record<MediaOp, (s: ChromeState) => boolean>> = { mute: (s) => !!s.media?.muted, captions: (s) => !!s.media?.captions };
-    const MEDIA_ENABLED: Partial<Record<MediaOp, (s: ChromeState) => boolean>> = { captions: (s) => !!s.media?.hasCaptions, fullScreen: (s) => !!s.media?.video };
+    const notEditing = (s: ChromeState): boolean => !s.media?.editing;
+    const MEDIA_ENABLED: Partial<Record<MediaOp, (s: ChromeState) => boolean>> = { captions: (s) => !!s.media?.hasCaptions && !s.media.editing, fullScreen: (s) => !!s.media?.video, mute: notEditing, slower: notEditing, faster: notEditing, normalSpeed: notEditing };
     for (const op of MEDIA_OPS) {
       r.add(a(`media.${op}`, t(`media.op.${op}`), { kind: 'media', op }, { ...(MEDIA_ICONS[op] && { icon: MEDIA_ICONS[op] }), ...(MEDIA_CHECKED[op] && { checked: MEDIA_CHECKED[op] }), ...(MEDIA_ENABLED[op] && { enabled: MEDIA_ENABLED[op] }) }));
+    }
+
+    // Audio: the Audio menu (see media/edit/audioEditor.ts).
+    const AUDIO_ICONS: Partial<Record<AudioOp, string>> = {
+      edit: 'pencil',
+      save: 'save',
+      record: 'audioRecord',
+      delete: 'trash',
+      trim: 'crop',
+      silence: 'mediaMute',
+      label: 'audioLabel',
+      zoomIn: 'audioZoomIn',
+      zoomOut: 'audioZoomOut',
+      zoomSelection: 'audioZoomSelection',
+      zoomAll: 'audioZoomAll',
+      spectrogram: 'audioSpectrogram',
+    };
+    const AUDIO_VIEW = new Set<AudioOp>(['zoomIn', 'zoomOut', 'zoomSelection', 'zoomAll', 'spectrogram', 'noiseSample']);
+    const AUDIO_SELECTED = new Set<AudioOp>(['delete', 'trim', 'silence', 'noiseSample', 'zoomSelection']);
+    const AUDIO_CHECKED: Partial<Record<AudioOp, (s: ChromeState) => boolean>> = { edit: (s) => !!s.media?.editing, record: (s) => !!s.media?.recording, spectrogram: (s) => !!s.media?.spectrogram };
+    for (const op of AUDIO_OPS) {
+      const enabled = (s: ChromeState): boolean => {
+        if (op === 'edit') return !!s.media?.canEdit || !!s.media?.editing;
+        if (!s.media?.editing) return false;
+        if (op === 'record' && s.media.recording) return true;
+        if (op === 'save' && !s.media.unsaved) return false;
+        return (AUDIO_VIEW.has(op) || !s.media.readOnly) && (!AUDIO_SELECTED.has(op) || !!s.media.selected);
+      };
+      r.add(a(`audio.${op}`, t(`media.audio.${op}`), { kind: 'audio', op }, { ...(AUDIO_ICONS[op] && { icon: AUDIO_ICONS[op] }), enabled, ...(AUDIO_CHECKED[op] && { checked: AUDIO_CHECKED[op] }) }));
     }
 
     for (const op of SHEET_OPS) r.add(a(`sheet.${op}`, t(`sheet.op.${op}`), { kind: 'sheet', op }, SHEET_ICONS[op] ? { icon: SHEET_ICONS[op] } : {}));
@@ -837,6 +870,7 @@ export class Chrome {
         label: t('chrome.menu.file'),
         items: [
           cmd('file.new'),
+          cmd('file.newRecording'),
           cmd('file.open'),
           this.openRecentItem(),
           cmd('file.close'),
@@ -1132,6 +1166,40 @@ export class Chrome {
       {
         label: t('media.menu'),
         items: [cmd('media.playPause'), cmd('media.back'), cmd('media.forward'), cmd('media.start'), sep, cmd('media.mute'), cmd('media.slower'), cmd('media.faster'), cmd('media.normalSpeed'), sep, cmd('media.captions'), cmd('media.fullScreen')],
+      },
+      {
+        label: t('media.audio.menu'),
+        items: [
+          cmd('audio.edit'),
+          cmd('audio.save'),
+          cmd('audio.record'),
+          sep,
+          cmd('audio.delete'),
+          cmd('audio.trim'),
+          cmd('audio.silence'),
+          cmd('audio.label'),
+          sub(t('media.audio.generate'), [cmd('audio.generateSilence'), cmd('audio.generateTone')]),
+          sub(t('media.audio.effects'), [
+            cmd('audio.gain'),
+            cmd('audio.normalize'),
+            cmd('audio.fadeIn'),
+            cmd('audio.fadeOut'),
+            cmd('audio.reverse'),
+            sep,
+            cmd('audio.speed'),
+            cmd('audio.equalizer'),
+            cmd('audio.compressor'),
+            sep,
+            cmd('audio.noiseSample'),
+            cmd('audio.noise'),
+          ]),
+          sep,
+          cmd('audio.zoomIn'),
+          cmd('audio.zoomOut'),
+          cmd('audio.zoomSelection'),
+          cmd('audio.zoomAll'),
+          cmd('audio.spectrogram'),
+        ],
       },
       {
         label: t('slides.menu'),

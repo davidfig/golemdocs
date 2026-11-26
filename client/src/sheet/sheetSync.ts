@@ -8,8 +8,8 @@ import { RoomClient, type RoomHost } from '../collab/roomClient.ts';
 import type { RoomState } from '../layout/protocol.ts';
 
 export interface SheetRoomOptions {
-  /** A workbook's room (`cells`, the default) or a deck's (`slides`): both are watched, and work the same way. */
-  kind?: 'cells' | 'slides';
+  /** A workbook's room (`cells`, the default) or a deck's (`slides`) or an audio file's (`audio`): all are watched, and work the same way. */
+  kind?: 'cells' | 'slides' | 'audio';
   docId: string;
   client: string;
   name: string;

@@ -42,3 +42,42 @@ test('F6 reaches the player, and Tab goes through its controls in order', async 
   }
   expect(names).toEqual(['Play', 'Back 10 Seconds', 'Forward 10 Seconds', 'Position', 'Mute', 'Volume']);
 });
+
+test('the audio editor is reached and worked by keyboard, and its waveform is a slider that says what is selected', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, wav('edit.wav', 10));
+  await waitForMedia(app, 'edit.wav');
+  const open = page.getByRole('button', { name: 'Edit Audio' });
+  await open.focus();
+  await page.keyboard.press('Enter');
+  const region = page.getByRole('region', { name: 'Editing edit.wav' });
+  const wave = region.getByRole('slider', { name: 'Waveform' });
+  await expect(wave).toBeFocused();
+  await expect(wave).toHaveAttribute('aria-valuetext', '0 seconds of 10 seconds');
+  const bar = region.getByRole('toolbar', { name: 'Audio editing tools' });
+  await expect(bar.getByRole('button', { name: 'Delete Selection' })).toBeDisabled();
+  await page.keyboard.press('Shift+End');
+  await expect(wave).toHaveAttribute('aria-valuetext', '0 seconds to 10 seconds selected');
+  for (const name of ['Play', 'Delete Selection', 'Trim to Selection', 'Silence Selection', 'Zoom In', 'Zoom Out', 'Zoom to Selection', 'Zoom to Whole File', 'Done']) await expect(bar.getByRole('button', { name, exact: true })).toBeEnabled();
+  for (const name of ['Record', 'Label…', 'Spectrogram']) await expect(bar.getByRole('button', { name: name.replace('…', '') })).toBeEnabled();
+  // An effect's dialog is named, starts in its first field, and gives the keyboard back.
+  await app.menu('Audio', 'Effects', 'Equalizer');
+  const dialog = page.getByRole('dialog', { name: 'Equalizer' });
+  await expect(dialog.getByRole('slider', { name: '31 Hz' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(wave).toBeFocused();
+  // A label by keyboard: it is made, and gone to.
+  await page.keyboard.press('l');
+  await page.getByRole('dialog', { name: 'Label' }).getByLabel('Text').fill('All of it');
+  await page.keyboard.press('Enter');
+  await expect(wave).toBeFocused();
+  await page.keyboard.press('End');
+  await page.keyboard.press('[');
+  await expect(wave).toHaveAttribute('aria-valuetext', '0 seconds to 10 seconds selected');
+  await page.keyboard.press('Escape');
+  await expect(wave).toHaveAttribute('aria-valuetext', '0 seconds of 10 seconds');
+  // Away to the menu bar, then F6 until the editor has the keyboard.
+  await page.keyboard.press('F10');
+  for (let i = 0; i < 8 && !(await region.evaluate((el) => el.contains(document.activeElement))); i++) await page.keyboard.press('F6');
+  await expect.poll(() => region.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+});

@@ -52,6 +52,35 @@ export type ImageOp = 'rotateLeft' | 'rotateRight' | 'rotate180' | 'flipHorizont
 export const MEDIA_OPS = ['playPause', 'back', 'forward', 'start', 'mute', 'slower', 'faster', 'normalSpeed', 'captions', 'fullScreen'] as const;
 export type MediaOp = (typeof MEDIA_OPS)[number];
 
+/** The audio editor's commands (the Audio menu), in the menu's order; `edit` turns editing on and off. */
+export const AUDIO_OPS = [
+  'edit',
+  'save',
+  'record',
+  'delete',
+  'trim',
+  'silence',
+  'label',
+  'generateSilence',
+  'generateTone',
+  'gain',
+  'normalize',
+  'fadeIn',
+  'fadeOut',
+  'reverse',
+  'speed',
+  'equalizer',
+  'compressor',
+  'noiseSample',
+  'noise',
+  'zoomIn',
+  'zoomOut',
+  'zoomSelection',
+  'zoomAll',
+  'spectrogram',
+] as const;
+export type AudioOp = (typeof AUDIO_OPS)[number];
+
 /** What the media viewer shows, for the Playback menu's checks. Null when no audio or video is open. */
 export interface MediaState {
   playing: boolean;
@@ -61,6 +90,16 @@ export interface MediaState {
   hasCaptions: boolean;
   /** It shows pictures (full screen means something). */
   video: boolean;
+  /** Audio: it can be edited here, it is being edited, and something in it is selected. */
+  canEdit?: boolean;
+  editing?: boolean;
+  selected?: boolean;
+  /** It can't be changed: someone else holds it, or an effect is at work. */
+  readOnly?: boolean;
+  recording?: boolean;
+  spectrogram?: boolean;
+  /** There are edits that Save would write (a lossy file's). */
+  unsaved?: boolean;
 }
 
 /** A slides editor command (the Slide menu, Insert, View and the slide's context menu; see ../slides/view.ts). */
@@ -374,6 +413,8 @@ export type Action =
   | { kind: 'sheet'; op: SheetOp }
   // Audio and video
   | { kind: 'media'; op: MediaOp }
+  | { kind: 'audio'; op: AudioOp }
+  | { kind: 'newRecording' }
   | { kind: 'slides'; op: SlidesOp }
   /** How the selected shapes (and the next ones) look; null is none. */
   | { kind: 'vectorStyle'; fill?: string | null; stroke?: string | null; strokeWidth?: number; strokeStyle?: string; fillType?: 'solid' | 'linear' | 'radial' }

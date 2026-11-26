@@ -146,6 +146,7 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-23 | `e2e/viewer/sandbox.spec.ts` › Chromium: the sandboxed viewer starts its worker, draws with WebGL and loads its fonts under a strict CSP | Already `@heavy`, fourth time here: hit its 3.0 min limit (no assertion failed) in the heavy pass of the 0.46.2 release run, passed its retry in 28.8 s; alone, passed in 19.7 s. Its build was not timed this time; its limit should allow for one |
 | 2026-11-25 | `e2e/collab/signin.spec.ts` › a sign-in that runs out › signing out on purpose shows no note | Failed at 5.6 s in the 0.48.0 release run (`pnpm e2e:rest` after the Mac slept through pass one): `waitForURL` saw the sign-out's page load aborted by the next one. Passed its retry; alone, passed. Now `@heavy` |
 | 2026-11-25 | `e2e/collab/comments.spec.ts` › comments panel › editing a comment changes its text; Cancel keeps the old text | Timed out at 1 min at the start of the same run, while its servers started; passed its retry; alone, passed in 3 s |
+| 2026-11-26 | `e2e/collab/comments-files.spec.ts` › comments in downloaded files › HTML writes comments as `<mark class="comment">` elements with author, text and thread | Failed at 4.7 s in pass one and on its retry (0.49.0 release run); alone, passed four times in about 4 s each |
 
 ## Performance traces (`golem:*`)
 

@@ -123,7 +123,7 @@ test.describe('comments in downloaded files', () => {
     await expect.poll(() => app.selectedText()).toBe('marked text');
   });
 
-  test('HTML writes comments as <mark class="comment"> elements with author, text and thread', async ({ app }) => {
+  test('HTML writes comments as <mark class="comment"> elements with author, text and thread', { tag: '@heavy' }, async ({ app }) => {
     await richDocument(app);
     await app.menu('File', 'Convert To', 'Web Page');
     const file = await app.download(() => app.menu('File', 'Download'));

@@ -822,9 +822,18 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
       // A view picked from the menu this once (HTML as Document, which a page doesn't remember), else as it opens by itself.
       const view = (pickedHtmlView?.key === key ? pickedHtmlView.view : null) ?? pageView.viewFor(key, html);
       pickedHtmlView = null;
+      // What a conversion that made this file left out (convertTo sets it once the open has started) outlives the open below.
+      const notice = pendingNotice;
       if (view === 'page') openPage(source, options, stored);
-      else if (view === 'source') void openLarge(source.name, new TextEncoder().encode(html), { localId: options.localId, cloudId: options.cloudId, shared: options.shared }).then(() => showSourceBar(source.name));
-      else open(source, { ...options, pageChecked: true });
+      else if (view === 'source')
+        void openLarge(source.name, new TextEncoder().encode(html), { localId: options.localId, cloudId: options.cloudId, shared: options.shared }).then(() => {
+          showSourceBar(source.name);
+          if (notice) setStatus(notice);
+        });
+      else {
+        open(source, { ...options, pageChecked: true });
+        pendingNotice ??= notice;
+      }
     });
     return;
   }
@@ -8646,7 +8655,10 @@ function openPage(source: DocumentSource & { name: string }, options: OpenOption
     loaded = true;
     documentReady();
     loadingScreen.hide();
-    setStatus(t('app.ready', { name }));
+    // A page a conversion made says what the conversion left out (set once the open had started, see convertTo).
+    const notice = pendingNotice;
+    pendingNotice = null;
+    setStatus(notice ?? t('app.ready', { name }));
     // A file that came from the computer is kept in this browser at once, as a document is.
     if (imported) documentEdited();
   })().catch((e: unknown) => {

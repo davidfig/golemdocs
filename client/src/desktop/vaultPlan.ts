@@ -77,7 +77,9 @@ export type VaultAction =
   /** A folder made in the vault that the account does not have, or one the account has that the vault does not: make it on that side (see `mirrorFolders`). */
   | { kind: 'makeFolder'; path: string; where: 'cloud' | 'local' }
   /** A folder removed from the account: remove it from the vault too, if nothing is left in it. */
-  | { kind: 'removeLocalFolder'; path: string };
+  | { kind: 'removeLocalFolder'; path: string }
+  /** A folder moved or renamed in the vault: do the same to the account's, whole, so it stays the same folder (see `folderMoves`). */
+  | { kind: 'moveFolder'; from: string; to: string };
 
 export interface VaultPlan {
   actions: VaultAction[];
@@ -113,6 +115,21 @@ export function needsHash(local: readonly LocalFile[], manifest: readonly Manife
   return need;
 }
 
+/** How many names, from the end, two paths share: `a/x/f.md` and `b/x/f.md` share 2. */
+function sharedTail(a: string, b: string): number {
+  const x = a.split('/');
+  const y = b.split('/');
+  let n = 0;
+  while (n < x.length && n < y.length && x[x.length - 1 - n] === y[y.length - 1 - n]) n++;
+  return n;
+}
+
+/** The one file whose path ends most like `path`'s, by at least its name; none when two tie. */
+function closest(path: string, files: readonly LocalFile[]): LocalFile | undefined {
+  const scored = files.map((f) => ({ f, n: sharedTail(path, f.path) })).sort((a, b) => b.n - a.n);
+  return scored[0].n > 0 && scored[0].n !== scored[1]?.n ? scored[0].f : undefined;
+}
+
 export function planVault(input: PlanInput): VaultPlan {
   const { local, manifest, cloud, hashes, allowMassDelete } = input;
   const localByPath = new Map(local.map((f) => [f.path, f]));
@@ -130,9 +147,12 @@ export function planVault(input: PlanInput): VaultPlan {
   for (const entry of manifest) {
     if (localByPath.has(entry.path)) continue;
     const matches = untracked.filter((f) => !taken.has(f.path) && hashes.get(f.path) === entry.hash);
-    if (matches.length === 1) {
-      taken.add(matches[0].path);
-      renamedTo.set(entry.id, matches[0].path);
+    // Several files with the same bytes (a font copied into each of several folders, all moved at once): the one whose path ends
+    // the most like the old one's (the same name, in a folder of the same name...) is that file, if only one does.
+    const best = matches.length > 1 ? closest(entry.path, matches) : matches[0];
+    if (best) {
+      taken.add(best.path);
+      renamedTo.set(entry.id, best.path);
     }
   }
 
@@ -305,4 +325,45 @@ export function vanishedFolders(before: Iterable<string>, now: ReadonlySet<strin
     .filter(canRemove)
     .map((f) => ({ id: f.id, path: pathOf.get(f.id)! }))
     .sort((a, b) => b.path.split('/').length - a.path.split('/').length);
+}
+
+// ---- Folders moved in the vault ----
+
+/**
+ * The account's folders to move or rename, whole, because the vault's were: a folder that is gone from the vault (`onDisk`),
+ * whose files all turned up again under one new folder at the same places inside it (`renames`, the plan's `renameCloud`s).
+ * Moving the folder itself keeps it the same folder in the account (its id, and so its shares and links) and moves what is in it
+ * at once, where moving each document would make a new folder and remove the old one once emptied.
+ *
+ * Only a folder the account has, to a place it has no folder at yet, spelled the same on both sides (`safeName`). One whose files
+ * went to several places, or were renamed on the way, is not moved: its documents are, one by one. The topmost of nested moves
+ * only, since its folders go with it.
+ */
+export function folderMoves(renames: readonly { from: string; to: string }[], accountFolders: ReadonlySet<string>, onDisk: ReadonlySet<string>): { from: string; to: string }[] {
+  // Old folder -> new folder, from each rename. The names the two paths end with (the file's at least) are inside the folder that
+  // moved, or end with its own name if it kept it (`a/F/x.md` to `a/new/F/x.md`): each of those levels is a candidate, and only one
+  // that is gone from the vault and new to it is taken below.
+  const candidates = new Map<string, [string, string]>();
+  for (const { from, to } of renames) {
+    const x = from.split('/');
+    const y = to.split('/');
+    const tail = Math.min(sharedTail(from, to), x.length - 1, y.length - 1);
+    for (let k = 1; k <= tail; k++) {
+      const pair: [string, string] = [x.slice(0, x.length - k).join('/'), y.slice(0, y.length - k).join('/')];
+      candidates.set(pair.join('\n'), pair);
+    }
+  }
+  const inside = (path: string, dir: string) => path.startsWith(`${dir}/`);
+  const spelledAlike = (path: string) => path.split('/').every((name) => safeName(name) === name);
+  const claimed = new Set<string>();
+  const moves: { from: string; to: string }[] = [];
+  for (const [from, to] of [...candidates.values()].sort(([a], [b]) => a.split('/').length - b.split('/').length || a.localeCompare(b))) {
+    if (moves.some((m) => from === m.from || inside(from, m.from))) continue;
+    if (!accountFolders.has(from) || onDisk.has(from) || !onDisk.has(to) || accountFolders.has(to) || claimed.has(to) || inside(to, from) || !spelledAlike(to)) continue;
+    // Everything that left it went to the same place inside the new one.
+    if (!renames.every((r) => !inside(r.from, from) || r.to === to + r.from.slice(from.length))) continue;
+    claimed.add(to);
+    moves.push({ from, to });
+  }
+  return moves;
 }

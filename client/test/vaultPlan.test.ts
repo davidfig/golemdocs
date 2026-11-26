@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   cloudPaths,
+  folderMoves,
   foldersOf,
   MASS_DELETE_MIN,
   needsHash,
@@ -101,6 +102,19 @@ test('two vanished files and one candidate do not guess', () => {
   });
   // Each of the two candidates matches both vanished files, so none is taken as a rename.
   assert.equal(result.actions.filter((a) => a.kind === 'renameCloud').length, 0);
+});
+
+test('copies of one file moved with their folders are each followed to the copy at the same place', () => {
+  const result = plan({
+    local: [file('New/A/font.ttf'), file('New/B/font.ttf')],
+    manifest: [entry('a', 'A/font.ttf', { hash: 'same' }), entry('b', 'B/font.ttf', { hash: 'same' })],
+    cloud: [remote('a', 'A/font.ttf'), remote('b', 'B/font.ttf')],
+    hashes: { 'New/A/font.ttf': 'same', 'New/B/font.ttf': 'same' },
+  });
+  assert.deepEqual(result.actions, [
+    { kind: 'renameCloud', id: 'a', from: 'A/font.ttf', to: 'New/A/font.ttf' },
+    { kind: 'renameCloud', id: 'b', from: 'B/font.ttf', to: 'New/B/font.ttf' },
+  ]);
 });
 
 test('a document renamed in the account moves the untouched file', () => {
@@ -208,4 +222,34 @@ test('vanishedFolders removes folders gone from the vault that hold nothing in t
   // Emptied in the account too: deepest first, and a folder never in the vault stays.
   assert.deepEqual(vanishedFolders(before, new Set(), [], folders).map((f) => f.id), ['x', 'y', 'e', 'p']);
   assert.deepEqual(vanishedFolders([], new Set(), [], folders), []);
+});
+
+test('folderMoves: folders moved into a new folder, nested ones with them, are moved whole', () => {
+  const renames = [
+    { from: 'W/A/f.md', to: 'W/New/A/f.md' },
+    { from: 'W/A/Deep/g.md', to: 'W/New/A/Deep/g.md' },
+    { from: 'W/B/h.md', to: 'W/New/B/h.md' },
+  ];
+  const account = new Set(['W', 'W/A', 'W/A/Deep', 'W/B']);
+  const disk = new Set(['W', 'W/New', 'W/New/A', 'W/New/A/Deep', 'W/New/B']);
+  assert.deepEqual(folderMoves(renames, account, disk), [
+    { from: 'W/A', to: 'W/New/A' },
+    { from: 'W/B', to: 'W/New/B' },
+  ]);
+});
+
+test('folderMoves: a folder renamed in place, or moved up, is moved whole', () => {
+  assert.deepEqual(folderMoves([{ from: 'Drafts/a.md', to: 'Published/a.md' }], new Set(['Drafts']), new Set(['Published'])), [{ from: 'Drafts', to: 'Published' }]);
+  assert.deepEqual(folderMoves([{ from: 'P/Q/a.md', to: 'Q/a.md' }], new Set(['P', 'P/Q']), new Set(['P', 'Q'])), [{ from: 'P/Q', to: 'Q' }]);
+});
+
+test('folderMoves: only a folder gone from the vault, to a place the account has nothing at, all of whose files went the same way', () => {
+  const one = [{ from: 'A/a.md', to: 'B/a.md' }];
+  assert.deepEqual(folderMoves(one, new Set(['A']), new Set(['A', 'B'])), [], 'A is still in the vault: only a file moved');
+  assert.deepEqual(folderMoves(one, new Set(['A', 'B']), new Set(['B'])), [], 'the account has a B already');
+  assert.deepEqual(folderMoves(one, new Set([]), new Set(['B'])), [], 'the account has no A');
+  assert.deepEqual(folderMoves([{ from: 'A/a.md', to: 'B/a.md' }, { from: 'A/b.md', to: 'C/b.md' }], new Set(['A']), new Set(['B', 'C'])), [], 'split in two');
+  assert.deepEqual(folderMoves([{ from: 'A/a.md', to: 'B/a.md' }, { from: 'A/b.md', to: 'B/renamed.md' }], new Set(['A']), new Set(['B'])), [], 'a file renamed on the way');
+  assert.deepEqual(folderMoves([{ from: 'A/a.md', to: 'a:b/a.md' }], new Set(['A']), new Set(['a:b'])), [], 'a name the account spells differently');
+  assert.deepEqual(folderMoves([{ from: 'a.md', to: 'B/a.md' }], new Set([]), new Set(['B'])), [], 'a file at the top is no folder');
 });

@@ -5,12 +5,20 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { accountCloud, type KeepCopy } from '../src/desktop/vaultHost.ts';
 
+let folderList: { id: string; name: string; parentId: string | null; createdAt: number; updatedAt: number }[] = [];
+const sentFolders: { id: string; name?: string; parentId?: string | null }[] = [];
+
 globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
   const url = String(input);
   const method = init?.method ?? 'GET';
   const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
   if (method === 'GET' && url === '/api/documents') return json([{ id: 'd1', name: 'Notes.md', size: 2, createdAt: 1, updatedAt: 10 }]);
-  if (method === 'GET' && url === '/api/folders') return json([]);
+  if (method === 'GET' && url === '/api/folders') return json(folderList);
+  if (method === 'PUT' && url === '/api/folders') {
+    const { folders } = JSON.parse(String((init as { body?: string }).body)) as { folders: { id: string; name?: string; parentId?: string | null }[] };
+    sentFolders.push(...folders);
+    return json({ ok: folders, failed: [] });
+  }
   if (method === 'GET' && url === '/api/documents/d1') return new Response(new Uint8Array([1, 2]));
   if (method === 'PUT' && url.startsWith('/api/documents/d1')) return json({ id: 'd1', name: 'Notes.md', size: 1, createdAt: 1, updatedAt: 11 });
   if (method === 'POST' && url.startsWith('/api/documents')) return json({ id: 'd2', name: 'New.md', size: 1, createdAt: 1, updatedAt: 20 }, 201);
@@ -41,4 +49,23 @@ test('a copy that can’t be kept never fails the sync', async () => {
   await cloud.list();
   assert.deepEqual([...(await cloud.download('d1'))], [1, 2]);
   assert.deepEqual(await cloud.replace('d1', new Uint8Array([3])), { updatedAt: 11 });
+});
+
+test('a folder moved in the vault is the same folder in the account, renamed and put in its new parent', async () => {
+  folderList = [
+    { id: 'work', name: 'Work', parentId: null, createdAt: 1, updatedAt: 1 },
+    { id: 'julie', name: 'For Julie', parentId: 'work', createdAt: 1, updatedAt: 1 },
+    { id: 'taken', name: 'Taken', parentId: null, createdAt: 1, updatedAt: 1 },
+  ];
+  sentFolders.length = 0;
+  const cloud = accountCloud();
+  await cloud.list();
+  assert.equal(await cloud.moveFolder!(['Work', 'For Julie'], ['Work', 'Wonderland', 'For Julie']), true);
+  const parent = sentFolders.find((f) => f.name === 'Wonderland')!;
+  assert.equal(parent.parentId, 'work', 'the new parent is made');
+  assert.deepEqual(sentFolders.at(-1), { id: 'julie', name: 'For Julie', parentId: parent.id });
+  // Nothing at the old place any more, so it can't be moved twice; nor onto a folder that is there.
+  assert.equal(await cloud.moveFolder!(['Work', 'For Julie'], ['Elsewhere']), false);
+  assert.equal(await cloud.moveFolder!(['Work', 'Wonderland', 'For Julie'], ['Taken']), false);
+  folderList = [];
 });

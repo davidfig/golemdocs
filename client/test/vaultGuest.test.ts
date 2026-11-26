@@ -117,3 +117,19 @@ test('the vault memory is kept in this browser, and the folder only says whose i
   assert.equal(remembered.entries.length, 1);
   assert.deepEqual(JSON.parse(read(files.get('.golemdocs/state.json')!.bytes)), { version: 1, account: GUEST_ACCOUNT, entries: [] });
 });
+
+test('a folder moved in the folder is the same folder in this browser, under its new parent', async () => {
+  await local.putLocalFolder({ id: 'f1', name: 'Flyer', parentId: null, createdAt: 1, updatedAt: 1 });
+  await local.saveSaved({ name: 'flyer.svg', bytes: text('<svg/>'), folderId: 'f1' });
+  await syncVault(host());
+  files.set('Wonderland/Flyer/flyer.svg', files.get('Flyer/flyer.svg')!);
+  files.delete('Flyer/flyer.svg');
+  const report = await syncVault(host());
+  assert.deepEqual(report.errors, []);
+  assert.equal(report.foldersMoved, 1);
+  const folders = await local.listLocalFolders();
+  const moved = folders.find((f) => f.id === 'f1')!;
+  assert.equal(moved.name, 'Flyer');
+  assert.equal(folders.find((f) => f.id === moved.parentId)?.name, 'Wonderland');
+  assert.equal((await local.listSaved())[0].folderId, 'f1');
+});

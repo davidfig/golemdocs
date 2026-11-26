@@ -514,7 +514,7 @@ async function writeIndexes(disk: VaultDisk, prefix: string, share: VaultShare, 
 /** A copy's run that failed before it began (the shared folder could not be listed). */
 function failed(error: unknown): SyncReport {
   const message = error instanceof Error ? error.message : String(error);
-  return { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, linked: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, foldersRemoved: 0, foldersMade: 0, skipped: 0, errors: [{ action: { kind: 'forget', id: '' }, message }], touched: [], missing: [] };
+  return { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, linked: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, foldersRemoved: 0, foldersMade: 0, foldersMoved: 0, skipped: 0, errors: [{ action: { kind: 'forget', id: '' }, message }], touched: [], missing: [] };
 }
 
 /**

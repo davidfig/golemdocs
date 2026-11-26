@@ -29,7 +29,8 @@ export interface ScriptRun {
   /** When it ran, ISO. */
   at: string;
   /** What started it: by hand, a button, a trigger. */
-  by: 'hand' | 'button' | 'changed' | 'schedule' | 'block';
+  /** What ran it; `page` is an HTML page's edit (docs/html-pages.md §6). */
+  by: 'hand' | 'button' | 'changed' | 'schedule' | 'block' | 'page';
   ok: boolean;
   /** The error, or what the script said. */
   message?: string;

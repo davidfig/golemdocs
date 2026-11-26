@@ -120,4 +120,7 @@ export const USER_MIGRATIONS: string[][] = [
     `ALTER TABLE trash ADD COLUMN wrapped_key TEXT`,
     `ALTER TABLE versions ADD COLUMN sealed INTEGER NOT NULL DEFAULT 0`,
   ],
+  // 12: who saved a document's file last, when that was not the owner (an editor it is shared with, or one of a shared folder). Null: the
+  // owner, or before this was kept. The owner's app treats an HTML page another account changed as from elsewhere (docs/html-pages.md §1).
+  [`ALTER TABLE documents ADD COLUMN saved_by TEXT`],
 ];

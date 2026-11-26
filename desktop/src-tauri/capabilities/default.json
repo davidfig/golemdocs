@@ -25,6 +25,7 @@
     "allow-vault-make-folder",
     "allow-vault-remove-folder",
     "allow-vault-set-times",
+    "allow-vault-downloaded",
     "allow-vault-media-url",
     "allow-app-log",
     "allow-set-native-menu",

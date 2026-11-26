@@ -31,6 +31,8 @@ import { followSaves } from './live.ts';
 import { checkOutcome } from './protocol.ts';
 import { h } from '../ui/dom.ts';
 import { mount, type Viewer } from './viewer.ts';
+import { sharedPageHtml, showSharedPage } from './sharedPage.ts';
+import type { SharedPage } from './sharedPage.ts';
 
 async function start(): Promise<void> {
   // Framed by the app, which sends the file itself (a document in the trash: ui/trashPreview.ts). The words come with it.
@@ -98,7 +100,10 @@ async function start(): Promise<void> {
     mark.rel = 'noopener';
     mark.title = t('viewer.openInGolemDocs');
   }
-  const viewer: Viewer = mount(place, {
+  // An HTML page shows as the page it makes, with what its owner's app kept of what it read (sharedPage.ts, docs/html-pages.md §5).
+  const pageHtml = await sharedPageHtml(new Uint8Array(bytes), name);
+  const page: SharedPage | null = pageHtml === null ? null : await showSharedPage(place, { api, name, title, html: pageHtml });
+  const viewer: Viewer | null = page ? null : mount(place, {
     bytes,
     name,
     fontBase: '/fonts/',
@@ -117,7 +122,7 @@ async function start(): Promise<void> {
     onError: (message) => console.error(message),
     onDownload: () => void download(),
     // Printing opens the browser's dialog over the page: not in another site's.
-    onPrint: embedded ? undefined : () => void printShown(viewer, name, (text) => header?.tell(text)),
+    onPrint: embedded ? undefined : () => void printShown(viewer!, name, (text) => header?.tell(text)),
     // The page is the site's: a link opens in a tab of its own.
     onLink: (url) => void window.open(url, '_blank', 'noopener,noreferrer'),
   });
@@ -134,14 +139,17 @@ async function start(): Promise<void> {
         etag = response!.headers.get('etag');
         const newer = await response!.arrayBuffer();
         if (stored) stored = new Uint8Array(newer.slice(0));
-        viewer.reload(newer);
+        const html = page ? await sharedPageHtml(new Uint8Array(newer), name) : null;
+        if (page && html !== null) await page.reload(html);
+        else viewer?.reload(newer);
       } else if (outcome === 'ended' || outcome === 'signedOut') {
         // Access is over: the document goes, pages, text and worker with it (not just hidden), and nothing more is asked.
         ended = true;
         clearInterval(timer);
         live.stop();
         document.removeEventListener('visibilitychange', onShown);
-        viewer.destroy();
+        viewer?.destroy();
+        page?.destroy();
         stored = null;
         document.title = PAGE_TITLE;
         if (outcome === 'ended') say(gone);

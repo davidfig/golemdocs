@@ -30,6 +30,7 @@ It lives in `client/src/automation.ts` and is installed by `main.ts` at start-up
 
 - **It reads and sets up; it does not replace the UI.** A test of a feature still clicks and types through the real controls (by role and name, see [Accessibility](accessibility.md)), and uses `golem` to set up and to read the result. A test that only calls `commands.run` never tests the button.
 - **Everything goes through what the app already has.** Add to the API by exposing an existing path (a command, a worker request, the DOM), never by adding a second way to change the document.
+- **Page view** (an HTML page, [html-pages.md](../html-pages.md)) is read through `window.pageViewer.state()`: whether a page is shown, its name and path, `trust` (`own` or `foreign`), whether its scripts run and its reads were allowed, what its embeds show and the vault paths it read. Its content is in its own sandboxed frame: an e2e spec reads it with `page.frameLocator('iframe.wm-page-frame')`. `golem.doc.text()` and `markdown()` refuse while a page is shown, and `outline()` is null.
 - **The older hooks stay for now.** `window.camera`, `pages`, `selectionState`, `textEditor`, `sheetEditor` and the others are what many e2e specs read for positions on the canvas. New specs and agents should use `golem` where it covers what they need.
 - **Not yet:** a way for an agent outside the page (the desktop app's local socket, a `golem` command line) to reach it. Inside a browser an agent calls it through its own JavaScript tool (Playwright's `page.evaluate`, a browser pane's JavaScript tool).
 

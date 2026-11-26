@@ -96,6 +96,7 @@ fn builder() -> tauri::Builder<tauri::Wry> {
             vault::vault_make_folder,
             vault::vault_remove_folder,
             vault::vault_set_times,
+            vault::vault_downloaded,
             media::vault_media_url,
             log::app_log,
             menu::set_native_menu,

@@ -76,9 +76,9 @@ const routes: ExportedHandler = {
       // The desktop app's installers are public: they are downloaded before there is an account (downloads.ts).
       if (path === '/api/downloads' || path.startsWith('/api/downloads/')) return await handleDownloads(request, env, path);
 
-      // GET /api/public/:token[/file|/thumbnail|/live]: a document's public link, for anyone (see handlePublic).
-      const publicMatch = /^\/api\/public\/([^/]+)(?:\/(file|thumbnail|live))?$/.exec(path);
-      if (publicMatch) return await handlePublic(request, env, publicMatch[1]!, publicMatch[2] as 'file' | 'thumbnail' | 'live' | undefined);
+      // GET /api/public/:token[/file|/thumbnail|/live|/page]: a document's public link, for anyone (see handlePublic).
+      const publicMatch = /^\/api\/public\/([^/]+)(?:\/(file|thumbnail|live|page))?$/.exec(path);
+      if (publicMatch) return await handlePublic(request, env, publicMatch[1]!, publicMatch[2] as 'file' | 'thumbnail' | 'live' | 'page' | undefined);
 
       // GET /api/folder-public/:token[/file?path=…|/live?path=…]: a folder's public link, for anyone (see handleFolderView).
       const folderPublicMatch = /^\/api\/folder-public\/([^/]+)(?:\/(file|live))?$/.exec(path);
@@ -126,11 +126,11 @@ const routes: ExportedHandler = {
         return joinRoom(env, docId, headers, !!roomMatch[2]);
       }
 
-      // GET /api/view/:token[/file|/live]: a document shared view-only, by its share's own address (see handleView).
-      const viewMatch = /^\/api\/view\/([^/]+)(?:\/(file|live))?$/.exec(path);
+      // GET /api/view/:token[/file|/live|/page]: a document shared view-only, by its share's own address (see handleView).
+      const viewMatch = /^\/api\/view\/([^/]+)(?:\/(file|live|page))?$/.exec(path);
       // Cookies ride along on cross-site WebSocket handshakes, so a live line's origin is checked here (as a room's is).
       if (viewMatch?.[2] === 'live' && request.headers.get('origin') !== url.origin) throw new HttpError(403, 'bad origin');
-      if (viewMatch) return await handleView(request, env, userId, viewMatch[1]!, viewMatch[2] as 'file' | 'live' | undefined);
+      if (viewMatch) return await handleView(request, env, userId, viewMatch[1]!, viewMatch[2] as 'file' | 'live' | 'page' | undefined);
 
       // GET /api/folder-view/:token[/file?path=…|/live?path=…]: a folder shared view-only, by its share's own address (see handleFolderView).
       const folderViewMatch = /^\/api\/folder-view\/([^/]+)(?:\/(file|live))?$/.exec(path);
@@ -247,7 +247,7 @@ const routes: ExportedHandler = {
       }
 
       // The rest are the user's folders (folders.ts) and documents (documents.ts).
-      const match = /^\/api\/(documents|shared|folders|trash)(?:\/([^/]+)(?:\/(thumbnail|index|shares|versions|link|restore|file)(?:\/([^/]+)(?:\/(restore))?)?)?)?$/.exec(path);
+      const match = /^\/api\/(documents|shared|folders|trash)(?:\/([^/]+)(?:\/(thumbnail|index|shares|versions|link|page|restore|file)(?:\/([^/]+)(?:\/(restore))?)?)?)?$/.exec(path);
       if (!match) throw new HttpError(404, 'not found');
       const [, collection, id, sub0, granteeId, action0] = match;
       // `/api/trash/:id/restore` and `/api/trash/:id/file` have their action where the other collections have a sub-resource.

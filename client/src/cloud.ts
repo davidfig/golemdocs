@@ -21,6 +21,8 @@ export interface CloudDocument {
   role?: 'owner' | 'editor' | 'viewer';
   /** A document shared with this user view-only: the share's own address for the viewer (/view?s=<token>), not the document's id. */
   viewToken?: string;
+  /** For the owner: another account made it or saved it last, so an HTML page in it is from elsewhere (docs/html-pages.md §1). */
+  byOther?: boolean;
   /** Who shared it (documents shared with this user). */
   owner?: { name: string | null; email: string | null };
   /** Encrypted (docs/encrypted-folders.md): its file and name are sealed, with the item key `wrappedKey` (the owner's only). */

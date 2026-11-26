@@ -6,6 +6,9 @@
 
 - Shared documents and folders can be printed from the viewer's toolbar, and shown full screen with nothing but the document.
 - View › Files Sidebar has a keyboard shortcut: ⌃⌘S on a Mac, Ctrl+Shift+L elsewhere.
+- HTML pages: an HTML file with a script opens as the page it makes, right in Golem Docs, so an ai agent can write you a dashboard or a report as a file in your vault instead of hosting it somewhere else. A page can show parts of your other documents with `<golem-embed>` (a sheet's totals, a note's section, a chart) and read and change your notes from its scripts, and it keeps up as those documents change. View › HTML as Page, HTML as Document and HTML Source switch between the page, editing it as a document, and its HTML.
+- Pages run walled off from your account. A page that came from somewhere else (a download, an email, someone else's change) can't read your documents until you allow it, and then runs none of its scripts, so nothing it shows can leave your computer. Mark as Mine trusts a page you wrote yourself.
+- A shared page shows the people you share it with what it last showed you, and File › Share lists the documents it shows parts of.
 
 ### Changed
 

@@ -663,6 +663,45 @@ pub fn vault_remove_folder(path: String, vault: State<'_, Vault>) -> Result<bool
     remove_folder(&vault.root()?, &path)
 }
 
+/// Whether the system marks a file as downloaded from the internet: macOS's `com.apple.quarantine` attribute, or Windows' `Zone.Identifier`
+/// stream with a zone of 3 (Internet) or 4 (Restricted), which browsers and mail apps put on what they save. An HTML page so marked is
+/// shown as one from elsewhere (docs/html-pages.md §1). Linux has no common mark: false.
+pub fn downloaded(file: &Path) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        extern "C" {
+            fn getxattr(path: *const std::os::raw::c_char, name: *const std::os::raw::c_char, value: *mut std::ffi::c_void, size: usize, position: u32, options: i32) -> isize;
+        }
+        let (Ok(path), Ok(name)) = (CString::new(file.as_os_str().as_bytes()), CString::new("com.apple.quarantine")) else {
+            return false;
+        };
+        // Its size alone: any value means it is there.
+        return unsafe { getxattr(path.as_ptr(), name.as_ptr(), std::ptr::null_mut(), 0, 0, 0) } >= 0;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut stream = file.as_os_str().to_owned();
+        stream.push(":Zone.Identifier");
+        return match fs::read_to_string(PathBuf::from(stream)) {
+            Ok(text) => text.lines().any(|line| matches!(line.trim().strip_prefix("ZoneId=").map(str::trim), Some("3") | Some("4"))),
+            Err(_) => false,
+        };
+    }
+    #[allow(unreachable_code)]
+    {
+        let _ = file;
+        false
+    }
+}
+
+#[tauri::command]
+pub fn vault_downloaded(path: String, vault: State<'_, Vault>) -> Result<bool, String> {
+    let file = resolve(&vault.locate(&path)?, &path, true)?;
+    Ok(downloaded(&file))
+}
+
 /// Gives a document's file the account's dates, so it shows when the document was made (and last changed) on every computer
 /// rather than when this one wrote it. Either may be null to leave it as it is. Returns the modification time after.
 #[tauri::command]
@@ -707,6 +746,18 @@ mod tests {
     fn file_uris_are_percent_encoded() {
         assert_eq!(file_uri(Path::new("/home/bob/Bob's Vault/a b.md")), "file:///home/bob/Bob%27s%20Vault/a%20b.md");
         assert_eq!(file_uri(Path::new("/v/é")), "file:///v/%C3%A9");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn downloaded_reads_the_quarantine_mark() {
+        let dir = vault();
+        let file = dir.path().join("page.html");
+        fs::write(&file, "<p>hi</p>").unwrap();
+        assert!(!downloaded(&file));
+        let marked = std::process::Command::new("xattr").args(["-w", "com.apple.quarantine", "0081;00000000;Safari;"]).arg(&file).status().unwrap();
+        assert!(marked.success());
+        assert!(downloaded(&file));
     }
 
     #[test]

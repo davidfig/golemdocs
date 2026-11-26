@@ -14,6 +14,7 @@
 
 ### Changed
 
+- Website: the home page now leads with what Golem Docs is for: one editor for every file, kept as plain files that any ai can work on, and open source all the way through. Its sections follow that order, with every format Golem Docs opens after the ai demo. The Formats page now lists PowerPoint, and audio and video.
 - Shared documents and folders look like Golem Docs: the app's toolbar, icons, font and Files panel, your own color scheme, and a header with Golem Docs' name, the file you're looking at, and who shared it with you. A public link doesn't show the owner's name.
 - Help › Keyboard Shortcuts lists every command, by menu, with a search box, so you can give a key to any of them, not only to the ones that already have one. Your shortcuts follow your account to your other computers.
 - Format › Subscript is now ⇧⌘, (Ctrl+Shift+, on Windows and Linux), so ⌘, (Ctrl+,) opens Tools › Options as it always meant to. Subscript had been taking that key from it.

@@ -391,7 +391,7 @@ test.describe('a sign-in that runs out', () => {
     await person.context.close();
   });
 
-  test('signing out on purpose shows no note', async ({ browser }) => {
+  test('signing out on purpose shows no note', { tag: '@heavy' }, async ({ browser }) => {
     const person = await newPerson(browser, 'left');
     await person.app.blank();
     await person.app.type('kept in the account');

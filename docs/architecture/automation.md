@@ -9,7 +9,7 @@ It lives in `client/src/automation.ts` and is installed by `main.ts` at start-up
 | Call | What it does |
 | --- | --- |
 | `golem.state()` | The open document's name and kind, whether it is loaded, the status text, zoom, view mode, undo and redo, selection and the selection's format (`ChromeState`) |
-| `golem.commands.list(filter?)` | Every command in the `CommandRegistry`: id, plain label, shortcut, `enabled` (would run now), `available` (the format has it at all), `checked`. The filter matches the id or the label |
+| `golem.commands.list(filter?)` | Every command in the `CommandRegistry`: id, plain label, shortcut, `scope` (`vector` or `picture` for those editors' own keys, absent for the document's), `enabled` (would run now), `available` (the format has it at all), `checked`. The filter matches the id or the label |
 | `golem.commands.run(id)` | Runs a command exactly as its menu item would (`CommandRegistry.execute`): false when it is disabled or the format lacks it. An unknown id throws, naming the ids it might have meant (`nearIds`) |
 | `golem.doc.outline()` | Every body paragraph in order: its index (as the `select` command takes it), kind (`heading`, `item`, `paragraph`), level, whether a list is numbered, its text (a picture reads as U+FFFC, as for a screen reader) and its table cell. Null for a PDF, a text file or a workbook |
 | `golem.doc.text()` / `golem.doc.markdown()` | The whole document as the `.txt` / `.md` exporters write it (`worker.convert`); a text file's own text |

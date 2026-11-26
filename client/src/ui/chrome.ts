@@ -52,7 +52,7 @@ import { lockGuidesOn, selectAfterPencilOn, setLockGuides, setSelectAfterPencil,
 import { SCHEMES, currentAppearance, currentScheme, isDark, pagesDark, setAppearance, setScheme, toggleDark, toggleDarkPages } from './theme.ts';
 import { showCustomize, type CatalogItem } from './customize.ts';
 import { ICONS, iconElement } from './icons.ts';
-import { CommandPalette } from './commandPalette.ts';
+import { CommandPalette, filterEntries } from './commandPalette.ts';
 import { AccountButton } from './accountButton.ts';
 import { SyncButton } from './syncButton.ts';
 import { DocumentTitle } from './documentTitle.ts';
@@ -401,7 +401,8 @@ export class Chrome {
       a('view.fillForm', t('chrome.view.fillForm'), { kind: 'setFormMode', mode: 'fill' }, { checked: (s) => s.formMode === 'fill', radio: true, tooltip: t('chrome.view.fillForm.tip') }),
       a('view.editForm', t('chrome.view.editForm'), { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: t('chrome.view.editForm.tip') }),
       a('view.pagesPanel', t('chrome.view.pagesPanel'), { kind: 'togglePagesPanel' }, { shortcut: 'Alt+P', checked: (s) => s.pagesPanel }),
-      a('view.filesPanel', t('chrome.view.filesPanel'), { kind: 'toggleFilesPanel' }, { checked: (s) => s.filesPanel }),
+      // ⌃⌘S is a Mac's Show Sidebar (Finder, Mail, Notes); Ctrl+Shift+L is free in the app and in every browser.
+      a('view.filesPanel', t('chrome.view.filesPanel'), { kind: 'toggleFilesPanel' }, { shortcut: { mac: 'Ctrl+Mod+S', other: 'Mod+Shift+L' }, checked: (s) => s.filesPanel }),
       a('view.toolbars', t('chrome.view.showToolbars'), { kind: 'toggleToolbars' }, { checked: (s) => s.toolbars }),
       a('view.footer', t('chrome.view.footer'), { kind: 'toggleFooter' }, { checked: (s) => s.footer }),
       a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
@@ -485,7 +486,8 @@ export class Chrome {
       mark('underline', t('chrome.format.underline'), 'Mod+U'),
       mark('strikethrough', t('chrome.format.strikethrough'), { other: 'Alt+Shift+5', mac: 'Mod+Shift+X' }),
       mark('superscript', t('chrome.format.superscript'), 'Mod+.'),
-      mark('subscript', t('chrome.format.subscript'), 'Mod+,'),
+      // Mod+, is Tools › Options (a Mac's Settings key), so subscript takes it with Shift, beside superscript's Mod+.
+      mark('subscript', t('chrome.format.subscript'), 'Mod+Shift+,'),
       mark('code', t('chrome.format.code')),
       a('format.growFont', t('chrome.format.growFont'), { kind: 'growFont' }, { icon: 'growFont', shortcut: 'Mod+]' }),
       a('format.shrinkFont', t('chrome.format.shrinkFont'), { kind: 'shrinkFont' }, { icon: 'shrinkFont', shortcut: 'Mod+[' }),
@@ -2104,34 +2106,49 @@ export class Chrome {
     const table = h('table', { class: 'wm-shortcuts' });
     const status = h('div', { class: 'wm-shortcuts-status', attrs: { role: 'status' } });
     const reset = h('button', { class: 'wm-button', text: t('chrome.shortcuts.default'), attrs: { type: 'button' } });
+    const search = h('input', { class: 'wm-input wm-shortcuts-search', attrs: { type: 'search', placeholder: t('chrome.shortcuts.search'), 'aria-label': t('chrome.shortcuts.search') } });
     let recording: (() => void) | null = null;
+
+    // Every command is listed, so any of them can be given a key: the document's under the menu they come from, then the
+    // vector editor's and the picture tools' own.
+    const sectionName = (command: Command, category: string) => (command.scope === 'picture' ? t('chrome.shortcuts.picture') : command.scope === 'vector' ? t('chrome.shortcuts.vector') : category);
+    const entries = () => {
+      const all = [...this.registry.all()].map((command) => {
+        const { label, category } = this.commandInfo(command, command.plainLabel);
+        return { id: command.id, label, category: sectionName(command, category), command };
+      });
+      const order = [...new Set(all.filter((e) => !e.command.scope).map((e) => e.category))];
+      const rank = (e: (typeof all)[number]) => (e.command.scope === 'vector' ? order.length : e.command.scope === 'picture' ? order.length + 1 : order.indexOf(e.category));
+      return all.map((e, i) => [rank(e), i, e] as const).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]);
+    };
 
     const render = () => {
       recording = null;
       table.replaceChildren();
-      const commands = [...this.registry.all()];
-      const rows = [...commands.filter((c) => !c.scope), ...commands.filter((c) => c.scope === 'vector'), ...commands.filter((c) => c.scope === 'picture')];
-      const headers = new Set<string>();
-      for (const command of rows) {
+      const all = entries();
+      const shown = new Set(filterEntries(all, search.value).map((e) => e.id));
+      let section: string | null = null;
+      for (const { command, label, category } of all) {
+        if (!shown.has(command.id)) continue;
         const vector = command.scope !== undefined;
-        // The vector editor's and the picture tools' sections list every command, so any of them can be given a key.
-        if (!vector && !command.shortcutParsed && !command.defaultShortcut) continue;
-        if (command.scope && !headers.has(command.scope)) {
-          headers.add(command.scope);
-          const picture = command.scope === 'picture';
-          table.append(h('tr', { class: 'wm-shortcuts-section' }, h('th', { text: t(picture ? 'chrome.shortcuts.picture' : 'chrome.shortcuts.vector'), attrs: { colspan: '2', scope: 'colgroup' } })));
-          table.append(h('tr', {}, h('td', { class: 'wm-shortcuts-note', text: t(picture ? 'chrome.shortcuts.pictureHint' : 'chrome.shortcuts.vectorHint'), attrs: { colspan: '2' } })));
+        if (category !== section) {
+          section = category;
+          table.append(h('tr', { class: 'wm-shortcuts-section' }, h('th', { text: category, attrs: { colspan: '2', scope: 'colgroup' } })));
+          if (command.scope) {
+            const picture = command.scope === 'picture';
+            table.append(h('tr', {}, h('td', { class: 'wm-shortcuts-note', text: t(picture ? 'chrome.shortcuts.pictureHint' : 'chrome.shortcuts.vectorHint'), attrs: { colspan: '2' } })));
+          }
         }
         const key = h('button', {
           class: 'wm-shortcut-key',
-          attrs: { type: 'button', 'aria-label': t('chrome.shortcuts.change', { label: command.plainLabel }) },
+          attrs: { type: 'button', 'aria-label': t('chrome.shortcuts.change', { label }) },
         });
         const show = () => {
           key.classList.remove('recording');
           key.textContent = command.shortcutText || t('chrome.shortcuts.none');
           key.classList.toggle('none', !command.shortcutText);
           // Its name says the key it has now, which its label would otherwise hide.
-          key.setAttribute('aria-label', t('a11y.withValue', { label: t('chrome.shortcuts.change', { label: command.plainLabel }), value: key.textContent }));
+          key.setAttribute('aria-label', t('a11y.withValue', { label: t('chrome.shortcuts.change', { label }), value: key.textContent }));
         };
         show();
         if (command.nativeShortcut) {
@@ -2180,10 +2197,12 @@ export class Chrome {
             key.addEventListener('blur', stop);
           });
         }
-        table.append(h('tr', {}, h('td', { text: command.plainLabel }), h('td', {}, key)));
+        table.append(h('tr', {}, h('td', { text: label }), h('td', {}, key)));
       }
+      if (!shown.size) table.append(h('tr', {}, h('td', { class: 'wm-shortcuts-note', text: t('chrome.shortcuts.noMatch'), attrs: { colspan: '2' } })));
     };
     render();
+    search.addEventListener('input', render);
     reset.addEventListener('click', () => {
       this.registry.resetShortcuts();
       this.refresh();
@@ -2192,7 +2211,7 @@ export class Chrome {
     });
 
     const footer = h('div', { class: 'wm-shortcuts-footer' }, h('span', { class: 'wm-shortcuts-hint', text: t('chrome.shortcuts.hint') }), reset);
-    showDialog(t('chrome.shortcuts.title'), h('div', {}, footer, status, h('div', { class: 'wm-scroll' }, table)), () => this.options.host.focusEditor());
+    showDialog(t('chrome.shortcuts.title'), h('div', {}, footer, search, status, h('div', { class: 'wm-scroll' }, table)), () => this.options.host.focusEditor());
   }
 }
 

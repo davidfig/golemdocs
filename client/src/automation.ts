@@ -37,6 +37,8 @@ export interface CommandInfo {
   id: string;
   label: string;
   shortcut: string;
+  /** The editor whose own keys these are ('vector', 'picture'), or none for the document's. */
+  scope?: string;
   /** It would run now. */
   enabled: boolean;
   /** The open document's format can express it at all (menus hide it when not). */
@@ -129,6 +131,7 @@ function commandInfo(registry: CommandRegistry, command: Command): CommandInfo {
     id: command.id,
     label: command.plainLabel,
     shortcut: command.shortcutText,
+    ...(command.scope && { scope: command.scope }),
     enabled: registry.isAvailable(command) && registry.isEnabled(command),
     available: registry.isAvailable(command),
     checked: registry.isChecked(command),

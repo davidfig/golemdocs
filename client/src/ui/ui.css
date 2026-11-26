@@ -1467,6 +1467,13 @@ html.wm-titlebar .wm-format {
   opacity: 0.75;
 }
 
+.wm-shortcuts-search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 4px;
+}
+
 .wm-shortcuts-status {
   min-height: 1.3em;
   margin-bottom: 4px;

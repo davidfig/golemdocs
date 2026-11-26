@@ -315,6 +315,8 @@ export const chrome: Partial<Messages> = {
   'chrome.shortcuts.vector': 'Vektoreditor',
   'chrome.shortcuts.vectorHint': 'Tasten für die Zeichenwerkzeuge, wie in Illustrator. Ein Werkzeug kann eine einzelne Buchstaben-, Ziffern- oder Symboltaste haben.',
   'chrome.shortcuts.needKey': 'Drücken Sie eine Buchstaben-, Ziffern- oder Symboltaste (auf Wunsch mit Strg, Alt, ⌘ oder Umschalt).',
+  'chrome.shortcuts.search': 'Befehle suchen',
+  'chrome.shortcuts.noMatch': 'Keine passenden Befehle.',
   'chrome.file.rename': '&Umbenennen…',
   'chrome.file.rename.tip': 'Den Namen dieses Dokuments ändern',
   'chrome.title.label': 'Dokumentname',

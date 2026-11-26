@@ -315,6 +315,8 @@ export const chrome: Partial<Messages> = {
   'chrome.shortcuts.vector': '벡터 편집기',
   'chrome.shortcuts.vectorHint': 'Illustrator와 같은 그리기 도구 단축키입니다. 도구에는 문자, 숫자 또는 기호 키 하나만 지정할 수 있습니다.',
   'chrome.shortcuts.needKey': '문자, 숫자 또는 기호 키를 누르세요(원하면 Ctrl, Alt, ⌘, Shift와 함께).',
+  'chrome.shortcuts.search': '명령 검색',
+  'chrome.shortcuts.noMatch': '일치하는 명령이 없습니다.',
   'chrome.file.rename': '이름 바꾸기(&R)…',
   'chrome.file.rename.tip': '이 문서의 이름을 바꿉니다',
   'chrome.title.label': '문서 이름',

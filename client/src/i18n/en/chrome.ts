@@ -313,6 +313,8 @@ export const chrome = {
   'chrome.shortcuts.vector': 'Vector Editor',
   'chrome.shortcuts.vectorHint': 'Keys for the drawing tools, as in Illustrator. A tool can be a single letter, digit or symbol key.',
   'chrome.shortcuts.needKey': 'Press a letter, digit or symbol key (with Ctrl, Alt, ⌘ or Shift if you like).',
+  'chrome.shortcuts.search': 'Search commands',
+  'chrome.shortcuts.noMatch': 'No commands match.',
   'chrome.file.rename': '&Rename…',
   'chrome.file.rename.tip': 'Change this document\'s name',
   'chrome.title.label': 'Document name',

@@ -315,6 +315,8 @@ export const chrome: Partial<Messages> = {
   'chrome.shortcuts.vector': '矢量编辑器',
   'chrome.shortcuts.vectorHint': '绘图工具的快捷键，与 Illustrator 相同。工具可以只用一个字母、数字或符号键。',
   'chrome.shortcuts.needKey': '请按一个字母、数字或符号键（也可同时按 Ctrl、Alt、⌘ 或 Shift）。',
+  'chrome.shortcuts.search': '搜索命令',
+  'chrome.shortcuts.noMatch': '没有匹配的命令。',
   'chrome.file.rename': '重命名(&R)…',
   'chrome.file.rename.tip': '更改此文档的名称',
   'chrome.title.label': '文档名称',

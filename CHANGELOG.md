@@ -2,8 +2,14 @@
 
 ## 0.49.0 - Unreleased
 
+### Added
+
+- View › Files Sidebar has a keyboard shortcut: ⌃⌘S on a Mac, Ctrl+Shift+L elsewhere.
+
 ### Changed
 
+- Help › Keyboard Shortcuts lists every command, by menu, with a search box, so you can give a key to any of them, not only to the ones that already have one. Your shortcuts follow your account to your other computers.
+- Format › Subscript is now ⇧⌘, (Ctrl+Shift+, on Windows and Linux), so ⌘, (Ctrl+,) opens Tools › Options as it always meant to. Subscript had been taking that key from it.
 - The Files sidebar comes back as you left it after a reload: scrolled to the same place, and still showing Trash if Trash was open.
 
 ### Fixed

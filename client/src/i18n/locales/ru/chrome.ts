@@ -315,6 +315,8 @@ export const chrome: Catalog = {
   'chrome.shortcuts.vector': 'Векторный редактор',
   'chrome.shortcuts.vectorHint': 'Клавиши инструментов рисования, как в Illustrator. Для инструмента можно задать одну клавишу с буквой, цифрой или символом.',
   'chrome.shortcuts.needKey': 'Нажмите клавишу с буквой, цифрой или символом (при желании вместе с Ctrl, Alt, ⌘ или Shift).',
+  'chrome.shortcuts.search': 'Поиск команд',
+  'chrome.shortcuts.noMatch': 'Подходящих команд нет.',
   'chrome.file.rename': '&Переименовать…',
   'chrome.file.rename.tip': 'Изменить имя этого документа',
   'chrome.title.label': 'Имя документа',

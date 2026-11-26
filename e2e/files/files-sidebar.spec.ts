@@ -1,6 +1,7 @@
 // View > Files Sidebar: the documents as a tree beside the editor.
 
 import { expect, test } from './fixtures';
+import { menuRow, openMenu } from '../shell/helpers';
 import { dropFileOn, dropFilesOn, formatLabel, importFile, moveTo, status, text, waitForOpen, waitForSaved } from './helpers';
 
 const panel = (page: import('@playwright/test').Page) => page.locator('.wm-files');
@@ -29,6 +30,24 @@ test('View opens it, it lists the documents, opens one on a click, and the choic
   await expect(panel(page)).toBeVisible();
   await panel(page).getByRole('button', { name: 'Close' }).click();
   await expect(panel(page)).toBeHidden();
+});
+
+test('its key opens and closes it, from the document and from the sidebar itself, and the menu shows the key', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  const mac = await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.platform));
+  const key = mac ? 'Control+Meta+S' : 'Control+Shift+L';
+  await app.focus();
+  await page.keyboard.press(key);
+  await expect(panel(page)).toBeVisible();
+  // The document keeps the keyboard, so the same key closes it again.
+  await page.keyboard.press(key);
+  await expect(panel(page)).toBeHidden();
+  await page.keyboard.press(key);
+  await panel(page).locator('[tabindex="0"]').first().focus();
+  await page.keyboard.press(key);
+  await expect(panel(page)).toBeHidden();
+  await openMenu(app, 'View');
+  await expect(menuRow(page, 'Files Sidebar').locator('.wm-shortcut')).toHaveText(mac ? '⌃⌘S' : 'Ctrl+Shift+L');
 });
 
 test.describe('by default', () => {

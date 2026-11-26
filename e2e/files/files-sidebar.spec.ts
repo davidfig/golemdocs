@@ -254,3 +254,32 @@ test('a long press with a finger opens a row\'s menu, and lifting the finger doe
   await expect(page.getByRole('menuitem', { name: 'Rename' })).toBeVisible();
   await expect(row(page, 'beta')).toHaveClass(/wm-files-current/);
 });
+
+test('a reload puts the tree back where it was scrolled to, and keeps Trash open', async ({ app, page }) => {
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await app.goto('?doc=welcome');
+  await app.menu('View', 'Files Sidebar');
+  const tree = panel(page).locator('.wm-files-tree');
+  await dropFilesOn(tree, Array.from({ length: 30 }, (_, i) => text(`note ${String(i).padStart(2, '0')}.txt`, `${i}`)));
+  await expect.poll(() => status(page)).toContain('Imported documents: 30');
+  await expect(row(page, 'note 29')).toHaveCount(1);
+
+  const box = (await tree.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 240);
+  await expect.poll(() => tree.evaluate((el) => el.scrollTop)).toBeGreaterThan(100);
+  const scrolled = await tree.evaluate((el) => el.scrollTop);
+
+  await page.reload();
+  await app.ready();
+  await expect.poll(() => tree.evaluate((el) => el.scrollTop)).toBe(scrolled);
+
+  await panel(page).getByRole('button', { name: 'Trash', exact: true }).click();
+  await expect(panel(page).getByRole('tree', { name: 'Trash' })).toBeVisible();
+  await page.reload();
+  await app.ready();
+  await expect(panel(page).getByRole('tree', { name: 'Trash' })).toBeVisible();
+  await panel(page).getByRole('button', { name: 'Back to Files' }).click();
+  await expect(tree).toBeVisible();
+  await expect.poll(() => tree.evaluate((el) => el.scrollTop)).toBe(scrolled);
+});

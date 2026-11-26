@@ -26,6 +26,7 @@ import { showInFileManagerLabel } from '../desktop/bridge.ts';
 import { newMenuItems } from './newKinds.ts';
 import type { DocumentKind } from './actions.ts';
 import { makeResizable } from './sidebarResize.ts';
+import { parseFilesView, ScrollRestore, type FilesView } from './scrollRestore.ts';
 import { iconElement } from './icons.ts';
 import type { TrashActions } from './trashActions.ts';
 import { trashKey, type TrashItem } from '../trash.ts';
@@ -71,6 +72,8 @@ export interface FilesPanelHost {
 const OPEN_KEY = 'word.filesOpen';
 /** Set once the tip about dropping files here is dismissed, kept in this browser. */
 const TIP_KEY = 'word.filesDropTipDismissed';
+/** Whether Trash was showing and how far the documents and Trash were scrolled, kept in this browser. */
+const VIEW_KEY = 'word.filesView';
 
 /** The padlock of an encrypted folder or document: shut while locked, open while unlocked (none for anything else). */
 function lockOf(item: { encrypted?: boolean; locked?: boolean }): HTMLElement[] {
@@ -110,6 +113,9 @@ export class FilesPanel {
   private revealed = '';
   /** The row Tab goes to in the tree (one row at a time is in the tab order): the last one focused. */
   private tabStop: string | null = null;
+  /** Where the documents and Trash were scrolled to before the page was loaded, until they are put back there. */
+  private treeRestore = new ScrollRestore(null);
+  private trashRestore = new ScrollRestore(null);
 
   /** `library`: the documents and folders, the same copy the Documents screen shows. */
   constructor(
@@ -131,6 +137,7 @@ export class FilesPanel {
     } catch {
       // Storage unavailable: the folders start closed.
     }
+    this.inTrash = this.loadView().trash;
     // The collapse button is a stacked box with a minus: the usual sign for closing every folder in a tree.
     const close = iconButton('wm-files-close', CLOSE_ICON, t('panels.files.close'));
     close.addEventListener('click', () => host.close());
@@ -156,6 +163,16 @@ export class FilesPanel {
       list.addEventListener('focusin', (e) => {
         const row = (e.target as HTMLElement).closest<HTMLElement>('.wm-files-row');
         if (row?.dataset.row) this.setTabStop(row);
+      });
+    }
+    for (const [list, restore] of [
+      [this.tree, () => this.treeRestore],
+      [this.trashList, () => this.trashRestore],
+    ] as const) {
+      // Scrolling by the person (not the rows being drawn, or the list being put back) is kept for the next load.
+      for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) list.addEventListener(type, () => restore().cancel(), { passive: true });
+      list.addEventListener('scroll', () => {
+        if (!restore().pending && this.visible) this.saveView();
       });
     }
     parent.append(this.el);
@@ -193,6 +210,8 @@ export class FilesPanel {
     this.el.hidden = !visible;
     if (visible) {
       this.revealed = '';
+      // A hidden list forgets how far it was scrolled: it goes back to where it was.
+      this.loadView();
       // What the library has shows at once; the listing brings it up to date.
       this.render();
       this.reveal();
@@ -209,6 +228,7 @@ export class FilesPanel {
   /** Shows what was deleted in place of the tree, with the keyboard on the first of it (or on the way back, if there is none). */
   private enterTrash(): void {
     this.inTrash = true;
+    this.saveView();
     this.render();
     void this.host.trash.store.refresh();
     const first = this.trashList.querySelector<HTMLElement>('.wm-files-row');
@@ -220,6 +240,7 @@ export class FilesPanel {
   private leaveTrash(): void {
     this.inTrash = false;
     this.focusTrash = false;
+    this.saveView();
     this.render();
     this.trashEntry.focus();
   }
@@ -303,6 +324,7 @@ export class FilesPanel {
       this.tree.querySelector<HTMLElement>('.wm-files-row');
     if (stop) stop.tabIndex = 0;
     if (focused) this.tree.querySelector<HTMLElement>(`[data-row="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+    if (!this.inTrash) this.treeRestore.apply(this.tree);
   }
 
   private row(row: TreeRow<LibraryEntry>, here: { localId: string | null; cloudId: string | null }): HTMLElement {
@@ -396,6 +418,7 @@ export class FilesPanel {
     const rows = store.items.map((item) => this.trashRow(item));
     this.trashList.replaceChildren(...rows);
     this.emptyTrash.disabled = !store.items.length || store.emptying !== null;
+    this.trashRestore.apply(this.trashList);
     const stop = (this.tabStop && rows.find((r) => r.dataset.row === this.tabStop)) ?? rows[0];
     if (stop) stop.tabIndex = 0;
     if (this.focusTrash && store.loaded) {
@@ -698,6 +721,32 @@ export class FilesPanel {
     else this.expanded.delete(id);
     this.saveExpanded();
     this.render();
+  }
+
+  /** What was saved of the sidebar's place; each list is put back where it was scrolled to as its rows come. */
+  private loadView(): FilesView {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(VIEW_KEY);
+    } catch {
+      // Storage unavailable: the documents show, at the top.
+    }
+    const view = parseFilesView(saved);
+    this.treeRestore = new ScrollRestore(view.treeScroll);
+    this.trashRestore = new ScrollRestore(view.trashScroll);
+    return view;
+  }
+
+  /** Keeps whether Trash is showing and how far each list is scrolled (a hidden list, or one still being put back, keeps what was saved). */
+  private saveView(): void {
+    try {
+      const before = parseFilesView(localStorage.getItem(VIEW_KEY));
+      const tree = this.treeRestore.pending || this.tree.hidden ? before.treeScroll : this.tree.scrollTop;
+      const trash = this.trashRestore.pending || this.trashView.hidden ? before.trashScroll : this.trashList.scrollTop;
+      localStorage.setItem(VIEW_KEY, JSON.stringify({ trash: this.inTrash, treeScroll: tree, trashScroll: trash }));
+    } catch {
+      // Storage unavailable: the sidebar starts at the top next time.
+    }
   }
 
   private saveExpanded(): void {

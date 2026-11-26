@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.49.0 - Unreleased
+
+### Changed
+
+- The Files sidebar comes back as you left it after a reload: scrolled to the same place, and still showing Trash if Trash was open.
+
 ## 0.48.0 - 2026-11-25
 
 ### Added

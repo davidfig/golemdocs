@@ -677,7 +677,7 @@ the engine (`Host.structured`, `resolveStructured`); a formula typed in a table 
 it, `T[[#This Row],[Price]]` (`expandStructured`). The built-in styles (Light, Medium, Dark) are drawn in their shape: the
 header in the style's theme colour, banded rows tinted from it, the totals row bold (`tablePaint`, `TileCache.tableStyle`;
 a cell's own fill and colour win). Checked by the oracle's `tables` group (a table on the Data sheet) and in Excel, which
-keeps a table grown by an inserted row. Sheet › Insert Table makes one (`createTable`, `newTable`: the first row its
+keeps a table grown by an inserted row. Insert › Table (Ctrl+T on a Mac and in the desktop app) makes one (`createTable`, `newTable`: the first row its
 header, empty header cells named Column1...); the writer gives a new table its part and relationship, removes those of
 tables gone, and writes `<tableParts>` from the model; Excel opens it.
 

@@ -42,7 +42,7 @@ import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerDocument, DrawerEntry } from './menuDrawer.ts';
 import { closePopup, openPopup, popupOpenFor, setPopupLayer, showConfirm, showDialog } from './popup.ts';
 import { showZoomList, zoomPresets } from './zoomList.ts';
-import { IS_MAC, isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
+import { IS_MAC, isUsableShortcut, matches, shortcutFromEvent, type Shortcut, type ShortcutSpec } from './shortcuts.ts';
 import { inAppMenuOnMac, installFullScreen, isFullScreen, onFullScreenChange, onInAppMenuChange, toggleFullScreen } from './fullScreen.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type PaletteControl, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
@@ -636,7 +636,10 @@ export class Chrome {
       r.add(a(`media.${op}`, t(`media.op.${op}`), { kind: 'media', op }, { ...(MEDIA_ICONS[op] && { icon: MEDIA_ICONS[op] }), ...(MEDIA_CHECKED[op] && { checked: MEDIA_CHECKED[op] }), ...(MEDIA_ENABLED[op] && { enabled: MEDIA_ENABLED[op] }) }));
     }
 
-    for (const op of SHEET_OPS) r.add(a(`sheet.${op}`, t(`sheet.op.${op}`), { kind: 'sheet', op }, SHEET_ICONS[op] ? { icon: SHEET_ICONS[op] } : {}));
+    // Excel's Ctrl+T makes a table (Control on a Mac too, where ⌘T is the browser's). A browser elsewhere keeps Ctrl+T for a
+    // new tab and never hands it to the page, so there only the desktop app has it.
+    const SHEET_KEYS: Partial<Record<(typeof SHEET_OPS)[number], ShortcutSpec>> = { insertTable: { mac: 'Ctrl+T', ...(isDesktopApp() && { other: 'Ctrl+T' }) } };
+    for (const op of SHEET_OPS) r.add(a(`sheet.${op}`, t(`sheet.op.${op}`), { kind: 'sheet', op }, { ...(SHEET_ICONS[op] && { icon: SHEET_ICONS[op] }), ...(SHEET_KEYS[op] && { shortcut: SHEET_KEYS[op] }) }));
 
     // Slides: the Slide menu, Insert's slide items and View's (the editor's own keys and context menus do the rest; see slides/view.ts).
     const SLIDE_ICONS: Partial<Record<(typeof SLIDES_OPS)[number], string>> = { textBox: 'text', picture: 'image', table: 'table', shape: 'shapes' };
@@ -972,6 +975,13 @@ export class Chrome {
       {
         label: t('chrome.menu.insert'),
         items: [
+          // Spreadsheets: cells first, in the Sheet menu's order.
+          cmd('sheet.insertRowsAbove'),
+          cmd('sheet.insertRowsBelow'),
+          cmd('sheet.insertColumnsLeft'),
+          cmd('sheet.insertColumnsRight'),
+          cmd('sheet.addSheet'),
+          sep,
           sub(t('chrome.insert.break'), [cmd('insert.pageBreak'), cmd('insert.columnBreak'), cmd('insert.lineBreak'), sep, cmd('insert.sectionNext'), cmd('insert.sectionContinuous')], 'pageBreak'),
           cmd('insert.pageNumbers'),
           sub(t('chrome.insert.dateTime'), () => {
@@ -997,9 +1007,13 @@ export class Chrome {
           cmd('slides.shape'),
           cmd('slides.picture'),
           cmd('slides.table'),
+          cmd('sheet.insertTable'),
           cmd('sheet.insertPivot'),
           sub(t('sheet.chart'), [cmd('sheet.chartColumn'), cmd('sheet.chartBar'), cmd('sheet.chartLine'), cmd('sheet.chartArea'), cmd('sheet.chartPie'), cmd('sheet.chartDoughnut'), cmd('sheet.chartScatter')]),
           sub(t('sheet.sparklines'), [cmd('sheet.sparklineLine'), cmd('sheet.sparklineColumn'), cmd('sheet.sparklineWinLoss'), sep, cmd('sheet.clearSparklines')]),
+          sep,
+          cmd('sheet.newNote'),
+          cmd('sheet.insertPageBreak'),
           sep,
           cmd('insert.horizontalRule'),
           cmd('insert.codeBlock'),
@@ -1095,7 +1109,6 @@ export class Chrome {
           cmd('sheet.filter'),
           sub(t('sheet.group'), [cmd('sheet.groupRows'), cmd('sheet.ungroupRows'), cmd('sheet.groupColumns'), cmd('sheet.ungroupColumns')]),
           sep,
-          cmd('sheet.insertTable'),
           sub(t('sheet.pivot'), [cmd('sheet.pivotFields'), cmd('sheet.refreshPivots')]),
           sub(t('sheet.whatIf'), [cmd('sheet.scenarioManager'), cmd('sheet.goalSeek'), cmd('sheet.dataTable'), cmd('sheet.solver')]),
           sep,

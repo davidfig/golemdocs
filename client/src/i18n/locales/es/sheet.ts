@@ -62,7 +62,7 @@ export const sheet = {
   'sheet.op.pasteFormulas': 'Pegar fórmulas',
   'sheet.op.pasteFormats': 'Pegar formato',
   'sheet.op.pasteTranspose': 'Pegar transpuesto',
-  'sheet.op.insertTable': 'Insertar tabla',
+  'sheet.op.insertTable': 'Tabla',
   'sheet.tableOverlap': 'Una tabla no puede superponerse a otra tabla ni a un filtro.',
   'sheet.group': 'Agrupar',
   'sheet.op.groupRows': 'Agrupar filas',

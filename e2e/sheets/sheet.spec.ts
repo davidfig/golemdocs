@@ -247,14 +247,14 @@ test('Sheet › Group groups rows; the outline’s box collapses them and its le
   await expect.poll(async () => (await outline()).outline).toBe(null);
 });
 
-test('a table made with Insert Table has filter buttons of its own, and a formula typed in a new column fills it', async ({ app, page }) => {
+test('a table made with Insert › Table has filter buttons of its own, and a formula typed in a new column fills it', async ({ app, page }) => {
   await open(app, page);
   // C1:C27 is empty beside the A:B block: a header there makes it part of the table.
   await clickCell(page, 0, 2);
   await page.keyboard.type('Twice');
   await page.keyboard.press('Enter');
   await clickCell(page, 0, 0);
-  await app.menu('Sheet', 'Insert Table');
+  await app.menu('Insert', 'Table');
   await expect.poll(async () => ((await state(page)) as unknown as { tableFilters: { table: string }[] | null }).tableFilters?.map((f) => f.table)).toEqual(['Table1']);
   await clickCell(page, 3, 2);
   await page.keyboard.type('=LEN(A4)');
@@ -274,6 +274,27 @@ test('a table made with Insert Table has filter buttons of its own, and a formul
   await card.getByRole('checkbox', { name: 'five', exact: true }).check();
   await card.getByRole('button', { name: 'OK' }).click();
   await expect.poll(async () => ((await state(page)) as unknown as { hiddenRows: number }).hiddenRows).toBe(24);
+});
+
+test('Insert lists what a sheet can insert, and Ctrl+T makes a table of the block around the cell', async ({ app, page }) => {
+  await open(app, page);
+  await app.menubar.getByRole('menuitem', { name: 'Insert', exact: true }).click();
+  const menu = page.getByRole('menu').last();
+  for (const name of ['Insert Rows Above', 'Insert Columns Left', 'New Sheet', 'Date and Time', 'Symbol', 'Table', 'PivotTable', 'Chart', 'Sparklines', 'New Note', 'Insert Page Break']) {
+    await expect(menu.getByRole('menuitem', { name: new RegExp(`^${name}(\\s|$)`) })).toBeVisible();
+  }
+  // A word processor's entries are not offered.
+  await expect(menu.getByRole('menuitem', { name: /^Footnote/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  // Insert Table moved to Insert: the Sheet menu no longer lists it.
+  await app.menubar.getByRole('menuitem', { name: 'Sheet', exact: true }).click();
+  await expect(page.getByRole('menu').last().getByRole('menuitem', { name: /^Insert Table/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  // Ctrl+T: the Control key on a Mac too (a browser elsewhere keeps Ctrl+T for a new tab, so only the desktop app has it there).
+  test.skip(process.platform !== 'darwin', 'Ctrl+T reaches the page only on a Mac in a browser');
+  await clickCell(page, 0, 0);
+  await page.keyboard.press('Control+t');
+  await expect.poll(async () => ((await state(page)) as unknown as { tableFilters: { table: string }[] | null }).tableFilters?.map((f) => f.table)).toEqual(['Table1']);
 });
 
 test('a workbook’s charts are drawn over its cells, and follow their data', async ({ app, page }) => {

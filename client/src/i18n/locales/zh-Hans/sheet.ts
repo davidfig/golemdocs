@@ -62,7 +62,7 @@ export const sheet = {
   'sheet.op.pasteFormulas': '粘贴公式',
   'sheet.op.pasteFormats': '粘贴格式',
   'sheet.op.pasteTranspose': '转置粘贴',
-  'sheet.op.insertTable': '插入表格',
+  'sheet.op.insertTable': '表格',
   'sheet.tableOverlap': '表格不能与其他表格或筛选重叠。',
   'sheet.group': '组合',
   'sheet.op.groupRows': '组合行',

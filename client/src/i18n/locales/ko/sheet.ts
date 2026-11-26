@@ -62,7 +62,7 @@ export const sheet = {
   'sheet.op.pasteFormulas': '수식 붙여넣기',
   'sheet.op.pasteFormats': '서식 붙여넣기',
   'sheet.op.pasteTranspose': '행/열 바꿈 붙여넣기',
-  'sheet.op.insertTable': '표 삽입',
+  'sheet.op.insertTable': '표',
   'sheet.tableOverlap': '표는 다른 표나 필터와 겹칠 수 없습니다.',
   'sheet.group': '그룹',
   'sheet.op.groupRows': '행 그룹',

@@ -181,10 +181,10 @@ export interface SheetInfo {
   sparklines?: boolean;
   /** Protect Sheet is on; `password`: unprotecting asks for one. */
   protection?: { password: boolean };
-  /** The AutoFilter: its range, and the columns it filters by values (sheet columns). */
-  filter?: { range: CellRange; filtered: number[] };
+  /** The AutoFilter: its range, the columns it filters by values (sheet columns), and its header cells whose text is at the top or in the middle (their buttons go there too; the rest sit at the bottom). */
+  filter?: { range: CellRange; filtered: number[]; raised?: [number, 'top' | 'center'][] };
   /** Tables' own AutoFilters, by table name. */
-  tableFilters?: { table: string; range: CellRange; filtered: number[] }[];
+  tableFilters?: { table: string; range: CellRange; filtered: number[]; raised?: [number, 'top' | 'center'][] }[];
 }
 
 export interface BookInfo {

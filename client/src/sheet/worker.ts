@@ -110,11 +110,11 @@ export function info(b: Workbook): BookInfo {
           : undefined,
         protection: isProtected(sheet.protection) ? { password: hasPassword(sheet.protection) } : undefined,
         notes: sheet.notes.length ? sheet.notes.slice(0, 20000).map((n): [number, number] => [n.row, n.col]) : undefined,
-        filter: sheet.autoFilter ? { range: sheet.autoFilter.range, filtered: sheet.autoFilter.columns.map((c) => sheet.autoFilter!.range.c0 + c.col) } : undefined,
+        filter: sheet.autoFilter ? { range: sheet.autoFilter.range, filtered: sheet.autoFilter.columns.map((c) => sheet.autoFilter!.range.c0 + c.col), raised: raisedHeaders(sheet, sheet.autoFilter.range) } : undefined,
         tableFilters: sheet.tables.some((t) => tableFilter(t))
           ? sheet.tables.flatMap((t) => {
               const f = tableFilter(t);
-              return f ? [{ table: t.displayName, range: f.range, filtered: f.columns.filter((c) => c.values !== null).map((c) => f.range.c0 + c.col) }] : [];
+              return f ? [{ table: t.displayName, range: f.range, filtered: f.columns.filter((c) => c.values !== null).map((c) => f.range.c0 + c.col), raised: raisedHeaders(sheet, f.range) }] : [];
             })
           : undefined,
       };
@@ -266,6 +266,21 @@ function columnTexts(sheet: Worksheet, col: number): [string, number][] {
   const out: [string, number][] = [];
   for (const [style, list] of byStyle) for (const text of list.sort((a, b) => b.length - a.length).slice(0, 8)) out.push([text, style]);
   return out;
+}
+
+/** A filter's header cells whose text is not at the bottom (top or middle), so their buttons stand beside the text. */
+function raisedHeaders(sheet: Worksheet, range: CellRange): [number, 'top' | 'center'][] | undefined {
+  const out: [number, 'top' | 'center'][] = [];
+  const row = range.r0;
+  for (let col = range.c0; col <= Math.min(range.c1, range.c0 + 4096); col++) {
+    const column = sheet.grid.columns[col];
+    const kind = column?.kind(row) ?? Kind.Empty;
+    const style = kind === Kind.Empty ? (sheet.rowStyles.get(row) ?? sheet.colStyles.get(col) ?? 0) : (column?.style(row) ?? 0);
+    const vertical = style ? book!.styles.format(style)?.alignment?.vertical : undefined;
+    if (vertical === 'top') out.push([col, 'top']);
+    else if (vertical && vertical !== 'bottom') out.push([col, 'center']);
+  }
+  return out.length ? out : undefined;
 }
 
 function cellContent(sheet: Worksheet, row: number, col: number): CellContent {

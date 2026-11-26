@@ -62,7 +62,7 @@ export const sheet = {
   'sheet.op.pasteFormulas': 'Paste Formulas',
   'sheet.op.pasteFormats': 'Paste Formatting',
   'sheet.op.pasteTranspose': 'Paste Transposed',
-  'sheet.op.insertTable': 'Insert Table',
+  'sheet.op.insertTable': 'Table',
   'sheet.tableOverlap': 'A table can’t overlap another table or a filter.',
   'sheet.group': 'Group',
   'sheet.op.groupRows': 'Group Rows',

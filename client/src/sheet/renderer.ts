@@ -158,7 +158,7 @@ export interface SheetFrame {
   /** The range the fill handle is being dragged over. */
   filling: CellRange | null;
   /** AutoFilters (the sheet's, tables'): buttons on their first rows (blue on columns they filter). */
-  filters: { range: CellRange; filtered: number[] }[];
+  filters: { range: CellRange; filtered: number[]; raised?: [number, 'top' | 'center'][] }[];
   /** A cell whose list validation offers choices: its arrow, beside it. */
   choices: { row: number; col: number } | null;
   /** The sheet's charts, laid out (drawn over the cells). */
@@ -667,10 +667,10 @@ export class SheetRenderer {
 
       // The AutoFilter's buttons, the selection, the cell being edited's frame, and a copied range.
       const over = new RectList();
-      for (const filter of frame.filters) this.filterButtons(over, filter, g, 1 / scale);
+      for (const filter of frame.filters) this.filterButtons(over, filter, g, 1 / scale, view);
       if (frame.choices) {
         const box = choicesButton(g, frame.choices.row, frame.choices.col, 1 / scale);
-        if (box) this.dropButton(over, box, 1 / scale, false);
+        if (box) dropButton(over, box, 1 / scale, false, view);
       }
       this.selection(over, frame, g, 1 / (scale * dpr));
       if (frame.chartGhost) this.dashed(over, frame.chartGhost, 1.5 / scale, packColor(COLOR.selectionLine));
@@ -952,26 +952,12 @@ export class SheetRenderer {
   }
 
   /** The AutoFilter's buttons: a framed square with a down arrow at the right of each cell of its first row. */
-  private filterButtons(list: RectList, filter: { range: CellRange; filtered: number[] }, g: SheetGeometry, cssPx: number): void {
+  private filterButtons(list: RectList, filter: { range: CellRange; filtered: number[]; raised?: [number, 'top' | 'center'][] }, g: SheetGeometry, cssPx: number, view: Camera): void {
     const row = filter.range.r0;
+    const raised = new Map(filter.raised);
     for (let col = filter.range.c0; col <= filter.range.c1; col++) {
-      const box = filterButton(g, row, col, cssPx);
-      if (box) this.dropButton(list, box, cssPx, filter.filtered.includes(col));
-    }
-  }
-
-  /** A framed square with a down arrow (blue when `on`): a filter's button, a validation list's. */
-  private dropButton(list: RectList, box: { x0: number; y0: number; x1: number; y1: number }, cssPx: number, on: boolean): void {
-    list.push(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0, packColor(COLOR.filterFace));
-    outline(list, box, cssPx, packColor(COLOR.filterEdge));
-    // The arrow: rows of a triangle, each a little narrower.
-    const w = (box.x1 - box.x0) * 0.5;
-    const cx = (box.x0 + box.x1) / 2;
-    const top = box.y0 + (box.y1 - box.y0) * 0.38;
-    const steps = 4;
-    for (let i = 0; i < steps; i++) {
-      const half = (w / 2) * (1 - i / steps);
-      list.push(cx - half, top + i * cssPx * 1.2, half * 2, cssPx * 1.2, packColor(on ? COLOR.selectionLine : COLOR.filterArrow));
+      const box = filterButton(g, row, col, cssPx, raised.get(col));
+      if (box) dropButton(list, box, cssPx, filter.filtered.includes(col), view);
     }
   }
 
@@ -1143,21 +1129,86 @@ function niceStep(n: number): number {
   return 10 * power;
 }
 
-/** Where a cell's filter button is (sheet points): a square at its right, about 15 CSS pixels, never more than the cell. */
-export function filterButton(g: SheetGeometry, row: number, col: number, cssPx: number): { x0: number; y0: number; x1: number; y1: number } | null {
-  const x1 = g.x(col + 1) - cssPx;
-  const y1 = g.y(row + 1) - cssPx;
-  const size = Math.min(15 * cssPx, g.y(row + 1) - g.y(row) - 2 * cssPx, g.x(col + 1) - g.x(col) - 2 * cssPx);
-  if (size <= 0) return null;
-  return { x0: x1 - size, y0: y1 - size, x1, y1 };
+/** A framed square with a down arrow (blue when `on`): a filter's button, a validation list's. */
+function dropButton(list: RectList, box: { x0: number; y0: number; x1: number; y1: number }, cssPx: number, on: boolean, view: Camera): void {
+  list.push(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0, packColor(COLOR.filterFace));
+  outline(list, box, cssPx, packColor(COLOR.filterEdge));
+  // The arrow, worked out in device pixels so its rows sit on the pixel grid and its slanted edges are smooth.
+  const s = view.scale;
+  const width = (box.x1 - box.x0) * 0.5 * s;
+  const height = width * 0.55;
+  const cx = ((box.x0 + box.x1) / 2 - view.x) * s;
+  const top = ((box.y0 + box.y1) / 2 - view.y) * s - height * 0.45;
+  const rgb = on ? COLOR.selectionLine : COLOR.filterArrow;
+  for (const [x, y, w, coverage] of arrowRows(cx, top, width, height)) list.push(x / s + view.x, y / s + view.y, w / s, 1 / s, packColor(rgb, coverage));
 }
 
-/** Where a list validation's arrow is (sheet points): a square just right of the cell, as tall as it, at most 15 CSS pixels. */
+/**
+ * A down-pointing triangle as device-pixel rows (x, y, width, coverage), `width` wide at `top` and `height` tall, centred on
+ * `cx`: each row's inside as one solid run, and the pixel at each end as much covered as the slanted edge leaves it, so the
+ * edges look smooth without antialiasing.
+ */
+export function arrowRows(cx: number, top: number, width: number, height: number): [number, number, number, number][] {
+  const out: [number, number, number, number][] = [];
+  const rows = Math.max(2, Math.round(height));
+  const y0 = Math.round(top);
+  for (let i = 0; i < rows; i++) {
+    const half = (width / 2) * (1 - (i + 0.5) / rows);
+    const l = cx - half;
+    const r = cx + half;
+    const y = y0 + i;
+    const a = Math.ceil(l);
+    const b = Math.floor(r);
+    if (b < a) {
+      // The whole row is inside one pixel.
+      if (r - l > 0.02) out.push([Math.floor(l), y, 1, r - l]);
+      continue;
+    }
+    if (a - l > 0.02) out.push([a - 1, y, 1, a - l]);
+    if (b > a) out.push([a, y, b - a, 1]);
+    if (r - b > 0.02) out.push([b, y, 1, r - b]);
+  }
+  return out;
+}
+
+/** A filter or list button's side (sheet points): 15 CSS pixels at 100%, zooming with the cells like their text. */
+export const DROP_BUTTON_POINTS = 11.25;
+
+/** The smallest a drop button's clickable area gets (CSS pixels), however small it is drawn when zoomed out. */
+const MIN_DROP_TARGET_CSS = 10;
+
+/**
+ * Where a cell's filter button is (sheet points): a square at its right, `DROP_BUTTON_POINTS` wide, never more than the cell,
+ * level with the cell's text: at the bottom, or at the top or in the middle when the text is (`vertical`).
+ */
+export function filterButton(g: SheetGeometry, row: number, col: number, cssPx: number, vertical: 'top' | 'center' | 'bottom' = 'bottom'): { x0: number; y0: number; x1: number; y1: number } | null {
+  const x1 = g.x(col + 1) - cssPx;
+  const top = g.y(row);
+  const bottom = g.y(row + 1);
+  const size = Math.min(DROP_BUTTON_POINTS, bottom - top - 2 * cssPx, g.x(col + 1) - g.x(col) - 2 * cssPx);
+  if (size <= 0) return null;
+  const y0 = vertical === 'top' ? top + cssPx : vertical === 'center' ? (top + bottom - size) / 2 : bottom - cssPx - size;
+  return { x0: x1 - size, y0, x1, y1: y0 + size };
+}
+
+/** Where a list validation's arrow is (sheet points): a square just right of the cell, as tall as it, at most `DROP_BUTTON_POINTS`. */
 export function choicesButton(g: SheetGeometry, row: number, col: number, cssPx: number): { x0: number; y0: number; x1: number; y1: number } | null {
-  const size = Math.min(15 * cssPx, g.y(row + 1) - g.y(row));
+  const size = Math.min(DROP_BUTTON_POINTS, g.y(row + 1) - g.y(row));
   if (size <= 0) return null;
   const x0 = g.x(col + 1) + cssPx;
   return { x0, y0: g.y(row + 1) - size, x1: x0 + size, y1: g.y(row + 1) };
+}
+
+/** A drop button's clickable area (sheet points): the button, grown about its middle to at least `MIN_DROP_TARGET_CSS` CSS pixels. */
+export function dropTarget(box: { x0: number; y0: number; x1: number; y1: number }, cssPx: number): { x0: number; y0: number; x1: number; y1: number } {
+  const min = MIN_DROP_TARGET_CSS * cssPx;
+  const grow = (a: number, b: number): [number, number] => {
+    const pad = Math.max(0, (min - (b - a)) / 2);
+    return [a - pad, b + pad];
+  };
+  const [x0, x1] = grow(box.x0, box.x1);
+  const [y0, y1] = grow(box.y0, box.y1);
+  return { x0, y0, x1, y1 };
 }
 
 function rangeBox(g: SheetGeometry, r: CellRange): { x0: number; y0: number; x1: number; y1: number } {

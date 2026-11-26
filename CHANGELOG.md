@@ -20,6 +20,8 @@
 - Format › Subscript is now ⇧⌘, (Ctrl+Shift+, on Windows and Linux), so ⌘, (Ctrl+,) opens Tools › Options as it always meant to. Subscript had been taking that key from it.
 - The Files sidebar comes back as you left it after a reload: scrolled to the same place, and still showing Trash if Trash was open.
 - The Files sidebar no longer opens with a tip about dropping files in. While it is empty, it says you can drop files or folders there.
+- Spreadsheets: the Insert menu lists everything a sheet can insert: rows, columns and a new sheet, Table (moved from the Sheet menu), PivotTable, Chart, Sparklines, a note and a page break. Ctrl+T makes a table, as in Excel (on a Mac, and on Windows and Linux in the desktop app; a browser there keeps Ctrl+T for a new tab).
+- Spreadsheets: filter buttons and list arrows grow and shrink with the zoom like the cells around them, rather than staying one size. They stay easy to click when you zoom far out, their arrows are smooth at any zoom, and a filter button sits level with its header's text when that text is at the top or in the middle of the cell.
 
 ### Fixed
 

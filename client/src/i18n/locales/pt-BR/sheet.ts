@@ -62,7 +62,7 @@ export const sheet = {
   'sheet.op.pasteFormulas': 'Colar fórmulas',
   'sheet.op.pasteFormats': 'Colar formatação',
   'sheet.op.pasteTranspose': 'Colar transposto',
-  'sheet.op.insertTable': 'Inserir tabela',
+  'sheet.op.insertTable': 'Tabela',
   'sheet.tableOverlap': 'Uma tabela não pode se sobrepor a outra tabela ou a um filtro.',
   'sheet.group': 'Agrupar',
   'sheet.op.groupRows': 'Agrupar linhas',

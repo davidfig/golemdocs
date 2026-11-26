@@ -31,7 +31,7 @@ import type { BorderChange, StyleChange } from './format/styleChange.ts';
 import type { PasteWhat } from './pasteCells.ts';
 import { HEADER_HEIGHT, SheetGeometry } from './geometry.ts';
 import type { Hit } from './geometry.ts';
-import { FILL_HANDLE, SheetRenderer, choicesButton, filterButton } from './renderer.ts';
+import { FILL_HANDLE, SheetRenderer, choicesButton, dropTarget, filterButton } from './renderer.ts';
 import { FilterCard } from './filterCard.ts';
 import { NoteCard, NoteEditor } from './noteCard.ts';
 import { askSheetPassword } from './protectDialog.ts';
@@ -57,6 +57,8 @@ import './view.css';
 interface SheetFilter {
   range: CellRange;
   filtered: number[];
+  /** Header cells whose text is at the top or in the middle (their buttons stand there too). */
+  raised?: [number, 'top' | 'center'][];
   table?: string;
   pivot?: { index: number; fields: { field: number; name: string }[] };
 }
@@ -1610,9 +1612,10 @@ export class SheetEditorView {
     const g = this.geometry;
     if (!filter || !g) return false;
     const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
-    const box = filterButton(g, row, col, 1 / scale);
+    const drawn = filterButton(g, row, col, 1 / scale, filter.raised?.find(([c]) => c === col)?.[1]);
     const center = this.pointOf(row, col);
-    if (!box || !center) return false;
+    if (!drawn || !center) return false;
+    const box = dropTarget(drawn, 1 / scale);
     // The cell's middle on screen, and the button's offset from it.
     const mx = (g.x(col) + g.x(col + 1)) / 2;
     const my = (g.y(row) + g.y(row + 1)) / 2;
@@ -1856,9 +1859,10 @@ export class SheetEditorView {
     if (!g || !this.content.list || this.editing) return false;
     const { row, col } = this.active;
     const scale = this.deps.camera.zoom * CSS_PX_PER_POINT;
-    const box = choicesButton(g, row, col, 1 / scale);
+    const drawn = choicesButton(g, row, col, 1 / scale);
     const center = this.pointOf(row, col);
-    if (!box || !center) return false;
+    if (!drawn || !center) return false;
+    const box = dropTarget(drawn, 1 / scale);
     const mx = (g.x(col) + g.x(col + 1)) / 2;
     const my = (g.y(row) + g.y(row + 1)) / 2;
     return x >= center.x + (box.x0 - mx) * scale && x <= center.x + (box.x1 - mx) * scale && y >= center.y + (box.y0 - my) * scale && y <= center.y + (box.y1 - my) * scale;

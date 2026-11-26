@@ -62,7 +62,7 @@ export const sheet = {
   'sheet.op.pasteFormulas': 'Coller les formules',
   'sheet.op.pasteFormats': 'Coller la mise en forme',
   'sheet.op.pasteTranspose': 'Coller en transposant',
-  'sheet.op.insertTable': 'Insérer un tableau',
+  'sheet.op.insertTable': 'Tableau',
   'sheet.tableOverlap': 'Un tableau ne peut pas chevaucher un autre tableau ni un filtre.',
   'sheet.group': 'Grouper',
   'sheet.op.groupRows': 'Grouper les lignes',

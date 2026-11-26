@@ -62,7 +62,7 @@ export const sheet = {
   'sheet.op.pasteFormulas': 'Вставить формулы',
   'sheet.op.pasteFormats': 'Вставить форматирование',
   'sheet.op.pasteTranspose': 'Вставить с транспонированием',
-  'sheet.op.insertTable': 'Вставить таблицу',
+  'sheet.op.insertTable': 'Таблица',
   'sheet.tableOverlap': 'Таблица не может перекрывать другую таблицу или фильтр.',
   'sheet.group': 'Группировать',
   'sheet.op.groupRows': 'Группировать строки',

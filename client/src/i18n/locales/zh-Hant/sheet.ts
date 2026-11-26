@@ -62,7 +62,7 @@ export const sheet = {
   'sheet.op.pasteFormulas': '貼上公式',
   'sheet.op.pasteFormats': '貼上格式設定',
   'sheet.op.pasteTranspose': '轉置貼上',
-  'sheet.op.insertTable': '插入表格',
+  'sheet.op.insertTable': '表格',
   'sheet.tableOverlap': '表格不能與其他表格或篩選重疊。',
   'sheet.group': '群組',
   'sheet.op.groupRows': '群組列',

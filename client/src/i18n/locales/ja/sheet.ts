@@ -62,7 +62,7 @@ export const sheet = {
   'sheet.op.pasteFormulas': '数式の貼り付け',
   'sheet.op.pasteFormats': '書式の貼り付け',
   'sheet.op.pasteTranspose': '行/列を入れ替えて貼り付け',
-  'sheet.op.insertTable': 'テーブルの挿入',
+  'sheet.op.insertTable': '表',
   'sheet.tableOverlap': 'テーブルは他のテーブルやフィルターと重ねられません。',
   'sheet.group': 'グループ化',
   'sheet.op.groupRows': '行のグループ化',

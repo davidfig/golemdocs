@@ -8,7 +8,7 @@
 // is still different from the manifest, so the next sync tries it again.
 
 import { playsInPlace } from '../media/mediaFiles.ts';
-import { cloudPaths, folderPaths, foldersOf, needsHash, planVault, safeName, vanishedFolders, type CloudDoc, type CloudFile, type CloudFolder, type LocalFile, type ManifestEntry, type VaultAction, type VaultPlan } from './vaultPlan.ts';
+import { cloudPaths, folderMoves, folderPaths, foldersOf, needsHash, planVault, safeName, vanishedFolders, type CloudDoc, type CloudFile, type CloudFolder, type LocalFile, type ManifestEntry, type VaultAction, type VaultPlan } from './vaultPlan.ts';
 
 /** Failures in a row after which a sync stops: a bad file is skipped, but every file failing is a problem to show now. */
 const GIVE_UP_AFTER = 5;
@@ -64,6 +64,12 @@ export interface VaultCloud {
   removeFolder(id: string): Promise<void>;
   /** Makes the folder named by `directory` and the ones it is in, unless they are there already. */
   makeFolder(directory: string[]): Promise<void>;
+  /**
+   * Moves and/or renames the folder at `from`, with everything in it, to `to` (the folders it goes in are made if missing), keeping it
+   * the same folder: its id, and so its shares and links. False when it can't be done here (no folder at `from`, one at `to` already,
+   * an encrypted folder): then the sync moves its documents one by one. Missing where folders are never moved (another's shared folder).
+   */
+  moveFolder?(from: string[], to: string[]): Promise<boolean>;
 }
 
 export interface VaultCodec {
@@ -147,6 +153,8 @@ export interface SyncReport {
   foldersRemoved: number;
   /** Folders made in the account because they were made in the vault (empty ones: a file's folder comes with it). */
   foldersMade: number;
+  /** Folders moved or renamed in the account, whole, because they were in the vault (`folderMoves`); their documents are in `renamed`. */
+  foldersMoved: number;
   /** Documents the vault does not keep (a name with no file format the app opens) and so left alone, plus any that had no file to write. */
   skipped: number;
   errors: { action: VaultAction; message: string }[];
@@ -199,7 +207,7 @@ function adoptable(entries: ManifestEntry[], account: string, listed: ReadonlySe
 }
 
 export async function syncVault(host: VaultHost, options: { allowMassDelete?: boolean; progress?: (progress: SyncProgress) => void } = {}): Promise<SyncReport> {
-  const report: SyncReport = { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, linked: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, foldersRemoved: 0, foldersMade: 0, skipped: 0, errors: [], touched: [], missing: [] };
+  const report: SyncReport = { accountDocs: 0, folderFiles: 0, downloaded: 0, uploaded: 0, linked: 0, created: 0, renamed: 0, movedHere: 0, deletedHere: 0, trashed: 0, foldersRemoved: 0, foldersMade: 0, foldersMoved: 0, skipped: 0, errors: [], touched: [], missing: [] };
   const { disk, cloud, codec } = host;
 
   const remembered = parseState(await host.memory.load());
@@ -395,7 +403,8 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
         return;
       }
       case 'renameCloud': {
-        await cloud.place(action.id, directoryOf(action.to), baseName(action.to));
+        // Already there if its folder was moved whole (`folderMoves`): only the memory of it follows.
+        if (follow(action.from) !== action.to) await cloud.place(action.id, directoryOf(action.to), baseName(action.to));
         const entry = entries.get(action.id)!;
         entries.set(action.id, { ...entry, path: action.to, mtimeMs: localByPath.get(action.to)?.mtimeMs ?? entry.mtimeMs });
         touched.add(action.id);
@@ -453,20 +462,55 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
       case 'removeLocalFolder':
         if (!(await disk.removeFolder!(action.path))) leftHere.add(action.path);
         return;
+      case 'moveFolder':
+        // Not done here (see `VaultCloud.moveFolder`): its documents are moved one by one instead.
+        if (!(await cloud.moveFolder!(action.from.split('/'), action.to.split('/')))) return;
+        movedFolders.push({ from: action.from, to: action.to });
+        report.foldersMoved++;
+        return;
     }
   }
   /** Folders removed from the account that still hold something in the vault, so they stay here (see `mirrorFolders`). */
   const leftHere = new Set<string>();
+  /** Folders moved in the account, whole, by this sync (see `folderMoves`). */
+  const movedFolders: { from: string; to: string }[] = [];
+
+  const attempt = (action: VaultAction): Promise<boolean> =>
+    run(action).then(
+      () => true,
+      (error) => {
+        report.errors.push({ action, message: error instanceof Error ? error.message : String(error) });
+        return false;
+      },
+    );
+
+  // Folders moved or renamed in the vault are moved in the account whole, before their documents, so the folder stays the same one
+  // (its shares and links with it) and what is in it moves at once. Each document's own rename then finds it already in place.
+  const onDisk = new Set([...foldersOf(scanned.map((f) => f.path)), ...(diskFolders ?? [])]);
+  const renames = plan.actions.filter((a): a is Extract<VaultAction, { kind: 'renameCloud' }> => a.kind === 'renameCloud');
+  if (cloud.moveFolder && renames.length) {
+    for (const move of folderMoves(renames, new Set(folderPaths(listing.folders).values()), onDisk)) {
+      tell({ phase: 'apply', accountDocs: report.accountDocs, folderFiles: report.folderFiles, done: 0, total: plan.actions.length, path: move.to });
+      await attempt({ kind: 'moveFolder', ...move });
+    }
+  }
+  /** Where a path in the account is now, after the folder moves above. */
+  function follow(path: string): string {
+    const move = movedFolders.find((m) => path.startsWith(`${m.from}/`));
+    return move ? move.to + path.slice(move.from.length) : path;
+  }
+  // What the plan placed by the account's old paths (a document new there, one moved there) goes where its folder is now.
+  const actions = plan.actions.map((a): VaultAction => (a.kind === 'download' ? { ...a, path: follow(a.path) } : a.kind === 'moveLocal' ? { ...a, to: follow(a.to) } : a));
 
   let done = 0;
   let inARow = 0;
-  for (const action of plan.actions) {
+  for (const action of actions) {
     if (inARow >= GIVE_UP_AFTER) {
       report.gaveUp = inARow;
       break;
     }
     const path = 'path' in action ? action.path : 'to' in action ? action.to : undefined;
-    tell({ phase: 'apply', accountDocs: report.accountDocs, folderFiles: report.folderFiles, done, total: plan.actions.length, path, failed: report.errors.length, lastError: report.errors.at(-1)?.message });
+    tell({ phase: 'apply', accountDocs: report.accountDocs, folderFiles: report.folderFiles, done, total: actions.length, path, failed: report.errors.length, lastError: report.errors.at(-1)?.message });
     try {
       await run(action);
       inARow = 0;
@@ -507,19 +551,9 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
     }
   }
 
-  const attempt = (action: VaultAction): Promise<boolean> =>
-    run(action).then(
-      () => true,
-      (error) => {
-        report.errors.push({ action, message: error instanceof Error ? error.message : String(error) });
-        return false;
-      },
-    );
-
   // Folders removed from the vault (deleted, or renamed: their files are in the new one by now) go from the account once empty there.
   // Only those the vault had at the last sync: with no memory of folders yet, nothing is removed. One that is not removed yet
   // (it still holds documents, say a held-back delete's, or the account could not be reached) is looked at again next time.
-  const onDisk = new Set([...foldersOf(scanned.map((f) => f.path)), ...(diskFolders ?? [])]);
   const stillGone = new Set((state.folders ?? []).filter((path) => !onDisk.has(path)));
   // With the vault's folders listed, the two sides have the same folders, empty ones included (`mirrorFolders`).
   let mirrored: string[] | null = null;

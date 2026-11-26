@@ -65,7 +65,8 @@ share the document with, within seconds. There is no special API: read and write
 - **The file wins.** When a file here changed, it replaces the document. If the document was changed in the app too, the
   app's version is kept in the document's history first, so nothing is lost.
 - **Earlier versions are kept** before each burst of changes, and every ten minutes while changes go on.
-- **Moving or renaming a file** keeps it the same document, with its history. Folders here are folders in the app.
+- **Moving or renaming a file** keeps it the same document, with its history. Folders here are folders in the app, and moving
+  or renaming a whole folder keeps it the same folder, still shared with the same people.
 - **Encrypted documents and folders are not here**, unless the person decrypts an encrypted folder into this one for a while,
   for you to work on. Its files are then here like any other, and what you change, add, rename or delete in it is encrypted
   before it leaves this computer. A document moved into it is encrypted; one moved out of it stays encrypted. When the person

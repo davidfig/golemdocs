@@ -6,6 +6,10 @@
 
 - The Files sidebar comes back as you left it after a reload: scrolled to the same place, and still showing Trash if Trash was open.
 
+### Fixed
+
+- Desktop app: a folder moved or renamed in the vault folder (in Finder or with `mv`) is moved in your account as a whole, at once, and stays the same folder, still shared with the same people and by the same links. Before, each of its files was moved one by one into a new folder, the folder list showed the old place until that was done, and the old folder's sharing was lost with it. Copies of the same file in several moved folders also keep their history now, instead of being made again.
+
 ## 0.48.0 - 2026-11-25
 
 ### Added

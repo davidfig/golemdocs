@@ -62,6 +62,17 @@ export function accountCloud(keep: KeepCopy = async () => {}, owner = ''): Vault
     return parent ?? undefined;
   }
 
+  /** The folder at a vault path, without making any. */
+  function folderAt(directory: string[]): Folder | undefined {
+    let found: Folder | undefined;
+    for (const part of directory) {
+      const parentId = found?.id ?? null;
+      found = folders.find((f) => (f.parentId ?? null) === parentId && safeName(f.name) === part);
+      if (!found) return undefined;
+    }
+    return found;
+  }
+
   return {
     async list() {
       const [all, every] = await Promise.all([listDocuments(), listFolders()]);
@@ -143,6 +154,18 @@ export function accountCloud(keep: KeepCopy = async () => {}, owner = ''): Vault
     async removeFolder(id) {
       throwIfFailed(await removeFolders([id]));
       folders = folders.filter((f) => f.id !== id);
+    },
+    async moveFolder(from, to) {
+      const folder = folderAt(from);
+      // An encrypted folder (decrypted into the vault), or a move into one, goes document by document: those are sealed on the way.
+      if (!folder || !to.length || folderAt(to) || sealedFolders.has(folder.id)) return false;
+      const parentId = (await folderFor(to.slice(0, -1))) ?? null;
+      if (parentId !== null && sealedFolders.has(parentId)) return false;
+      const name = to[to.length - 1];
+      // The same folder, renamed and/or under a new parent: its id, and so its shares and links, stay (server/src/folders.ts).
+      throwIfFailed(await putFolders([{ id: folder.id, name, parentId }]));
+      folders = folders.map((f) => (f.id === folder.id ? { ...f, name, parentId } : f));
+      return true;
     },
   };
 }

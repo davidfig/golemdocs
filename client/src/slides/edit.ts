@@ -4,7 +4,7 @@
 
 import { cloneElement, el, parseXml, type XmlElement } from '@golemdocs/docx';
 import { hexOf, type Rgba } from './color.ts';
-import type { Deck, LayoutPart, SlidePart } from './deck.ts';
+import type { Deck, DeckPart, LayoutPart, SlidePart } from './deck.ts';
 import type { Transaction } from './history.ts';
 import { REL_TYPE, at, emu, ensure, findAll, insertBefore, kid, kids, num, removeKids, replaceKid } from './ooxml.ts';
 import { cNvPr, placeholderOf, propsOf, xfrmOf, type Frame } from './shapes.ts';
@@ -21,7 +21,7 @@ const FILL_NAMES = ['a:noFill', 'a:solidFill', 'a:gradFill', 'a:blipFill', 'a:pa
 const after = (name: string): string[] => SPPR_ORDER.slice(SPPR_ORDER.indexOf(name) + 1);
 
 /** The slide's shape tree. */
-export function treeOf(slide: SlidePart): XmlElement {
+export function treeOf(slide: DeckPart): XmlElement {
   return at(slide.xml, 'p:cSld/p:spTree')!;
 }
 
@@ -84,7 +84,7 @@ function holderIn(tree: XmlElement, element: XmlElement): { parent: XmlElement; 
   return { parent, node: element };
 }
 
-export function deleteShapes(slide: SlidePart, elements: readonly XmlElement[], tx: Transaction): void {
+export function deleteShapes(slide: DeckPart, elements: readonly XmlElement[], tx: Transaction): void {
   tx.touch(slide);
   const tree = treeOf(slide);
   for (const element of elements) {
@@ -94,7 +94,7 @@ export function deleteShapes(slide: SlidePart, elements: readonly XmlElement[], 
 }
 
 /** Copies of shapes on the same slide, a little down and right, with new ids; returns the copies. */
-export function duplicateShapes(slide: SlidePart, elements: readonly XmlElement[], tx: Transaction, offset = 228600): XmlElement[] {
+export function duplicateShapes(slide: DeckPart, elements: readonly XmlElement[], tx: Transaction, offset = 228600): XmlElement[] {
   tx.touch(slide);
   const tree = treeOf(slide);
   const out: XmlElement[] = [];
@@ -119,7 +119,7 @@ export function renumber(element: XmlElement, tree: XmlElement): XmlElement {
 export type Order = 'front' | 'forward' | 'backward' | 'back';
 
 /** Moves shapes in the drawing order among their siblings. */
-export function reorder(slide: SlidePart, elements: readonly XmlElement[], order: Order, tx: Transaction): void {
+export function reorder(slide: DeckPart, elements: readonly XmlElement[], order: Order, tx: Transaction): void {
   tx.touch(slide);
   const tree = treeOf(slide);
   const byParent = new Map<XmlElement, Set<XmlElement>>();
@@ -223,7 +223,7 @@ export function newShape(tree: XmlElement, preset: string, frame: Frame, name: s
 }
 
 /** A new picture (`p:pic`) of a media part already in the deck, related from the slide. */
-export function newPicture(slide: SlidePart, media: string, frame: Frame, name: string, descr: string): XmlElement {
+export function newPicture(slide: DeckPart, media: string, frame: Frame, name: string, descr: string): XmlElement {
   const rId = slide.rels.add(REL_TYPE.image, media);
   const tree = treeOf(slide);
   return el('p:pic', {}, [
@@ -372,7 +372,7 @@ export function setHidden(slide: SlidePart, hidden: boolean, tx: Transaction): v
   slide.xml.attrs = attrs;
 }
 
-export function isHidden(slide: SlidePart): boolean {
+export function isHidden(slide: DeckPart): boolean {
   return slide.xml.attrs.show === '0' || slide.xml.attrs.show === 'false';
 }
 

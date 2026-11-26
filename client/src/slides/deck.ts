@@ -33,6 +33,18 @@ export interface SlidePart extends DeckPart {
   notes: DeckPart | null;
 }
 
+/** What the editor shows and edits as a page: a slide, or (in master view) a master or one of its layouts. */
+export type PagePart = SlidePart | LayoutPart | MasterPart;
+
+export const isSlidePart = (part: DeckPart): part is SlidePart => 'layout' in part;
+export const isLayoutPart = (part: DeckPart): part is LayoutPart => 'master' in part && !('layout' in part);
+export const isMasterPart = (part: DeckPart): part is MasterPart => 'theme' in part && 'colorMap' in part;
+
+/** The master a page takes after (a master is its own). */
+export function masterOfPage(part: PagePart): MasterPart {
+  return isSlidePart(part) ? part.layout.master : isLayoutPart(part) ? part.master : part;
+}
+
 export class DeckError extends Error {}
 
 /** Parts a slide may point at whose XML is read up front, so drawing never waits for them. */
@@ -135,6 +147,20 @@ export class Deck {
     this.layoutsByName.set(name, layout);
     await this.loadAttached(layout);
     return layout;
+  }
+
+  /** The theme part a master uses (undefined when it has none). */
+  themePart(master: MasterPart): DeckPart | undefined {
+    const rel = master.rels.byType(REL_TYPE.theme)[0];
+    return rel ? this.parts.get(master.rels.partName(rel)) : undefined;
+  }
+
+  /** Reads every master's theme and colour map again from their XML (after a theme was changed, or put back by an undo). */
+  refreshThemes(): void {
+    for (const master of this.masters) {
+      master.theme = readTheme(this.themePart(master)?.xml);
+      master.colorMap = colorMapOf(kid(master.xml, 'p:clrMap'));
+    }
   }
 
   /** The layouts of a master, in its own order. */

@@ -1,0 +1,272 @@
+// A deck's design (docs/slides.md, M5): slide backgrounds, the theme's colours and fonts, and the master's text styles. Each
+// change is made on the XML of the part that holds it (a slide, layout or master; the theme part), recorded in a transaction,
+// and touches only the elements it is about, so everything else in those parts is written back as it came.
+
+import { el, type XmlElement } from '@golemdocs/docx';
+import { hexOf } from './color.ts';
+import { Deck, isLayoutPart, isMasterPart, isSlidePart, type DeckPart, type MasterPart, type PagePart } from './deck.ts';
+import type { Transaction } from './history.ts';
+import { REL_TYPE, at, findAll, insertBefore, kid, kids, replaceKid } from './ooxml.ts';
+import { placeholderOf } from './shapes.ts';
+import { masterStyleFor } from './textStyle.ts';
+
+// ---- Backgrounds ----------------------------------------------------------------------------------------------------
+
+/** A background to set: a colour, a two-colour gradient at an angle, or a picture (a media part already in the deck). */
+export type BackgroundSpec =
+  | { kind: 'solid'; color: string }
+  | { kind: 'gradient'; from: string; to: string; angle: number }
+  | { kind: 'picture'; media: string };
+
+/** Children of `p:cSld`, in schema order: a background comes first. */
+const CSLD_AFTER_BG = ['p:spTree', 'p:custDataLst', 'p:controls', 'p:extLst'];
+
+const hex = (color: string): string => color.replace(/^#/, '').toUpperCase().slice(0, 6).padEnd(6, '0');
+
+/** The `p:bg` element for a background. `rId` is the picture's relationship, made by the caller. */
+export function backgroundXml(spec: BackgroundSpec, rId = ''): XmlElement {
+  let fill: XmlElement;
+  if (spec.kind === 'solid') fill = el('a:solidFill', {}, [el('a:srgbClr', { val: hex(spec.color) })]);
+  else if (spec.kind === 'gradient') {
+    fill = el('a:gradFill', { rotWithShape: '1' }, [
+      el('a:gsLst', {}, [el('a:gs', { pos: '0' }, [el('a:srgbClr', { val: hex(spec.from) })]), el('a:gs', { pos: '100000' }, [el('a:srgbClr', { val: hex(spec.to) })])]),
+      el('a:lin', { ang: String(Math.round((((spec.angle % 360) + 360) % 360) * 60000)), scaled: '0' }),
+    ]);
+  } else fill = el('a:blipFill', { dpi: '0', rotWithShape: '1' }, [el('a:blip', { 'r:embed': rId }), el('a:srcRect'), el('a:stretch', {}, [el('a:fillRect')])]);
+  return el('p:bg', {}, [el('p:bgPr', {}, [fill, el('a:effectLst')])]);
+}
+
+/** Removes a picture relationship nothing in the part points at any more. */
+function dropUnusedRel(part: DeckPart, rId: string | undefined): void {
+  if (!rId) return;
+  const used = findAll(part.xml, (e) => Object.entries(e.attrs).some(([k, v]) => k.startsWith('r:') && v === rId)).length > 0;
+  if (!used) part.rels.remove(rId);
+}
+
+/** Sets a page's own background (null removes it, so the page shows what it inherits). */
+export function setBackground(part: PagePart, spec: BackgroundSpec | null, tx: Transaction): void {
+  tx.touch(part);
+  const cSld = kid(part.xml, 'p:cSld');
+  if (!cSld) return;
+  const old = at(cSld, 'p:bg/p:bgPr/a:blipFill/a:blip')?.attrs['r:embed'];
+  const rId = spec?.kind === 'picture' ? part.rels.add(REL_TYPE.image, spec.media) : '';
+  replaceKid(cSld, 'p:bg', spec ? backgroundXml(spec, rId) : null, CSLD_AFTER_BG);
+  dropUnusedRel(part, old);
+}
+
+/** "Apply to All": the master gets the background, and every slide and layout under it lets its own go, so all show it. */
+export function setBackgroundEverywhere(deck: Deck, master: MasterPart, spec: BackgroundSpec, tx: Transaction): void {
+  setBackground(master, spec, tx);
+  for (const layout of deck.layoutsOf(master)) if (at(layout.xml, 'p:cSld/p:bg')) setBackground(layout, null, tx);
+  for (const slide of deck.slides) if (slide.layout.master === master && at(slide.xml, 'p:cSld/p:bg')) setBackground(slide, null, tx);
+}
+
+/** The page's own background as a spec, for the dialog to start from (null when it inherits, or has a kind not offered). */
+export function backgroundOf(part: PagePart): BackgroundSpec | null {
+  const fill = kids(at(part.xml, 'p:cSld/p:bg/p:bgPr'))[0];
+  if (!fill) return null;
+  const val = (e: XmlElement | undefined): string | null => {
+    const v = kid(e, 'a:srgbClr')?.attrs.val;
+    return v ? `#${v}` : null;
+  };
+  if (fill.name === 'a:solidFill') {
+    const color = val(fill);
+    return color ? { kind: 'solid', color } : null;
+  }
+  if (fill.name === 'a:gradFill') {
+    const stops = kids(kid(fill, 'a:gsLst'), 'a:gs');
+    const from = val(stops[0]);
+    const to = val(stops[stops.length - 1]);
+    if (!from || !to) return null;
+    return { kind: 'gradient', from, to, angle: Number(kid(fill, 'a:lin')?.attrs.ang ?? 0) / 60000 };
+  }
+  return null;
+}
+
+// ---- Themes ---------------------------------------------------------------------------------------------------------
+
+/** The twelve colours of a colour scheme, in the theme's order. */
+export const SCHEME_NAMES = ['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'hlink', 'folHlink'] as const;
+export type SchemeName = (typeof SCHEME_NAMES)[number];
+
+export interface ColorScheme {
+  /** The id of a built-in scheme (its name is localized), or a scheme's own name (one read from another deck). */
+  id: string;
+  name: string;
+  colors: Record<SchemeName, string>;
+}
+
+export interface FontPair {
+  id: string;
+  name: string;
+  /** Headings and body text (Latin script). */
+  major: string;
+  minor: string;
+}
+
+const scheme = (id: string, name: string, c: string): ColorScheme => {
+  const values = c.split(' ');
+  return { id, name, colors: Object.fromEntries(SCHEME_NAMES.map((n, i) => [n, values[i]])) as Record<SchemeName, string> };
+};
+
+/** The built-in colour schemes, Office's own first. Names are given in English; the dialog shows them localized by id. */
+export const COLOR_SCHEMES: readonly ColorScheme[] = [
+  scheme('office', 'Office', '000000 FFFFFF 0E2841 E8E8E8 156082 E97132 196B24 0F9ED5 A02B93 4EA72E 467886 96607D'),
+  scheme('office2013', 'Office 2013 - 2022', '000000 FFFFFF 44546A E7E6E6 4472C4 ED7D31 A5A5A5 FFC000 5B9BD5 70AD47 0563C1 954F72'),
+  scheme('office2007', 'Office 2007 - 2010', '000000 FFFFFF 1F497D EEECE1 4F81BD C0504D 9BBB59 8064A2 4BACC6 F79646 0000FF 800080'),
+  scheme('blue', 'Blue', '000000 FFFFFF 17406D DBEFF9 0F6FC6 009DD9 0BD0D9 10CF9B 7CCA62 A5C249 0563C1 85DFD0'),
+  scheme('green', 'Green', '000000 FFFFFF 455F51 E3DED1 549E39 8AB833 C0CF3A 029676 4AB5C4 0989B1 6B9F25 BA6906'),
+  scheme('redOrange', 'Red Orange', '000000 FFFFFF 505046 EEECE1 E84C22 FFBD47 B64926 FF8427 CC9900 B22600 CC9900 666699'),
+  scheme('violet', 'Violet', '000000 FFFFFF 373545 DCD8DC AD84C6 8784C7 A5B592 F3A447 E7BC29 D092A7 6B9F25 B26B02'),
+  scheme('grayscale', 'Grayscale', '000000 FFFFFF 000000 F8F8F8 DDDDDD B2B2B2 969696 808080 5F5F5F 4D4D4D 5F5F5F 919191'),
+];
+
+/** The built-in font pairs: families slides are drawn in from the app's own font files (fonts/manifest.json), so they show as picked. */
+export const FONT_PAIRS: readonly FontPair[] = [
+  { id: 'office', name: 'Office', major: 'Aptos Display', minor: 'Aptos' },
+  { id: 'office2013', name: 'Office 2013 - 2022', major: 'Calibri Light', minor: 'Calibri' },
+  { id: 'office2007', name: 'Office 2007 - 2010', major: 'Calibri', minor: 'Calibri' },
+  { id: 'cambria', name: 'Cambria', major: 'Cambria', minor: 'Calibri' },
+  { id: 'cambriaAll', name: 'Cambria', major: 'Cambria', minor: 'Cambria' },
+  { id: 'arial', name: 'Arial', major: 'Arial', minor: 'Arial' },
+  { id: 'times', name: 'Times New Roman', major: 'Times New Roman', minor: 'Arial' },
+  { id: 'segoe', name: 'Segoe UI', major: 'Segoe UI Light', minor: 'Segoe UI' },
+];
+
+/** A master's colour scheme and fonts as they are now. */
+export function currentDesign(master: MasterPart): { colors: Record<SchemeName, string>; major: string; minor: string; dark: boolean } {
+  const colors = Object.fromEntries(SCHEME_NAMES.map((n) => [n, hexOf(master.theme.colors[n] ?? { r: 0, g: 0, b: 0, a: 1 })])) as Record<SchemeName, string>;
+  return { colors, major: master.theme.major.latin, minor: master.theme.minor.latin, dark: master.colorMap.bg1 === 'dk1' };
+}
+
+/** Puts a colour scheme in a theme part (`a:clrScheme`): each colour becomes a plain RGB value. */
+export function setThemeColors(themePart: DeckPart, colors: ColorScheme, tx: Transaction): void {
+  const clrScheme = at(themePart.xml, 'a:themeElements/a:clrScheme');
+  if (!clrScheme) return;
+  tx.touch(themePart);
+  clrScheme.attrs = { ...clrScheme.attrs, name: colors.name };
+  for (const name of SCHEME_NAMES) {
+    const holder = kid(clrScheme, `a:${name}`) ?? el(`a:${name}`);
+    if (!kid(clrScheme, `a:${name}`)) insertBefore(clrScheme, holder, ['a:extLst', ...SCHEME_NAMES.slice(SCHEME_NAMES.indexOf(name) + 1).map((n) => `a:${n}`)]);
+    holder.children = [el('a:srgbClr', { val: hex(colors.colors[name]) })];
+  }
+}
+
+/** Puts a font pair in a theme part (`a:fontScheme`): the Latin typeface of its heading and body fonts. */
+export function setThemeFonts(themePart: DeckPart, fonts: FontPair, tx: Transaction): void {
+  const fontScheme = at(themePart.xml, 'a:themeElements/a:fontScheme');
+  if (!fontScheme) return;
+  tx.touch(themePart);
+  fontScheme.attrs = { ...fontScheme.attrs, name: fonts.name };
+  for (const [which, typeface] of [['a:majorFont', fonts.major], ['a:minorFont', fonts.minor]] as const) {
+    const font = kid(fontScheme, which);
+    if (!font) continue;
+    const latin = kid(font, 'a:latin');
+    if (latin) latin.attrs = { typeface };
+    else font.children.unshift(el('a:latin', { typeface }));
+  }
+}
+
+/** The colour map of a light page (text dark on light) and of a dark one (light on dark). */
+const LIGHT_MAP = { bg1: 'lt1', tx1: 'dk1', bg2: 'lt2', tx2: 'dk2' };
+const DARK_MAP = { bg1: 'dk1', tx1: 'lt1', bg2: 'dk2', tx2: 'lt2' };
+
+/** Makes a master's pages dark (its background the scheme's dark colour, its text the light one) or light, by its colour map. */
+export function setDarkPages(master: MasterPart, dark: boolean, tx: Transaction): void {
+  const map = kid(master.xml, 'p:clrMap');
+  if (!map) return;
+  tx.touch(master);
+  map.attrs = { ...map.attrs, ...(dark ? DARK_MAP : LIGHT_MAP) };
+}
+
+/** The colours and fonts of another deck's (or a theme file's) theme, to apply to this one. Null if it has none. */
+export async function readOtherTheme(bytes: Uint8Array, name: string): Promise<{ colors: ColorScheme; fonts: FontPair } | null> {
+  const { OpcPackage, parseXml } = await import('@golemdocs/docx');
+  const { readTheme } = await import('./theme.ts');
+  const pkg = await OpcPackage.read(bytes);
+  // A theme file (.thmx) points at its theme from the package; a deck, from its first master.
+  const root = await pkg.relationships('');
+  let themeName = '';
+  const main = root.byType(REL_TYPE.officeDocument)[0];
+  if (main) {
+    const mainName = root.partName(main);
+    const mainXml = parseXml(await pkg.text(mainName));
+    if (mainXml.name === 'a:theme') themeName = mainName;
+    else {
+      const rels = await pkg.relationships(mainName);
+      const masterRel = rels.byType(REL_TYPE.slideMaster)[0] ?? rels.byType(REL_TYPE.theme)[0];
+      if (masterRel && isRelOf(masterRel.type, REL_TYPE.theme)) themeName = rels.partName(masterRel);
+      else if (masterRel) {
+        const masterName = rels.partName(masterRel);
+        const themeRel = (await pkg.relationships(masterName)).byType(REL_TYPE.theme)[0];
+        if (themeRel) themeName = (await pkg.relationships(masterName)).partName(themeRel);
+      }
+    }
+  }
+  if (!themeName || !pkg.has(themeName)) return null;
+  const xml = parseXml(await pkg.text(themeName));
+  if (!at(xml, 'a:themeElements/a:clrScheme')) return null;
+  const theme = readTheme(xml);
+  const label = at(xml, 'a:themeElements/a:clrScheme')?.attrs.name || theme.name || name;
+  const colors = Object.fromEntries(SCHEME_NAMES.map((n) => [n, hexOf(theme.colors[n])])) as Record<SchemeName, string>;
+  const fontLabel = at(xml, 'a:themeElements/a:fontScheme')?.attrs.name || theme.name || name;
+  return { colors: { id: `file:${name}`, name: label, colors }, fonts: { id: `file:${name}`, name: fontLabel, major: theme.major.latin, minor: theme.minor.latin } };
+}
+
+const isRelOf = (type: string, wanted: string): boolean => type === wanted || type.endsWith(wanted.slice(wanted.lastIndexOf('/')));
+
+// ---- Master and layout text styles ------------------------------------------------------------------------------------
+
+/** Children of a list style (`a:lstStyle`, `p:titleStyle`...), in schema order. */
+const LIST_ORDER = ['a:defPPr', ...Array.from({ length: 9 }, (_, i) => `a:lvl${i + 1}pPr`), 'a:extLst'];
+/** Children of a level's paragraph properties, in schema order. */
+const PPR_ORDER = ['a:lnSpc', 'a:spcBef', 'a:spcAft', 'a:buClrTx', 'a:buClr', 'a:buSzTx', 'a:buSzPct', 'a:buSzPts', 'a:buFontTx', 'a:buFont', 'a:buNone', 'a:buAutoNum', 'a:buChar', 'a:buBlip', 'a:tabLst', 'a:defRPr', 'a:extLst'];
+
+/**
+ * The list style that a placeholder on a master or layout passes to every slide that inherits it: on a master, its text
+ * style for that kind of placeholder (`p:titleStyle`, `p:bodyStyle`, `p:otherStyle`); on a layout, the placeholder's own list
+ * style. Made when missing (with `create`). Undefined for a slide, or a shape that is not a placeholder.
+ */
+export function inheritedStyleOf(part: PagePart, element: XmlElement, create: boolean): XmlElement | undefined {
+  if (isSlidePart(part)) return undefined;
+  const ph = placeholderOf(element);
+  if (!ph) return undefined;
+  if (isMasterPart(part)) {
+    const which = masterStyleFor(ph.type);
+    if (!which) return undefined;
+    const styles = kid(part.xml, 'p:txStyles') ?? (create ? addKid(part.xml, 'p:txStyles', ['p:extLst']) : undefined);
+    if (!styles) return undefined;
+    return kid(styles, which) ?? (create ? addKid(styles, which, which === 'p:titleStyle' ? ['p:bodyStyle', 'p:otherStyle', 'p:extLst'] : which === 'p:bodyStyle' ? ['p:otherStyle', 'p:extLst'] : ['p:extLst']) : undefined);
+  }
+  if (!isLayoutPart(part)) return undefined;
+  const body = kid(element, 'p:txBody');
+  if (!body) return undefined;
+  return kid(body, 'a:lstStyle') ?? (create ? addKid(body, 'a:lstStyle', ['a:p']) : undefined);
+}
+
+function addKid(parent: XmlElement, name: string, before: readonly string[]): XmlElement {
+  const made = el(name);
+  insertBefore(parent, made, before);
+  return made;
+}
+
+/** A level's paragraph properties in a list style (`a:lvl2pPr` for level 1), made when missing. */
+export function levelOf(list: XmlElement, level: number): XmlElement {
+  const name = `a:lvl${Math.max(0, Math.min(8, level)) + 1}pPr`;
+  return kid(list, name) ?? addKid(list, name, LIST_ORDER.slice(LIST_ORDER.indexOf(name) + 1));
+}
+
+/** A level's default run properties (`a:defRPr`), made when missing. */
+export function levelRunOf(list: XmlElement, level: number): XmlElement {
+  const lvl = levelOf(list, level);
+  return kid(lvl, 'a:defRPr') ?? addKid(lvl, 'a:defRPr', PPR_ORDER.slice(PPR_ORDER.indexOf('a:defRPr') + 1));
+}
+
+/** The levels (0 to 8) of a text body's paragraphs, from `first` to `last` (all of them when not given). */
+export function levelsIn(body: XmlElement, first = 0, last = Infinity): Set<number> {
+  const out = new Set<number>();
+  kids(body, 'a:p').forEach((p, i) => {
+    if (i >= first && i <= last) out.add(Math.max(0, Math.min(8, Number(kid(p, 'a:pPr')?.attrs.lvl ?? 0) || 0)));
+  });
+  return out;
+}

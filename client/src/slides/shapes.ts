@@ -203,15 +203,20 @@ export function shownFromLayout(shape: ResolvedShape): boolean {
   return false;
 }
 
-/** The shapes shown on a slide, back to front: the master's (unless hidden), the layout's, then the slide's. */
-export function slideShapes(deck: Deck, slide: SlidePart): ResolvedShape[] {
+/**
+ * The shapes shown on a page, back to front: on a slide, the master's (unless hidden), the layout's, then the slide's; on a
+ * layout (master view), the master's and then its own; on a master, its own, placeholders included.
+ */
+export function slideShapes(deck: Deck, page: SlidePart | LayoutPart | MasterPart): ResolvedShape[] {
   const out: ResolvedShape[] = [];
-  const layout = slide.layout;
-  const master = layout.master;
   const showMaster = (part: DeckPart): boolean => part.xml.attrs.showMasterSp !== '0' && part.xml.attrs.showMasterSp !== 'false';
-  if (showMaster(slide) && showMaster(layout)) out.push(...resolveTree(at(master.xml, 'p:cSld/p:spTree'), master, deck).filter(shownFromLayout));
-  if (showMaster(slide)) out.push(...resolveTree(at(layout.xml, 'p:cSld/p:spTree'), layout, deck).filter(shownFromLayout));
-  out.push(...resolveTree(at(slide.xml, 'p:cSld/p:spTree'), slide, deck));
+  const own = resolveTree(at(page.xml, 'p:cSld/p:spTree'), page, deck);
+  if ('layout' in page) {
+    const layout = page.layout;
+    if (showMaster(page) && showMaster(layout)) out.push(...resolveTree(at(layout.master.xml, 'p:cSld/p:spTree'), layout.master, deck).filter(shownFromLayout));
+    if (showMaster(page)) out.push(...resolveTree(at(layout.xml, 'p:cSld/p:spTree'), layout, deck).filter(shownFromLayout));
+  } else if ('master' in page && showMaster(page)) out.push(...resolveTree(at(page.master.xml, 'p:cSld/p:spTree'), page.master, deck).filter(shownFromLayout));
+  out.push(...own);
   return out;
 }
 

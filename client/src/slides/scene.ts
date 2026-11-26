@@ -14,7 +14,7 @@ import { readChart } from '../sheet/charts/model.ts';
 import { defaultColor, layoutChart, type Resolved } from '../sheet/charts/scene.ts';
 import { chartSvg } from '../sheet/charts/svg.ts';
 import { cssColor, resolveColor, colorChild, type ColorContext, type Rgba } from './color.ts';
-import type { Deck, DeckPart, SlidePart } from './deck.ts';
+import { masterOfPage, type Deck, type DeckPart, type PagePart } from './deck.ts';
 import { shapeGeometry, type Geometry } from './geometry.ts';
 import { EMU_PER_PX, at, kid, kids, num, pct } from './ooxml.ts';
 import { backgroundFill, propsOf, resolveTree, shapeFill, shapeLine, slideShapes, type ResolvedFill, type ResolvedLine, type ResolvedShape } from './shapes.ts';
@@ -102,7 +102,7 @@ class Builder {
 
   constructor(
     readonly deck: Deck,
-    readonly part: SlidePart,
+    readonly part: PagePart,
     readonly options: SceneOptions,
     readonly ctx: ColorContext,
     readonly tc: TextContext,
@@ -551,12 +551,12 @@ export function pathData(commands: readonly PathCommand[]): string {
 }
 
 /** The colour context a slide's shapes use. */
-export function colorContext(deck: Deck, slide: SlidePart): ColorContext {
-  return { theme: slide.layout.master.theme, map: deck.colorMap(slide) };
+export function colorContext(deck: Deck, slide: PagePart): ColorContext {
+  return { theme: masterOfPage(slide).theme, map: deck.colorMap(slide) };
 }
 
 /** A slide drawn as a scene, with where its shapes and text are. */
-export function slideScene(deck: Deck, slide: SlidePart, options: SceneOptions): SlideScene {
+export function slideScene(deck: Deck, slide: PagePart, options: SceneOptions): SlideScene {
   const ctx = colorContext(deck, slide);
   const tc: TextContext = { deck, ctx, slideNumber: options.number, date: options.date ?? new Date(), part: slide };
   const builder = new Builder(deck, slide, options, ctx, tc);
@@ -566,7 +566,8 @@ export function slideScene(deck: Deck, slide: SlidePart, options: SceneOptions):
   const bg = backgroundFill(deck, slide, ctx);
   if (bg.kind === 'picture' && bg.blip) {
     const group: GroupNode = { kind: 'group', tag: 'g', style: {}, attrs: {}, children: [] };
-    const owner = [slide, slide.layout, slide.layout.master].find((p) => at(p.xml, 'p:cSld/p:bg/p:bgPr/a:blipFill')) ?? slide;
+    const chain: DeckPart[] = 'layout' in slide ? [slide, slide.layout, slide.layout.master] : 'master' in slide ? [slide, slide.master] : [slide];
+    const owner = chain.find((p) => at(p.xml, 'p:cSld/p:bg/p:bgPr/a:blipFill')) ?? slide;
     builder.blipInto(group, bg.blip, owner, width, height);
     children.push({ kind: 'rect', x: 0, y: 0, width, height, rx: 0, ry: 0, style: { fill: '#ffffff' }, attrs: { 'data-bg': '1' } }, { ...group, attrs: { 'data-bg': '1' } });
   } else children.push({ kind: 'rect', x: 0, y: 0, width, height, rx: 0, ry: 0, style: bg.kind === 'none' ? { fill: '#ffffff' } : builder.fillStyle(bg), attrs: { 'data-bg': '1' } });

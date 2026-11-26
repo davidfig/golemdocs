@@ -76,6 +76,9 @@ export const SLIDES_OPS = [
   'moveSlideDown',
   'layout',
   'resetSlide',
+  'background',
+  'theme',
+  'editMaster',
   'textBox',
   'shape',
   'picture',
@@ -94,6 +97,9 @@ export const SLIDES_OPS = [
   'copy',
   'paste',
 ] as const;
+
+/** The slides commands about slides themselves, which do nothing in master view (whose pages are masters and layouts). */
+export const SLIDE_ONLY_OPS: ReadonlySet<SlidesOp> = new Set<SlidesOp>(['newSlide', 'duplicateSlide', 'deleteSlide', 'hideSlide', 'moveSlideUp', 'moveSlideDown', 'layout', 'resetSlide', 'notes']);
 
 /** What the spreadsheet editor's commands do (the Sheet menu and toolbar, and the cells' context menu). */
 /** A spreadsheet command (see SHEET_OPS). */
@@ -607,6 +613,8 @@ export interface ChromeState {
   vector: { tool: 'select' | 'rect' | 'ellipse' | 'shape' | 'line' | 'pen' | 'pencil' | 'nudge' | 'text' | 'canvas'; shape: ShapeId; hasSelection: boolean; multiple: boolean; clipped: boolean; masked: boolean; layers: boolean; snap: boolean; fill: string | null; stroke: string | null; strokeWidth: number; fillType: 'solid' | 'linear' | 'radial'; strokeStyle: string; gradient: { stops: { offset: number; color: string }[]; stop: number; type: 'linear' | 'radial' } | null; documentColors: string[] };
   /** The audio or video playing, when one is open. */
   media?: MediaState | null;
+  /** A deck is open in master view: Slide › Edit Master is checked, and the commands about slides themselves do nothing. */
+  slidesMaster?: boolean;
   /** Whether the open document is saved, for the button at the top right. */
   sync: SyncStatus;
   /** The paid sync subscription: `active` (menus offer to manage it), `none` (they offer to subscribe), null while unknown. */

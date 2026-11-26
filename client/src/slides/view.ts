@@ -17,19 +17,22 @@ import { showPopupMenu, type PopupItem } from '../ui/popupMenu.ts';
 import { announce } from '../ui/announce.ts';
 import { IS_MAC } from '../ui/shortcuts.ts';
 import type { Region } from '../ui/focusRegions.ts';
-import type { Action, FormatState, SlidesOp } from '../ui/actions.ts';
+import { SLIDE_ONLY_OPS, type Action, type FormatState, type SlidesOp } from '../ui/actions.ts';
 import { readClipboard } from '../ui/clipboard.ts';
-import { Deck, paragraphText, type LayoutPart, type SlidePart } from './deck.ts';
-import { parseCss, cssColor, type Rgba } from './color.ts';
+import { Deck, isSlidePart, masterOfPage, paragraphText, type LayoutPart, type PagePart, type SlidePart } from './deck.ts';
+import { parseCss, cssColor, hexOf, type Rgba } from './color.ts';
 import { History, Transaction } from './history.ts';
 import { EMU_PER_PX, at, kid, kids } from './ooxml.ts';
 import { SlideFonts } from './fonts.ts';
 import { colorContext, slideScene, type ShapeText, type ShapeView, type SlideScene } from './scene.ts';
+import { backgroundFill } from './shapes.ts';
 import { cNvPr, placeholderOf, xfrmOf, type Frame, type ResolvedShape } from './shapes.ts';
 import { paragraphString, type LaidLine } from './textLayout.ts';
 import { comparePos, deleteRange, ensureBody, insertBreak, insertMultiline, maxPos, minPos, paragraphLength, paragraphsOf, plainText, pPrOf, rPrOf, runsIn, splitAt, splitParagraph, textBetween, wordAt, type TextPos } from './textEdit.ts';
 import { addSlide, changeLayout, deleteShapes, deleteSlides, duplicateShapes, duplicateSlide, isHidden, moveSlides, newPicture, newShape, newTable, reorder, resetToLayout, setFill, setFrame, setHidden, setHighlight, setLine, setNotes, treeOf, type Order } from './edit.ts';
 import { Presenter } from './present.ts';
+import { backgroundOf, currentDesign, inheritedStyleOf, levelOf, levelRunOf, levelsIn, readOtherTheme, setBackground, setBackgroundEverywhere, setDarkPages, setThemeColors, setThemeFonts } from './design.ts';
+import { showBackgroundDialog, showThemeDialog } from './designDialogs.ts';
 import { deckPdf, sceneWithData } from './export.ts';
 import { SHAPE_CHOICES } from './shapeChoices.ts';
 import { deckLines } from './outline.ts';
@@ -48,6 +51,8 @@ export interface SlidesEditorDeps {
   viewKey(e: KeyboardEvent): boolean;
   /** Lets the user pick a picture file. */
   pickImage(): Promise<File | null>;
+  /** Lets the user pick a presentation or theme file (Slide › Theme › From Presentation). */
+  pickDeck(): Promise<File | null>;
 }
 
 /** Gap between slides down the page, and in the sorter, in points. */
@@ -57,7 +62,7 @@ const HANDLE = 8;
 const TURN = 22;
 
 interface Placed {
-  slide: SlidePart;
+  slide: PagePart;
   /** In points. */
   x: number;
   y: number;
@@ -74,7 +79,7 @@ type Drag =
   | { kind: 'pan' };
 
 interface TextEdit {
-  slide: SlidePart;
+  slide: PagePart;
   /** The shape (or table cell, `a:tc`) whose text is edited. */
   element: XmlElement;
   /** The table's frame, when a cell is edited. */
@@ -97,14 +102,16 @@ export class SlidesEditorView {
   private readonly canvas = h('canvas', { class: 'wm-slides-canvas' });
   private readonly input = h('textarea', { class: 'wm-slides-input', attrs: { 'aria-label': t('slides.editor'), autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', rows: '1', 'data-slides-input': '' } });
   private readonly notesBar = h('div', { class: 'wm-slides-notes', attrs: { hidden: '', role: 'region', 'aria-label': t('slides.notes') } });
+  /** Shown in master view: what is being edited, and the way back to the slides. */
+  private readonly masterBar = h('div', { class: 'wm-slides-masterbar', attrs: { hidden: '', role: 'region', 'aria-label': t('slides.masterView') } });
   private readonly notesInput = h('textarea', { class: 'wm-input wm-slides-notes-input', attrs: { 'aria-label': t('slides.notes'), placeholder: t('slides.notesPlaceholder') } });
   deck: Deck | null = null;
   fileName = '';
   readOnly = false;
   private placed: Placed[] = [];
   private sorter = false;
-  private readonly scenes = new Map<SlidePart, { scene: SlideScene; version: string }>();
-  private readonly thumbs = new Map<SlidePart, { canvas: HTMLCanvasElement; version: string }>();
+  private readonly scenes = new Map<PagePart, { scene: SlideScene; version: string }>();
+  private readonly thumbs = new Map<PagePart, { canvas: HTMLCanvasElement; version: string }>();
   private images: Map<string, CanvasImageSource> = new Map();
   private loadingImages = new Set<string>();
   private readonly history = new History();
@@ -121,7 +128,11 @@ export class SlidesEditorView {
   private presenter: Presenter | null = null;
   private notesShown = false;
   /** Copied shapes, for pasting within the app (the system clipboard has their text). */
-  private copied: { elements: XmlElement[]; from: SlidePart; key: string } | null = null;
+  private copied: { elements: XmlElement[]; from: PagePart; key: string } | null = null;
+  /** Master view: the pages are the masters and their layouts rather than the slides. */
+  private masterView = false;
+  /** The slide in hand when master view was opened, to go back to. */
+  private slideBeforeMaster = 0;
   onEdit: (() => void) | null = null;
   onState: (() => void) | null = null;
 
@@ -130,13 +141,33 @@ export class SlidesEditorView {
     private readonly deps: SlidesEditorDeps,
   ) {
     this.notesBar.append(this.notesInput);
-    this.el.append(this.canvas, this.input, this.notesBar);
+    const closeMaster = h('button', { class: 'wm-button', text: t('slides.closeMaster'), attrs: { type: 'button' } });
+    closeMaster.addEventListener('click', () => {
+      if (this.masterView) this.toggleMasterView();
+      this.focus();
+    });
+    this.masterBar.append(h('span', { class: 'wm-slides-masterbar-label', text: t('slides.masterView') }), closeMaster);
+    this.el.append(this.canvas, this.input, this.masterBar, this.notesBar);
     parent.append(this.el);
     this.listen();
   }
 
   get isOpen(): boolean {
     return this.deck !== null;
+  }
+
+  /** What is shown and edited: the slides, or in master view each master followed by its layouts. */
+  private get pages(): PagePart[] {
+    const deck = this.deck;
+    if (!deck) return [];
+    if (!this.masterView) return deck.slides;
+    return deck.masters.flatMap((master): PagePart[] => [master, ...deck.layoutsOf(master)]);
+  }
+
+  /** The slide in hand, or nothing in master view (for what only a slide has: notes, hiding, its layout). */
+  private get currentSlide(): SlidePart | undefined {
+    const page = this.pages[this.current];
+    return page && isSlidePart(page) ? page : undefined;
   }
 
   // ---- Opening and saving ---------------------------------------------------------------------------------------------
@@ -161,13 +192,15 @@ export class SlidesEditorView {
     this.selected = [];
     this.text = null;
     this.sorter = false;
+    this.masterView = false;
+    this.masterBar.hidden = true;
     this.layout();
     this.el.hidden = false;
     this.showNotes();
     this.painted = '';
     this.onState?.();
     this.deps.render();
-    announce(t('slides.opened', { name, count: deck.slides.length }));
+    announce(t('slides.opened', { name, count: this.pages.length }));
   }
 
   close(): void {
@@ -212,10 +245,10 @@ export class SlidesEditorView {
     const deck = this.deck;
     if (!deck) return;
     const { w, h } = this.slideSize;
-    const columns = this.sorter ? Math.max(1, Math.min(6, Math.ceil(Math.sqrt(deck.slides.length * 1.6)))) : 1;
+    const columns = this.sorter ? Math.max(1, Math.min(6, Math.ceil(Math.sqrt(this.pages.length * 1.6)))) : 1;
     // The sorter's rows leave room under each slide for its number (a fifth of a slide's height).
     const rowGap = this.sorter ? Math.max(GAP, h / 5) : GAP;
-    this.placed = deck.slides.map((slide, i) => ({ slide, x: (i % columns) * (w + GAP), y: Math.floor(i / columns) * (h + rowGap), w, h }));
+    this.placed = this.pages.map((slide, i) => ({ slide, x: (i % columns) * (w + GAP), y: Math.floor(i / columns) * (h + rowGap), w, h }));
     this.painted = '';
   }
 
@@ -226,11 +259,11 @@ export class SlidesEditorView {
     return { x: 0, y: 0, width: right, height: bottom };
   }
 
-  private strip: { width: number; height: number; slide: SlidePart }[] = [];
+  private strip: { width: number; height: number; slide: PagePart }[] = [];
 
   /** The slides as pages, for the slide strip (the pages panel): the same list, and the same page for a slide, until the slides change. */
-  stripPages(): readonly { width: number; height: number; slide: SlidePart }[] {
-    const slides = this.deck?.slides ?? [];
+  stripPages(): readonly { width: number; height: number; slide: PagePart }[] {
+    const slides = this.pages;
     if (this.strip.length !== slides.length || this.strip.some((p, i) => p.slide !== slides[i])) {
       const known = new Map(this.strip.map((p) => [p.slide, p]));
       const { w, h: hh } = this.slideSize;
@@ -240,7 +273,7 @@ export class SlidesEditorView {
   }
 
   get slideCount(): number {
-    return this.deck?.slides.length ?? 0;
+    return this.pages.length;
   }
 
   get currentIndex(): number {
@@ -281,13 +314,21 @@ export class SlidesEditorView {
   }
 
   private slideMessage(index: number): string {
-    const slide = this.deck?.slides[index];
+    const slide = this.pages[index];
+    if (this.masterView && slide) return t('slides.masterPage', { name: this.pageName(slide), n: index + 1, count: this.slideCount });
     const title = slide ? this.titleOf(slide) : '';
     return title ? t('slides.slideTitled', { n: index + 1, count: this.slideCount, title }) : t('slides.slideNumber', { n: index + 1, count: this.slideCount });
   }
 
+  /** A master's or layout's name (`p:cSld name`), as master view labels it. */
+  pageName(page: PagePart): string {
+    if (isSlidePart(page)) return this.titleOf(page);
+    const name = at(page.xml, 'p:cSld')?.attrs.name;
+    return 'master' in page ? name || page.name.replace(/^.*\//, '').replace(/\.xml$/, '') : t('slides.masterName');
+  }
+
   /** A slide's title: its title placeholder's text. */
-  titleOf(slide: SlidePart): string {
+  titleOf(slide: PagePart): string {
     for (const sp of kids(at(slide.xml, 'p:cSld/p:spTree'), 'p:sp')) {
       const ph = placeholderOf(sp);
       if (ph && (ph.type === 'title' || ph.type === 'ctrTitle')) return kids(kid(sp, 'p:txBody'), 'a:p').map(paragraphText).join(' ').replace(/\u000b/g, ' ').trim();
@@ -297,9 +338,9 @@ export class SlidesEditorView {
 
   // ---- Scenes and painting ------------------------------------------------------------------------------------------
 
-  private sceneOf(slide: SlidePart, forEditor = true): SlideScene {
+  private sceneOf(slide: PagePart, forEditor = true): SlideScene {
     const deck = this.deck!;
-    const index = deck.slides.indexOf(slide);
+    const index = this.pages.indexOf(slide);
     const editing = forEditor && this.text?.slide === slide ? this.text.element : null;
     const version = `${this.contentVersion}|${forEditor ? 1 : 0}|${editing ? 'e' : ''}`;
     const known = forEditor ? this.scenes.get(slide) : undefined;
@@ -411,11 +452,14 @@ export class SlidesEditorView {
         }
         ctx.fillStyle = darkPages ? '#cccccc' : cssVar('--wm-muted', '#666666');
         ctx.font = `${12 * ratio}px system-ui, sans-serif`;
-        const label = String(i + 1) + (isHidden(p.slide) ? ` (${t('slides.hidden')})` : '');
+        const label = this.masterView ? ('master' in p.slide ? '    ' : '') + this.pageName(p.slide) : String(i + 1) + (isHidden(p.slide) ? ` (${t('slides.hidden')})` : '');
         ctx.textBaseline = 'top';
-        // Down the page the number stands left of its slide; in the sorter, under it.
+        // Down the page the number stands left of its slide; in the sorter, under it; in master view the page's name, above it.
         if (this.sorter) ctx.fillText(label, left, top + hh + 6 * ratio);
-        else {
+        else if (this.masterView) {
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(label, left, top - 6 * ratio);
+        } else {
           ctx.textAlign = 'right';
           ctx.fillText(label, left - 6 * ratio, top);
           ctx.textAlign = 'left';
@@ -432,7 +476,7 @@ export class SlidesEditorView {
     return d.kind;
   }
 
-  private thumbnail(slide: SlidePart, width: number): HTMLCanvasElement | null {
+  private thumbnail(slide: PagePart, width: number): HTMLCanvasElement | null {
     const bucket = width <= 200 ? 200 : width <= 400 ? 400 : 800;
     const version = `${this.contentVersion}|${bucket}`;
     const known = this.thumbs.get(slide);
@@ -452,7 +496,7 @@ export class SlidesEditorView {
 
   /** A slide's picture in pixels, for the slide strip. */
   thumbnailPixels(index: number, width: number, height: number): Uint8ClampedArray<ArrayBuffer> | null {
-    const slide = this.deck?.slides[index];
+    const slide = this.pages[index];
     if (!slide) return null;
     const canvas = document.createElement('canvas');
     canvas.width = width;
@@ -479,7 +523,7 @@ export class SlidesEditorView {
     return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
   }
 
-  private async imagesSettled(slide: SlidePart): Promise<void> {
+  private async imagesSettled(slide: PagePart): Promise<void> {
     this.sceneOf(slide, false);
     for (let i = 0; i < 20 && this.loadingImages.size > this.images.size; i++) await new Promise((r) => setTimeout(r, 50));
   }
@@ -499,12 +543,12 @@ export class SlidesEditorView {
 
   // ---- The selection, drawn ---------------------------------------------------------------------------------------
 
-  private viewsOf(slide: SlidePart): ShapeView[] {
+  private viewsOf(slide: PagePart): ShapeView[] {
     return this.sceneOf(slide).views;
   }
 
   /** The view of a selected (top-level) shape. */
-  private viewOf(slide: SlidePart, element: XmlElement): ShapeView | undefined {
+  private viewOf(slide: PagePart, element: XmlElement): ShapeView | undefined {
     return this.viewsOf(slide).find((v) => v.shape.element === element);
   }
 
@@ -722,7 +766,7 @@ export class SlidesEditorView {
   }
 
   /** The topmost shape of the slide's own at a point (slide pixels): its view. */
-  private shapeAt(slide: SlidePart, at: [number, number], tolerance = 4): ShapeView | null {
+  private shapeAt(slide: PagePart, at: [number, number], tolerance = 4): ShapeView | null {
     const views = this.viewsOf(slide);
     for (let i = views.length - 1; i >= 0; i--) {
       const v = views[i];
@@ -1052,7 +1096,7 @@ export class SlidesEditorView {
       this.current = hit.index;
       this.selected = [];
     }
-    const slide = this.deck.slides[this.current];
+    const slide = this.pages[this.current];
     if (hit && slide && !this.sorter && !this.text) {
       const view = this.shapeAt(slide, hit.at);
       if (view && !this.selected.includes(view.top.element)) this.selected = [view.top.element];
@@ -1066,15 +1110,17 @@ export class SlidesEditorView {
       items.push({ label: t('slides.arrange'), items: [op('bringToFront'), op('bringForward'), op('sendBackward'), op('sendToBack')] });
     } else if (this.text) {
       items.push(op('cut'), op('copy'), op('paste'));
+    } else if (this.masterView) {
+      items.push(op('paste'), 'separator', op('background'), op('theme'), { label: t('slides.closeMaster'), run: () => this.toggleMasterView() });
     } else {
-      items.push(op('paste'), 'separator', op('newSlide'), op('duplicateSlide'), op('deleteSlide'), op('hideSlide'), 'separator', { label: t('slides.op.layout'), items: this.layoutItems() }, op('resetSlide'));
+      items.push(op('paste'), 'separator', op('newSlide'), op('duplicateSlide'), op('deleteSlide'), op('hideSlide'), 'separator', { label: t('slides.op.layout'), items: this.layoutItems() }, op('resetSlide'), op('background'));
     }
     showPopupMenu(items, clientX, clientY, t('slides.editor'), () => this.focus());
   }
 
   private colorItems(set: (color: Rgba | null) => void): PopupItem[] {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.pages[this.current];
     if (!deck || !slide) return [];
     const theme = colorContext(deck, slide).theme;
     const names = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'dk1', 'lt1', 'dk2', 'lt2'];
@@ -1131,12 +1177,17 @@ export class SlidesEditorView {
   }
 
   private shapeKey(e: KeyboardEvent, mod: boolean): boolean {
-    const slide = this.deck!.slides[this.current];
+    const slide = this.pages[this.current];
     if (!slide) return false;
     const nudge = e.altKey ? 1 : e.shiftKey ? 50 : 8;
     switch (e.key) {
       case 'Escape':
         if (this.presenter) return false;
+        // Nothing selected in master view: Escape closes it, as the bar's button does.
+        if (!this.selected.length && this.masterView) {
+          this.toggleMasterView();
+          return true;
+        }
         this.selected = [];
         this.redraw();
         return true;
@@ -1381,7 +1432,7 @@ export class SlidesEditorView {
   private typed(text: string): void {
     if (!this.deck || this.readOnly) return;
     if (!this.text) {
-      const slide = this.deck.slides[this.current];
+      const slide = this.pages[this.current];
       if (!slide || this.selected.length !== 1) return;
       const view = this.viewOf(slide, this.selected[0]);
       if (!view?.text || (view.shape.kind !== 'shape' && view.shape.kind !== 'connector')) return;
@@ -1500,7 +1551,7 @@ export class SlidesEditorView {
   // ---- Text editing: entering, leaving, changing ----------------------------------------------------------------
 
   /** Starts editing a shape's (or a table cell's) text, with the caret at a point, at its end, or all of it selected. */
-  private editText(slide: SlidePart, owner: XmlElement, element: XmlElement, where: 'end' | 'all' | null, at?: [number, number], selectWord = false): void {
+  private editText(slide: PagePart, owner: XmlElement, element: XmlElement, where: 'end' | 'all' | null, at?: [number, number], selectWord = false): void {
     if (this.readOnly) return;
     this.leaveText();
     this.selected = [owner];
@@ -1599,7 +1650,7 @@ export class SlidesEditorView {
   }
 
   /** Sets run attributes on the selected text (or, with no text in hand, all the text of the selected shapes). */
-  private setRunAttrs(attrs: Record<string, string | null>, label: string, children?: (rPr: XmlElement) => void): void {
+  private setRunAttrs(attrs: Record<string, string | null>, label: string, children?: (rPr: XmlElement) => void, mirror = true): void {
     if (!this.deck) return;
     const apply = (rPr: XmlElement): void => {
       const next = { ...rPr.attrs };
@@ -1614,10 +1665,12 @@ export class SlidesEditorView {
       const edit = this.text;
       this.textChange(label, (body) => {
         for (const run of runsIn(body, edit.anchor, edit.focus)) apply(rPrOf(run));
+        if (mirror) this.mirrorToStyle(edit.element, levelsIn(body, minPos(edit.anchor, edit.focus).p, maxPos(edit.anchor, edit.focus).p), (list, level) => apply(levelRunOf(list, level)));
       });
       return;
     }
-    this.forSelectedBodies(label, (body) => {
+    this.forSelectedBodies(label, (body, element) => {
+      if (mirror) this.mirrorToStyle(element, levelsIn(body), (list, level) => apply(levelRunOf(list, level)));
       for (const p of paragraphsOf(body)) {
         for (const r of kids(p)) if (r.name === 'a:r' || r.name === 'a:fld' || r.name === 'a:br') apply(rPrOf(r));
         const end = kid(p, 'a:endParaRPr');
@@ -1631,30 +1684,48 @@ export class SlidesEditorView {
     });
   }
 
-  private forSelectedBodies(label: string, change: (body: XmlElement) => void): void {
+  /**
+   * In master view, a change to the text of a master's or layout's placeholder is made to the text style it passes on too
+   * (the master's title, body or other style; the layout placeholder's list style), for each level the text has, so it
+   * reaches every slide that inherits it and does not set that itself.
+   */
+  private mirrorToStyle(element: XmlElement, levels: Set<number>, change: (list: XmlElement, level: number) => void): void {
+    const page = this.pages[this.current];
+    if (!this.masterView || !page) return;
+    const list = inheritedStyleOf(page, element, true);
+    if (!list) return;
+    for (const level of levels) change(list, level);
+  }
+
+  private forSelectedBodies(label: string, change: (body: XmlElement, element: XmlElement) => void): void {
     const deck = this.deck!;
-    const slide = deck.slides[this.current];
+    const slide = this.pages[this.current];
     if (!slide || !this.selected.length) return;
     const tx = new Transaction(deck, label);
     tx.touch(slide);
     for (const element of this.selected) {
       const bodies = element.name === 'p:graphicFrame' ? kids(at(element, 'a:graphic/a:graphicData/a:tbl'), 'a:tr').flatMap((tr) => kids(tr, 'a:tc')).map((tc) => kid(tc, 'a:txBody')).filter((b): b is XmlElement => !!b) : kid(element, 'p:txBody') ? [kid(element, 'p:txBody')!] : [];
-      for (const body of bodies) change(body);
+      for (const body of bodies) change(body, element);
     }
     this.commit(tx);
   }
 
-  private setParagraphs(label: string, change: (pPr: XmlElement, p: XmlElement) => void): void {
+  /** Changes the paragraphs of the text in hand (or of the selected shapes); `mirror`: in master view, their level styles too. */
+  private setParagraphs(label: string, change: (pPr: XmlElement, p: XmlElement | null) => void, mirror = true): void {
     if (this.text) {
       const edit = this.text;
       this.textChange(label, (body) => {
         const ps = paragraphsOf(body);
-        for (let i = minPos(edit.anchor, edit.focus).p; i <= maxPos(edit.anchor, edit.focus).p; i++) change(pPrOf(ps[i]), ps[i]);
+        const first = minPos(edit.anchor, edit.focus).p;
+        const last = maxPos(edit.anchor, edit.focus).p;
+        for (let i = first; i <= last; i++) change(pPrOf(ps[i]), ps[i]);
+        if (mirror) this.mirrorToStyle(edit.element, levelsIn(body, first, last), (list, level) => change(levelOf(list, level), null));
       });
       return;
     }
-    this.forSelectedBodies(label, (body) => {
+    this.forSelectedBodies(label, (body, element) => {
       for (const p of paragraphsOf(body)) change(pPrOf(p), p);
+      if (mirror) this.mirrorToStyle(element, levelsIn(body), (list, level) => change(levelOf(list, level), null));
     });
   }
 
@@ -1700,7 +1771,7 @@ export class SlidesEditorView {
       }
       return p.runs[0]?.style ?? p.end;
     }
-    const slide = this.deck?.slides[this.current];
+    const slide = this.pages[this.current];
     const view = slide && this.selected[0] ? this.viewOf(slide, this.selected[0]) : undefined;
     const p = view?.text?.body.paragraphs[0];
     return p ? (p.runs[0]?.style ?? p.end) : null;
@@ -1725,7 +1796,7 @@ export class SlidesEditorView {
   }
 
   private selectedParagraph(): import('./textStyle.ts').Paragraph | undefined {
-    const slide = this.deck?.slides[this.current];
+    const slide = this.pages[this.current];
     const view = slide && this.selected[0] ? this.viewOf(slide, this.selected[0]) : undefined;
     return view?.text?.body.paragraphs[0];
   }
@@ -1787,9 +1858,14 @@ export class SlidesEditorView {
         return true;
       }
       case 'clearFormatting':
-        this.setRunAttrs({ b: null, i: null, u: null, strike: null, baseline: null, sz: null }, label, (rPr) => {
-          rPr.children = [];
-        });
+        this.setRunAttrs(
+          { b: null, i: null, u: null, strike: null, baseline: null, sz: null },
+          label,
+          (rPr) => {
+            rPr.children = [];
+          },
+          false,
+        );
         return true;
       case 'setAlignment':
         this.setAlign(action.align === 'center' ? 'ctr' : action.align === 'right' ? 'r' : action.align === 'justify' ? 'just' : 'l');
@@ -1803,10 +1879,15 @@ export class SlidesEditorView {
       }
       case 'indent':
         if (this.text) this.changeLevel(action.direction === 'increase' ? 1 : -1);
-        else this.setParagraphs(label, (pPr) => {
-          const level = Math.min(8, Math.max(0, (Number(pPr.attrs.lvl) || 0) + (action.direction === 'increase' ? 1 : -1)));
-          pPr.attrs = { ...pPr.attrs, lvl: String(level) };
-        });
+        else
+          this.setParagraphs(
+            label,
+            (pPr) => {
+              const level = Math.min(8, Math.max(0, (Number(pPr.attrs.lvl) || 0) + (action.direction === 'increase' ? 1 : -1)));
+              pPr.attrs = { ...pPr.attrs, lvl: String(level) };
+            },
+            false,
+          );
         return true;
       case 'setLineSpacing':
         this.setParagraphs(label, (pPr) => {
@@ -1828,7 +1909,7 @@ export class SlidesEditorView {
 
   private shapeChange(label: string, change: (element: XmlElement) => void): void {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.pages[this.current];
     if (!deck || !slide || !this.selected.length || this.readOnly) return;
     const tx = new Transaction(deck, label);
     tx.touch(slide);
@@ -1839,18 +1920,27 @@ export class SlidesEditorView {
   async slidesOp(op: SlidesOp): Promise<void> {
     const deck = this.deck;
     if (!deck) return;
-    const slide = deck.slides[this.current];
-    if (op === 'presentStart' || op === 'presentCurrent') return this.present(op === 'presentStart' ? 0 : this.current);
+    const slide = this.pages[this.current];
+    if (op === 'editMaster') return this.toggleMasterView();
+    if (op === 'presentStart' || op === 'presentCurrent') {
+      if (this.masterView) this.toggleMasterView();
+      return this.present(op === 'presentStart' ? 0 : this.current);
+    }
     if (op === 'sorter') return this.toggleSorter();
     if (op === 'notes') return this.toggleNotes();
     if (op === 'copy') return void this.copy();
     if (op === 'cut') return void this.cut();
     if (op === 'paste') return void this.paste();
     if (this.readOnly) return;
+    if (op === 'background') return this.backgroundDialog();
+    if (op === 'theme') return this.themeDialog();
+    // Commands about slides do nothing in master view, whose pages are masters and layouts.
+    if (this.masterView && SLIDE_ONLY_OPS.has(op)) return;
     const tx = (label: string): Transaction => new Transaction(deck, label);
+    const current = this.currentSlide;
     switch (op) {
       case 'newSlide': {
-        const layout = this.layoutFor(slide);
+        const layout = this.layoutFor(current);
         if (!layout) return;
         const step = tx(t('slides.op.newSlide'));
         await addSlide(deck, layout, this.current + 1, step);
@@ -1859,25 +1949,25 @@ export class SlidesEditorView {
         return;
       }
       case 'duplicateSlide': {
-        if (!slide) return;
+        if (!current) return;
         const step = tx(t('slides.op.duplicateSlide'));
-        await duplicateSlide(deck, slide, step);
+        await duplicateSlide(deck, current, step);
         this.commit(step, true);
         this.go(this.current + 1);
         return;
       }
       case 'deleteSlide': {
-        if (!slide || deck.slides.length <= 1) return;
+        if (!current || deck.slides.length <= 1) return;
         const step = tx(t('slides.op.deleteSlide'));
-        await deleteSlides(deck, [slide], step);
+        await deleteSlides(deck, [current], step);
         this.commit(step, true);
-        this.go(Math.min(this.current, deck.slides.length - 1));
+        this.go(Math.min(this.current, this.pages.length - 1));
         return;
       }
       case 'hideSlide': {
-        if (!slide) return;
+        if (!current) return;
         const step = tx(t('slides.op.hideSlide'));
-        setHidden(slide, !isHidden(slide), step);
+        setHidden(current, !isHidden(current), step);
         this.commit(step);
         return;
       }
@@ -1885,7 +1975,7 @@ export class SlidesEditorView {
       case 'moveSlideDown': {
         if (!slide) return;
         const to = this.current + (op === 'moveSlideUp' ? -1 : 1);
-        if (to < 0 || to >= deck.slides.length) return;
+        if (to < 0 || to >= this.pages.length) return;
         await this.moveSlide(this.current, to);
         return;
       }
@@ -1893,9 +1983,9 @@ export class SlidesEditorView {
         showPopupMenu(this.layoutItems(), this.canvas.getBoundingClientRect().left + 40, this.canvas.getBoundingClientRect().top + 40, t('slides.op.layout'), () => this.focus());
         return;
       case 'resetSlide': {
-        if (!slide) return;
+        if (!current) return;
         const step = tx(t('slides.op.resetSlide'));
-        resetToLayout(slide, step);
+        resetToLayout(current, step);
         this.commit(step);
         return;
       }
@@ -1969,7 +2059,7 @@ export class SlidesEditorView {
 
   private layoutItems(): PopupItem[] {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.currentSlide;
     if (!deck || !slide) return [];
     return deck.layoutsOf(slide.layout.master).map((layout) => ({
       label: (at(layout.xml, 'p:cSld')?.attrs.name ?? layout.name.replace(/^.*\//, '')) + (layout === slide.layout ? ' ✓' : ''),
@@ -1979,7 +2069,7 @@ export class SlidesEditorView {
 
   private async changeLayout(layout: LayoutPart): Promise<void> {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.currentSlide;
     if (!deck || !slide || this.readOnly) return;
     const step = new Transaction(deck, t('slides.op.layout'));
     await changeLayout(deck, slide, layout, step);
@@ -1989,7 +2079,7 @@ export class SlidesEditorView {
   async moveSlide(from: number, to: number): Promise<void> {
     const deck = this.deck;
     const slide = deck?.slides[from];
-    if (!deck || !slide || this.readOnly) return;
+    if (!deck || !slide || this.readOnly || this.masterView) return;
     const step = new Transaction(deck, t('slides.undo.moveSlide'));
     await moveSlides(deck, [slide], to, step);
     this.commit(step, true);
@@ -1998,7 +2088,7 @@ export class SlidesEditorView {
   }
 
   async deleteSlideAt(index: number): Promise<void> {
-    if (!this.deck || this.readOnly) return;
+    if (!this.deck || this.readOnly || this.masterView) return;
     this.current = index;
     await this.slidesOp('deleteSlide');
   }
@@ -2006,7 +2096,7 @@ export class SlidesEditorView {
   /** A new shape in the middle of the slide in hand. */
   private insertShape(preset: string): void {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.pages[this.current];
     if (!deck || !slide || this.readOnly) return;
     const textBox = preset === 'textBox';
     const w = textBox ? Math.round(deck.width * 0.4) : Math.round(Math.min(deck.width, deck.height) * 0.3);
@@ -2025,7 +2115,7 @@ export class SlidesEditorView {
 
   private insertTable(rows: number, cols: number): void {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.pages[this.current];
     if (!deck || !slide || this.readOnly) return;
     const w = Math.round(deck.width * 0.7);
     const frame: Frame = { x: Math.round((deck.width - w) / 2), y: Math.round(deck.height * 0.3), w, h: 0, rot: 0, flipH: false, flipV: false };
@@ -2041,7 +2131,7 @@ export class SlidesEditorView {
 
   async insertPicture(bytes: Uint8Array, name: string): Promise<void> {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.pages[this.current];
     if (!deck || !slide || this.readOnly) return;
     let bitmap: ImageBitmap;
     let ext: string;
@@ -2100,16 +2190,17 @@ export class SlidesEditorView {
   private async step(back: boolean): Promise<void> {
     const deck = this.deck;
     if (!deck || this.readOnly) return;
-    const slideName = deck.slides[this.current]?.name;
+    const slideName = this.pages[this.current]?.name;
     const step = back ? this.history.undo(deck) : this.history.redo(deck);
     if (!step) return;
     this.leaveText();
     this.selected = [];
+    deck.refreshThemes();
     await deck.loadSlides();
-    const index = deck.slides.findIndex((s) => s.name === slideName);
+    const index = this.pages.findIndex((s) => s.name === slideName);
     // The slide changed by the step comes into view.
-    const touched = deck.slides.findIndex((s) => step.before.has(s.name));
-    this.current = touched >= 0 ? touched : index >= 0 ? index : Math.min(this.current, deck.slides.length - 1);
+    const touched = this.pages.findIndex((s) => step.before.has(s.name));
+    this.current = touched >= 0 ? touched : index >= 0 ? index : Math.min(this.current, this.pages.length - 1);
     this.changed(true);
     this.showNotes();
     announce(t(back ? 'slides.undone' : 'slides.redone', { what: step.label }));
@@ -2131,7 +2222,7 @@ export class SlidesEditorView {
 
   private copyShapes(cut: boolean): void {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.pages[this.current];
     if (!deck || !slide || !this.selected.length) return;
     const elements = this.selected.map((e) => cloneElement(e));
     const text = elements.map((e) => kids(kid(e, 'p:txBody'), 'a:p').map(paragraphText).join('\n')).filter(Boolean).join('\n\n');
@@ -2165,7 +2256,7 @@ export class SlidesEditorView {
 
   private async pasteText(text: string): Promise<void> {
     if (this.readOnly || !this.deck) return;
-    const slide = this.deck.slides[this.current];
+    const slide = this.pages[this.current];
     // Shapes copied here come back as shapes, when the clipboard still holds what was copied with them.
     if (!this.text && this.copied && slide && (text === this.copiedText || !text)) {
       const step = new Transaction(this.deck, t('slides.undo.paste'));
@@ -2197,7 +2288,7 @@ export class SlidesEditorView {
   }
 
   /** Copies of a shape's relationship ids (pictures, links) re-made on another slide. */
-  private carryRelationships(element: XmlElement, from: SlidePart, to: SlidePart): XmlElement {
+  private carryRelationships(element: XmlElement, from: PagePart, to: PagePart): XmlElement {
     if (from === to) return element;
     const walk = (e: XmlElement): void => {
       for (const [k, v] of Object.entries(e.attrs)) {
@@ -2219,7 +2310,7 @@ export class SlidesEditorView {
       this.text.anchor = { p: 0, o: 0 };
       this.text.focus = { p: ps.length - 1, o: paragraphLength(ps[ps.length - 1]) };
     } else {
-      const slide = this.deck?.slides[this.current];
+      const slide = this.pages[this.current];
       if (!slide) return;
       this.selected = this.viewsOf(slide)
         .filter((v) => !v.inherited && v.shape === v.top)
@@ -2241,6 +2332,103 @@ export class SlidesEditorView {
 
   get notesOpen(): boolean {
     return this.notesShown;
+  }
+
+  // ---- Design: background and theme -------------------------------------------------------------------------------------
+
+  /** Slide › Background: sets the background of the slide in hand (master view: the master or layout), or of every slide. */
+  private async backgroundDialog(): Promise<void> {
+    const deck = this.deck;
+    const page = this.pages[this.current];
+    if (!deck || !page || this.readOnly) return;
+    this.leaveText();
+    const own = backgroundOf(page);
+    const shown = colorContext(deck, page);
+    const fill = backgroundFill(deck, page, shown);
+    const fallback = fill.kind === 'solid' && fill.color ? `#${hexOf(fill.color)}` : '#FFFFFF';
+    const master = masterOfPage(page);
+    const answer = await showBackgroundDialog(own, fallback, { canReset: !!at(page.xml, 'p:cSld/p:bg') && page !== master, allLabel: t('slides.background.applyAll') }, () => this.deps.pickImage());
+    this.focus();
+    if (!answer || this.deck !== deck) return;
+    let spec = answer.spec;
+    if (spec?.kind === 'picture') {
+      const media = answer.picture ? await this.addPictureMedia(answer.picture.bytes, answer.picture.name) : null;
+      if (!media || this.deck !== deck) return;
+      spec = { kind: 'picture', media };
+    }
+    const step = new Transaction(deck, t('slides.background.title'));
+    if (answer.scope === 'all' && spec) setBackgroundEverywhere(deck, master, spec, step);
+    else setBackground(page, answer.scope === 'reset' ? null : spec, step);
+    this.commit(step);
+    announce(t('slides.background.done'));
+  }
+
+  /** Puts a picture's bytes in the deck (as a kind PowerPoint shows) and returns its part name; null if it can't be read. */
+  private async addPictureMedia(bytes: Uint8Array, name: string): Promise<string | null> {
+    const deck = this.deck!;
+    try {
+      const kind = sniffImage(bytes)?.type;
+      if (kind !== 'png' && kind !== 'jpeg' && kind !== 'gif' && kind !== 'webp') bytes = (await toPng(name, bytes)).bytes;
+      const bitmap = await decodeImage(bytes);
+      const media = deck.addMedia(bytes, sniffImage(bytes)?.type ?? 'png');
+      this.images.set(`pptx:${media}`, bitmap);
+      return media;
+    } catch {
+      this.deps.notify(t('slides.pictureUnreadable'));
+      return null;
+    }
+  }
+
+  /** Slide › Theme: the deck's colours, fonts, and light or dark pages, for every master. */
+  private async themeDialog(): Promise<void> {
+    const deck = this.deck;
+    const page = this.pages[this.current];
+    if (!deck || !page || this.readOnly) return;
+    this.leaveText();
+    const master = masterOfPage(page);
+    const now = currentDesign(master);
+    const answer = await showThemeDialog({ ...now, name: master.theme.name }, () => this.deps.pickDeck(), async (file) => readOtherTheme(new Uint8Array(await file.arrayBuffer()), file.name.replace(/\.[^.]*$/, '')));
+    this.focus();
+    if (!answer || this.deck !== deck) return;
+    const step = new Transaction(deck, t('slides.theme.title'));
+    const themes = new Set(deck.masters.map((m) => deck.themePart(m)).filter((p) => !!p));
+    for (const theme of themes) {
+      setThemeColors(theme!, answer.colors, step);
+      setThemeFonts(theme!, answer.fonts, step);
+    }
+    for (const m of deck.masters) if ((m.colorMap.bg1 === 'dk1') !== answer.dark) setDarkPages(m, answer.dark, step);
+    deck.refreshThemes();
+    this.commit(step);
+    announce(t('slides.theme.done'));
+  }
+
+  get isMasterView(): boolean {
+    return this.masterView;
+  }
+
+  /** Opens master view (the masters and their layouts, edited as slides are) on the layout of the slide in hand, or closes it. */
+  toggleMasterView(): void {
+    const deck = this.deck;
+    if (!deck) return;
+    this.leaveText();
+    this.commitNotes();
+    this.selected = [];
+    if (!this.masterView) {
+      const slide = this.currentSlide;
+      this.slideBeforeMaster = this.current;
+      this.masterView = true;
+      this.current = Math.max(0, slide ? this.pages.indexOf(slide.layout) : 0);
+    } else {
+      this.masterView = false;
+      this.current = Math.min(this.slideBeforeMaster, deck.slides.length - 1);
+    }
+    this.masterBar.hidden = !this.masterView;
+    this.layout();
+    this.contentVersion++;
+    this.thumbs.clear();
+    this.showNotes();
+    this.go(this.current, false);
+    announce(this.masterView ? `${t('slides.masterOn')}. ${this.slideMessage(this.current)}` : `${t('slides.masterOff')}. ${this.slideMessage(this.current)}`);
   }
 
   toggleSorter(): void {
@@ -2273,8 +2461,8 @@ export class SlidesEditorView {
 
   private showNotes(): void {
     this.commitNotes();
-    this.notesBar.hidden = !this.notesShown || !this.deck;
-    const slide = this.deck?.slides[this.current] ?? null;
+    this.notesBar.hidden = !this.notesShown || !this.deck || this.masterView;
+    const slide = this.currentSlide ?? null;
     this.notesFor = slide;
     this.notesInput.value = slide ? this.deck!.notesText(slide).replace(/\u000b/g, '\n') : '';
     this.notesKept = this.notesInput.value;
@@ -2357,7 +2545,7 @@ export class SlidesEditorView {
   }
 
   private announceSelection(): void {
-    const slide = this.deck?.slides[this.current];
+    const slide = this.pages[this.current];
     if (!slide || !this.selected.length) return;
     if (this.selected.length > 1) return announce(t('slides.selectedMany', { count: this.selected.length }));
     const view = this.viewOf(slide, this.selected[0]);
@@ -2415,7 +2603,8 @@ export class SlidesEditorView {
     const deck = this.deck;
     if (!deck) return null;
     return {
-      slides: deck.slides.map((s) => ({ name: s.name, title: this.titleOf(s), hidden: isHidden(s), layout: at(s.layout.xml, 'p:cSld')?.attrs.name ?? '', shapes: kids(at(s.xml, 'p:cSld/p:spTree')).filter((e) => /^p:(sp|pic|grpSp|cxnSp|graphicFrame)$/.test(e.name)).map((e) => ({ name: cNvPr(e)?.attrs.name ?? '', text: kids(kid(e, 'p:txBody'), 'a:p').map(paragraphText).join('\n'), x: Number(kid(xfrmOf(e), 'a:off')?.attrs.x ?? NaN), y: Number(kid(xfrmOf(e), 'a:off')?.attrs.y ?? NaN) })) })),
+      masterView: this.masterView,
+      slides: this.pages.map((s) => ({ name: s.name, title: this.titleOf(s), hidden: isHidden(s), layout: isSlidePart(s) ? (at(s.layout.xml, 'p:cSld')?.attrs.name ?? '') : (at(s.xml, 'p:cSld')?.attrs.name ?? ''), shapes: kids(at(s.xml, 'p:cSld/p:spTree')).filter((e) => /^p:(sp|pic|grpSp|cxnSp|graphicFrame)$/.test(e.name)).map((e) => ({ name: cNvPr(e)?.attrs.name ?? '', text: kids(kid(e, 'p:txBody'), 'a:p').map(paragraphText).join('\n'), x: Number(kid(xfrmOf(e), 'a:off')?.attrs.x ?? NaN), y: Number(kid(xfrmOf(e), 'a:off')?.attrs.y ?? NaN) })) })),
       current: this.current,
       selected: this.selected.map((e) => cNvPr(e)?.attrs.name ?? ''),
       editing: this.text ? { anchor: this.text.anchor, focus: this.text.focus } : null,

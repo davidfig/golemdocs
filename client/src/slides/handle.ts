@@ -81,6 +81,11 @@ export class SlidesEditor {
     return this.view?.isSorter ?? false;
   }
 
+  /** Master view is open (the masters and layouts are shown and edited instead of the slides). */
+  get masterView(): boolean {
+    return this.view?.isMasterView ?? false;
+  }
+
   get notesOpen(): boolean {
     return this.view?.notesOpen ?? false;
   }

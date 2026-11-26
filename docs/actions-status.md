@@ -85,7 +85,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 - Screen Reader Mode (Mod+Alt+Z): see [Accessibility](architecture/accessibility.md)
 
 **Slides** (a `.pptx` open in the slides editor; [slides.md](slides.md))
-- Slide menu (`slides`): New, Duplicate, Delete and Hide Slide, Move Slide Up/Down, Layout (a list of the master's layouts), Reset Slide, Duplicate and Delete Shape, Arrange (front, forward, backward, back), Present from Beginning / Current Slide
+- Slide menu (`slides`): New, Duplicate, Delete and Hide Slide, Move Slide Up/Down, Layout (a list of the master's layouts), Reset Slide, Background… (solid, gradient or picture, for the slide or all), Theme… (colors, fonts, light or dark, built in or from another deck), Edit Master (also in View; master view, where the slide commands are disabled), Duplicate and Delete Shape, Arrange (front, forward, backward, back), Present from Beginning / Current Slide
 - Insert: Text Box, Shape (a list of presets), Picture (a file), Table (a list of sizes), on the slide in hand
 - View: Slide Sorter, Notes
 - Undo, Redo, Cut, Copy, Paste, Select All; the toolbar's character and paragraph formatting (bold, italic, underline, strikethrough, font, size, colour, highlight, alignment, bullets, numbering, indent, line spacing) on the text being edited or all the text of the selected shapes

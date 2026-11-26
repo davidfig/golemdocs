@@ -9,6 +9,7 @@ import {
   MEDIA_OPS,
   type MediaOp,
   SLIDES_OPS,
+  SLIDE_ONLY_OPS,
   type Action,
   type Alignment,
   type CaseChange,
@@ -639,8 +640,17 @@ export class Chrome {
     for (const op of SLIDES_OPS) {
       if (op === 'cut' || op === 'copy' || op === 'paste') continue;
       // The show, the notes pane and the lists of layouts, shapes and table sizes take the keyboard: it is not handed back to the slides.
-      const takesKeyboard = op === 'presentStart' || op === 'presentCurrent' || op === 'notes' || op === 'layout' || op === 'shape' || op === 'table' || op === 'picture';
-      r.add(a(`slides.${op}`, t(`slides.op.${op}`), { kind: 'slides', op }, { ...(SLIDE_ICONS[op] && { icon: SLIDE_ICONS[op] }), ...(takesKeyboard && { takesKeyboard }) }));
+      const takesKeyboard = op === 'presentStart' || op === 'presentCurrent' || op === 'notes' || op === 'layout' || op === 'shape' || op === 'table' || op === 'picture' || op === 'background' || op === 'theme';
+      // Master view shows masters and layouts, not slides: the commands about slides themselves wait until it is closed.
+      const slideOnly = SLIDE_ONLY_OPS.has(op);
+      r.add(
+        a(`slides.${op}`, t(`slides.op.${op}`), { kind: 'slides', op }, {
+          ...(SLIDE_ICONS[op] && { icon: SLIDE_ICONS[op] }),
+          ...(takesKeyboard && { takesKeyboard }),
+          ...(op === 'editMaster' && { checked: (s: ChromeState) => !!s.slidesMaster }),
+          ...(slideOnly && { enabled: (s: ChromeState) => !s.slidesMaster }),
+        }),
+      );
     }
 
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
@@ -906,6 +916,7 @@ export class Chrome {
           cmd('view.flow'),
           cmd('view.grid'),
           cmd('slides.sorter'),
+          cmd('slides.editMaster'),
           cmd('view.markdownSource'),
           sep,
           sub(t('chrome.view.toolbars'), [cmd('view.toolbars'), sep, cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
@@ -1147,6 +1158,10 @@ export class Chrome {
           cmd('slides.moveSlideDown'),
           cmd('slides.layout'),
           cmd('slides.resetSlide'),
+          sep,
+          cmd('slides.background'),
+          cmd('slides.theme'),
+          cmd('slides.editMaster'),
           sep,
           cmd('slides.duplicateShape'),
           cmd('slides.deleteShape'),

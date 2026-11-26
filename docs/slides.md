@@ -1,6 +1,6 @@
 # Plan: slides (.pptx, .odp)
 
-**Status (2026-11-23).** Built on the `worktree-slides` branch: M0 to M3 and most of M4 and M6, M5 in part. See *Progress* at the
+**Status (2026-11-26).** Built on the `worktree-slides` branch: M0 to M3 and most of M4 and M6, M5 in part (the design part, background, theme and master editing, is done). See *Progress* at the
 end for what exists, how it differs from the plan, and what is left.
 
 **Goal.** A presentation editor, not a viewer: open, edit, present and save `.pptx` (and later `.odp`) without damaging
@@ -219,6 +219,20 @@ All in `client/src/slides/`, one lazily loaded chunk (`view.ts` and what it impo
   To in both directions, New › PowerPoint Presentation (`blank.ts`, the app's own 16:9 deck), and a `slides` room kind,
   watched as workbooks are (`sheet/sheetSync.ts` with `kind: 'slides'`).
 
+- **Design** (`design.ts`, `designDialogs.ts`): Slide › Background writes a solid, gradient or picture `p:bg` on the slide in
+  hand, or (Apply to All) on the master while every slide and layout under it lets its own go; Reset Background removes the
+  page's own. Slide › Theme writes a colour scheme and the Latin heading and body fonts into each master's theme part (from a
+  built-in list, `COLOR_SCHEMES` and `FONT_PAIRS`, or read from another `.pptx` or `.thmx`), and dark or light slides as the
+  master's colour map (`bg1`/`tx1` on `dk1`/`lt1`); `Deck.refreshThemes` re-reads them after a change or an undo. Slide ›
+  Edit Master (also in View) is master view: the editor's pages (`pages` in `view.ts`) become each master followed by its
+  layouts, drawn and edited as slides are (`slideShapes` and `slideScene` take a master or layout), with a bar to close it
+  (or Escape with nothing selected), and the commands about slides themselves (`SLIDE_ONLY_OPS`) disabled. Text formatting
+  on a master's placeholder is also written to the master's title, body or other style, and on a layout's placeholder to
+  its list style, for each level the text has (`inheritedStyleOf`, `mirrorToStyle`), so it reaches every slide that does
+  not set it itself; moving or sizing a master placeholder moves every slide's that has no place of its own. Each change
+  touches only the parts it is about, so the rest of the package is written back byte for byte. Checked in PowerPoint
+  16.115: a python-pptx deck restyled this way opens with no repair prompt and looks as set.
+
 ### How it differs from the plan
 
 - **Text in shapes has its own editor** (`textEdit.ts` and the text half of `view.ts`), not the document editor (decision 2).
@@ -229,10 +243,13 @@ All in `client/src/slides/`, one lazily loaded chunk (`view.ts` and what it impo
 
 ### Left to do
 
-- Editing animations and transitions (they are kept and played, not edited); master and layout editing; themes; charts
+- Editing animations and transitions (they are kept and played, not edited); charts
   edited in the sheet editor; tables' rows and columns added or removed (cells' text is edited).
 - The yellow handles that drag a shape's adjustments (the table's handles are left out until then).
 - `.odp`; Keynote stays out.
+- Design: adding, renaming and deleting layouts and masters; theme effects and the full font scheme (East Asian and complex
+  script fonts are kept as they were); Georgia has no TTF in `client/public/fonts`, so slides can't draw it yet and it is
+  left out of the built-in fonts.
 - Rooms where several people edit a deck at once (it is watched: one edits, the others look).
 - Live blocks: a slide as a source (`#slide:3`), shapes as hosts.
 - A screen reader pass by hand (the shapes, the caret's paragraph and slide changes are announced).

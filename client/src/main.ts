@@ -5475,6 +5475,7 @@ function render(): void {
     draw: { ...drawStyle, tool: drawLayer.tool, hasSelection: drawLayer.selection.length > 0, layers: layersOpen },
     vector: vector ? vector.state(layersOpen) : { ...DEFAULT_STATE.vector, layers: layersOpen },
     media: mediaView.state(),
+    slidesMaster: slidesView.active && slidesView.masterView,
     inTable,
     formattingMarks,
     markdownSource: markdownSource !== null,
@@ -8090,6 +8091,13 @@ const slidesView: SlidesEditor = new SlidesEditor(document.getElementById('viewp
       picker.addEventListener('cancel', () => resolve(null));
       picker.click();
     }),
+  pickDeck: () =>
+    new Promise((resolve) => {
+      const picker = Object.assign(document.createElement('input'), { type: 'file', accept: '.pptx,.potx,.pptm,.potm,.thmx' });
+      picker.addEventListener('change', () => resolve(picker.files?.[0] ?? null));
+      picker.addEventListener('cancel', () => resolve(null));
+      picker.click();
+    }),
 });
 /** The slides editor as the chrome sees it (see documentEngine.ts). */
 const slidesEngine: DocumentEngine = {
@@ -8585,7 +8593,8 @@ function syncPagesPanel(): void {
       panelStrip = strip;
       pagesPanel.setPages(strip);
     }
-    pagesPanel.setEditable(!slidesView.readOnly);
+    // Master view's pages are masters and layouts, which are not deleted or moved from the strip.
+    pagesPanel.setEditable(!slidesView.readOnly && !slidesView.masterView);
     pagesPanel.setCurrent(slidesView.currentIndex);
     return;
   }

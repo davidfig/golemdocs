@@ -55,3 +55,31 @@
   resize: vertical;
   font-family: var(--wm-font);
 }
+
+/* Master view's bar: a strip over the top of the slides saying what is being edited, with the way back. */
+.wm-slides-masterbar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--wm-border);
+  border-radius: var(--wm-radius);
+  background: var(--wm-face);
+  color: var(--wm-text);
+  font-family: var(--wm-font);
+  box-shadow: 0 1px 4px var(--wm-shadow);
+  pointer-events: auto;
+}
+
+.wm-slides-masterbar[hidden] {
+  display: none;
+}
+
+.wm-slides-masterbar-label {
+  font-weight: 600;
+}

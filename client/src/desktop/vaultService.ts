@@ -388,7 +388,7 @@ export class VaultService {
           shared = await syncShared({ disk: abandonable(this.bridge, gone), memory: memoryFor, api: sharedApi(), codec: this.codec, hash: host.hash, account, wanted: keepsCopy, excluded: excludedFolders, setExcluded: setExcludedFolders });
           for (const { label, report: copy } of shared.copies) {
             report.errors.push(...copy.errors.map((e) => ({ ...e, message: `${shared!.root}/${label}: ${e.message}` })));
-            for (const key of ['downloaded', 'uploaded', 'created', 'renamed', 'movedHere', 'deletedHere', 'trashed', 'foldersRemoved', 'foldersMade'] as const) report[key] += copy[key];
+            for (const key of ['downloaded', 'uploaded', 'created', 'renamed', 'movedHere', 'deletedHere', 'trashed', 'foldersRemoved', 'foldersMade', 'foldersMoved'] as const) report[key] += copy[key];
           }
         } catch (error) {
           if (error instanceof SyncAbandoned) throw error;
@@ -409,7 +409,7 @@ export class VaultService {
       // Signed out, a folder that belongs to an account waits for that account to sign in.
       const state: VaultState = report.wrongAccount ? (account ? 'wrongAccount' : 'signedOut') : report.blocked ? 'blocked' : report.errors.length ? 'error' : 'idle';
       this.set({ state, report, shared, progress: undefined, lastSync: Date.now(), message: report.errors[0]?.message });
-      const changes = report.downloaded + report.uploaded + report.created + report.renamed + report.movedHere + report.deletedHere + report.trashed + report.foldersRemoved + report.foldersMade;
+      const changes = report.downloaded + report.uploaded + report.created + report.renamed + report.movedHere + report.deletedHere + report.trashed + report.foldersRemoved + report.foldersMade + report.foldersMoved;
       const took = Date.now() - started;
       this.logOutcome(`${state} ${report.errors[0]?.message ?? ''}`, changes > 0 || took >= SLOW_MS, () => `sync ${state} in ${Math.round(took / 1000)} s: ${changes} change(s)${report.errors.length ? `, ${report.errors.length} error(s), first: ${report.errors[0].message}` : ''}`);
       if (changes > 0) this.hooks.changed(report.touched);

@@ -4,7 +4,7 @@
 // documents do. Text is measured with the canvas in the same font it is drawn in, so lines break where they are painted.
 
 import { FontSet, type ResolvedFont } from '@golemdocs/layout';
-import type { FontSpec, TextMeasure } from './textLayout.ts';
+import type { FontSpec, TextMeasure } from '../drawingml/textLayout.ts';
 
 interface Face {
   css: string;

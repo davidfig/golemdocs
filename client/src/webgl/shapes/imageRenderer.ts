@@ -1,6 +1,7 @@
 import { createProgram, uniforms } from '../program.ts';
 import type { Camera } from '../../view/camera.ts';
 import type { ImageCache } from '../../vector/paint.ts';
+import type { SceneFonts } from '../../vector/fonts.ts';
 import type { Scene } from '../../vector/model.ts';
 import { makeCanvas } from '../../formats/imageCodec.ts';
 
@@ -18,17 +19,18 @@ const VERTEX = /* glsl */ `#version 300 es
 precision highp float;
 uniform vec4 u_rect;       // x, y, width, height in device px
 uniform vec2 u_viewport;
+uniform vec4 u_crop;       // left, top, right, bottom of the part shown, 0-1
 out vec2 v_uv;
 void main() {
   vec2 corner = vec2(float(gl_VertexID & 1), float(gl_VertexID >> 1));
   vec2 screen = u_rect.xy + corner * u_rect.zw;
   gl_Position = vec4(screen / u_viewport * vec2(2.0, -2.0) + vec2(-1.0, 1.0), 0.0, 1.0);
-  v_uv = corner;
+  v_uv = mix(u_crop.xy, u_crop.zw, corner);
 }
 `;
 
 const FRAGMENT = /* glsl */ `#version 300 es
-precision mediump float;
+precision highp float;
 uniform sampler2D u_image;
 uniform vec4 u_fallback;   // drawn when the image can't be decoded (EMF, WMF, ...)
 uniform float u_useFallback;
@@ -43,6 +45,8 @@ export interface ImageSource {
   /** Returns the image bytes for a package part. */
   bytes(part: string): Promise<Uint8Array>;
 }
+
+const WHOLE = [0, 0, 1, 1] as const;
 
 const MIME: Record<string, string> = {
   png: 'image/png',
@@ -103,6 +107,8 @@ interface SvgState {
   /** The drawing as the painter wants it, and the pictures inside it. */
   scene?: Scene;
   images?: ImageCache;
+  /** The fonts it embeds, held until the drawing is let go of. */
+  fonts?: SceneFonts;
   texture?: SvgTexture;
   /** A drawing at some size is under way. */
   drawing: boolean;
@@ -122,11 +128,13 @@ export interface DrawImage {
   y: number;
   width: number;
   height: number;
+  /** The part of the picture shown (see `ImageItem.crop`). */
+  crop?: readonly [number, number, number, number];
 }
 
 export class ImageRenderer {
   private readonly program: WebGLProgram;
-  private readonly u: Record<'u_rect' | 'u_viewport' | 'u_image' | 'u_fallback' | 'u_useFallback', WebGLUniformLocation>;
+  private readonly u: Record<'u_rect' | 'u_crop' | 'u_viewport' | 'u_image' | 'u_fallback' | 'u_useFallback', WebGLUniformLocation>;
   private readonly textures = new Map<string, TextureState>();
   /** Bumped by clear(), so a load that was under way then doesn't put its texture back in. */
   private generation = 0;
@@ -141,7 +149,7 @@ export class ImageRenderer {
   ) {
     this.program = createProgram(gl, VERTEX, FRAGMENT);
     this.maxSide = Math.min(SVG_MAX_SIDE, gl.getParameter(gl.MAX_TEXTURE_SIZE) as number);
-    this.u = uniforms(gl, this.program, ['u_rect', 'u_viewport', 'u_image', 'u_fallback', 'u_useFallback'] as const);
+    this.u = uniforms(gl, this.program, ['u_rect', 'u_crop', 'u_viewport', 'u_image', 'u_fallback', 'u_useFallback'] as const);
   }
 
   private readonly svgs = new Map<string, SvgState>();
@@ -232,6 +240,8 @@ export class ImageRenderer {
         image.width * scale,
         image.height * scale,
       );
+      const [left, top, right, bottom] = image.crop ?? WHOLE;
+      gl.uniform4f(this.u.u_crop, left, top, right, bottom);
       if (state.status === 'ready') {
         gl.bindTexture(gl.TEXTURE_2D, state.texture);
         gl.uniform1f(this.u.u_useFallback, 0);
@@ -262,10 +272,11 @@ export class ImageRenderer {
   private async loadSvg(part: string, state: SvgState): Promise<void> {
     const generation = this.generation;
     try {
-      const [bytes, { readSvg }, { loadImages }] = await Promise.all([this.source.bytes(part), import('../../vector/svgRead.ts'), import('../../vector/paint.ts')]);
+      const [bytes, { readSvg }, { loadFonts, loadImages }] = await Promise.all([this.source.bytes(part), import('../../vector/svgRead.ts'), import('../../vector/paint.ts')]);
       const scene = readSvg(new TextDecoder().decode(bytes));
-      const images = await loadImages(scene, (data, mime) => createImageBitmap(new Blob([data as Uint8Array<ArrayBuffer>], { type: mime })));
-      if (generation !== this.generation) return;
+      const [images, fonts] = await Promise.all([loadImages(scene, (data, mime) => createImageBitmap(new Blob([data as Uint8Array<ArrayBuffer>], { type: mime }))), loadFonts(scene)]);
+      if (generation !== this.generation) return fonts.release();
+      state.fonts = fonts;
       state.scene = scene;
       state.images = images;
       state.status = 'ready';
@@ -311,7 +322,7 @@ export class ImageRenderer {
       // The painter draws the scene at this size, not at some size scaled up or down, so edges and curves are sharp.
       const { paintScene } = await import('../../vector/paint.ts');
       const { canvas, context } = makeCanvas(width, height);
-      paintScene(context, state.scene!, width, height, { images: state.images });
+      paintScene(context, state.scene!, width, height, { images: state.images, fonts: state.fonts?.aliases });
       const bitmap = await createImageBitmap(canvas as ImageBitmapSource, { premultiplyAlpha: 'premultiply' });
       if (generation !== this.generation) {
         bitmap.close();
@@ -355,7 +366,10 @@ export class ImageRenderer {
   }
 
   clear(): void {
-    for (const state of this.svgs.values()) if (state.texture) this.gl.deleteTexture(state.texture.texture);
+    for (const state of this.svgs.values()) {
+      if (state.texture) this.gl.deleteTexture(state.texture.texture);
+      state.fonts?.release();
+    }
     this.svgs.clear();
     clearTimeout(this.timer);
     this.timer = 0;

@@ -165,6 +165,8 @@ export interface ImageItem {
   y: number;
   width: number;
   height: number;
+  /** The part of the picture shown in that box, as fractions of it [left, top, right, bottom] (a PDF's clipped images; all of it without). */
+  crop?: [number, number, number, number];
   /** Drawn behind text (floating images marked "behind text"). */
   behind: boolean;
   /** The drawing in the document this shows (so a click can select it); left off what is sent to the page. */

@@ -8,15 +8,20 @@ import { h } from './dom.ts';
 import { linkAddress, type LinkChoice } from './linkDialog.ts';
 import { dialogTitleBar } from './popup.ts';
 
-/** A link under the pointer: what it says and does, and where it is (page point, to act on it; window point, to place the form). */
+/**
+ * A link under the pointer: what it says and does, and where it is (window point, to place the form; in a document,
+ * its page point, to act on it). An editor that changes links its own way (a sheet's cells) gives `apply` with it.
+ */
 export interface LinkTarget {
   url: string;
   text: string;
-  page: number;
-  x: number;
-  y: number;
+  page?: number;
+  x?: number;
+  y?: number;
   clientX: number;
   clientY: number;
+  /** What to do with the form's answer for this link, instead of the popover's `apply`. */
+  apply?(choice: LinkChoice | null): void;
 }
 
 /** What the form starts with: the link the caret is in (`existing`), or the text selected. */
@@ -174,7 +179,7 @@ export class LinkPopover {
   private openFor(target: LinkTarget): void {
     this.hide();
     this.target = target;
-    this.fill({ url: target.url, text: target.text, existing: true }, (choice) => choice !== undefined && this.actions.apply(target, choice), target);
+    this.fill({ url: target.url, text: target.text, existing: true }, (choice) => choice !== undefined && (target.apply ? target.apply(choice) : this.actions.apply(target, choice)), target);
   }
 
   private fill(draft: LinkDraft, done: (choice: LinkChoice | null | undefined) => void, at: { clientX: number; clientY: number }): void {

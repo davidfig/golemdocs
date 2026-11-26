@@ -29,4 +29,6 @@ export interface DocumentEngine {
   focus(): void;
   /** A formatting command (bold, font, colour, alignment) for an editor that formats in its own way; false if it has no such formatting. */
   format?(action: Action): boolean;
+  /** Insert › Hyperlink, for an editor that links in its own way (a sheet's cells): opens its link form. */
+  link?(): void;
 }

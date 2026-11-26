@@ -23,18 +23,20 @@ interface Doc {
 }
 
 /** An account in memory. Stored bytes are "wdoc:" + the file, so the codec is visible in the assertions. A folder, once
- * made, stays until it is removed, as the account's do; its id is its path. */
+ * made, stays until it is removed, as the account's do; its id is its path, and `uid` is what the real account's id is (it follows
+ * the folder when it is moved, as its shares do). */
 function fakeCloud() {
   let clock = 100;
   let ids = 0;
+  let uids = 0;
   const docs = new Map<string, Doc>();
-  const folders = new Map<string, { id: string; name: string; parentId: string | null }>();
+  const folders = new Map<string, { id: string; name: string; parentId: string | null; uid: number }>();
   const calls: string[] = [];
   const folderFor = (dir: string[]): string | null => {
     let parent: string | null = null;
     for (const name of dir) {
       const id: string = parent ? `${parent}/${name}` : name;
-      if (!folders.has(id)) folders.set(id, { id, name, parentId: parent });
+      if (!folders.has(id)) folders.set(id, { id, name, parentId: parent, uid: ++uids });
       parent = id;
     }
     return parent;
@@ -80,6 +82,19 @@ function fakeCloud() {
     async makeFolder(dir) {
       calls.push(`mkdir ${dir.join('/')}`);
       folderFor(dir);
+    },
+    async moveFolder(from, to) {
+      const [old, now] = [from.join('/'), to.join('/')];
+      if (!folders.has(old) || folders.has(now)) return false;
+      calls.push(`mvdir ${old} -> ${now}`);
+      folderFor(to.slice(0, -1));
+      const follow = (id: string) => (id === old || id.startsWith(`${old}/`) ? now + id.slice(old.length) : id);
+      for (const f of [...folders.values()].filter((f) => f.id === old || f.id.startsWith(`${old}/`))) {
+        folders.delete(f.id);
+        folders.set(follow(f.id), { ...f, id: follow(f.id), name: f.id === old ? to[to.length - 1] : f.name, parentId: f.id === old ? (to.length > 1 ? to.slice(0, -1).join('/') : null) : follow(f.parentId!) });
+      }
+      for (const d of docs.values()) d.dir = follow(d.dir.join('/')).split('/').filter(Boolean);
+      return true;
     },
   };
   const add = (path: string, content: string, id = `a${++ids}`) => {
@@ -383,11 +398,117 @@ test('a folder renamed in the vault takes its documents to the new name and the 
   await s.sync();
   s.folder.files.set('Published/one.md', s.folder.files.get('Drafts/one.md')!);
   s.folder.files.delete('Drafts/one.md');
+  const before = s.folders.get('Drafts')!.uid;
+  const report = await s.sync();
+  assert.equal(report.renamed, 1);
+  assert.equal(report.foldersMoved, 1);
+  assert.equal(report.foldersRemoved, 0);
+  assert.deepEqual(s.docs.get(id)!.dir, ['Published']);
+  assert.deepEqual([...s.folders.keys()], ['Published']);
+  assert.equal(s.folders.get('Published')!.uid, before, 'the same folder, renamed');
+  assert.ok(!s.calls.some((c) => c.startsWith('place')), 'its document was not moved on its own');
+});
+
+test('a folder renamed in the vault, with an account that can only move documents, takes its documents to a new folder and the old one goes', async () => {
+  const s = setup();
+  delete s.cloud.moveFolder;
+  const id = s.add('Drafts/one.md', 'x');
+  await s.sync();
+  s.folder.files.set('Published/one.md', s.folder.files.get('Drafts/one.md')!);
+  s.folder.files.delete('Drafts/one.md');
   const report = await s.sync();
   assert.equal(report.renamed, 1);
   assert.equal(report.foldersRemoved, 1);
   assert.deepEqual(s.docs.get(id)!.dir, ['Published']);
   assert.deepEqual([...s.folders.keys()], ['Published']);
+});
+
+/** `mv` of folders into a folder just made: every file under each one moves with it, at the same place inside. */
+function mvInto(s: ReturnType<typeof setup>, dirs: string[], into: string) {
+  for (const dir of dirs) {
+    const name = dir.slice(dir.lastIndexOf('/') + 1);
+    for (const path of [...s.folder.files.keys()].filter((p) => p.startsWith(`${dir}/`))) {
+      s.folder.files.set(`${into}/${name}${path.slice(dir.length)}`, s.folder.files.get(path)!);
+      s.folder.files.delete(path);
+    }
+    for (const path of [...s.folder.dirs].filter((p) => p === dir || p.startsWith(`${dir}/`))) {
+      s.folder.dirs.delete(path);
+      s.folder.dirs.add(`${into}/${name}${path.slice(dir.length)}`);
+    }
+  }
+}
+
+test('folders moved into a new folder in the vault are moved whole in the account: the same folders and documents, at once', async () => {
+  const s = setup('u1', { folders: true });
+  const base = 'Work/Art Center';
+  const flyers = ['Flyer - Ana', 'Flyer - Bo', 'Flyer - Cy'];
+  const docIds = new Map<string, string>();
+  for (const who of flyers) {
+    // The same font in every flyer's folder, and nested folders of their own.
+    for (const [path, body] of [['font.ttf', 'the font'], ['flyer.svg', `svg ${who}`], ['Exports/flyer.pdf', `pdf ${who}`]]) {
+      docIds.set(`${who}/${path}`, s.add(`${base}/${who}/${path}`, body));
+    }
+  }
+  const julie = s.add(`${base}/For Julie/flyers.pdf`, 'for julie');
+  s.add(`${base}/Other.md`, 'stays');
+  await s.sync();
+  const uids = new Map([...flyers, 'For Julie'].map((name) => [name, s.folders.get(`${base}/${name}`)!.uid]));
+  const exportsUid = s.folders.get(`${base}/Flyer - Ana/Exports`)!.uid;
+
+  await s.folder.disk.makeFolder!(`${base}/Wonderland`);
+  mvInto(s, [...flyers, 'For Julie'].map((name) => `${base}/${name}`), `${base}/Wonderland`);
+  const calls = s.calls.length;
+  const report = await s.sync();
+
+  assert.deepEqual(report.errors, []);
+  assert.equal(report.foldersMoved, 4);
+  assert.equal(report.renamed, 10, 'every document is followed, the copies of the font too');
+  assert.equal([report.created, report.trashed, report.foldersRemoved, report.foldersMade].join(','), '0,0,0,0');
+  // One call per folder: no document is moved on its own, no folder made again or removed.
+  assert.deepEqual(s.calls.slice(calls).filter((c) => !c.startsWith('download')).sort(), [...flyers, 'For Julie'].map((name) => `mvdir ${base}/${name} -> ${base}/Wonderland/${name}`).sort());
+  for (const [name, uid] of uids) assert.equal(s.folders.get(`${base}/Wonderland/${name}`)?.uid, uid, `${name} is the same folder`);
+  assert.equal(s.folders.get(`${base}/Wonderland/Flyer - Ana/Exports`)?.uid, exportsUid, 'a folder inside goes with it');
+  for (const [path, id] of docIds) assert.deepEqual([...s.docs.get(id)!.dir, s.docs.get(id)!.name].join('/'), `${base}/Wonderland/${path}`);
+  assert.deepEqual(s.docs.get(julie)!.dir, [...base.split('/'), 'Wonderland', 'For Julie']);
+  assert.ok(![...s.folders.keys()].some((p) => p.startsWith(`${base}/Flyer`) || p === `${base}/For Julie`), 'nothing left at the old places');
+
+  const again = await s.sync();
+  assert.equal(counts(again), quiet);
+  assert.equal(again.foldersMoved + again.foldersMade + again.foldersRemoved, 0);
+  assert.deepEqual(s.folder.folders().filter((p) => p.startsWith(`${base}/Flyer`) || p === `${base}/For Julie`), [], 'the old folders are not made again in the vault');
+});
+
+test('a document added in the account to a folder the vault just moved comes down into the folder where it is now', async () => {
+  const s = setup('u1', { folders: true });
+  s.add('Old/a.md', 'a');
+  await s.sync();
+  const added = s.add('Old/b.md', 'b'); // made in the app since the last sync
+  s.folder.files.set('New/a.md', s.folder.files.get('Old/a.md')!);
+  s.folder.files.delete('Old/a.md');
+  const report = await s.sync();
+  assert.equal(report.foldersMoved, 1);
+  assert.deepEqual(report.errors, []);
+  assert.deepEqual(s.docs.get(added)!.dir, ['New']);
+  assert.deepEqual(s.folder.paths(), ['New/a.md', 'New/b.md']);
+  assert.equal(counts(await s.sync()), quiet);
+});
+
+test('a folder whose files went to different places is not moved whole: its documents are, one by one', async () => {
+  const s = setup('u1', { folders: true });
+  const a = s.add('Mixed/a.md', 'a');
+  const b = s.add('Mixed/b.md', 'b');
+  await s.sync();
+  const uid = s.folders.get('Mixed')!.uid;
+  s.folder.files.set('One/a.md', s.folder.files.get('Mixed/a.md')!);
+  s.folder.files.set('Two/b.md', s.folder.files.get('Mixed/b.md')!);
+  s.folder.files.delete('Mixed/a.md');
+  s.folder.files.delete('Mixed/b.md');
+  const report = await s.sync();
+  assert.equal(report.foldersMoved, 0);
+  assert.equal(report.renamed, 2);
+  assert.deepEqual([s.docs.get(a)!.dir, s.docs.get(b)!.dir], [['One'], ['Two']]);
+  assert.ok(!s.folders.has('Mixed'));
+  assert.notEqual(s.folders.get('One')!.uid, uid);
 });
 
 test('folders the vault never had, or that were emptied in the account, are not removed', async () => {

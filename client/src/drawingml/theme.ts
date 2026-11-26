@@ -1,5 +1,6 @@
-// A deck's theme (docs/slides.md): its twelve colours, its heading and body fonts, and its style matrix (the fills, lines and
-// backgrounds that shapes point at with `p:style` and `bgRef`). Read from `ppt/theme/themeN.xml`.
+// A theme (docs/architecture/drawingml.md): its twelve colours, its heading and body fonts, and its style matrix (the fills,
+// lines and backgrounds that shapes point at with their `style` and `bgRef`). Read from a deck's `ppt/theme/themeN.xml` or a
+// workbook's `xl/theme/theme1.xml`.
 
 import type { XmlElement } from '@golemdocs/docx';
 import { hex, type Rgba } from './color.ts';

@@ -2,8 +2,9 @@
    (.wm-tbutton, .wm-input, .wm-find-message and the --wm-* colors); this file only places them. */
 
 /* The viewer fetches nothing but its own files and the document's fonts, so its words are in the system's font, not the app's
-   Atkinson Hyperlegible (a web font served from the site, which the viewer's host doesn't have). */
-:root {
+   Atkinson Hyperlegible (a web font served from the site, which the viewer's host doesn't have). The site's own /view pages do have it
+   (view/index.html marks them `wm-app-font`), so they keep the app's. */
+:root:not(.wm-app-font) {
   --wm-font: system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
 }
 
@@ -45,12 +46,27 @@ html.wm-viewer-page body {
   display: none;
 }
 
-.wm-viewer-bar svg {
+.wm-viewer-bar button > svg,
+.wm-viewer-header button > svg {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.4;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* A button with its words beside its icon (Download, Download All). */
+.wm-tbutton.wm-tbutton-words {
+  gap: 4px;
+  padding: 0 8px 0 4px;
+  white-space: nowrap;
+}
+
+/* The bar of buttons is the app's toolbars (ui.css): groups on the panel's face. */
+.wm-viewer-tools {
+  gap: 2px 3px;
+  padding: 2px 2px 3px;
+  background: var(--wm-face);
 }
 
 .wm-viewer-bar .wm-input {
@@ -74,6 +90,21 @@ html.wm-viewer-page body {
 .wm-viewer-zoom {
   color: var(--wm-muted);
   white-space: nowrap;
+}
+
+/* The page field and "of 3" in their group: room either side, so neither runs into the arrows or the group's edge. */
+.wm-viewer-bar .wm-viewer-pages .wm-input {
+  margin: 0 4px 0 3px;
+}
+
+.wm-viewer-count {
+  flex: none;
+  padding: 0 6px 0 0;
+}
+
+/* A group keeps its width: shrunk, "of 3" would run over the group's edge. The bar wraps to a second row instead. */
+.wm-viewer-tools > .wm-toolbar {
+  flex: none;
 }
 
 .wm-viewer-zoom {
@@ -145,7 +176,192 @@ html.wm-viewer-page body {
   display: none;
 }
 
-/* A shared folder (folderPage.ts): a bar with the folder's name, its files as a tree beside the document. */
+/* --- The site's shared pages (pageHeader.ts, share.ts, folderPage.ts): Golem Docs' header over the document ----------------- */
+
+.wm-site-page {
+  font-size: 12px;
+}
+
+.wm-site-doc {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The row the app's menu bar takes: the mark and name, the file in the middle, then who shared it and the visitor's way in. */
+.wm-viewer-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 8px 0 4px;
+  background: var(--wm-face);
+  border-bottom: 1px solid var(--wm-toolbar-border);
+}
+
+.wm-viewer-brand,
+.wm-viewer-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: var(--wm-radius);
+  color: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.wm-viewer-brand:hover,
+.wm-viewer-mark:hover,
+.wm-viewer-me:hover {
+  background: var(--wm-hot);
+}
+
+.wm-viewer-brand:focus-visible,
+.wm-viewer-mark:focus-visible,
+.wm-viewer-me:focus-visible {
+  outline: 2px solid var(--wm-hot-border);
+  outline-offset: -2px;
+}
+
+/* Embedded in another site: a quieter mark at the end of the bar. */
+.wm-viewer-mark {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--wm-muted);
+}
+
+.wm-viewer-mark img {
+  width: 14px;
+  height: 14px;
+}
+
+.wm-viewer-divider {
+  flex: none;
+  align-self: center;
+  width: 1px;
+  height: 18px;
+  background: var(--wm-toolbar-border);
+}
+
+.wm-viewer-middle {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+}
+
+.wm-viewer-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.wm-viewer-filename {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wm-viewer-in {
+  overflow: hidden;
+  color: var(--wm-muted);
+  text-overflow: ellipsis;
+}
+
+/* "View only", where the app shows its save state. */
+.wm-viewer-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid var(--wm-border);
+  border-radius: 999px;
+  background: var(--wm-field-bg);
+  font-size: 11.5px;
+}
+
+.wm-viewer-pill svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wm-viewer-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wm-viewer-note {
+  min-height: 0;
+  max-width: 28em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wm-viewer-sharer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--wm-muted);
+  white-space: nowrap;
+}
+
+.wm-viewer-sharer[hidden] {
+  display: none;
+}
+
+.wm-viewer-account {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* A link drawn as the app's button (Try Golem Docs, Go to Golem Docs). */
+a.wm-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  color: inherit;
+  text-decoration: none;
+}
+
+.wm-viewer-try {
+  height: 24px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.wm-viewer-me {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 50%;
+}
+
+/* A shared folder: the app's Files panel (fileRows.css) beside the document, shown and hidden by the header's Files button. */
+.wm-viewer-files[aria-expanded='true'] {
+  background: var(--wm-checked);
+  border-color: var(--wm-hot-border);
+}
+
 .wm-folder-body {
   position: relative;
   display: flex;
@@ -153,32 +369,10 @@ html.wm-viewer-page body {
   min-height: 0;
 }
 
-.wm-folder-doc {
-  position: relative;
-  display: flex;
-  flex: 1;
-  min-width: 0;
-}
-
 .wm-folder-name {
-  margin: 0;
-  font-size: inherit;
-}
-
-.wm-folder-head .wm-find-message {
-  margin-left: auto;
-}
-
-.wm-folder-tree {
-  flex: 0 0 240px;
-  overflow: auto;
-  padding: 6px 0;
-  background: var(--wm-bar-top);
-  border-right: 1px solid var(--wm-toolbar-border);
-}
-
-.wm-folder-tree[hidden] {
-  display: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .wm-folder-tree ul {
@@ -187,26 +381,8 @@ html.wm-viewer-page body {
   list-style: none;
 }
 
-.wm-folder-tree ul ul {
-  padding-left: 14px;
-}
-
-.wm-folder-tree a,
-.wm-folder-tree summary {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  overflow: hidden;
-  color: inherit;
+.wm-folder-tree a.wm-files-row {
   text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.wm-folder-tree a {
-  padding-left: 26px;
 }
 
 .wm-folder-tree summary {
@@ -217,42 +393,53 @@ html.wm-viewer-page body {
   display: none;
 }
 
-.wm-folder-tree a:hover,
-.wm-folder-tree summary:hover {
-  background: var(--wm-row-hover);
-}
-
-.wm-folder-tree a[aria-current='page'] {
-  background: var(--wm-accent-ring);
-  font-weight: 600;
-}
-
-.wm-folder-tree a:focus-visible,
-.wm-folder-tree summary:focus-visible {
-  outline: 2px solid var(--wm-accent);
-  outline-offset: -2px;
-}
-
-.wm-folder-chevron {
-  flex: none;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-details[open] > summary > .wm-folder-chevron {
-  transform: rotate(90deg);
-}
-
 .wm-folder-tree .wm-hint {
   margin: 8px 10px;
 }
 
-/* On a phone the tree is laid over the document while it is open. */
+/* A message in place of the document: a card with what happened and the way on. */
+.wm-viewer-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: 360px;
+  color: var(--wm-text);
+}
+
+.wm-viewer-card p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.wm-viewer-more:empty {
+  display: none;
+}
+
+.wm-viewer-more .wm-button {
+  pointer-events: auto;
+  text-decoration: none;
+}
+
+/* Full Screen (ui/fullScreen.ts): only the document stays, in the view it was in. Esc, or the corner button on a phone, brings the rest back. */
+body.wm-fullscreen .wm-viewer-header,
+body.wm-fullscreen .wm-viewer-tools,
+body.wm-fullscreen .wm-folder-files,
+body.wm-fullscreen .wm-viewer .wm-footer {
+  display: none !important;
+}
+
+/* A phone: the header keeps the mark, the file and the way in; the tree is laid over the document while it is open. */
 @media (max-width: 640px) {
-  .wm-folder-tree {
+  .wm-viewer-header .wm-tbutton-words span,
+  .wm-viewer-header .wm-viewer-brand-name,
+  .wm-viewer-in,
+  .wm-viewer-sharer,
+  .wm-viewer-pill span,
+  .wm-viewer-header .wm-viewer-divider {
+    display: none;
+  }
+
+  .wm-folder-files {
     position: absolute;
     inset: 0 auto 0 0;
     z-index: 2;
@@ -269,11 +456,7 @@ details[open] > summary > .wm-folder-chevron {
   }
 }
 
-/* The page buttons, field and count (hidden in Flow, which has no pages): laid out as if they were the bar's own. */
-.wm-viewer-pages {
-  display: contents;
-}
-
+/* The page buttons, field and count: a group of their own, hidden in Flow, which has no pages. */
 .wm-viewer-pages[hidden] {
   display: none;
 }

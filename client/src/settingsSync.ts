@@ -31,6 +31,7 @@ const KEYS = [
   'word.ruler',
   'word.collapsePages', // View › Hide Space Between Pages
   'word.footer', // status bar
+  'word.footerWords', // what the status bar's word count shows (Tools › Word Count)
   'word.fullScreenMenus', // Tools › Options: keep the menu bar in full screen
   'word.scrollPastEnd', // Tools › Options: scroll half a screen past the end of the document
   'golem.macInAppMenu', // Tools › Options: menus in the window on a Mac

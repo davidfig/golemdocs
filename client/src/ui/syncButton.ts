@@ -32,7 +32,10 @@ export class SyncButton {
 
   constructor(private readonly host: ChromeHost) {
     this.label = h('span');
-    this.el = h('button', { class: 'wm-sync', attrs: { type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false' } }, h('span', { class: 'wm-sync-dot' }), this.label);
+    // "Saved" and "Saving…" take turns with every save: the label keeps room for the wider of the two, drawn unseen in the same
+    // grid cell from these attributes (ui.css), so the button doesn't change its width each time. The rarer states may widen it.
+    const label = h('span', { class: 'wm-sync-label', attrs: { 'data-saved': t('dialogs.sync.button.saved'), 'data-saving': t('dialogs.sync.button.saving') } }, this.label);
+    this.el = h('button', { class: 'wm-sync', attrs: { type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false' } }, h('span', { class: 'wm-sync-dot' }), label);
     this.el.addEventListener('mousedown', (e) => e.preventDefault()); // keep the document's focus
     this.el.addEventListener('click', () => {
       if (popupOpenFor(this.el)) closePopup();

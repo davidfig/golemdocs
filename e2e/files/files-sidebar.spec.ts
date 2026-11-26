@@ -1,6 +1,7 @@
 // View > Files Sidebar: the documents as a tree beside the editor.
 
 import { expect, test } from './fixtures';
+import { menuRow, openMenu } from '../shell/helpers';
 import { dropFileOn, dropFilesOn, formatLabel, importFile, moveTo, status, text, waitForOpen, waitForSaved } from './helpers';
 
 const panel = (page: import('@playwright/test').Page) => page.locator('.wm-files');
@@ -29,6 +30,24 @@ test('View opens it, it lists the documents, opens one on a click, and the choic
   await expect(panel(page)).toBeVisible();
   await panel(page).getByRole('button', { name: 'Close' }).click();
   await expect(panel(page)).toBeHidden();
+});
+
+test('its key opens and closes it, from the document and from the sidebar itself, and the menu shows the key', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  const mac = await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.platform));
+  const key = mac ? 'Control+Meta+S' : 'Control+Shift+L';
+  await app.focus();
+  await page.keyboard.press(key);
+  await expect(panel(page)).toBeVisible();
+  // The document keeps the keyboard, so the same key closes it again.
+  await page.keyboard.press(key);
+  await expect(panel(page)).toBeHidden();
+  await page.keyboard.press(key);
+  await panel(page).locator('[tabindex="0"]').first().focus();
+  await page.keyboard.press(key);
+  await expect(panel(page)).toBeHidden();
+  await openMenu(app, 'View');
+  await expect(menuRow(page, 'Files Sidebar').locator('.wm-shortcut')).toHaveText(mac ? '⌃⌘S' : 'Ctrl+Shift+L');
 });
 
 test.describe('by default', () => {
@@ -253,4 +272,33 @@ test('a long press with a finger opens a row\'s menu, and lifting the finger doe
   await row(page, 'alpha').dispatchEvent('click', { clientX: at.clientX, clientY: at.clientY });
   await expect(page.getByRole('menuitem', { name: 'Rename' })).toBeVisible();
   await expect(row(page, 'beta')).toHaveClass(/wm-files-current/);
+});
+
+test('a reload puts the tree back where it was scrolled to, and keeps Trash open', async ({ app, page }) => {
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await app.goto('?doc=welcome');
+  await app.menu('View', 'Files Sidebar');
+  const tree = panel(page).locator('.wm-files-tree');
+  await dropFilesOn(tree, Array.from({ length: 30 }, (_, i) => text(`note ${String(i).padStart(2, '0')}.txt`, `${i}`)));
+  await expect.poll(() => status(page)).toContain('Imported documents: 30');
+  await expect(row(page, 'note 29')).toHaveCount(1);
+
+  const box = (await tree.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 240);
+  await expect.poll(() => tree.evaluate((el) => el.scrollTop)).toBeGreaterThan(100);
+  const scrolled = await tree.evaluate((el) => el.scrollTop);
+
+  await page.reload();
+  await app.ready();
+  await expect.poll(() => tree.evaluate((el) => el.scrollTop)).toBe(scrolled);
+
+  await panel(page).getByRole('button', { name: 'Trash', exact: true }).click();
+  await expect(panel(page).getByRole('tree', { name: 'Trash' })).toBeVisible();
+  await page.reload();
+  await app.ready();
+  await expect(panel(page).getByRole('tree', { name: 'Trash' })).toBeVisible();
+  await panel(page).getByRole('button', { name: 'Back to Files' }).click();
+  await expect(tree).toBeVisible();
+  await expect.poll(() => tree.evaluate((el) => el.scrollTop)).toBe(scrolled);
 });

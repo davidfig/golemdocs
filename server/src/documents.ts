@@ -6,15 +6,16 @@
 import { documentIndex } from './docIndex.ts';
 import { DELTA, applyDelta, deleteChunkList, deleteChunks, deltaSize, documentResponse, isChunked, previousManifest, readDocument } from './fileStore.ts';
 import { isSealed } from '@golemdocs/ops';
-import { DOCX, docxKey, historyKey, indexKey, thumbKey } from './keys.ts';
+import { DOCX, docxKey, historyKey, indexKey, pageKey, thumbKey } from './keys.ts';
 import type { Env } from './cf.ts';
 import { cleanName, failure, HttpError, idList, IDS_PER_QUERY, json, MAX_BATCH, perChunk, type Failure } from './http.ts';
 import { checkMove, type FolderRow } from './folders.ts';
 import { folderEncrypts, refuseEncrypted, requireOpen, requireSealedWith, sealedName, wrappedKey } from './sealed.ts';
 import { describeTrashed, purge, purgeExpired, PURGING, trashStatements, type TrashRow } from './trash.ts';
+import { handleWordCounts, versionWords } from './wordCounts.ts';
 import { checkpoint, chunksToDelete, describeVersion, prune, removeVersions, replaceVersion, retainedChunks, storedSize, versionsOf, type VersionRow } from './versions.ts';
 import { editableFolder, forgetFolders } from './folderShares.ts';
-import { accessFor, canWrite, dropPublicLink, dropSharing, forgetDocuments, makePublicLink, person, publicLinkOf, publicShare, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
+import { accessFor, canWrite, dropPublicLink, dropSharing, forgetDocuments, makePublicLink, person, publicLinkOf, sharer, publicShare, registerOwner, registerOwners, sharedWith, sharesOf, shareWith, unshare, userByEmail, viewShare, viewTokenFor, type Access, type Role, type ShareRole } from './sharing.ts';
 import { dropPublicListeners, endRooms, kickFromRoom, listenToRoom, rejoinRoom, roomAllowsSave, roomSaved } from './roomGate.ts';
 import { requireRoom } from './storage.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
@@ -22,6 +23,8 @@ import { cloudStorageConfigured, existingUserDb, userDb, type UserDb } from './u
 
 const MAX_BYTES = 50 * 1024 * 1024;
 const MAX_THUMB_BYTES = 512 * 1024;
+/** The most a page's kept results may be (its embeds and what its scripts read, as JSON). */
+const MAX_PAGE_BYTES = 8 * 1024 * 1024;
 const THUMB_TYPES = new Set(['image/webp', 'image/png', 'image/jpeg']);
 
 interface DocumentRow {
@@ -37,6 +40,8 @@ interface DocumentRow {
   folder_id: string | null;
   /** Who added it, when that was not the owner: someone editing a folder shared with them (docs/folder-sharing.md). */
   created_by?: string | null;
+  /** Who saved its file last, when that was not the owner (docs/html-pages.md §1). */
+  saved_by?: string | null;
   /** 1 for an encrypted document (sealed.ts): the server keeps its file, name and versions sealed, and never reads them. */
   encrypted?: number | null;
   /** An encrypted document's item key, wrapped by the person's own key. */
@@ -55,6 +60,8 @@ export function describe(row: DocumentRow, role: Role = 'owner') {
     thumbAt: row.thumb_at ?? null,
     // Folders are the owner's own arrangement: nobody else sees where a document is kept.
     folderId: role === 'owner' ? (row.folder_id ?? null) : null,
+    // For the owner: another account made it or saved it last, so an HTML page in it is not only theirs (docs/html-pages.md §1).
+    ...(role === 'owner' && (row.created_by || row.saved_by) ? { byOther: true } : {}),
     ...(row.encrypted ? { encrypted: true, ...(role === 'owner' && row.wrapped_key ? { wrappedKey: row.wrapped_key } : {}) } : {}),
   };
 }
@@ -251,11 +258,14 @@ export interface DocumentRoute {
   collection: 'documents' | 'shared' | 'trash';
   /** The document, or `batch` for the batch upload; undefined for the collection itself. */
   id?: string;
-  sub?: 'thumbnail' | 'index' | 'shares' | 'versions' | 'link';
+  sub?: 'thumbnail' | 'index' | 'shares' | 'versions' | 'link' | 'page' | 'words';
   /** Whose share a DELETE /api/documents/:id/shares/:userId removes, or which version /api/documents/:id/versions/:version is. */
   granteeId?: string;
-  /** `restore` for /api/documents/:id/versions/:version/restore and /api/trash/:id/restore; `file` for /api/trash/:id/file. */
-  action?: 'restore' | 'file';
+  /**
+   * `restore` for /api/documents/:id/versions/:version/restore and /api/trash/:id/restore; `file` for /api/trash/:id/file; `words` for
+   * /api/documents/:id/versions/:version/words.
+   */
+  action?: 'restore' | 'file' | 'words';
 }
 
 /** The user's own storage: whether they sync, and their database if they have one (or get one now). */
@@ -277,11 +287,19 @@ export async function ownStorage(env: Env, userId: string, method: string): Prom
  */
 /**
  * GET /api/view/:token and /api/view/:token/file: a document shared view-only, as the read-only viewer (/view?s=<token>) reads it:
- * its name, and its file (304 for `If-None-Match` while unchanged). The token is the share's own (`shares.view_token`), and only the
+ * its name and who shared it (`owner`: their name and picture, shown in the page's header), and its file (304 for `If-None-Match`
+ * while unchanged). The token is the share's own (`shares.view_token`), and only the
  * person it was shared with may use it; anyone else, and a token dropped by unsharing or a role change, gets 404. Nothing answered
  * names the document's id. GET /api/view/:token/live is the WebSocket that tells the page of each save (`listenToRoom`).
  */
-export async function handleView(request: Request, env: Env, userId: string, token: string, part: 'file' | 'live' | undefined): Promise<Response> {
+/** What a shared HTML page showed when last opened by someone who may change it (docs/html-pages.md §5); 404 when there is none. */
+export async function pageResults(env: Env, ownerId: string, docId: string): Promise<Response> {
+  const object = await env.FILES.get(pageKey(ownerId, docId));
+  if (!object) throw new HttpError(404, 'not found');
+  return new Response(object.body, { headers: { 'content-type': 'application/json', 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' } });
+}
+
+export async function handleView(request: Request, env: Env, userId: string, token: string, part: 'file' | 'live' | 'page' | undefined): Promise<Response> {
   if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
   const share = await viewShare(env, token, userId);
   if (!share) throw new HttpError(404, 'not found');
@@ -289,8 +307,9 @@ export async function handleView(request: Request, env: Env, userId: string, tok
   const db = await userDb(env, share.ownerId);
   const row = db && (await db.first<DocumentRow>('SELECT * FROM documents WHERE id = ?', [share.docId]));
   if (!row) throw new HttpError(404, 'not found');
-  if (!part) return json({ name: row.name, updatedAt: row.updated_at });
+  if (!part) return json({ name: row.name, updatedAt: row.updated_at, owner: await sharer(env, share.ownerId) });
   if (part === 'live') return listenToRoom(env, share.docId, request, userId, share.ownerId);
+  if (part === 'page') return pageResults(env, share.ownerId, share.docId);
   const response = await documentResponse(env, row.r2_key, share.ownerId, share.docId, DOCX, request.headers.get('if-none-match'));
   if (!response) throw new HttpError(404, 'not found');
   return response;
@@ -313,12 +332,13 @@ export async function publicDocument(env: Env, token: string): Promise<{ ownerId
 }
 
 /** GET /api/public/:token, /file and /thumbnail: a document's public link, for anyone. */
-export async function handlePublic(request: Request, env: Env, token: string, part: 'file' | 'thumbnail' | 'live' | undefined): Promise<Response> {
+export async function handlePublic(request: Request, env: Env, token: string, part: 'file' | 'thumbnail' | 'live' | 'page' | undefined): Promise<Response> {
   if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
   const found = await publicDocument(env, token);
   if (!found) throw new HttpError(404, 'not found');
   const { ownerId, docId, row } = found;
   if (part === 'live') return listenToRoom(env, docId, request, null, ownerId);
+  if (part === 'page') return pageResults(env, ownerId, docId);
   const cache = 'public, max-age=60';
   if (part === 'thumbnail') {
     // Link previews (sharePreview.ts) ask for it by the version in its address, so it may be kept a while.
@@ -682,6 +702,12 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     return documentIndex(env, ownerId, row);
   }
 
+  // /api/documents/:id/words: its word history, day by day (wordCounts.ts). Anyone who can open it may look; anyone who can edit adds to it.
+  if (sub === 'words') {
+    if (granteeId !== undefined) throw new HttpError(404, 'not found');
+    return handleWordCounts(request, db, id, !!row.encrypted, canWrite(role), requireStorage);
+  }
+
   // /api/documents/:id/versions[/:version[/restore]]: the document's history (versions.ts). Anyone who can open the document may look
   // at it; anyone who can edit may save a version, rename or restore one. Restoring never touches the document: it makes a new one, in
   // the restorer's own account, from the version's bytes.
@@ -708,6 +734,11 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     const version = Number(rest);
     const kept = await db.first<VersionRow>('SELECT * FROM versions WHERE doc_id = ? AND version = ?', [id, version]);
     if (!kept) throw new HttpError(404, 'not found');
+    // GET .../words: how many words it had, to fill in the word history for the days before it was kept (wordCounts.ts).
+    if (action === 'words') {
+      if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
+      return versionWords(env, ownerId, id, version, !!row.encrypted);
+    }
     if (!action) {
       if (request.method === 'GET') {
         const response = await documentResponse(env, historyKey(ownerId, id, version), ownerId, id, DOCX);
@@ -773,6 +804,35 @@ export async function handleDocuments(request: Request, env: Env, userId: string
       await ownDb.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id, encrypted, wrapped_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [docId, name, bytes.byteLength, docxKey(userId, docId), now, now, folderId, encrypted ? 1 : 0, encrypted ? row.wrapped_key : null]);
       await registerOwner(env, docId, userId);
       return json({ role: 'owner', id: docId, name, size: bytes.byteLength, createdAt: now, updatedAt: now, thumbAt: null, folderId, ...(encrypted ? { encrypted: true, wrappedKey: row.wrapped_key } : {}) }, 201);
+    }
+    throw new HttpError(405, 'method not allowed');
+  }
+
+  // GET/PUT /api/documents/:id/page: what an HTML page showed when it was last opened by someone who may change it (its embeds and
+  // what its scripts read), for the people it is shared with, whose own app can't read the owner's vault (docs/html-pages.md §5).
+  // JSON the client makes; the server only keeps it. DELETE drops it (a page with nothing to show).
+  if (sub === 'page') {
+    if (request.method === 'GET') {
+      const object = await env.FILES.get(pageKey(ownerId, id));
+      if (!object) throw new HttpError(404, 'no page results');
+      return new Response(object.body, { headers: { 'content-type': 'application/json', 'cache-control': 'private, no-cache', 'x-content-type-options': 'nosniff' } });
+    }
+    if (request.method === 'PUT' || request.method === 'DELETE') {
+      requireWrite();
+      refuseEncrypted(row, 'page results');
+      if (request.method === 'DELETE') {
+        await env.FILES.delete(pageKey(ownerId, id));
+        return json({ ok: true });
+      }
+      requireStorage();
+      const bytes = await readBody(request, MAX_PAGE_BYTES, 'page results');
+      try {
+        JSON.parse(new TextDecoder().decode(bytes));
+      } catch {
+        throw new HttpError(400, 'page results are JSON');
+      }
+      await env.FILES.put(pageKey(ownerId, id), bytes, { httpMetadata: { contentType: 'application/json' } });
+      return json({ ok: true });
     }
     throw new HttpError(405, 'method not allowed');
   }
@@ -897,8 +957,8 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     // base it also has to be the version the save started from; and the row may be gone (deleted
     // meanwhile), which RETURNING tells apart from success.
     const updated = await db.run<{ updated_at: number }>(
-      `UPDATE documents SET name = ?, size = ?, encrypted = ?, wrapped_key = ?, thumb_at = ${encrypting !== null ? 'NULL' : 'thumb_at'}, updated_at = MAX(?, updated_at + 1) WHERE id = ?${base !== null ? ' AND updated_at = ?' : ''} RETURNING updated_at`,
-      [name, size, encrypted ? 1 : 0, key, Date.now(), id, ...(base !== null ? [row.updated_at] : [])],
+      `UPDATE documents SET name = ?, size = ?, encrypted = ?, wrapped_key = ?, saved_by = ?, thumb_at = ${encrypting !== null ? 'NULL' : 'thumb_at'}, updated_at = MAX(?, updated_at + 1) WHERE id = ?${base !== null ? ' AND updated_at = ?' : ''} RETURNING updated_at`,
+      [name, size, encrypted ? 1 : 0, key, userId === ownerId ? null : userId, Date.now(), id, ...(base !== null ? [row.updated_at] : [])],
     );
     if (!updated[0]) {
       if (base !== null && (await db.first('SELECT 1 FROM documents WHERE id = ?', [id]))) {
@@ -917,7 +977,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     // search index (its text) go; its shares and public link end, so decrypting it later gives no access back; a room it had is ended,
     // which forgets the edits it kept.
     if (encrypting !== null) {
-      await env.FILES.delete([thumbKey(ownerId, id), indexKey(ownerId, id)]);
+      await env.FILES.delete([thumbKey(ownerId, id), indexKey(ownerId, id), pageKey(ownerId, id)]);
       await dropSharing(env, id);
       await endRooms(env, [id]);
     }

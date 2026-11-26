@@ -10,9 +10,9 @@
         <p class="note-small">{{home.fine}}</p>
 
         <ul class="glance" aria-label="{{home.glance.label}}">
-          <li><a href="#formats"><b>{{home.glance.formats.h}}</b>{{home.glance.formats.p}}</a></li>
           <li><a href="#files"><b>{{home.glance.files.h}}</b>{{home.glance.files.p}}</a></li>
           <li><a href="#ai"><b>{{home.glance.ai.h}}</b>{{home.glance.ai.p}}</a></li>
+          <li><a href="#formats"><b>{{home.glance.formats.h}}</b>{{home.glance.formats.p}}</a></li>
           <li><a href="#free"><b>{{home.glance.free.h}}</b>{{home.glance.free.p}}</a></li>
         </ul>
 
@@ -105,33 +105,6 @@
           </div>
           <figcaption><b>{{home.p.write.h}}</b> {{home.p.write.p}}</figcaption>
         </figure>
-
-        <h2 id="formats">{{home.p.everything.h}}</h2>
-        <p class="text">{{home.p.everything.p}} <a href="{{base}}/formats">{{home.p.everything.link}}</a></p>
-        <div class="points">
-          <figure class="point">
-            <div class="plate flush sheet-plate">
-              <video data-src="/home/workbook.webm" data-src-dark="/home/workbook-dark.webm" muted loop playsinline preload="none" aria-label="{{home.sheet.label}}"></video>
-              <span class="callout" style="right: 12px; bottom: 12px">{{home.sheet.callout}}</span>
-            </div>
-            <figcaption><b>{{home.sheet.h}}</b> {{home.sheet.capP}}</figcaption>
-          </figure>
-          <figure class="point">
-            <div class="plate flush sheet-plate">
-              <video data-src="/home/war-and-peace.webm" data-src-dark="/home/war-and-peace-dark.webm" muted loop playsinline preload="none" aria-label="{{home.clip.label}}"></video>
-              <span class="callout" style="left: 12px; bottom: 12px">{{home.clip.callout}}</span>
-            </div>
-            <figcaption><b>{{home.clip.h}}</b> {{home.clip.p}}</figcaption>
-          </figure>
-        </div>
-        <a class="live-callout" href="{{base}}/live-blocks">
-          <span class="lv-flow" role="img" aria-label="{{home.live.label}}">
-            <span class="lv-file"><i class="ft csv">XLSX</i>{{live.f.budget}}</span>
-            <svg class="lv-arrow" viewBox="0 0 32 12" aria-hidden="true"><path d="M1 6h28M24 1.5L29.5 6 24 10.5"/></svg>
-            <span class="lv-file"><i class="ft docx">DOCX</i>{{live.f.plan}}</span>
-          </span>
-          <span class="lv-text"><span class="lv-badge">{{home.live.badge}}</span> <b>{{home.live.h}}</b> {{home.live.p}} <u>{{home.live.link}}</u></span>
-        </a>
 
         <h2 id="files">{{home.brain.h}}</h2>
         <div class="points split wide">
@@ -255,6 +228,33 @@
           </figure>
         </div>
         <p><a href="{{base}}/ai-philosophy">{{ai.why}}</a></p>
+
+        <h2 id="formats">{{home.p.everything.h}}</h2>
+        <p class="text">{{home.p.everything.p}} <a href="{{base}}/formats">{{home.p.everything.link}}</a></p>
+        <div class="points">
+          <figure class="point">
+            <div class="plate flush sheet-plate">
+              <video data-src="/home/workbook.webm" data-src-dark="/home/workbook-dark.webm" muted loop playsinline preload="none" aria-label="{{home.sheet.label}}"></video>
+              <span class="callout" style="right: 12px; bottom: 12px">{{home.sheet.callout}}</span>
+            </div>
+            <figcaption><b>{{home.sheet.h}}</b> {{home.sheet.capP}}</figcaption>
+          </figure>
+          <figure class="point">
+            <div class="plate flush sheet-plate">
+              <video data-src="/home/war-and-peace.webm" data-src-dark="/home/war-and-peace-dark.webm" muted loop playsinline preload="none" aria-label="{{home.clip.label}}"></video>
+              <span class="callout" style="left: 12px; bottom: 12px">{{home.clip.callout}}</span>
+            </div>
+            <figcaption><b>{{home.clip.h}}</b> {{home.clip.p}}</figcaption>
+          </figure>
+        </div>
+        <a class="live-callout" href="{{base}}/live-blocks">
+          <span class="lv-flow" role="img" aria-label="{{home.live.label}}">
+            <span class="lv-file"><i class="ft csv">XLSX</i>{{live.f.budget}}</span>
+            <svg class="lv-arrow" viewBox="0 0 32 12" aria-hidden="true"><path d="M1 6h28M24 1.5L29.5 6 24 10.5"/></svg>
+            <span class="lv-file"><i class="ft docx">DOCX</i>{{live.f.plan}}</span>
+          </span>
+          <span class="lv-text"><span class="lv-badge">{{home.live.badge}}</span> <b>{{home.live.h}}</b> {{home.live.p}} <u>{{home.live.link}}</u></span>
+        </a>
 
         <h2 id="free">{{home.free.h}}</h2>
         <div class="points">

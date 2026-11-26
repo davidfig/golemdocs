@@ -8,8 +8,8 @@ import { cloneElement, type XmlElement } from '@golemdocs/docx';
 import { decodeImage, toPng } from '../formats/imageCodec.ts';
 import { sniffImage } from '../formats/images.ts';
 import { paintScene, type ImageCache } from '../vector/paint.ts';
-import { apply, invert, multiply } from '../vector/matrix.ts';
-import type { Matrix, Scene } from '../vector/model.ts';
+import { apply } from '../vector/matrix.ts';
+import type { Scene } from '../vector/model.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
 import { h } from '../ui/dom.ts';
 import { attachTextInput, focusTextInput } from '../ui/textInput.ts';
@@ -17,21 +17,23 @@ import { showPopupMenu, type PopupItem } from '../ui/popupMenu.ts';
 import { announce } from '../ui/announce.ts';
 import { IS_MAC } from '../ui/shortcuts.ts';
 import type { Region } from '../ui/focusRegions.ts';
-import type { Action, FormatState, SlidesOp } from '../ui/actions.ts';
+import { SLIDE_ONLY_OPS, type Action, type FormatState, type SlidesOp } from '../ui/actions.ts';
 import { readClipboard } from '../ui/clipboard.ts';
-import { Deck, paragraphText, type LayoutPart, type SlidePart } from './deck.ts';
-import { parseCss, cssColor, type Rgba } from './color.ts';
+import { hexOf } from '../drawingml/color.ts';
+import { ShapeEditor, type ShapeChange } from '../drawingml/editor.ts';
+import { isLinePreset, SHAPE_GROUPS } from '../drawingml/shapeChoices.ts';
+import { shapeMenuItems, shapeName } from '../ui/shapePicker.ts';
+import { Deck, isSlidePart, masterOfPage, paragraphText, type LayoutPart, type PagePart, type SlidePart } from './deck.ts';
 import { History, Transaction } from './history.ts';
 import { EMU_PER_PX, at, kid, kids } from './ooxml.ts';
 import { SlideFonts } from './fonts.ts';
-import { colorContext, slideScene, type ShapeText, type ShapeView, type SlideScene } from './scene.ts';
-import { cNvPr, placeholderOf, xfrmOf, type Frame, type ResolvedShape } from './shapes.ts';
-import { paragraphString, type LaidLine } from './textLayout.ts';
-import { comparePos, deleteRange, ensureBody, insertBreak, insertMultiline, maxPos, minPos, paragraphLength, paragraphsOf, plainText, pPrOf, rPrOf, runsIn, splitAt, splitParagraph, textBetween, wordAt, type TextPos } from './textEdit.ts';
-import { addSlide, changeLayout, deleteShapes, deleteSlides, duplicateShapes, duplicateSlide, isHidden, moveSlides, newPicture, newShape, newTable, reorder, resetToLayout, setFill, setFrame, setHidden, setHighlight, setLine, setNotes, treeOf, type Order } from './edit.ts';
+import { colorContext, slideScene, type ShapeView, type SlideScene } from './scene.ts';
+import { backgroundFill, cNvPr, placeholderOf, xfrmOf, type Frame } from './shapes.ts';
+import { addSlide, changeLayout, deleteShapes, deleteSlides, duplicateShapes, duplicateSlide, isHidden, moveSlides, newPicture, newShape, newTable, reorder, resetToLayout, setHidden, setNotes, treeOf, type Order } from './edit.ts';
 import { Presenter } from './present.ts';
+import { backgroundOf, currentDesign, inheritedStyleOf, readOtherTheme, setBackground, setBackgroundEverywhere, setDarkPages, setThemeColors, setThemeFonts } from './design.ts';
+import { showBackgroundDialog, showThemeDialog } from './designDialogs.ts';
 import { deckPdf, sceneWithData } from './export.ts';
-import { SHAPE_CHOICES } from './shapeChoices.ts';
 import { deckLines } from './outline.ts';
 import './view.css';
 
@@ -48,46 +50,26 @@ export interface SlidesEditorDeps {
   viewKey(e: KeyboardEvent): boolean;
   /** Lets the user pick a picture file. */
   pickImage(): Promise<File | null>;
+  /** Lets the user pick a presentation or theme file (Slide › Theme › From Presentation). */
+  pickDeck(): Promise<File | null>;
 }
 
 /** Gap between slides down the page, and in the sorter, in points. */
 const GAP = 28;
-/** Handles: size in CSS px, and how far the turning handle stands above the box. */
-const HANDLE = 8;
-const TURN = 22;
+/** A change to a slide, kept in the deck's history. */
+interface SlideChange extends ShapeChange {
+  tx: Transaction;
+  page: PagePart;
+}
 
 interface Placed {
-  slide: SlidePart;
+  slide: PagePart;
   /** In points. */
   x: number;
   y: number;
   w: number;
   h: number;
 }
-
-type Drag =
-  | { kind: 'move'; start: [number, number]; frames: Map<XmlElement, Frame>; moved: boolean; tx: Transaction }
-  | { kind: 'resize'; handle: number; element: XmlElement; frame: Frame; matrix: Matrix; w: number; h: number; tx: Transaction; picture: boolean }
-  | { kind: 'turn'; element: XmlElement; frame: Frame; centre: [number, number]; tx: Transaction }
-  | { kind: 'text'; anchor: TextPos }
-  | { kind: 'marquee'; start: [number, number]; now: [number, number] }
-  | { kind: 'pan' };
-
-interface TextEdit {
-  slide: SlidePart;
-  /** The shape (or table cell, `a:tc`) whose text is edited. */
-  element: XmlElement;
-  /** The table's frame, when a cell is edited. */
-  owner: XmlElement;
-  anchor: TextPos;
-  focus: TextPos;
-  /** Where the caret wants to be across lines (Up and Down keep to it). */
-  goalX: number | null;
-  /** Properties for the next typed text (Ctrl+B with nothing selected). */
-  pending: Record<string, string | null> | null;
-}
-
-const px2emu = (v: number): number => Math.round(v * EMU_PER_PX);
 
 /** The smallest view, in CSS pixels, a deck is fitted to as it opens. */
 const MIN_FIT = 100;
@@ -97,31 +79,34 @@ export class SlidesEditorView {
   private readonly canvas = h('canvas', { class: 'wm-slides-canvas' });
   private readonly input = h('textarea', { class: 'wm-slides-input', attrs: { 'aria-label': t('slides.editor'), autocapitalize: 'off', autocomplete: 'off', spellcheck: 'false', rows: '1', 'data-slides-input': '' } });
   private readonly notesBar = h('div', { class: 'wm-slides-notes', attrs: { hidden: '', role: 'region', 'aria-label': t('slides.notes') } });
+  /** Shown in master view: what is being edited, and the way back to the slides. */
+  private readonly masterBar = h('div', { class: 'wm-slides-masterbar', attrs: { hidden: '', role: 'region', 'aria-label': t('slides.masterView') } });
   private readonly notesInput = h('textarea', { class: 'wm-input wm-slides-notes-input', attrs: { 'aria-label': t('slides.notes'), placeholder: t('slides.notesPlaceholder') } });
   deck: Deck | null = null;
   fileName = '';
   readOnly = false;
   private placed: Placed[] = [];
   private sorter = false;
-  private readonly scenes = new Map<SlidePart, { scene: SlideScene; version: string }>();
-  private readonly thumbs = new Map<SlidePart, { canvas: HTMLCanvasElement; version: string }>();
+  private readonly scenes = new Map<PagePart, { scene: SlideScene; version: string }>();
+  private readonly thumbs = new Map<PagePart, { canvas: HTMLCanvasElement; version: string }>();
   private images: Map<string, CanvasImageSource> = new Map();
   private loadingImages = new Set<string>();
   private readonly history = new History();
   /** The slide in hand (its index), and its shapes selected. */
   private current = 0;
-  private selected: XmlElement[] = [];
-  private text: TextEdit | null = null;
-  private gesture: Drag | null = null;
+  /** The shapes of the page in hand: selected, moved, sized, turned, their text edited (drawingml/editor.ts). */
+  private readonly shapes: ShapeEditor<PagePart>;
   private contentVersion = 0;
   private painted = '';
-  private caretOn = true;
-  private caretTimer = 0;
   private fonts: SlideFonts | null = null;
   private presenter: Presenter | null = null;
   private notesShown = false;
   /** Copied shapes, for pasting within the app (the system clipboard has their text). */
-  private copied: { elements: XmlElement[]; from: SlidePart; key: string } | null = null;
+  private copied: { elements: XmlElement[]; from: PagePart; key: string } | null = null;
+  /** Master view: the pages are the masters and their layouts rather than the slides. */
+  private masterView = false;
+  /** The slide in hand when master view was opened, to go back to. */
+  private slideBeforeMaster = 0;
   onEdit: (() => void) | null = null;
   onState: (() => void) | null = null;
 
@@ -130,13 +115,86 @@ export class SlidesEditorView {
     private readonly deps: SlidesEditorDeps,
   ) {
     this.notesBar.append(this.notesInput);
-    this.el.append(this.canvas, this.input, this.notesBar);
+    const closeMaster = h('button', { class: 'wm-button', text: t('slides.closeMaster'), attrs: { type: 'button' } });
+    closeMaster.addEventListener('click', () => {
+      if (this.masterView) this.toggleMasterView();
+      this.focus();
+    });
+    this.masterBar.append(h('span', { class: 'wm-slides-masterbar-label', text: t('slides.masterView') }), closeMaster);
+    this.el.append(this.canvas, this.input, this.masterBar, this.notesBar);
     parent.append(this.el);
+    this.shapes = this.shapeEditor();
     this.listen();
+  }
+
+  /** The editor of the slide's shapes, driven through the slide in hand: where it is on screen, and the deck's history. */
+  private shapeEditor(): ShapeEditor<PagePart> {
+    const view = this;
+    const screenScale = (): number => this.deps.camera.zoom * CSS_PX_PER_POINT;
+    return new ShapeEditor<PagePart>({
+      get readOnly() {
+        return view.readOnly;
+      },
+      get measure() {
+        return view.fonts!;
+      },
+      input: this.input,
+      page: () => this.pages[this.current],
+      views: (page) => this.viewsOf(page),
+      toScreen: (page, x, y) => {
+        const p = this.placed.find((q) => q.slide === page) ?? this.placed[this.current];
+        const cam = this.deps.camera;
+        const scale = screenScale();
+        return [(p.x - cam.x) * scale + x * 0.75 * scale, (p.y - cam.y) * scale + y * 0.75 * scale];
+      },
+      scale: () => screenScale() * 0.75,
+      // A moved shape's edges and middle snap to the slide's.
+      snapLines: () => {
+        const { w, h: hh } = this.slideSize;
+        return { xs: [0, w / 1.5, w / 0.75], ys: [0, hh / 1.5, hh / 0.75] };
+      },
+      theme: (page) => (this.deck ? colorContext(this.deck, page).theme : undefined),
+      change: (page, label): SlideChange => {
+        const tx = new Transaction(this.deck!, label);
+        return { tx, page, touch: () => tx.touch(page) };
+      },
+      commit: (change, options) => {
+        const { tx, page } = change as SlideChange;
+        this.commit(tx, options?.structure ?? false, options?.merge ? `${options.merge}:${page.name}` : undefined, options?.before);
+      },
+      invalidate: () => void this.contentVersion++,
+      redraw: () => this.redraw(),
+      render: () => this.deps.render(),
+      state: () => this.onState?.(),
+      leftText: () => {
+        this.history.seal();
+        this.contentVersion++;
+        this.onState?.();
+      },
+      deleteSelection: () => void this.slidesOp('deleteShape'),
+      undo: () => this.undo(),
+      redo: () => this.redo(),
+      // In master view, a change to the text of a master's or layout's placeholder is made to the text style it passes on too.
+      mirrorStyle: (page, element) => (this.masterView ? inheritedStyleOf(page, element, true) : undefined),
+    });
   }
 
   get isOpen(): boolean {
     return this.deck !== null;
+  }
+
+  /** What is shown and edited: the slides, or in master view each master followed by its layouts. */
+  private get pages(): PagePart[] {
+    const deck = this.deck;
+    if (!deck) return [];
+    if (!this.masterView) return deck.slides;
+    return deck.masters.flatMap((master): PagePart[] => [master, ...deck.layoutsOf(master)]);
+  }
+
+  /** The slide in hand, or nothing in master view (for what only a slide has: notes, hiding, its layout). */
+  private get currentSlide(): SlidePart | undefined {
+    const page = this.pages[this.current];
+    return page && isSlidePart(page) ? page : undefined;
   }
 
   // ---- Opening and saving ---------------------------------------------------------------------------------------------
@@ -158,16 +216,17 @@ export class SlidesEditorView {
     this.loadingImages.clear();
     this.history.clear();
     this.current = 0;
-    this.selected = [];
-    this.text = null;
+    this.shapes.stop();
     this.sorter = false;
+    this.masterView = false;
+    this.masterBar.hidden = true;
     this.layout();
     this.el.hidden = false;
     this.showNotes();
     this.painted = '';
     this.onState?.();
     this.deps.render();
-    announce(t('slides.opened', { name, count: deck.slides.length }));
+    announce(t('slides.opened', { name, count: this.pages.length }));
   }
 
   close(): void {
@@ -179,9 +238,7 @@ export class SlidesEditorView {
     this.scenes.clear();
     this.thumbs.clear();
     this.images = new Map();
-    this.text = null;
-    this.selected = [];
-    clearInterval(this.caretTimer);
+    this.shapes.stop();
   }
 
   /** The deck as a `.pptx`. */
@@ -212,10 +269,10 @@ export class SlidesEditorView {
     const deck = this.deck;
     if (!deck) return;
     const { w, h } = this.slideSize;
-    const columns = this.sorter ? Math.max(1, Math.min(6, Math.ceil(Math.sqrt(deck.slides.length * 1.6)))) : 1;
+    const columns = this.sorter ? Math.max(1, Math.min(6, Math.ceil(Math.sqrt(this.pages.length * 1.6)))) : 1;
     // The sorter's rows leave room under each slide for its number (a fifth of a slide's height).
     const rowGap = this.sorter ? Math.max(GAP, h / 5) : GAP;
-    this.placed = deck.slides.map((slide, i) => ({ slide, x: (i % columns) * (w + GAP), y: Math.floor(i / columns) * (h + rowGap), w, h }));
+    this.placed = this.pages.map((slide, i) => ({ slide, x: (i % columns) * (w + GAP), y: Math.floor(i / columns) * (h + rowGap), w, h }));
     this.painted = '';
   }
 
@@ -226,11 +283,11 @@ export class SlidesEditorView {
     return { x: 0, y: 0, width: right, height: bottom };
   }
 
-  private strip: { width: number; height: number; slide: SlidePart }[] = [];
+  private strip: { width: number; height: number; slide: PagePart }[] = [];
 
   /** The slides as pages, for the slide strip (the pages panel): the same list, and the same page for a slide, until the slides change. */
-  stripPages(): readonly { width: number; height: number; slide: SlidePart }[] {
-    const slides = this.deck?.slides ?? [];
+  stripPages(): readonly { width: number; height: number; slide: PagePart }[] {
+    const slides = this.pages;
     if (this.strip.length !== slides.length || this.strip.some((p, i) => p.slide !== slides[i])) {
       const known = new Map(this.strip.map((p) => [p.slide, p]));
       const { w, h: hh } = this.slideSize;
@@ -240,7 +297,7 @@ export class SlidesEditorView {
   }
 
   get slideCount(): number {
-    return this.deck?.slides.length ?? 0;
+    return this.pages.length;
   }
 
   get currentIndex(): number {
@@ -251,9 +308,8 @@ export class SlidesEditorView {
   go(index: number, announceIt = true): void {
     const place = this.placed[index];
     if (!place) return;
-    this.leaveText();
+    this.shapes.reset();
     this.current = index;
-    this.selected = [];
     const cam = this.deps.camera;
     const viewW = this.canvas.clientWidth || 800;
     const viewH = this.canvas.clientHeight || 600;
@@ -281,13 +337,21 @@ export class SlidesEditorView {
   }
 
   private slideMessage(index: number): string {
-    const slide = this.deck?.slides[index];
+    const slide = this.pages[index];
+    if (this.masterView && slide) return t('slides.masterPage', { name: this.pageName(slide), n: index + 1, count: this.slideCount });
     const title = slide ? this.titleOf(slide) : '';
     return title ? t('slides.slideTitled', { n: index + 1, count: this.slideCount, title }) : t('slides.slideNumber', { n: index + 1, count: this.slideCount });
   }
 
+  /** A master's or layout's name (`p:cSld name`), as master view labels it. */
+  pageName(page: PagePart): string {
+    if (isSlidePart(page)) return this.titleOf(page);
+    const name = at(page.xml, 'p:cSld')?.attrs.name;
+    return 'master' in page ? name || page.name.replace(/^.*\//, '').replace(/\.xml$/, '') : t('slides.masterName');
+  }
+
   /** A slide's title: its title placeholder's text. */
-  titleOf(slide: SlidePart): string {
+  titleOf(slide: PagePart): string {
     for (const sp of kids(at(slide.xml, 'p:cSld/p:spTree'), 'p:sp')) {
       const ph = placeholderOf(sp);
       if (ph && (ph.type === 'title' || ph.type === 'ctrTitle')) return kids(kid(sp, 'p:txBody'), 'a:p').map(paragraphText).join(' ').replace(/\u000b/g, ' ').trim();
@@ -297,10 +361,10 @@ export class SlidesEditorView {
 
   // ---- Scenes and painting ------------------------------------------------------------------------------------------
 
-  private sceneOf(slide: SlidePart, forEditor = true): SlideScene {
+  private sceneOf(slide: PagePart, forEditor = true): SlideScene {
     const deck = this.deck!;
-    const index = deck.slides.indexOf(slide);
-    const editing = forEditor && this.text?.slide === slide ? this.text.element : null;
+    const index = this.pages.indexOf(slide);
+    const editing = forEditor && this.shapes.text?.page === slide ? this.shapes.text.element : null;
     const version = `${this.contentVersion}|${forEditor ? 1 : 0}|${editing ? 'e' : ''}`;
     const known = forEditor ? this.scenes.get(slide) : undefined;
     if (known && known.version === version) return known.scene;
@@ -359,7 +423,7 @@ export class SlidesEditorView {
     const ratio = window.devicePixelRatio || 1;
     const width = Math.max(1, Math.round(this.canvas.clientWidth * ratio));
     const height = Math.max(1, Math.round(this.canvas.clientHeight * ratio));
-    const key = [cam.x, cam.y, cam.zoom, width, height, this.contentVersion, this.current, this.selected.length, this.caretOn, this.text ? `${this.text.anchor.p}.${this.text.anchor.o}-${this.text.focus.p}.${this.text.focus.o}` : '', this.gestureKey(), darkPages, this.sorter].join();
+    const key = [cam.x, cam.y, cam.zoom, width, height, this.contentVersion, this.current, this.shapes.paintKey(), darkPages, this.sorter].join();
     if (key === this.painted) return;
     this.painted = key;
     if (this.canvas.width !== width || this.canvas.height !== height) {
@@ -411,28 +475,24 @@ export class SlidesEditorView {
         }
         ctx.fillStyle = darkPages ? '#cccccc' : cssVar('--wm-muted', '#666666');
         ctx.font = `${12 * ratio}px system-ui, sans-serif`;
-        const label = String(i + 1) + (isHidden(p.slide) ? ` (${t('slides.hidden')})` : '');
+        const label = this.masterView ? ('master' in p.slide ? '    ' : '') + this.pageName(p.slide) : String(i + 1) + (isHidden(p.slide) ? ` (${t('slides.hidden')})` : '');
         ctx.textBaseline = 'top';
-        // Down the page the number stands left of its slide; in the sorter, under it.
+        // Down the page the number stands left of its slide; in the sorter, under it; in master view the page's name, above it.
         if (this.sorter) ctx.fillText(label, left, top + hh + 6 * ratio);
-        else {
+        else if (this.masterView) {
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(label, left, top - 6 * ratio);
+        } else {
           ctx.textAlign = 'right';
           ctx.fillText(label, left - 6 * ratio, top);
           ctx.textAlign = 'left';
         }
       }
-      if (i === this.current && !this.sorter) this.decorate(ctx, p, perPoint * ratio);
+      if (i === this.current && !this.sorter) this.shapes.decorate(ctx, p.slide, ratio);
     }
   }
 
-  private gestureKey(): string {
-    const d = this.gesture;
-    if (!d) return '';
-    if (d.kind === 'marquee') return `m${d.now.join(',')}`;
-    return d.kind;
-  }
-
-  private thumbnail(slide: SlidePart, width: number): HTMLCanvasElement | null {
+  private thumbnail(slide: PagePart, width: number): HTMLCanvasElement | null {
     const bucket = width <= 200 ? 200 : width <= 400 ? 400 : 800;
     const version = `${this.contentVersion}|${bucket}`;
     const known = this.thumbs.get(slide);
@@ -452,7 +512,7 @@ export class SlidesEditorView {
 
   /** A slide's picture in pixels, for the slide strip. */
   thumbnailPixels(index: number, width: number, height: number): Uint8ClampedArray<ArrayBuffer> | null {
-    const slide = this.deck?.slides[index];
+    const slide = this.pages[index];
     if (!slide) return null;
     const canvas = document.createElement('canvas');
     canvas.width = width;
@@ -479,7 +539,7 @@ export class SlidesEditorView {
     return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
   }
 
-  private async imagesSettled(slide: SlidePart): Promise<void> {
+  private async imagesSettled(slide: PagePart): Promise<void> {
     this.sceneOf(slide, false);
     for (let i = 0; i < 20 && this.loadingImages.size > this.images.size; i++) await new Promise((r) => setTimeout(r, 50));
   }
@@ -499,218 +559,11 @@ export class SlidesEditorView {
 
   // ---- The selection, drawn ---------------------------------------------------------------------------------------
 
-  private viewsOf(slide: SlidePart): ShapeView[] {
+  private viewsOf(slide: PagePart): ShapeView[] {
     return this.sceneOf(slide).views;
   }
 
-  /** The view of a selected (top-level) shape. */
-  private viewOf(slide: SlidePart, element: XmlElement): ShapeView | undefined {
-    return this.viewsOf(slide).find((v) => v.shape.element === element);
-  }
-
-  private decorate(ctx: CanvasRenderingContext2D, p: Placed, scale: number): void {
-    const cam = this.deps.camera;
-    const toScreen = (m: Matrix, x: number, y: number): [number, number] => {
-      const [sx, sy] = apply(m, x, y);
-      return [(p.x - cam.x) * scale + sx * 0.75 * scale, (p.y - cam.y) * scale + sy * 0.75 * scale];
-    };
-    const ratio = window.devicePixelRatio || 1;
-    const accent = cssVar('--wm-accent', '#2b6cd4');
-    // Empty placeholders show a dashed box, so they can be found.
-    for (const view of this.viewsOf(p.slide)) {
-      if (view.inherited || view.shape !== view.top || !view.shape.placeholder || view.text?.prompt !== true) continue;
-      ctx.save();
-      ctx.setLineDash([4 * ratio, 3 * ratio]);
-      ctx.strokeStyle = 'rgba(128, 128, 128, 0.8)';
-      ctx.lineWidth = ratio;
-      this.boxPath(ctx, view, toScreen);
-      ctx.stroke();
-      ctx.restore();
-    }
-    for (const element of this.selected) {
-      const view = this.viewOf(p.slide, element);
-      if (!view) continue;
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = 1.5 * ratio;
-      this.boxPath(ctx, view, toScreen);
-      ctx.stroke();
-      if (this.text || this.selected.length > 1 || this.readOnly) continue;
-      ctx.fillStyle = '#ffffff';
-      for (const [hx, hy] of this.handlePoints(view)) {
-        const [x, y] = toScreen(view.matrix, hx, hy);
-        ctx.beginPath();
-        ctx.rect(x - (HANDLE / 2) * ratio, y - (HANDLE / 2) * ratio, HANDLE * ratio, HANDLE * ratio);
-        ctx.fill();
-        ctx.stroke();
-      }
-      const [tx, ty] = this.turnPoint(view, toScreen);
-      ctx.beginPath();
-      ctx.arc(tx, ty, (HANDLE / 2 + 1) * ratio, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
-    if (this.text && this.text.slide === p.slide) this.decorateText(ctx, p, scale, toScreen);
-    if (this.gesture?.kind === 'marquee') {
-      const [ax, ay] = this.gesture.start;
-      const [bx, by] = this.gesture.now;
-      const a = toScreen([1, 0, 0, 1, 0, 0], ax, ay);
-      const b = toScreen([1, 0, 0, 1, 0, 0], bx, by);
-      ctx.fillStyle = 'rgba(43, 108, 212, 0.12)';
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = ratio;
-      ctx.fillRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
-      ctx.strokeRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
-    }
-  }
-
-  private boxPath(ctx: CanvasRenderingContext2D, view: ShapeView, toScreen: (m: Matrix, x: number, y: number) => [number, number]): void {
-    const corners: [number, number][] = [
-      [0, 0],
-      [view.w, 0],
-      [view.w, view.h],
-      [0, view.h],
-    ];
-    ctx.beginPath();
-    corners.forEach(([x, y], i) => {
-      const [sx, sy] = toScreen(view.matrix, x, y);
-      if (i) ctx.lineTo(sx, sy);
-      else ctx.moveTo(sx, sy);
-    });
-    ctx.closePath();
-  }
-
-  /** The eight handles, in the shape's own pixels: corners then edge middles. */
-  private handlePoints(view: ShapeView): [number, number][] {
-    const { w, h: hh } = view;
-    return [
-      [0, 0],
-      [w, 0],
-      [w, hh],
-      [0, hh],
-      [w / 2, 0],
-      [w, hh / 2],
-      [w / 2, hh],
-      [0, hh / 2],
-    ];
-  }
-
-  private turnPoint(view: ShapeView, toScreen: (m: Matrix, x: number, y: number) => [number, number]): [number, number] {
-    const [ax, ay] = toScreen(view.matrix, view.w / 2, 0);
-    const [cx, cy] = toScreen(view.matrix, view.w / 2, view.h / 2);
-    const d = Math.hypot(ax - cx, ay - cy) || 1;
-    const ratio = window.devicePixelRatio || 1;
-    return [ax + ((ax - cx) / d) * TURN * ratio, ay + ((ay - cy) / d) * TURN * ratio];
-  }
-
-  // ---- Text: where things are -------------------------------------------------------------------------------------
-
-  /** The laid-out text being edited, and its transform to slide pixels. */
-  private editedText(): { text: ShapeText; matrix: Matrix } | null {
-    const edit = this.text;
-    if (!edit) return null;
-    const view = this.viewOf(edit.slide, edit.owner);
-    if (!view) return null;
-    if (edit.element.name === 'a:tc') {
-      const cell = view.cells?.find((c) => c.element === edit.element);
-      return cell ? { text: cell.text, matrix: view.matrix } : null;
-    }
-    return view.text ? { text: view.text, matrix: multiply(view.matrix, view.text.turn) } : null;
-  }
-
-  private lineAt(lines: readonly LaidLine[], pos: TextPos): LaidLine | undefined {
-    const inParagraph = lines.filter((l) => l.paragraph === pos.p);
-    return inParagraph.find((l) => pos.o >= l.start && pos.o < l.end) ?? inParagraph[inParagraph.length - 1];
-  }
-
-  /** The caret's x (text pixels) at a position on its line. */
-  private xAt(line: LaidLine, o: number): number {
-    const fonts = this.fonts!;
-    for (const s of line.segments) {
-      if (s.run < 0) continue;
-      if (o >= s.offset && o <= s.offset + s.text.length) {
-        if (s.text === '\t') return o > s.offset ? s.x + s.width : s.x;
-        const style = s.style;
-        const shown = style.caps !== 'none' ? s.text.toUpperCase() : s.text;
-        return s.x + fonts.width(shown.slice(0, o - s.offset), s.font) + style.spacing * (o - s.offset) * (96 / 72);
-      }
-    }
-    return line.right > line.left && o > line.start ? line.right : line.left;
-  }
-
-  /** The position nearest a point of the text (text pixels). */
-  private posAt(text: ShapeText, x: number, y: number): TextPos {
-    const lines = text.laid.lines;
-    if (!lines.length) return { p: 0, o: 0 };
-    let line = lines.find((l) => y < l.top + l.height) ?? lines[lines.length - 1];
-    if (y < lines[0].top) line = lines[0];
-    let best = line.start;
-    let bestD = Infinity;
-    const lastInLine = line.end - (line.end > line.start && this.charAt(text, line.paragraph, line.end - 1) === '\n' ? 1 : 0);
-    const isLastLine = !lines.some((l) => l.paragraph === line.paragraph && l.start >= line.end && l !== line);
-    const end = isLastLine ? line.end : Math.max(line.start, lastInLine - 0);
-    for (let o = line.start; o <= end; o++) {
-      const d = Math.abs(this.xAt(line, o) - x);
-      if (d < bestD) {
-        bestD = d;
-        best = o;
-      }
-    }
-    // A wrapped line's end is the next line's start: the caret stays on this line.
-    if (!isLastLine && best === line.end && line.end > line.start) best = line.end - 1;
-    return { p: line.paragraph, o: best };
-  }
-
-  private charAt(text: ShapeText, p: number, o: number): string {
-    const para = text.body.paragraphs[p];
-    return para ? paragraphString(para)[o] ?? '' : '';
-  }
-
-  private decorateText(ctx: CanvasRenderingContext2D, p: Placed, scale: number, toScreen: (m: Matrix, x: number, y: number) => [number, number]): void {
-    const edit = this.text!;
-    const found = this.editedText();
-    if (!found) return;
-    const { text, matrix } = found;
-    const ratio = window.devicePixelRatio || 1;
-    const from = minPos(edit.anchor, edit.focus);
-    const to = maxPos(edit.anchor, edit.focus);
-    const quad = (x0: number, y0: number, x1: number, y1: number): void => {
-      const pts = [toScreen(matrix, text.x + x0, text.y + y0), toScreen(matrix, text.x + x1, text.y + y0), toScreen(matrix, text.x + x1, text.y + y1), toScreen(matrix, text.x + x0, text.y + y1)];
-      ctx.beginPath();
-      pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-      ctx.closePath();
-    };
-    if (comparePos(from, to) !== 0) {
-      ctx.fillStyle = 'rgba(43, 108, 212, 0.3)';
-      for (const line of text.laid.lines) {
-        const s = { p: line.paragraph, o: line.start };
-        const e = { p: line.paragraph, o: line.end };
-        if (comparePos(e, from) <= 0 && !(line.start === line.end && comparePos(s, from) >= 0 && comparePos(s, to) < 0)) continue;
-        if (comparePos(s, to) >= 0) continue;
-        const x0 = comparePos(from, s) > 0 ? this.xAt(line, from.o) : line.left;
-        const x1 = comparePos(to, e) < 0 ? this.xAt(line, to.o) : Math.max(line.right, line.left + 4);
-        quad(x0, line.top, x1, line.top + line.height);
-        ctx.fill();
-      }
-    } else if (this.caretOn) {
-      const line = this.lineAt(text.laid.lines, edit.focus);
-      const x = line ? this.xAt(line, edit.focus.o) : 0;
-      const top = line ? line.top : 0;
-      const bottom = line ? line.top + line.height : 20;
-      const [ax, ay] = toScreen(matrix, text.x + x, text.y + top);
-      const [bx, by] = toScreen(matrix, text.x + x, text.y + bottom);
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = Math.max(1, 1.5 * ratio);
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(bx, by);
-      ctx.stroke();
-    }
-    void p;
-    void scale;
-  }
-
   // ---- Pointer ------------------------------------------------------------------------------------------------------
-
   /** The slide under a point of the canvas (CSS px), and the point in that slide's pixels. */
   private slideAt(x: number, y: number): { index: number; at: [number, number] } | null {
     const doc = this.deps.camera.toDocument(x, y);
@@ -721,77 +574,28 @@ export class SlidesEditorView {
     return null;
   }
 
-  /** The topmost shape of the slide's own at a point (slide pixels): its view. */
-  private shapeAt(slide: SlidePart, at: [number, number], tolerance = 4): ShapeView | null {
-    const views = this.viewsOf(slide);
-    for (let i = views.length - 1; i >= 0; i--) {
-      const v = views[i];
-      if (v.inherited || v.shape.kind === 'group') continue;
-      const back = invert(v.matrix);
-      if (!back) continue;
-      const [lx, ly] = apply(back, at[0], at[1]);
-      const tol = tolerance / Math.max(0.01, Math.sqrt(Math.abs(v.matrix[0] * v.matrix[3] - v.matrix[1] * v.matrix[2])));
-      if (lx >= -tol && ly >= -tol && lx <= v.w + tol && ly <= v.h + tol) return v;
-    }
-    return null;
-  }
-
-  /** Which handle of the selected shape is at a point (canvas CSS px): 0-7 sizing, 8 turning. */
-  private handleAt(x: number, y: number): { view: ShapeView; handle: number } | null {
-    if (this.text || this.selected.length !== 1 || this.readOnly) return null;
-    const p = this.placed[this.current];
-    if (!p) return null;
-    const view = this.viewOf(p.slide, this.selected[0]);
-    if (!view) return null;
-    const cam = this.deps.camera;
-    const scale = cam.zoom * CSS_PX_PER_POINT;
-    const toScreen = (m: Matrix, lx: number, ly: number): [number, number] => {
-      const [sx, sy] = apply(m, lx, ly);
-      return [(p.x - cam.x) * scale + sx * 0.75 * scale, (p.y - cam.y) * scale + sy * 0.75 * scale];
-    };
-    const ratio = window.devicePixelRatio || 1;
-    const [tx, ty] = this.turnPoint(view, toScreen);
-    if (Math.hypot(tx / ratio - x, ty / ratio - y) <= HANDLE) return { view, handle: 8 };
-    const points = this.handlePoints(view);
-    for (let i = 0; i < points.length; i++) {
-      const [hx, hy] = toScreen(view.matrix, points[i][0], points[i][1]);
-      if (Math.abs(hx - x) <= HANDLE && Math.abs(hy - y) <= HANDLE) return { view, handle: i };
-    }
-    return null;
-  }
-
   cursorAt(x: number, y: number): string {
     if (!this.deck) return 'default';
-    const handle = this.handleAt(x, y);
-    if (handle) return handle.handle === 8 ? 'grab' : ['nwse-resize', 'nesw-resize', 'nwse-resize', 'nesw-resize', 'ns-resize', 'ew-resize', 'ns-resize', 'ew-resize'][handle.handle];
+    const handle = this.shapes.handleCursor(x, y);
+    if (handle) return handle;
     const hit = this.slideAt(x, y);
     if (!hit || this.sorter) return 'default';
-    const slide = this.placed[hit.index].slide;
-    if (this.text && this.text.slide === slide) {
-      const view = this.viewOf(slide, this.text.owner);
-      if (view && this.shapeAt(slide, hit.at) === view) return 'text';
-    }
-    const view = this.shapeAt(slide, hit.at);
-    if (!view) return 'default';
-    return view.text && !this.readOnly ? (this.selected.includes(view.top.element) ? 'move' : 'pointer') : 'move';
+    return this.shapes.cursorAt(this.placed[hit.index].slide, hit.at);
   }
 
   press(x: number, y: number, shift: boolean, clicks: number, additive: boolean): void {
     if (!this.deck) return;
     this.focus();
-    const handle = this.handleAt(x, y);
-    if (handle) return this.startHandle(handle.view, handle.handle, x, y);
+    if (this.shapes.pressHandle(x, y)) return;
     const hit = this.slideAt(x, y);
     if (!hit) {
-      this.leaveText();
-      this.selected = [];
+      this.shapes.reset();
       this.redraw();
       return;
     }
     if (hit.index !== this.current) {
-      this.leaveText();
+      this.shapes.reset();
       this.current = hit.index;
-      this.selected = [];
       this.showNotes();
       announce(this.slideMessage(hit.index));
     }
@@ -803,297 +607,71 @@ export class SlidesEditorView {
       }
       return;
     }
-    const slide = this.placed[hit.index].slide;
-    // In the text being edited: the caret goes there.
-    if (this.text && this.text.slide === slide) {
-      const found = this.editedText();
-      const view = this.viewOf(slide, this.text.owner);
-      if (found && view && this.shapeAt(slide, hit.at) === view) {
-        const pos = this.textPosAt(found, hit.at);
-        if (this.text.element.name === 'a:tc') {
-          const cell = view.cells?.find((c) => this.contains(view.matrix, c, hit.at));
-          if (cell && cell.element !== this.text.element) return this.editText(slide, view.shape.element, cell.element, null, hit.at);
-        }
-        if (clicks === 2) {
-          const text = paragraphString(found.text.body.paragraphs[pos.p] ?? { runs: [] } as never);
-          const [s, e] = wordAt(text, pos.o);
-          this.text.anchor = { p: pos.p, o: s };
-          this.text.focus = { p: pos.p, o: e };
-        } else if (clicks >= 3) {
-          this.text.anchor = { p: pos.p, o: 0 };
-          this.text.focus = { p: pos.p, o: paragraphLength(paragraphsOf(this.textBody())[pos.p]) };
-        } else {
-          if (!shift) this.text.anchor = pos;
-          this.text.focus = pos;
-          this.gesture = { kind: 'text', anchor: this.text.anchor };
-        }
-        this.text.goalX = null;
-        this.text.pending = null;
-        this.caretBlink();
-        this.redraw();
-        return;
-      }
-      this.leaveText();
-    }
-    const view = this.shapeAt(slide, hit.at);
-    if (!view) {
-      if (!additive && !shift) this.selected = [];
-      this.gesture = { kind: 'marquee', start: hit.at, now: hit.at };
-      this.redraw();
-      return;
-    }
-    const element = view.top.element;
-    // A second click on a selected shape with text, or a double click: its text is edited there.
-    const wasSelected = this.selected.includes(element);
-    if (!this.readOnly && (clicks >= 2 || (wasSelected && this.selected.length === 1 && (view.text || view.cells)))) {
-      if (view.cells) {
-        const cell = view.cells.find((c) => this.contains(view.matrix, c, hit.at));
-        if (cell) return this.editText(slide, element, cell.element, null, hit.at);
-      }
-      if (view.text && view.shape === view.top && (view.shape.kind === 'shape' || view.shape.kind === 'connector')) return this.editText(slide, element, element, null, hit.at, clicks >= 2);
-    }
-    if (shift || additive) {
-      this.selected = wasSelected ? this.selected.filter((e) => e !== element) : [...this.selected, element];
-    } else if (!wasSelected) this.selected = [element];
-    this.announceSelection();
-    if (this.readOnly) return this.redraw();
-    const frames = new Map<XmlElement, Frame>();
-    for (const e of this.selected) {
-      const v = this.viewOf(slide, e);
-      if (v) frames.set(e, { ...v.shape.frame });
-    }
-    this.gesture = { kind: 'move', start: hit.at, frames, moved: false, tx: new Transaction(this.deck, t('slides.undo.move')) };
-    this.redraw();
+    this.shapes.press(this.placed[hit.index].slide, hit.at, shift, clicks, additive);
   }
 
-  private contains(matrix: Matrix, cell: { x: number; y: number; w: number; h: number }, at: [number, number]): boolean {
-    const back = invert(matrix);
-    if (!back) return false;
-    const [lx, ly] = apply(back, at[0], at[1]);
-    return lx >= cell.x && lx <= cell.x + cell.w && ly >= cell.y && ly <= cell.y + cell.h;
-  }
-
-  private textPosAt(found: { text: ShapeText; matrix: Matrix }, at: [number, number]): TextPos {
-    const back = invert(found.matrix);
-    const [lx, ly] = back ? apply(back, at[0], at[1]) : at;
-    return this.posAt(found.text, lx - found.text.x, ly - found.text.y);
-  }
-
-  private startHandle(view: ShapeView, handle: number, x: number, y: number): void {
-    const deck = this.deck!;
-    const element = view.shape.element;
-    if (handle === 8) {
-      const [cx, cy] = apply(view.matrix, view.w / 2, view.h / 2);
-      this.gesture = { kind: 'turn', element, frame: { ...view.shape.frame }, centre: [cx, cy], tx: new Transaction(deck, t('slides.undo.turn')) };
-    } else this.gesture = { kind: 'resize', handle, element, frame: { ...view.shape.frame }, matrix: view.matrix, w: view.w, h: view.h, tx: new Transaction(deck, t('slides.undo.resize')), picture: view.shape.kind === 'picture' };
-    void x;
-    void y;
+  /** A drag is selecting text or shapes (not moving, sizing or turning them): it scrolls at the view's edges. */
+  get isSelecting(): boolean {
+    return this.shapes.isSelecting;
   }
 
   drag(x: number, y: number, shift: boolean): void {
-    const d = this.gesture;
-    if (!d || !this.deck) return;
     const p = this.placed[this.current];
-    if (!p) return;
+    if (!p || !this.deck) return;
     const doc = this.deps.camera.toDocument(x, y);
-    const at: [number, number] = [(doc.x - p.x) / 0.75, (doc.y - p.y) / 0.75];
-    const slide = p.slide;
-    switch (d.kind) {
-      case 'text': {
-        const found = this.editedText();
-        if (!found || !this.text) return;
-        this.text.focus = this.textPosAt(found, at);
-        this.redraw();
-        return;
-      }
-      case 'marquee': {
-        d.now = at;
-        const x0 = Math.min(d.start[0], at[0]);
-        const x1 = Math.max(d.start[0], at[0]);
-        const y0 = Math.min(d.start[1], at[1]);
-        const y1 = Math.max(d.start[1], at[1]);
-        this.selected = this.viewsOf(slide)
-          .filter((v) => !v.inherited && v.shape === v.top)
-          .filter((v) => {
-            const [ax, ay] = apply(v.matrix, 0, 0);
-            const [bx, by] = apply(v.matrix, v.w, v.h);
-            return Math.min(ax, bx) >= x0 && Math.max(ax, bx) <= x1 && Math.min(ay, by) >= y0 && Math.max(ay, by) <= y1;
-          })
-          .map((v) => v.shape.element);
-        this.redraw();
-        return;
-      }
-      case 'move': {
-        let dx = at[0] - d.start[0];
-        let dy = at[1] - d.start[1];
-        if (!d.moved && Math.hypot(dx, dy) < 3) return;
-        if (shift) Math.abs(dx) > Math.abs(dy) ? (dy = 0) : (dx = 0);
-        // Snaps the selection's edges and middle to the slide's.
-        const first = [...d.frames.values()][0];
-        if (first && !shift) {
-          const snap = this.snap(first, dx, dy);
-          dx = snap[0];
-          dy = snap[1];
-        }
-        d.moved = true;
-        d.tx.touch(slide);
-        for (const [element, frame] of d.frames) setFrame(element, { ...frame, x: frame.x + px2emu(dx), y: frame.y + px2emu(dy) });
-        this.contentVersion++;
-        this.redraw();
-        return;
-      }
-      case 'resize': {
-        d.tx.touch(slide);
-        setFrame(d.element, this.resized(d, at, shift));
-        this.contentVersion++;
-        this.redraw();
-        return;
-      }
-      case 'turn': {
-        let angle = (Math.atan2(at[1] - d.centre[1], at[0] - d.centre[0]) * 180) / Math.PI + 90;
-        if (shift) angle = Math.round(angle / 15) * 15;
-        d.tx.touch(slide);
-        setFrame(d.element, { ...d.frame, rot: angle });
-        this.contentVersion++;
-        this.redraw();
-        return;
-      }
-    }
-  }
-
-  /** Moves a frame by (dx, dy) slide pixels, snapped to the slide's edges and middles within a few screen pixels. */
-  private snap(frame: Frame, dx: number, dy: number): [number, number] {
-    const { w, h: hh } = this.slideSize;
-    const slideW = w / 0.75;
-    const slideH = hh / 0.75;
-    const reach = 6 / (this.deps.camera.zoom * CSS_PX_PER_POINT * 0.75);
-    const fx = frame.x / EMU_PER_PX + dx;
-    const fy = frame.y / EMU_PER_PX + dy;
-    const fw = frame.w / EMU_PER_PX;
-    const fh = frame.h / EMU_PER_PX;
-    const best = (edges: number[], targets: number[]): number => {
-      let shift = 0;
-      let bestD = reach;
-      for (const e of edges)
-        for (const target of targets) {
-          const d = target - e;
-          if (Math.abs(d) < bestD) {
-            bestD = Math.abs(d);
-            shift = d;
-          }
-        }
-      return shift;
-    };
-    return [dx + best([fx, fx + fw / 2, fx + fw], [0, slideW / 2, slideW]), dy + best([fy, fy + fh / 2, fy + fh], [0, slideH / 2, slideH])];
-  }
-
-  private resized(d: Extract<Drag, { kind: 'resize' }>, at: [number, number], shift: boolean): Frame {
-    const back = invert(d.matrix);
-    if (!back) return d.frame;
-    const [lx, ly] = apply(back, at[0], at[1]);
-    const corner = d.handle < 4;
-    let x0 = 0;
-    let y0 = 0;
-    let x1 = d.w;
-    let y1 = d.h;
-    const moveLeft = d.handle === 0 || d.handle === 3 || d.handle === 7;
-    const moveRight = d.handle === 1 || d.handle === 2 || d.handle === 5;
-    const moveTop = d.handle === 0 || d.handle === 1 || d.handle === 4;
-    const moveBottom = d.handle === 2 || d.handle === 3 || d.handle === 6;
-    if (moveLeft) x0 = lx;
-    if (moveRight) x1 = lx;
-    if (moveTop) y0 = ly;
-    if (moveBottom) y1 = ly;
-    // Corners of a picture keep its shape (Shift lets them go); of other shapes, Shift keeps it.
-    if (corner && (d.picture ? !shift : shift) && d.w > 0 && d.h > 0) {
-      const ratio = d.w / d.h;
-      const nw = Math.abs(x1 - x0);
-      const nh = Math.abs(y1 - y0);
-      if (nw / ratio > nh) {
-        const want = nw / ratio;
-        if (moveTop) y0 = y1 - want * Math.sign(y1 - y0 || 1);
-        else y1 = y0 + want * Math.sign(y1 - y0 || 1);
-      } else {
-        const want = nh * ratio;
-        if (moveLeft) x0 = x1 - want * Math.sign(x1 - x0 || 1);
-        else x1 = x0 + want * Math.sign(x1 - x0 || 1);
-      }
-    }
-    const nx0 = Math.min(x0, x1);
-    const ny0 = Math.min(y0, y1);
-    const w = Math.max(1, Math.abs(x1 - x0));
-    const hh = Math.max(1, Math.abs(y1 - y0));
-    const [cx, cy] = apply(d.matrix, nx0 + w / 2, ny0 + hh / 2);
-    // The matrix holds the shape's parent too (a shape in a group): the new frame is in the slide's pixels, so only top-level shapes are sized.
-    return { ...d.frame, x: px2emu(cx - w / 2), y: px2emu(cy - hh / 2), w: px2emu(w), h: px2emu(hh) };
+    this.shapes.drag(p.slide, [(doc.x - p.x) / 0.75, (doc.y - p.y) / 0.75], shift);
   }
 
   release(): void {
-    const d = this.gesture;
-    this.gesture = null;
-    if (!d || !this.deck) return;
-    if (d.kind === 'move' || d.kind === 'resize' || d.kind === 'turn') {
-      if (d.kind === 'move' && !d.moved) return this.redraw();
-      this.commit(d.tx);
-    }
-    this.redraw();
+    if (this.deck) this.shapes.release();
   }
 
   contextMenu(clientX: number, clientY: number, x: number, y: number): void {
     if (!this.deck) return;
     const hit = this.slideAt(x, y);
     if (hit && hit.index !== this.current) {
-      this.leaveText();
+      this.shapes.reset();
       this.current = hit.index;
-      this.selected = [];
     }
-    const slide = this.deck.slides[this.current];
-    if (hit && slide && !this.sorter && !this.text) {
-      const view = this.shapeAt(slide, hit.at);
-      if (view && !this.selected.includes(view.top.element)) this.selected = [view.top.element];
+    const slide = this.pages[this.current];
+    if (hit && slide && !this.sorter && !this.shapes.text) {
+      const view = this.shapes.shapeAt(slide, hit.at);
+      if (view && !this.shapes.selected.includes(view.top.element)) this.shapes.selected = [view.top.element];
     }
     this.redraw();
     const op = (o: SlidesOp): PopupItem => ({ label: t(`slides.op.${o}` as MessageKey), run: () => void this.slidesOp(o), disabled: this.readOnly });
     const items: PopupItem[] = [];
-    if (this.selected.length && !this.text) {
+    if (this.shapes.selected.length && !this.shapes.text) {
       items.push(op('cut'), op('copy'), op('paste'), 'separator', op('deleteShape'), op('duplicateShape'), 'separator');
-      items.push({ label: t('slides.fill'), items: this.colorItems((c) => this.setShapeFill(c)) }, { label: t('slides.outline'), items: this.colorItems((c) => this.setShapeLine(c)) }, 'separator');
+      items.push(...this.shapes.colorMenus(), 'separator');
       items.push({ label: t('slides.arrange'), items: [op('bringToFront'), op('bringForward'), op('sendBackward'), op('sendToBack')] });
-    } else if (this.text) {
+    } else if (this.shapes.text) {
       items.push(op('cut'), op('copy'), op('paste'));
+    } else if (this.masterView) {
+      items.push(op('paste'), 'separator', op('background'), op('theme'), { label: t('slides.closeMaster'), run: () => this.toggleMasterView() });
     } else {
-      items.push(op('paste'), 'separator', op('newSlide'), op('duplicateSlide'), op('deleteSlide'), op('hideSlide'), 'separator', { label: t('slides.op.layout'), items: this.layoutItems() }, op('resetSlide'));
+      items.push(op('paste'), 'separator', op('newSlide'), op('duplicateSlide'), op('deleteSlide'), op('hideSlide'), 'separator', { label: t('slides.op.layout'), items: this.layoutItems() }, op('resetSlide'), op('background'));
     }
     showPopupMenu(items, clientX, clientY, t('slides.editor'), () => this.focus());
   }
 
-  private colorItems(set: (color: Rgba | null) => void): PopupItem[] {
-    const deck = this.deck;
-    const slide = deck?.slides[this.current];
-    if (!deck || !slide) return [];
-    const theme = colorContext(deck, slide).theme;
-    const names = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'dk1', 'lt1', 'dk2', 'lt2'];
-    const items: PopupItem[] = names.filter((n) => theme.colors[n]).map((n) => ({ label: `${t(`slides.color.${n}` as MessageKey)} (${cssColor(theme.colors[n])})`, run: () => set(theme.colors[n]) }));
-    items.push('separator', { label: t('slides.noColor'), run: () => set(null) });
-    return items;
-  }
-
   // ---- Keys and typing ----------------------------------------------------------------------------------------------
-
   private listen(): void {
     this.input.addEventListener('keydown', (e) => this.key(e));
     attachTextInput(this.input, {
-      insert: (text) => this.typed(text),
+      insert: (text) => this.shapes.typed(text),
       key: (k) => {
-        if (k.kind === 'delete') this.deleteKey(k.direction === 'backward', k.unit === 'word');
-        else if (k.kind === 'enter') this.enter(k.shift);
+        if (k.kind === 'delete') this.shapes.deleteKey(k.direction === 'backward', k.unit === 'word');
+        else if (k.kind === 'enter') {
+          if (!this.shapes.enter(k.shift) && !this.readOnly) this.shapeKey(new KeyboardEvent('keydown', { key: 'Enter' }), false);
+        }
         else if (k.kind === 'undo') this.undo();
         else if (k.kind === 'redo') this.redo();
       },
-      copy: () => this.copyText(),
-      cut: () => this.cutText(),
+      copy: () => this.shapes.copyText(),
+      cut: () => this.shapes.cutText(),
       copyOther: (cut) => {
-        if (this.text || !this.selected.length) return false;
+        if (this.shapes.text || !this.shapes.selected.length) return false;
         this.copyShapes(cut);
         return true;
       },
@@ -1113,8 +691,8 @@ export class SlidesEditorView {
   private key(e: KeyboardEvent): void {
     if (!this.deck) return;
     const mod = IS_MAC ? e.metaKey : e.ctrlKey;
-    if (this.text) {
-      if (this.textKey(e, mod)) {
+    if (this.shapes.text) {
+      if (this.shapes.textKey(e)) {
         e.preventDefault();
         return;
       }
@@ -1125,67 +703,49 @@ export class SlidesEditorView {
     if (this.deps.viewKey(e) || this.deps.appKey(e)) e.preventDefault();
   }
 
+  /** Keys with no text in hand: the selected shapes' (drawingml/editor.ts), then the slides'. */
   private shapeKey(e: KeyboardEvent, mod: boolean): boolean {
-    const slide = this.deck!.slides[this.current];
+    const slide = this.pages[this.current];
     if (!slide) return false;
-    const nudge = e.altKey ? 1 : e.shiftKey ? 50 : 8;
     switch (e.key) {
       case 'Escape':
         if (this.presenter) return false;
-        this.selected = [];
+        // Nothing selected in master view: Escape closes it, as the bar's button does.
+        if (!this.shapes.selected.length && this.masterView) {
+          this.toggleMasterView();
+          return true;
+        }
+        this.shapes.selected = [];
         this.redraw();
         return true;
-      case 'Tab': {
-        const views = this.viewsOf(slide).filter((v) => !v.inherited && v.shape === v.top);
-        if (!views.length) return true;
-        const i = views.findIndex((v) => v.shape.element === this.selected[0]);
-        const next = views[(i + (e.shiftKey ? -1 : 1) + views.length) % views.length];
-        this.selected = [next.shape.element];
-        this.announceSelection();
-        this.redraw();
-        return true;
-      }
       case 'Enter':
-      case 'F2': {
-        if (this.selected.length !== 1 || this.readOnly) {
-          if (!this.selected.length && e.key === 'Enter' && !mod) {
+      case 'F2':
+        if (this.shapes.selected.length !== 1 || this.readOnly) {
+          if (!this.shapes.selected.length && e.key === 'Enter' && !mod) {
             void this.slidesOp('newSlide');
             return true;
           }
           return false;
         }
-        const view = this.viewOf(slide, this.selected[0]);
-        if (view?.text && (view.shape.kind === 'shape' || view.shape.kind === 'connector')) this.editText(slide, view.shape.element, view.shape.element, 'end');
-        else if (view?.cells?.length) this.editText(slide, view.shape.element, view.cells[0].element, 'end');
-        return true;
-      }
+        break;
       case 'Delete':
       case 'Backspace':
         if (this.readOnly) return true;
-        if (this.selected.length) void this.slidesOp('deleteShape');
-        else void this.slidesOp('deleteSlide');
-        return true;
+        if (!this.shapes.selected.length) {
+          void this.slidesOp('deleteSlide');
+          return true;
+        }
+        break;
       case 'ArrowLeft':
       case 'ArrowRight':
       case 'ArrowUp':
-      case 'ArrowDown': {
-        if (!this.selected.length) {
+      case 'ArrowDown':
+        if (!this.shapes.selected.length) {
           if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') this.go(Math.max(0, this.current - 1));
           else this.go(Math.min(this.slideCount - 1, this.current + 1));
           return true;
         }
-        if (this.readOnly) return true;
-        const dx = e.key === 'ArrowLeft' ? -nudge : e.key === 'ArrowRight' ? nudge : 0;
-        const dy = e.key === 'ArrowUp' ? -nudge : e.key === 'ArrowDown' ? nudge : 0;
-        const tx = new Transaction(this.deck!, t('slides.undo.move'));
-        tx.touch(slide);
-        for (const element of this.selected) {
-          const view = this.viewOf(slide, element);
-          if (view) setFrame(element, { ...view.shape.frame, x: view.shape.frame.x + px2emu(dx), y: view.shape.frame.y + px2emu(dy) });
-        }
-        this.commit(tx);
-        return true;
-      }
+        break;
       case 'PageDown':
         this.go(Math.min(this.slideCount - 1, this.current + 1));
         return true;
@@ -1193,13 +753,13 @@ export class SlidesEditorView {
         this.go(Math.max(0, this.current - 1));
         return true;
       case 'Home':
-        if (mod || !this.selected.length) {
+        if (mod || !this.shapes.selected.length) {
           this.go(0);
           return true;
         }
         return false;
       case 'End':
-        if (mod || !this.selected.length) {
+        if (mod || !this.shapes.selected.length) {
           this.go(this.slideCount - 1);
           return true;
         }
@@ -1208,13 +768,14 @@ export class SlidesEditorView {
         void this.slidesOp(e.shiftKey ? 'presentCurrent' : 'presentStart');
         return true;
     }
+    if (this.shapes.shapeKey(e)) return true;
     if (mod && !e.altKey) {
       switch (e.key.toLowerCase()) {
         case 'a':
           this.selectAll();
           return true;
         case 'd':
-          if (!this.readOnly) void this.slidesOp(this.selected.length ? 'duplicateShape' : 'duplicateSlide');
+          if (!this.readOnly) void this.slidesOp(this.shapes.selected.length ? 'duplicateShape' : 'duplicateSlide');
           return true;
         case 'm':
           if (!this.readOnly) void this.slidesOp('newSlide');
@@ -1230,622 +791,41 @@ export class SlidesEditorView {
     return false;
   }
 
-  private textKey(e: KeyboardEvent, mod: boolean): boolean {
-    const edit = this.text!;
-    const word = IS_MAC ? e.altKey : e.ctrlKey;
-    const move = (to: TextPos): void => {
-      if (!e.shiftKey) edit.anchor = to;
-      edit.focus = to;
-      edit.pending = null;
-      this.caretBlink();
-      this.redraw();
-      this.speakCaret();
-    };
-    const body = this.textBody();
-    const ps = paragraphsOf(body);
-    const len = (p: number): number => paragraphLength(ps[p]);
-    const collapsed = comparePos(edit.anchor, edit.focus) === 0;
-    switch (e.key) {
-      case 'Escape': {
-        const owner = edit.owner;
-        this.leaveText();
-        this.selected = [owner];
-        this.redraw();
-        return true;
-      }
-      case 'ArrowLeft':
-      case 'ArrowRight': {
-        edit.goalX = null;
-        const back = e.key === 'ArrowLeft';
-        if (!e.shiftKey && !collapsed) {
-          move(back ? minPos(edit.anchor, edit.focus) : maxPos(edit.anchor, edit.focus));
-          return true;
-        }
-        let { p, o } = edit.focus;
-        if (IS_MAC && mod) o = back ? 0 : len(p);
-        else if (word) {
-          const text = plainText(ps[p]);
-          if (back) {
-            if (o === 0 && p > 0) (p--, (o = len(p)));
-            else {
-              while (o > 0 && /\s/.test(text[o - 1])) o--;
-              while (o > 0 && !/\s/.test(text[o - 1])) o--;
-            }
-          } else if (o === len(p) && p < ps.length - 1) (p++, (o = 0));
-          else {
-            while (o < text.length && !/\s/.test(text[o])) o++;
-            while (o < text.length && /\s/.test(text[o])) o++;
-          }
-        } else if (back) {
-          if (o > 0) o--;
-          else if (p > 0) (p--, (o = len(p)));
-        } else if (o < len(p)) o++;
-        else if (p < ps.length - 1) (p++, (o = 0));
-        move({ p, o });
-        return true;
-      }
-      case 'ArrowUp':
-      case 'ArrowDown': {
-        const found = this.editedText();
-        if (!found) return true;
-        const lines = found.text.laid.lines;
-        const line = this.lineAt(lines, edit.focus);
-        if (!line) return true;
-        const index = lines.indexOf(line);
-        const x = edit.goalX ?? this.xAt(line, edit.focus.o);
-        const target = lines[index + (e.key === 'ArrowUp' ? -1 : 1)];
-        if (!target) {
-          move(e.key === 'ArrowUp' ? { p: 0, o: 0 } : { p: ps.length - 1, o: len(ps.length - 1) });
-          return true;
-        }
-        const pos = this.posAt(found.text, x, target.top + target.height / 2);
-        move(pos);
-        edit.goalX = x;
-        return true;
-      }
-      case 'Home':
-      case 'End': {
-        if (mod) {
-          move(e.key === 'Home' ? { p: 0, o: 0 } : { p: ps.length - 1, o: len(ps.length - 1) });
-          return true;
-        }
-        const found = this.editedText();
-        const line = found && this.lineAt(found.text.laid.lines, edit.focus);
-        if (!line) return true;
-        const isLast = !found!.text.laid.lines.some((l) => l.paragraph === line.paragraph && l.start >= line.end && l !== line);
-        move({ p: line.paragraph, o: e.key === 'Home' ? line.start : isLast ? line.end : Math.max(line.start, line.end - 1) });
-        return true;
-      }
-      case 'Tab': {
-        const p = ps[edit.focus.p];
-        if (this.readOnly) return true;
-        if (edit.element.name === 'a:tc') {
-          this.nextCell(e.shiftKey);
-          return true;
-        }
-        const startOfLine = edit.focus.o === 0 && collapsed;
-        if (startOfLine || !collapsed || e.shiftKey) {
-          this.changeLevel(e.shiftKey ? -1 : 1);
-          return true;
-        }
-        this.typed('\t');
-        void p;
-        return true;
-      }
-    }
-    if (mod && !e.altKey) {
-      switch (e.key.toLowerCase()) {
-        case 'a':
-          edit.anchor = { p: 0, o: 0 };
-          edit.focus = { p: ps.length - 1, o: len(ps.length - 1) };
-          this.redraw();
-          return true;
-        case 'b':
-          this.toggleRunAttr('b');
-          return true;
-        case 'i':
-          this.toggleRunAttr('i');
-          return true;
-        case 'u':
-          this.toggleRunAttr('u', 'sng');
-          return true;
-        case 'z':
-          e.shiftKey ? this.redo() : this.undo();
-          return true;
-        case 'y':
-          this.redo();
-          return true;
-        case 'e':
-          this.setAlign('ctr');
-          return true;
-        case 'l':
-          this.setAlign('l');
-          return true;
-        case 'r':
-          this.setAlign('r');
-          return true;
-        case 'j':
-          this.setAlign('just');
-          return true;
-      }
-    }
-    return false;
-  }
-
-  /** Text typed with the deck in hand: into the text being edited, or a selected shape's text replaced. */
-  private typed(text: string): void {
-    if (!this.deck || this.readOnly) return;
-    if (!this.text) {
-      const slide = this.deck.slides[this.current];
-      if (!slide || this.selected.length !== 1) return;
-      const view = this.viewOf(slide, this.selected[0]);
-      if (!view?.text || (view.shape.kind !== 'shape' && view.shape.kind !== 'connector')) return;
-      this.editText(slide, view.shape.element, view.shape.element, 'all');
-    }
-    const edit = this.text!;
-    this.textChange(t('slides.undo.typing'), (body) => {
-      let at = deleteRange(body, edit.anchor, edit.focus);
-      if (edit.pending) {
-        const style = this.styledRun(paragraphsOf(body)[at.p], at.o, edit.pending);
-        const lines = text.replace(/\r\n?/g, '\n').split('\n');
-        insertStyled(body, at, lines[0], style);
-        at = { p: at.p, o: at.o + lines[0].length };
-        if (lines.length > 1) at = insertMultiline(body, at, '\n' + lines.slice(1).join('\n'));
-      } else at = insertMultiline(body, at, text);
-      edit.anchor = edit.focus = at;
-    }, 'typing');
-  }
-
-  private styledRun(p: XmlElement, o: number, pending: Record<string, string | null>): XmlElement {
-    const runs = kids(p).filter((r) => r.name === 'a:r');
-    let at = 0;
-    let base: XmlElement | undefined;
-    for (const r of runs) {
-      const len = kids(r, 'a:t').map((t) => t.children.join('')).join('').length;
-      if (o >= at && o <= at + len) base = r;
-      at += len;
-    }
-    const rPr = base && kid(base, 'a:rPr') ? cloneElement(kid(base, 'a:rPr')!) : cloneElement(kid(p, 'a:endParaRPr') ?? { name: 'a:rPr', attrs: { lang: 'en-US' }, children: [] });
-    rPr.name = 'a:rPr';
-    const attrs = { ...rPr.attrs };
-    for (const [k, v] of Object.entries(pending)) {
-      if (v === null) delete attrs[k];
-      else attrs[k] = v;
-    }
-    rPr.attrs = attrs;
-    return { name: 'a:r', attrs: {}, children: [rPr] };
-  }
-
-  private deleteKey(backward: boolean, word: boolean): void {
-    const edit = this.text;
-    if (!edit) {
-      if (this.selected.length && !this.readOnly) void this.slidesOp('deleteShape');
-      return;
-    }
-    if (this.readOnly) return;
-    this.textChange(t('slides.undo.typing'), (body) => {
-      const ps = paragraphsOf(body);
-      let from = edit.anchor;
-      let to = edit.focus;
-      if (comparePos(from, to) === 0) {
-        const { p, o } = edit.focus;
-        if (backward) {
-          if (o > 0) {
-            let s = o - 1;
-            if (word) {
-              const text = plainText(ps[p]);
-              while (s > 0 && /\s/.test(text[s])) s--;
-              while (s > 0 && !/\s/.test(text[s - 1])) s--;
-            }
-            from = { p, o: s };
-          } else if (p > 0) from = { p: p - 1, o: paragraphLength(ps[p - 1]) };
-        } else if (o < paragraphLength(ps[p])) to = { p, o: o + 1 };
-        else if (p < ps.length - 1) to = { p: p + 1, o: 0 };
-      }
-      const at = deleteRange(body, from, to);
-      edit.anchor = edit.focus = at;
-    }, 'typing');
-  }
-
-  private enter(shift: boolean): void {
-    const edit = this.text;
-    if (!edit) {
-      if (!this.readOnly) this.shapeKey(new KeyboardEvent('keydown', { key: 'Enter' }), false);
-      return;
-    }
-    if (this.readOnly) return;
-    this.textChange(t('slides.undo.typing'), (body) => {
-      let at = deleteRange(body, edit.anchor, edit.focus);
-      if (shift) {
-        insertBreak(paragraphsOf(body)[at.p], at.o);
-        at = { p: at.p, o: at.o + 1 };
-      } else at = splitParagraph(body, at);
-      edit.anchor = edit.focus = at;
-    });
-  }
-
-  private changeLevel(by: number): void {
-    const edit = this.text;
-    if (!edit) return;
-    this.textChange(t('slides.undo.format'), (body) => {
-      const ps = paragraphsOf(body);
-      const from = minPos(edit.anchor, edit.focus).p;
-      const to = maxPos(edit.anchor, edit.focus).p;
-      for (let i = from; i <= to; i++) {
-        const pPr = pPrOf(ps[i]);
-        const level = Math.min(8, Math.max(0, (Number(pPr.attrs.lvl) || 0) + by));
-        const attrs = { ...pPr.attrs };
-        if (level) attrs.lvl = String(level);
-        else delete attrs.lvl;
-        pPr.attrs = attrs;
-      }
-    });
-  }
-
-  private nextCell(back: boolean): void {
-    const edit = this.text!;
-    const slide = edit.slide;
-    const view = this.viewOf(slide, edit.owner);
-    const cells = view?.cells ?? [];
-    const i = cells.findIndex((c) => c.element === edit.element);
-    const next = cells[i + (back ? -1 : 1)];
-    if (next) this.editText(slide, edit.owner, next.element, 'all');
-  }
-
-  // ---- Text editing: entering, leaving, changing ----------------------------------------------------------------
-
-  /** Starts editing a shape's (or a table cell's) text, with the caret at a point, at its end, or all of it selected. */
-  private editText(slide: SlidePart, owner: XmlElement, element: XmlElement, where: 'end' | 'all' | null, at?: [number, number], selectWord = false): void {
-    if (this.readOnly) return;
-    this.leaveText();
-    this.selected = [owner];
-    const tx = new Transaction(this.deck!, t('slides.undo.typing'));
-    const body = element.name === 'a:tc' ? kid(element, 'a:txBody') : kid(element, 'p:txBody');
-    if (!body) {
-      tx.touch(slide);
-      if (element.name === 'a:tc') element.children.unshift({ name: 'a:txBody', attrs: {}, children: [{ name: 'a:bodyPr', attrs: {}, children: [] }, { name: 'a:lstStyle', attrs: {}, children: [] }, { name: 'a:p', attrs: {}, children: [] }] });
-      else ensureBody(element);
-      this.commit(tx, false);
-    }
-    this.text = { slide, element, owner, anchor: { p: 0, o: 0 }, focus: { p: 0, o: 0 }, goalX: null, pending: null };
-    this.contentVersion++;
-    const ps = paragraphsOf(this.textBody());
-    const end = { p: ps.length - 1, o: paragraphLength(ps[ps.length - 1]) };
-    if (where === 'end') this.text.anchor = this.text.focus = end;
-    else if (where === 'all') {
-      this.text.anchor = { p: 0, o: 0 };
-      this.text.focus = end;
-    } else if (at) {
-      const found = this.editedText();
-      if (found) {
-        const pos = this.textPosAt(found, at);
-        this.text.anchor = this.text.focus = pos;
-        if (selectWord) {
-          const [s, e] = wordAt(plainText(ps[pos.p]), pos.o);
-          this.text.anchor = { p: pos.p, o: s };
-          this.text.focus = { p: pos.p, o: e };
-        }
-      }
-    }
-    this.caretBlink();
-    this.onState?.();
-    this.redraw();
-    announce(t('slides.editingText'));
-  }
-
-  private leaveText(): void {
-    if (!this.text) return;
-    this.text = null;
-    this.history.seal();
-    this.contentVersion++;
-    clearInterval(this.caretTimer);
-    this.onState?.();
-  }
-
-  private textBody(): XmlElement {
-    const edit = this.text!;
-    return edit.element.name === 'a:tc' ? kid(edit.element, 'a:txBody')! : kid(edit.element, 'p:txBody')!;
-  }
-
-  /** Changes the edited text in one undoable step (typing joins the step before it). */
-  private textChange(label: string, change: (body: XmlElement) => void, merge?: string): void {
-    const edit = this.text;
-    if (!edit || !this.deck) return;
-    const tx = new Transaction(this.deck, label);
-    tx.touch(edit.slide);
-    const before = { anchor: edit.anchor, focus: edit.focus };
-    change(this.textBody());
-    edit.goalX = null;
-    this.commit(tx, true, merge ? `${merge}:${edit.slide.name}` : undefined, before);
-    this.fitToText();
-    this.caretBlink();
-    this.speakCaret();
-  }
-
-  /** A text box that grows with its text (`spAutoFit`): its height follows the text. */
-  private fitToText(): void {
-    const edit = this.text;
-    if (!edit || edit.element.name === 'a:tc') return;
-    const fit = at(edit.element, 'p:txBody/a:bodyPr/a:spAutoFit');
-    if (!fit) return;
-    const view = this.viewOf(edit.slide, edit.element);
-    if (!view?.text || view.shape.frame.rot) return;
-    const ins = view.text.body.settings.insets;
-    const wanted = px2emu(view.text.laid.height) + ins.t + ins.b;
-    if (Math.abs(wanted - view.shape.frame.h) < 2000) return;
-    setFrame(edit.element, { ...view.shape.frame, h: wanted });
-    this.contentVersion++;
-  }
-
-  private toggleRunAttr(name: 'b' | 'i' | 'u' | 'strike', on = '1'): void {
-    const edit = this.text;
-    if (edit && comparePos(edit.anchor, edit.focus) === 0) {
-      // Nothing selected: the next typed text takes the change.
-      const current = this.runStyleAtCaret();
-      const isOn = name === 'b' ? current?.bold : name === 'i' ? current?.italic : name === 'u' ? current?.underline : current?.strike;
-      edit.pending = { ...(edit.pending ?? {}), [name]: isOn ? (name === 'u' ? 'none' : name === 'strike' ? 'noStrike' : '0') : name === 'strike' ? 'sngStrike' : on };
-      this.onState?.();
-      return;
-    }
-    const style = this.runStyleAtCaret();
-    const isOn = name === 'b' ? style?.bold : name === 'i' ? style?.italic : name === 'u' ? style?.underline : style?.strike;
-    const value = isOn ? (name === 'u' ? 'none' : name === 'strike' ? 'noStrike' : '0') : name === 'strike' ? 'sngStrike' : on;
-    this.setRunAttrs({ [name]: value }, t('slides.undo.format'));
-  }
-
-  /** Sets run attributes on the selected text (or, with no text in hand, all the text of the selected shapes). */
-  private setRunAttrs(attrs: Record<string, string | null>, label: string, children?: (rPr: XmlElement) => void): void {
-    if (!this.deck) return;
-    const apply = (rPr: XmlElement): void => {
-      const next = { ...rPr.attrs };
-      for (const [k, v] of Object.entries(attrs)) {
-        if (v === null) delete next[k];
-        else next[k] = v;
-      }
-      rPr.attrs = next;
-      children?.(rPr);
-    };
-    if (this.text) {
-      const edit = this.text;
-      this.textChange(label, (body) => {
-        for (const run of runsIn(body, edit.anchor, edit.focus)) apply(rPrOf(run));
-      });
-      return;
-    }
-    this.forSelectedBodies(label, (body) => {
-      for (const p of paragraphsOf(body)) {
-        for (const r of kids(p)) if (r.name === 'a:r' || r.name === 'a:fld' || r.name === 'a:br') apply(rPrOf(r));
-        const end = kid(p, 'a:endParaRPr');
-        if (end) apply(end);
-        else {
-          const made = { name: 'a:endParaRPr', attrs: { lang: 'en-US', dirty: '0' }, children: [] as XmlElement['children'] };
-          apply(made);
-          p.children.push(made);
-        }
-      }
-    });
-  }
-
-  private forSelectedBodies(label: string, change: (body: XmlElement) => void): void {
-    const deck = this.deck!;
-    const slide = deck.slides[this.current];
-    if (!slide || !this.selected.length) return;
-    const tx = new Transaction(deck, label);
-    tx.touch(slide);
-    for (const element of this.selected) {
-      const bodies = element.name === 'p:graphicFrame' ? kids(at(element, 'a:graphic/a:graphicData/a:tbl'), 'a:tr').flatMap((tr) => kids(tr, 'a:tc')).map((tc) => kid(tc, 'a:txBody')).filter((b): b is XmlElement => !!b) : kid(element, 'p:txBody') ? [kid(element, 'p:txBody')!] : [];
-      for (const body of bodies) change(body);
-    }
-    this.commit(tx);
-  }
-
-  private setParagraphs(label: string, change: (pPr: XmlElement, p: XmlElement) => void): void {
-    if (this.text) {
-      const edit = this.text;
-      this.textChange(label, (body) => {
-        const ps = paragraphsOf(body);
-        for (let i = minPos(edit.anchor, edit.focus).p; i <= maxPos(edit.anchor, edit.focus).p; i++) change(pPrOf(ps[i]), ps[i]);
-      });
-      return;
-    }
-    this.forSelectedBodies(label, (body) => {
-      for (const p of paragraphsOf(body)) change(pPrOf(p), p);
-    });
-  }
-
-  private setAlign(algn: string): void {
-    this.setParagraphs(t('slides.undo.format'), (pPr) => {
-      pPr.attrs = { ...pPr.attrs, algn };
-    });
-  }
-
-  private setList(kind: 'bullet' | 'number' | null): void {
-    this.setParagraphs(t('slides.undo.format'), (pPr) => {
-      pPr.children = pPr.children.filter((c) => typeof c === 'string' || !['a:buNone', 'a:buChar', 'a:buAutoNum', 'a:buBlip', 'a:buFont'].includes(c.name));
-      const insertAt = pPr.children.findIndex((c) => typeof c !== 'string' && ['a:tabLst', 'a:defRPr', 'a:extLst'].includes(c.name));
-      const add = (...nodes: XmlElement[]): void => void (insertAt < 0 ? pPr.children.push(...nodes) : pPr.children.splice(insertAt, 0, ...nodes));
-      const attrs = { ...pPr.attrs };
-      if (kind === 'bullet') {
-        add({ name: 'a:buFont', attrs: { typeface: 'Arial', panose: '020B0604020202020204', pitchFamily: '34', charset: '0' }, children: [] }, { name: 'a:buChar', attrs: { char: '•' }, children: [] });
-        attrs.marL ??= '342900';
-        attrs.indent ??= '-342900';
-      } else if (kind === 'number') {
-        add({ name: 'a:buFont', attrs: { typeface: '+mj-lt' }, children: [] }, { name: 'a:buAutoNum', attrs: { type: 'arabicPeriod' }, children: [] });
-        attrs.marL ??= '457200';
-        attrs.indent ??= '-457200';
-      } else {
-        add({ name: 'a:buNone', attrs: {}, children: [] });
-        attrs.marL = '0';
-        attrs.indent = '0';
-      }
-      pPr.attrs = attrs;
-    });
-  }
-
-  private runStyleAtCaret(): import('./textStyle.ts').RunStyle | null {
-    const found = this.editedText();
-    if (found && this.text) {
-      const p = found.text.body.paragraphs[minPos(this.text.anchor, this.text.focus).p];
-      if (!p) return null;
-      const o = minPos(this.text.anchor, this.text.focus).o;
-      let at2 = 0;
-      for (const r of p.runs) {
-        if (o >= at2 && (o < at2 + r.text.length || (o === at2 + r.text.length && o > 0))) return r.style;
-        at2 += r.text.length;
-      }
-      return p.runs[0]?.style ?? p.end;
-    }
-    const slide = this.deck?.slides[this.current];
-    const view = slide && this.selected[0] ? this.viewOf(slide, this.selected[0]) : undefined;
-    const p = view?.text?.body.paragraphs[0];
-    return p ? (p.runs[0]?.style ?? p.end) : null;
-  }
-
   // ---- Commands from the menus and toolbar --------------------------------------------------------------------------
-
   formatState(): FormatState {
-    const style = this.runStyleAtCaret();
-    if (!style) return {};
-    const found = this.editedText();
-    const p = found && this.text ? found.text.body.paragraphs[this.text.focus.p] : this.selectedParagraph();
-    const align = p?.align === 'ctr' ? 'center' : p?.align === 'r' ? 'right' : p?.align === 'just' ? 'justify' : 'left';
-    return {
-      marks: { bold: style.bold, italic: style.italic, underline: style.underline, strikethrough: style.strike, superscript: style.baseline > 0, subscript: style.baseline < 0 },
-      font: style.font,
-      size: Math.round(style.size * 10) / 10,
-      align,
-      color: cssColor(style.color),
-      list: p?.bullet ? (p.bullet.kind === 'auto' ? 'number' : 'bullet') : null,
-    };
-  }
-
-  private selectedParagraph(): import('./textStyle.ts').Paragraph | undefined {
-    const slide = this.deck?.slides[this.current];
-    const view = slide && this.selected[0] ? this.viewOf(slide, this.selected[0]) : undefined;
-    return view?.text?.body.paragraphs[0];
+    return this.shapes.formatState();
   }
 
   /** A formatting command from the toolbar or the Format menu; false if slides have no such formatting. */
   formatAction(action: Action): boolean {
-    if (!this.deck || this.readOnly) return false;
-    if (!this.text && !this.selected.length) return false;
-    const label = t('slides.undo.format');
-    switch (action.kind) {
-      case 'toggleMark':
-        if (action.mark === 'bold') this.toggleRunAttr('b');
-        else if (action.mark === 'italic') this.toggleRunAttr('i');
-        else if (action.mark === 'underline') this.toggleRunAttr('u', 'sng');
-        else if (action.mark === 'strikethrough') this.toggleRunAttr('strike');
-        else if (action.mark === 'superscript' || action.mark === 'subscript') {
-          const style = this.runStyleAtCaret();
-          const want = action.mark === 'superscript' ? '30000' : '-25000';
-          const on = action.mark === 'superscript' ? (style?.baseline ?? 0) > 0 : (style?.baseline ?? 0) < 0;
-          this.setRunAttrs({ baseline: on ? null : want }, label);
-        } else return false;
-        return true;
-      case 'setFont':
-        this.setRunAttrs({}, label, (rPr) => {
-          rPr.children = rPr.children.filter((c) => typeof c === 'string' || (c.name !== 'a:latin' && c.name !== 'a:ea' && c.name !== 'a:cs'));
-          const index = rPr.children.findIndex((c) => typeof c !== 'string' && ['a:sym', 'a:hlinkClick', 'a:hlinkMouseOver', 'a:rtl', 'a:extLst'].includes(c.name));
-          const latin = { name: 'a:latin', attrs: { typeface: action.family }, children: [] };
-          if (index < 0) rPr.children.push(latin);
-          else rPr.children.splice(index, 0, latin);
-        });
-        return true;
-      case 'setFontSize':
-        this.setRunAttrs({ sz: String(Math.round(action.points * 100)) }, label);
-        return true;
-      case 'growFont':
-      case 'shrinkFont': {
-        const size = this.runStyleAtCaret()?.size ?? 18;
-        const steps = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 44, 48, 54, 60, 66, 72, 80, 88, 96];
-        const next = action.kind === 'growFont' ? (steps.find((s) => s > size + 0.01) ?? size + 8) : ([...steps].reverse().find((s) => s < size - 0.01) ?? Math.max(1, size - 1));
-        this.setRunAttrs({ sz: String(Math.round(next * 100)) }, label);
-        return true;
-      }
-      case 'setColor': {
-        const color = action.color ? parseCss(action.color) : null;
-        this.setRunAttrs({}, label, (rPr) => {
-          rPr.children = rPr.children.filter((c) => typeof c === 'string' || !['a:noFill', 'a:solidFill', 'a:gradFill', 'a:blipFill', 'a:pattFill', 'a:grpFill'].includes(c.name));
-          if (color) {
-            const index = rPr.children.findIndex((c) => typeof c !== 'string' && !['a:ln'].includes(c.name));
-            const fill = { name: 'a:solidFill', attrs: {}, children: [{ name: 'a:srgbClr', attrs: { val: cssColor(color).slice(1).toUpperCase() }, children: [] }] };
-            if (index < 0) rPr.children.push(fill);
-            else rPr.children.splice(index, 0, fill);
-          }
-        });
-        return true;
-      }
-      case 'setHighlight': {
-        const color = action.color ? parseCss(action.color) : null;
-        this.setRunAttrs({}, label, (rPr) => setHighlight(rPr, color));
-        return true;
-      }
-      case 'clearFormatting':
-        this.setRunAttrs({ b: null, i: null, u: null, strike: null, baseline: null, sz: null }, label, (rPr) => {
-          rPr.children = [];
-        });
-        return true;
-      case 'setAlignment':
-        this.setAlign(action.align === 'center' ? 'ctr' : action.align === 'right' ? 'r' : action.align === 'justify' ? 'just' : 'l');
-        return true;
-      case 'toggleList': {
-        const p = this.text ? this.editedText()?.text.body.paragraphs[this.text.focus.p] : this.selectedParagraph();
-        const has = p?.bullet ? (p.bullet.kind === 'auto' ? 'number' : 'bullet') : null;
-        const want = action.list === 'number' ? 'number' : 'bullet';
-        this.setList(has === want && !action.force ? null : want);
-        return true;
-      }
-      case 'indent':
-        if (this.text) this.changeLevel(action.direction === 'increase' ? 1 : -1);
-        else this.setParagraphs(label, (pPr) => {
-          const level = Math.min(8, Math.max(0, (Number(pPr.attrs.lvl) || 0) + (action.direction === 'increase' ? 1 : -1)));
-          pPr.attrs = { ...pPr.attrs, lvl: String(level) };
-        });
-        return true;
-      case 'setLineSpacing':
-        this.setParagraphs(label, (pPr) => {
-          pPr.children = pPr.children.filter((c) => typeof c === 'string' || c.name !== 'a:lnSpc');
-          pPr.children.unshift({ name: 'a:lnSpc', attrs: {}, children: [{ name: 'a:spcPct', attrs: { val: String(Math.round(action.lines * 100000)) }, children: [] }] });
-        });
-        return true;
-    }
-    return false;
-  }
-
-  private setShapeFill(color: Rgba | null): void {
-    this.shapeChange(t('slides.undo.format'), (element) => setFill(element, color));
-  }
-
-  private setShapeLine(color: Rgba | null): void {
-    this.shapeChange(t('slides.undo.format'), (element) => setLine(element, color, color ? 12700 : undefined));
-  }
-
-  private shapeChange(label: string, change: (element: XmlElement) => void): void {
-    const deck = this.deck;
-    const slide = deck?.slides[this.current];
-    if (!deck || !slide || !this.selected.length || this.readOnly) return;
-    const tx = new Transaction(deck, label);
-    tx.touch(slide);
-    for (const element of this.selected) change(element);
-    this.commit(tx);
+    if (!this.deck) return false;
+    return this.shapes.formatAction(action);
   }
 
   async slidesOp(op: SlidesOp): Promise<void> {
     const deck = this.deck;
     if (!deck) return;
-    const slide = deck.slides[this.current];
-    if (op === 'presentStart' || op === 'presentCurrent') return this.present(op === 'presentStart' ? 0 : this.current);
+    const slide = this.pages[this.current];
+    if (op === 'editMaster') return this.toggleMasterView();
+    if (op === 'presentStart' || op === 'presentCurrent') {
+      if (this.masterView) this.toggleMasterView();
+      return this.present(op === 'presentStart' ? 0 : this.current);
+    }
     if (op === 'sorter') return this.toggleSorter();
     if (op === 'notes') return this.toggleNotes();
     if (op === 'copy') return void this.copy();
     if (op === 'cut') return void this.cut();
     if (op === 'paste') return void this.paste();
     if (this.readOnly) return;
+    if (op === 'background') return this.backgroundDialog();
+    if (op === 'theme') return this.themeDialog();
+    // Commands about slides do nothing in master view, whose pages are masters and layouts.
+    if (this.masterView && SLIDE_ONLY_OPS.has(op)) return;
     const tx = (label: string): Transaction => new Transaction(deck, label);
+    const current = this.currentSlide;
     switch (op) {
       case 'newSlide': {
-        const layout = this.layoutFor(slide);
+        const layout = this.layoutFor(current);
         if (!layout) return;
         const step = tx(t('slides.op.newSlide'));
         await addSlide(deck, layout, this.current + 1, step);
@@ -1854,25 +834,25 @@ export class SlidesEditorView {
         return;
       }
       case 'duplicateSlide': {
-        if (!slide) return;
+        if (!current) return;
         const step = tx(t('slides.op.duplicateSlide'));
-        await duplicateSlide(deck, slide, step);
+        await duplicateSlide(deck, current, step);
         this.commit(step, true);
         this.go(this.current + 1);
         return;
       }
       case 'deleteSlide': {
-        if (!slide || deck.slides.length <= 1) return;
+        if (!current || deck.slides.length <= 1) return;
         const step = tx(t('slides.op.deleteSlide'));
-        await deleteSlides(deck, [slide], step);
+        await deleteSlides(deck, [current], step);
         this.commit(step, true);
-        this.go(Math.min(this.current, deck.slides.length - 1));
+        this.go(Math.min(this.current, this.pages.length - 1));
         return;
       }
       case 'hideSlide': {
-        if (!slide) return;
+        if (!current) return;
         const step = tx(t('slides.op.hideSlide'));
-        setHidden(slide, !isHidden(slide), step);
+        setHidden(current, !isHidden(current), step);
         this.commit(step);
         return;
       }
@@ -1880,7 +860,7 @@ export class SlidesEditorView {
       case 'moveSlideDown': {
         if (!slide) return;
         const to = this.current + (op === 'moveSlideUp' ? -1 : 1);
-        if (to < 0 || to >= deck.slides.length) return;
+        if (to < 0 || to >= this.pages.length) return;
         await this.moveSlide(this.current, to);
         return;
       }
@@ -1888,9 +868,9 @@ export class SlidesEditorView {
         showPopupMenu(this.layoutItems(), this.canvas.getBoundingClientRect().left + 40, this.canvas.getBoundingClientRect().top + 40, t('slides.op.layout'), () => this.focus());
         return;
       case 'resetSlide': {
-        if (!slide) return;
+        if (!current) return;
         const step = tx(t('slides.op.resetSlide'));
-        resetToLayout(slide, step);
+        resetToLayout(current, step);
         this.commit(step);
         return;
       }
@@ -1900,7 +880,7 @@ export class SlidesEditorView {
         if (op === 'shape') {
           const rect = this.canvas.getBoundingClientRect();
           showPopupMenu(
-            SHAPE_CHOICES.map((c) => ({ label: t(`slides.shape.${c}` as MessageKey), run: () => this.insertShape(c) })),
+            shapeMenuItems(SHAPE_GROUPS, (c) => this.insertShape(c.preset, shapeName(c.id))),
             rect.left + 40,
             rect.top + 40,
             t('slides.op.shape'),
@@ -1924,18 +904,18 @@ export class SlidesEditorView {
         return;
       }
       case 'deleteShape': {
-        if (!slide || !this.selected.length) return;
+        if (!slide || !this.shapes.selected.length) return;
         const step = tx(t('slides.op.deleteShape'));
-        deleteShapes(slide, this.selected, step);
-        this.selected = [];
+        deleteShapes(slide, this.shapes.selected, step);
+        this.shapes.selected = [];
         this.commit(step);
         announce(t('slides.deleted'));
         return;
       }
       case 'duplicateShape': {
-        if (!slide || !this.selected.length) return;
+        if (!slide || !this.shapes.selected.length) return;
         const step = tx(t('slides.op.duplicateShape'));
-        this.selected = duplicateShapes(slide, this.selected, step);
+        this.shapes.selected = duplicateShapes(slide, this.shapes.selected, step);
         this.commit(step);
         return;
       }
@@ -1943,10 +923,10 @@ export class SlidesEditorView {
       case 'bringForward':
       case 'sendBackward':
       case 'sendToBack': {
-        if (!slide || !this.selected.length) return;
+        if (!slide || !this.shapes.selected.length) return;
         const order: Order = op === 'bringToFront' ? 'front' : op === 'bringForward' ? 'forward' : op === 'sendBackward' ? 'backward' : 'back';
         const step = tx(t(`slides.op.${op}`));
-        reorder(slide, this.selected, order, step);
+        reorder(slide, this.shapes.selected, order, step);
         this.commit(step);
         return;
       }
@@ -1964,7 +944,7 @@ export class SlidesEditorView {
 
   private layoutItems(): PopupItem[] {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.currentSlide;
     if (!deck || !slide) return [];
     return deck.layoutsOf(slide.layout.master).map((layout) => ({
       label: (at(layout.xml, 'p:cSld')?.attrs.name ?? layout.name.replace(/^.*\//, '')) + (layout === slide.layout ? ' ✓' : ''),
@@ -1974,7 +954,7 @@ export class SlidesEditorView {
 
   private async changeLayout(layout: LayoutPart): Promise<void> {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.currentSlide;
     if (!deck || !slide || this.readOnly) return;
     const step = new Transaction(deck, t('slides.op.layout'));
     await changeLayout(deck, slide, layout, step);
@@ -1984,7 +964,7 @@ export class SlidesEditorView {
   async moveSlide(from: number, to: number): Promise<void> {
     const deck = this.deck;
     const slide = deck?.slides[from];
-    if (!deck || !slide || this.readOnly) return;
+    if (!deck || !slide || this.readOnly || this.masterView) return;
     const step = new Transaction(deck, t('slides.undo.moveSlide'));
     await moveSlides(deck, [slide], to, step);
     this.commit(step, true);
@@ -1993,34 +973,34 @@ export class SlidesEditorView {
   }
 
   async deleteSlideAt(index: number): Promise<void> {
-    if (!this.deck || this.readOnly) return;
+    if (!this.deck || this.readOnly || this.masterView) return;
     this.current = index;
     await this.slidesOp('deleteSlide');
   }
 
-  /** A new shape in the middle of the slide in hand. */
-  private insertShape(preset: string): void {
+  /** A new shape (or, for "textBox", a text box) in the middle of the slide in hand, named `name`. */
+  private insertShape(preset: string, name = ''): void {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.pages[this.current];
     if (!deck || !slide || this.readOnly) return;
     const textBox = preset === 'textBox';
     const w = textBox ? Math.round(deck.width * 0.4) : Math.round(Math.min(deck.width, deck.height) * 0.3);
-    const hh = textBox ? 369332 : preset === 'line' || preset === 'straightConnector1' ? 0 : w;
+    const hh = textBox ? 369332 : isLinePreset(preset) ? 0 : w;
     const frame: Frame = { x: Math.round((deck.width - w) / 2), y: Math.round((deck.height - hh) / 2), w, h: hh, rot: 0, flipH: false, flipV: false };
     const step = new Transaction(deck, t('slides.undo.insert'));
     step.touch(slide);
     const tree = treeOf(slide);
-    const element = newShape(tree, textBox ? 'rect' : preset, frame, textBox ? t('slides.textBoxName') : t(`slides.shape.${preset}` as MessageKey), textBox);
+    const element = newShape(tree, textBox ? 'rect' : preset, frame, textBox ? t('slides.textBoxName') : name, textBox);
     tree.children.push(element);
-    this.selected = [element];
+    this.shapes.selected = [element];
     this.commit(step);
-    if (textBox) this.editText(slide, element, element, 'end');
+    if (textBox) this.shapes.editText(slide, element, element, 'end');
     announce(t('slides.inserted'));
   }
 
   private insertTable(rows: number, cols: number): void {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.pages[this.current];
     if (!deck || !slide || this.readOnly) return;
     const w = Math.round(deck.width * 0.7);
     const frame: Frame = { x: Math.round((deck.width - w) / 2), y: Math.round(deck.height * 0.3), w, h: 0, rot: 0, flipH: false, flipV: false };
@@ -2029,14 +1009,14 @@ export class SlidesEditorView {
     const tree = treeOf(slide);
     const element = newTable(tree, rows, cols, frame, t('slides.tableName'));
     tree.children.push(element);
-    this.selected = [element];
+    this.shapes.selected = [element];
     this.commit(step);
     announce(t('slides.inserted'));
   }
 
   async insertPicture(bytes: Uint8Array, name: string): Promise<void> {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
+    const slide = this.pages[this.current];
     if (!deck || !slide || this.readOnly) return;
     let bitmap: ImageBitmap;
     let ext: string;
@@ -2060,7 +1040,7 @@ export class SlidesEditorView {
     const element = newPicture(slide, media, { x: Math.round((deck.width - w) / 2), y: Math.round((deck.height - hh) / 2), w, h: hh, rot: 0, flipH: false, flipV: false }, name.replace(/\.[^.]*$/, ''), '');
     treeOf(slide).children.push(element);
     this.images.set(`pptx:${media}`, bitmap);
-    this.selected = [element];
+    this.shapes.selected = [element];
     this.commit(step);
     announce(t('slides.inserted'));
   }
@@ -2081,7 +1061,7 @@ export class SlidesEditorView {
   }
 
   get hasSelection(): boolean {
-    return this.text ? comparePos(this.text.anchor, this.text.focus) !== 0 : this.selected.length > 0;
+    return this.shapes.hasSelection;
   }
 
   undo(): void {
@@ -2095,16 +1075,16 @@ export class SlidesEditorView {
   private async step(back: boolean): Promise<void> {
     const deck = this.deck;
     if (!deck || this.readOnly) return;
-    const slideName = deck.slides[this.current]?.name;
+    const slideName = this.pages[this.current]?.name;
     const step = back ? this.history.undo(deck) : this.history.redo(deck);
     if (!step) return;
-    this.leaveText();
-    this.selected = [];
+    this.shapes.reset();
+    deck.refreshThemes();
     await deck.loadSlides();
-    const index = deck.slides.findIndex((s) => s.name === slideName);
+    const index = this.pages.findIndex((s) => s.name === slideName);
     // The slide changed by the step comes into view.
-    const touched = deck.slides.findIndex((s) => step.before.has(s.name));
-    this.current = touched >= 0 ? touched : index >= 0 ? index : Math.min(this.current, deck.slides.length - 1);
+    const touched = this.pages.findIndex((s) => step.before.has(s.name));
+    this.current = touched >= 0 ? touched : index >= 0 ? index : Math.min(this.current, this.pages.length - 1);
     this.changed(true);
     this.showNotes();
     announce(t(back ? 'slides.undone' : 'slides.redone', { what: step.label }));
@@ -2112,23 +1092,11 @@ export class SlidesEditorView {
 
   // ---- Clipboard ----------------------------------------------------------------------------------------------------
 
-  private copyText(): string | null {
-    if (!this.text) return null;
-    const text = textBetween(this.textBody(), this.text.anchor, this.text.focus);
-    return text || null;
-  }
-
-  private cutText(): void {
-    // Nothing selected: a cut takes nothing.
-    if (!this.text || this.readOnly || comparePos(this.text.anchor, this.text.focus) === 0) return;
-    this.deleteKey(true, false);
-  }
-
   private copyShapes(cut: boolean): void {
     const deck = this.deck;
-    const slide = deck?.slides[this.current];
-    if (!deck || !slide || !this.selected.length) return;
-    const elements = this.selected.map((e) => cloneElement(e));
+    const slide = this.pages[this.current];
+    if (!deck || !slide || !this.shapes.selected.length) return;
+    const elements = this.shapes.selected.map((e) => cloneElement(e));
     const text = elements.map((e) => kids(kid(e, 'p:txBody'), 'a:p').map(paragraphText).join('\n')).filter(Boolean).join('\n\n');
     const key = `golem-slides:${Math.random().toString(36).slice(2)}`;
     this.copied = { elements, from: slide, key };
@@ -2140,16 +1108,16 @@ export class SlidesEditorView {
   private copiedText = '';
 
   async copy(): Promise<void> {
-    if (this.text) {
-      const text = this.copyText();
+    if (this.shapes.text) {
+      const text = this.shapes.copyText();
       if (text) await navigator.clipboard?.writeText(text).catch(() => undefined);
     } else this.copyShapes(false);
   }
 
   async cut(): Promise<void> {
-    if (this.text) {
+    if (this.shapes.text) {
       await this.copy();
-      this.cutText();
+      this.shapes.cutText();
     } else this.copyShapes(true);
   }
 
@@ -2160,9 +1128,9 @@ export class SlidesEditorView {
 
   private async pasteText(text: string): Promise<void> {
     if (this.readOnly || !this.deck) return;
-    const slide = this.deck.slides[this.current];
+    const slide = this.pages[this.current];
     // Shapes copied here come back as shapes, when the clipboard still holds what was copied with them.
-    if (!this.text && this.copied && slide && (text === this.copiedText || !text)) {
+    if (!this.shapes.text && this.copied && slide && (text === this.copiedText || !text)) {
       const step = new Transaction(this.deck, t('slides.undo.paste'));
       const offset = this.copied.from === slide ? 228600 : 0;
       // Pictures copied to another slide need their relationships there.
@@ -2171,28 +1139,21 @@ export class SlidesEditorView {
       const tree = treeOf(slide);
       const before = tree.children.length;
       tree.children.push(...fixed);
-      this.selected = duplicateShapes(slide, fixed, step, offset);
+      this.shapes.selected = duplicateShapes(slide, fixed, step, offset);
       tree.children.splice(before, fixed.length);
       this.commit(step);
       return;
     }
     if (!text) return;
-    if (this.text) {
-      const edit = this.text;
-      this.textChange(t('slides.undo.paste'), (body) => {
-        const atPos = deleteRange(body, edit.anchor, edit.focus);
-        edit.anchor = edit.focus = insertMultiline(body, atPos, text);
-      });
-      return;
-    }
+    if (this.shapes.pasteText(text)) return;
     if (!slide) return;
     // Text pasted with no text in hand: a new text box holding it.
     this.insertShape('textBox');
-    if (this.text) this.typed(text);
+    if (this.shapes.text) this.shapes.typed(text);
   }
 
   /** Copies of a shape's relationship ids (pictures, links) re-made on another slide. */
-  private carryRelationships(element: XmlElement, from: SlidePart, to: SlidePart): XmlElement {
+  private carryRelationships(element: XmlElement, from: PagePart, to: PagePart): XmlElement {
     if (from === to) return element;
     const walk = (e: XmlElement): void => {
       for (const [k, v] of Object.entries(e.attrs)) {
@@ -2209,23 +1170,11 @@ export class SlidesEditorView {
   }
 
   selectAll(): void {
-    if (this.text) {
-      const ps = paragraphsOf(this.textBody());
-      this.text.anchor = { p: 0, o: 0 };
-      this.text.focus = { p: ps.length - 1, o: paragraphLength(ps[ps.length - 1]) };
-    } else {
-      const slide = this.deck?.slides[this.current];
-      if (!slide) return;
-      this.selected = this.viewsOf(slide)
-        .filter((v) => !v.inherited && v.shape === v.top)
-        .map((v) => v.shape.element);
-      this.announceSelection();
-    }
-    this.redraw();
+    this.shapes.selectAll();
   }
 
   insert(text: string): void {
-    this.typed(text);
+    this.shapes.typed(text);
   }
 
   // ---- Views: sorter, notes, presenting ---------------------------------------------------------------------------
@@ -2238,9 +1187,105 @@ export class SlidesEditorView {
     return this.notesShown;
   }
 
+  // ---- Design: background and theme -------------------------------------------------------------------------------------
+
+  /** Slide › Background: sets the background of the slide in hand (master view: the master or layout), or of every slide. */
+  private async backgroundDialog(): Promise<void> {
+    const deck = this.deck;
+    const page = this.pages[this.current];
+    if (!deck || !page || this.readOnly) return;
+    this.shapes.leaveText();
+    const own = backgroundOf(page);
+    const shown = colorContext(deck, page);
+    const fill = backgroundFill(deck, page, shown);
+    const fallback = fill.kind === 'solid' && fill.color ? `#${hexOf(fill.color)}` : '#FFFFFF';
+    const master = masterOfPage(page);
+    const answer = await showBackgroundDialog(own, fallback, { canReset: !!at(page.xml, 'p:cSld/p:bg') && page !== master, allLabel: t('slides.background.applyAll') }, () => this.deps.pickImage());
+    this.focus();
+    if (!answer || this.deck !== deck) return;
+    let spec = answer.spec;
+    if (spec?.kind === 'picture') {
+      const media = answer.picture ? await this.addPictureMedia(answer.picture.bytes, answer.picture.name) : null;
+      if (!media || this.deck !== deck) return;
+      spec = { kind: 'picture', media };
+    }
+    const step = new Transaction(deck, t('slides.background.title'));
+    if (answer.scope === 'all' && spec) setBackgroundEverywhere(deck, master, spec, step);
+    else setBackground(page, answer.scope === 'reset' ? null : spec, step);
+    this.commit(step);
+    announce(t('slides.background.done'));
+  }
+
+  /** Puts a picture's bytes in the deck (as a kind PowerPoint shows) and returns its part name; null if it can't be read. */
+  private async addPictureMedia(bytes: Uint8Array, name: string): Promise<string | null> {
+    const deck = this.deck!;
+    try {
+      const kind = sniffImage(bytes)?.type;
+      if (kind !== 'png' && kind !== 'jpeg' && kind !== 'gif' && kind !== 'webp') bytes = (await toPng(name, bytes)).bytes;
+      const bitmap = await decodeImage(bytes);
+      const media = deck.addMedia(bytes, sniffImage(bytes)?.type ?? 'png');
+      this.images.set(`pptx:${media}`, bitmap);
+      return media;
+    } catch {
+      this.deps.notify(t('slides.pictureUnreadable'));
+      return null;
+    }
+  }
+
+  /** Slide › Theme: the deck's colours, fonts, and light or dark pages, for every master. */
+  private async themeDialog(): Promise<void> {
+    const deck = this.deck;
+    const page = this.pages[this.current];
+    if (!deck || !page || this.readOnly) return;
+    this.shapes.leaveText();
+    const master = masterOfPage(page);
+    const now = currentDesign(master);
+    const answer = await showThemeDialog({ ...now, name: master.theme.name }, () => this.deps.pickDeck(), async (file) => readOtherTheme(new Uint8Array(await file.arrayBuffer()), file.name.replace(/\.[^.]*$/, '')));
+    this.focus();
+    if (!answer || this.deck !== deck) return;
+    const step = new Transaction(deck, t('slides.theme.title'));
+    const themes = new Set(deck.masters.map((m) => deck.themePart(m)).filter((p) => !!p));
+    for (const theme of themes) {
+      setThemeColors(theme!, answer.colors, step);
+      setThemeFonts(theme!, answer.fonts, step);
+    }
+    for (const m of deck.masters) if ((m.colorMap.bg1 === 'dk1') !== answer.dark) setDarkPages(m, answer.dark, step);
+    deck.refreshThemes();
+    this.commit(step);
+    announce(t('slides.theme.done'));
+  }
+
+  get isMasterView(): boolean {
+    return this.masterView;
+  }
+
+  /** Opens master view (the masters and their layouts, edited as slides are) on the layout of the slide in hand, or closes it. */
+  toggleMasterView(): void {
+    const deck = this.deck;
+    if (!deck) return;
+    this.shapes.leaveText();
+    this.commitNotes();
+    this.shapes.selected = [];
+    if (!this.masterView) {
+      const slide = this.currentSlide;
+      this.slideBeforeMaster = this.current;
+      this.masterView = true;
+      this.current = Math.max(0, slide ? this.pages.indexOf(slide.layout) : 0);
+    } else {
+      this.masterView = false;
+      this.current = Math.min(this.slideBeforeMaster, deck.slides.length - 1);
+    }
+    this.masterBar.hidden = !this.masterView;
+    this.layout();
+    this.contentVersion++;
+    this.thumbs.clear();
+    this.showNotes();
+    this.go(this.current, false);
+    announce(this.masterView ? `${t('slides.masterOn')}. ${this.slideMessage(this.current)}` : `${t('slides.masterOff')}. ${this.slideMessage(this.current)}`);
+  }
+
   toggleSorter(): void {
-    this.leaveText();
-    this.selected = [];
+    this.shapes.reset();
     this.sorter = !this.sorter;
     this.layout();
     const cam = this.deps.camera;
@@ -2268,8 +1313,8 @@ export class SlidesEditorView {
 
   private showNotes(): void {
     this.commitNotes();
-    this.notesBar.hidden = !this.notesShown || !this.deck;
-    const slide = this.deck?.slides[this.current] ?? null;
+    this.notesBar.hidden = !this.notesShown || !this.deck || this.masterView;
+    const slide = this.currentSlide ?? null;
     this.notesFor = slide;
     this.notesInput.value = slide ? this.deck!.notesText(slide).replace(/\u000b/g, '\n') : '';
     this.notesKept = this.notesInput.value;
@@ -2297,7 +1342,7 @@ export class SlidesEditorView {
   private present(from: number): void {
     const deck = this.deck;
     if (!deck) return;
-    this.leaveText();
+    this.shapes.leaveText();
     const fonts = this.fonts!;
     this.presenter?.close();
     this.presenter = new Presenter({
@@ -2351,49 +1396,6 @@ export class SlidesEditorView {
     return this.deck ? { slide: this.current + 1, count: this.slideCount } : null;
   }
 
-  private announceSelection(): void {
-    const slide = this.deck?.slides[this.current];
-    if (!slide || !this.selected.length) return;
-    if (this.selected.length > 1) return announce(t('slides.selectedMany', { count: this.selected.length }));
-    const view = this.viewOf(slide, this.selected[0]);
-    if (!view) return;
-    announce(this.describe(view.shape));
-  }
-
-  /** What a shape is, for a screen reader: its kind, its name or alt text, and its text. */
-  describe(shape: ResolvedShape): string {
-    const kind = t(`slides.kind.${shape.kind}` as MessageKey);
-    const text = kids(kid(shape.element, 'p:txBody'), 'a:p').map(paragraphText).join(' ').trim();
-    const name = shape.descr || cNvPr(shape.element)?.attrs.name || '';
-    return [kind, name, text].filter(Boolean).join(', ');
-  }
-
-  private speakCaret(): void {
-    const edit = this.text;
-    if (!edit) return;
-    const ps = paragraphsOf(this.textBody());
-    const p = ps[edit.focus.p];
-    if (!p) return;
-    // Screen readers follow the caret through the textarea, which holds the paragraph around it.
-    const text = plainText(p);
-    this.input.value = text;
-    try {
-      this.input.setSelectionRange(Math.min(edit.anchor.p === edit.focus.p ? edit.anchor.o : edit.focus.o, edit.focus.o), Math.max(edit.anchor.p === edit.focus.p ? edit.anchor.o : edit.focus.o, edit.focus.o));
-    } catch {
-      // not focused
-    }
-  }
-
-  private caretBlink(): void {
-    clearInterval(this.caretTimer);
-    this.caretOn = true;
-    if (matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-    this.caretTimer = window.setInterval(() => {
-      this.caretOn = !this.caretOn;
-      this.deps.render();
-    }, 530);
-  }
-
   private redraw(): void {
     this.painted = '';
     this.onState?.();
@@ -2410,10 +1412,11 @@ export class SlidesEditorView {
     const deck = this.deck;
     if (!deck) return null;
     return {
-      slides: deck.slides.map((s) => ({ name: s.name, title: this.titleOf(s), hidden: isHidden(s), layout: at(s.layout.xml, 'p:cSld')?.attrs.name ?? '', shapes: kids(at(s.xml, 'p:cSld/p:spTree')).filter((e) => /^p:(sp|pic|grpSp|cxnSp|graphicFrame)$/.test(e.name)).map((e) => ({ name: cNvPr(e)?.attrs.name ?? '', text: kids(kid(e, 'p:txBody'), 'a:p').map(paragraphText).join('\n'), x: Number(kid(xfrmOf(e), 'a:off')?.attrs.x ?? NaN), y: Number(kid(xfrmOf(e), 'a:off')?.attrs.y ?? NaN) })) })),
+      masterView: this.masterView,
+      slides: this.pages.map((s) => ({ name: s.name, title: this.titleOf(s), hidden: isHidden(s), layout: isSlidePart(s) ? (at(s.layout.xml, 'p:cSld')?.attrs.name ?? '') : (at(s.xml, 'p:cSld')?.attrs.name ?? ''), shapes: kids(at(s.xml, 'p:cSld/p:spTree')).filter((e) => /^p:(sp|pic|grpSp|cxnSp|graphicFrame)$/.test(e.name)).map((e) => ({ name: cNvPr(e)?.attrs.name ?? '', text: kids(kid(e, 'p:txBody'), 'a:p').map(paragraphText).join('\n'), x: Number(kid(xfrmOf(e), 'a:off')?.attrs.x ?? NaN), y: Number(kid(xfrmOf(e), 'a:off')?.attrs.y ?? NaN) })) })),
       current: this.current,
-      selected: this.selected.map((e) => cNvPr(e)?.attrs.name ?? ''),
-      editing: this.text ? { anchor: this.text.anchor, focus: this.text.focus } : null,
+      selected: this.shapes.selected.map((e) => cNvPr(e)?.attrs.name ?? ''),
+      editing: this.shapes.text ? { anchor: this.shapes.text.anchor, focus: this.shapes.text.focus } : null,
       sorter: this.sorter,
       canUndo: this.canUndo,
       canRedo: this.canRedo,
@@ -2421,29 +1424,24 @@ export class SlidesEditorView {
     };
   }
 
-  /** Where a shape of the slide in hand is on screen (CSS px of the canvas), by name: for tests. */
-  screenOf(name: string): { x: number; y: number } | null {
+  /** Where a shape of the slide in hand is on screen (CSS px of the canvas), by name: its middle, and its bottom right corner (a handle). For tests. */
+  screenOf(name: string): { x: number; y: number; corner: { x: number; y: number } } | null {
     const p = this.placed[this.current];
     if (!p) return null;
     const view = this.viewsOf(p.slide).find((v) => cNvPr(v.shape.element)?.attrs.name === name);
     if (!view) return null;
-    const [sx, sy] = apply(view.matrix, view.w / 2, view.h / 2);
     const cam = this.deps.camera;
     const scale = cam.zoom * CSS_PX_PER_POINT;
-    return { x: (p.x + sx * 0.75 - cam.x) * scale, y: (p.y + sy * 0.75 - cam.y) * scale };
+    const screen = (x: number, y: number): { x: number; y: number } => {
+      const [sx, sy] = apply(view.matrix, x, y);
+      return { x: (p.x + sx * 0.75 - cam.x) * scale, y: (p.y + sy * 0.75 - cam.y) * scale };
+    };
+    return { ...screen(view.w / 2, view.h / 2), corner: screen(view.w, view.h) };
   }
 
   get presenting(): boolean {
     return this.presenter !== null;
   }
-}
-
-/** Inserts one line of text with a given run's look. */
-function insertStyled(body: XmlElement, atPos: TextPos, line: string, style: XmlElement): void {
-  if (!line) return;
-  const p = paragraphsOf(body)[atPos.p];
-  const index = splitAt(p, atPos.o);
-  p.children.splice(index, 0, { name: 'a:r', attrs: {}, children: [...style.children.filter((c) => typeof c !== 'string' && c.name === 'a:rPr'), { name: 'a:t', attrs: {}, children: [line] }] });
 }
 
 function cssVar(name: string, fallback: string): string {

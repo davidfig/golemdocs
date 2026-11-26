@@ -8,6 +8,7 @@ export * from './edit/bookmarks.ts';
 export * from './edit/comments.ts';
 export * from './edit/fields.ts';
 export { isPlainText, paragraphSegments, textSegments, type Segment } from './edit/segments.ts';
+export { countText, documentWords, type TextCounts } from './edit/wordCount.ts';
 export { WordDocument } from './docx/document.ts';
 export { OpcPackage, PackageError, REL, CONTENT_TYPE, Relationships, isRelType, resolveTarget, contentTypeForExtension, type Relationship } from './opc/package.ts';
 export { SHARED_MEDIA_IN_TEXT, sharedMediaHash, sharedMediaPart, sha256Hex } from './opc/sharedMedia.ts';

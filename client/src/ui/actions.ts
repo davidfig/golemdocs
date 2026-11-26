@@ -115,6 +115,9 @@ export const SLIDES_OPS = [
   'moveSlideDown',
   'layout',
   'resetSlide',
+  'background',
+  'theme',
+  'editMaster',
   'textBox',
   'shape',
   'picture',
@@ -133,6 +136,9 @@ export const SLIDES_OPS = [
   'copy',
   'paste',
 ] as const;
+
+/** The slides commands about slides themselves, which do nothing in master view (whose pages are masters and layouts). */
+export const SLIDE_ONLY_OPS: ReadonlySet<SlidesOp> = new Set<SlidesOp>(['newSlide', 'duplicateSlide', 'deleteSlide', 'hideSlide', 'moveSlideUp', 'moveSlideDown', 'layout', 'resetSlide', 'notes']);
 
 /** What the spreadsheet editor's commands do (the Sheet menu and toolbar, and the cells' context menu). */
 /** A spreadsheet command (see SHEET_OPS). */
@@ -172,6 +178,10 @@ export const SHEET_OPS = [
   'sortDescending',
   'filter',
   'insertTable',
+  'insertFunction',
+  'insertPicture',
+  'insertShape',
+  'insertTextBox',
   'newNote',
   'chartColumn',
   'chartBar',
@@ -334,6 +344,8 @@ export type Action =
   | { kind: 'toggleFormattingMarks' }
   /** A Markdown document's text as its file has it, to edit as Markdown (and back). */
   | { kind: 'toggleMarkdownSource' }
+  /** An HTML file as the page it makes, as a document, or as its HTML (docs/html-pages.md §2). */
+  | { kind: 'htmlView'; view: 'page' | 'document' | 'source' }
   /** A PDF shown as its pages: fill in its form, or edit the form itself. */
   | { kind: 'setFormMode'; mode: FormMode }
   // Character formatting
@@ -426,7 +438,7 @@ export type Action =
 export type ActionKind = Action['kind'];
 
 /** Kinds of document the chrome knows how to present. */
-export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'txt' | 'xlsx' | 'pptx' | 'audio' | 'video';
+export type DocumentKind = 'docx' | 'odt' | 'rtf' | 'pdf' | 'md' | 'html' | 'epub' | 'mhtml' | 'csv' | 'tsv' | 'tex' | 'adoc' | 'rst' | 'org' | 'mediawiki' | 'textile' | 'typst' | 'docbook' | 'jats' | 'fb2' | 'opml' | 'eml' | 'ipynb' | 'largetext' | 'png' | 'jpeg' | 'webp' | 'svg' | 'svgz' | 'txt' | 'xlsx' | 'pptx' | 'audio' | 'video' | 'page';
 
 /**
  * Formatting at the selection, for toolbar state. `undefined` means unknown or mixed (the
@@ -634,6 +646,8 @@ export interface ChromeState {
   formattingMarks: boolean;
   /** A Markdown document is shown as its Markdown source, in the text editor. */
   markdownSource: boolean;
+  /** An HTML file: shown as a page, a document or its source; null for anything else. */
+  htmlView: 'page' | 'document' | 'source' | null;
   trackChanges: boolean;
   format: FormatState;
   /** A PDF shown as its pages: whether its form is being filled in or edited; null otherwise. */
@@ -648,6 +662,8 @@ export interface ChromeState {
   vector: { tool: 'select' | 'rect' | 'ellipse' | 'shape' | 'line' | 'pen' | 'pencil' | 'nudge' | 'text' | 'canvas'; shape: ShapeId; hasSelection: boolean; multiple: boolean; clipped: boolean; masked: boolean; layers: boolean; snap: boolean; fill: string | null; stroke: string | null; strokeWidth: number; fillType: 'solid' | 'linear' | 'radial'; strokeStyle: string; gradient: { stops: { offset: number; color: string }[]; stop: number; type: 'linear' | 'radial' } | null; documentColors: string[] };
   /** The audio or video playing, when one is open. */
   media?: MediaState | null;
+  /** A deck is open in master view: Slide › Edit Master is checked, and the commands about slides themselves do nothing. */
+  slidesMaster?: boolean;
   /** Whether the open document is saved, for the button at the top right. */
   sync: SyncStatus;
   /** The paid sync subscription: `active` (menus offer to manage it), `none` (they offer to subscribe), null while unknown. */
@@ -696,6 +712,7 @@ export const DEFAULT_STATE: ChromeState = {
   toolbars: true,
   formattingMarks: false,
   markdownSource: false,
+  htmlView: null,
   trackChanges: false,
   format: {},
   formMode: null,

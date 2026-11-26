@@ -178,6 +178,26 @@ annotate or convert.
 - **Tests read the screen through `window.textEditor`** (`state()`, `pointOf()`, `numberPoint()`; see `e2e/files/large-helpers.ts`), since the
   text is on the GPU.
 
+## Syntax colors
+
+Code is colored by what each part of it is (keywords, strings, comments, tags and attributes, properties, functions, types), with
+[Lezer](https://lezer.codemirror.net), the parser system behind CodeMirror 6 (MIT): real grammars, not regular expressions, so template
+strings, regexes and `<script>` inside HTML come out right.
+
+- **Which files.** `syntax/languages.ts` (always loaded, tiny) names a grammar by extension: HTML (and Vue, Svelte, Astro as HTML), CSS,
+  SCSS/Less, Sass, JavaScript, JSX, TypeScript, TSX, JSON, YAML, XML, Markdown (its source view), Python, Go, Java, Rust, C and C++, PHP. Other
+  files, logs and anything over `MAX_SYNTAX_BYTES` (2 MB) are plain; a log keeps its error and warning lines' colors.
+- **Lazy.** `syntax/colorize.ts` is only ever `import()`ed, the first time a code file opens: Lezer's core with the small grammars (HTML, CSS,
+  JSON, YAML, XML) is one chunk (about 120 kB), and each larger grammar (JavaScript 78 kB, Python, Markdown, Go, Java, Rust, C++, PHP,
+  Sass) its own. HTML colors its `<style>` as CSS and its `<script>` as JavaScript (`configureNesting`), so it also fetches JavaScript.
+- **How.** The view parses the whole file (`colorize`): `highlightTree` gives runs of one color, kept as flat `from, to, color` triples in
+  text offsets, with each line's start found by `\n`. `LineRenderer.syntax` asks for a line's colors when it builds a chunk (one color per
+  UTF-16 unit, 0 for the text's own), and the view sets it and rebuilds the chunks when a parse is done. After an edit the file is parsed
+  again once typing pauses (30 ms for a file under 200 kB, 400 ms above), the latest parse winning.
+- **Colors** are one palette for light pages (`PALETTE`); dark pages and contrast themes come from the text shader, as for all text, and
+  Windows' contrast themes draw everything in the text color. Nothing is said by color alone.
+- **Tests:** `client/test/syntaxColors.test.ts`.
+
 ## Editing together
 A text file in the account joins a room of kind `text` (`ops/src/textOps.ts`, `server/src/roomCore.ts`, `textEditor/textSync.ts`), up to
 16 MiB (`MAX_SHARED_TEXT_BYTES`: the room holds the file a few times over while writing it, in a 128 MB Durable Object; a bigger file is

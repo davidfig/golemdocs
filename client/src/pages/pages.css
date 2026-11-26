@@ -1,0 +1,52 @@
+/* Page view (pages/view.ts): an HTML page in a sandboxed frame over the document area, under a bar the page cannot draw over. */
+
+.wm-page-view {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--wm-desk);
+  color: var(--wm-text);
+  font: 13px/1.2 var(--wm-font);
+  outline: none;
+}
+
+.wm-page-view[hidden] {
+  display: none;
+}
+
+.wm-page-view:focus-visible {
+  outline: 2px solid var(--wm-accent);
+  outline-offset: -2px;
+}
+
+.wm-page-note[hidden] {
+  display: none;
+}
+
+.wm-page-note {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--wm-note-border);
+  background: var(--wm-note);
+}
+
+/* The page itself: a white sheet, as a browser shows a page with no background of its own. */
+.wm-page-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: #fff;
+  color-scheme: light;
+}
+
+@media (forced-colors: active) {
+  .wm-page-note {
+    border-color: CanvasText;
+  }
+  .wm-page-frame {
+    background: Canvas;
+  }
+}
+.wm-page-link { overflow-wrap: anywhere; font-family: monospace; }

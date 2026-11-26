@@ -1,4 +1,4 @@
-// DrawingML colours (docs/slides.md): an explicit colour (`srgbClr`, `scrgbClr`, `hslClr`, `sysClr`, `prstClr`) or one of
+// DrawingML colours (docs/architecture/drawingml.md): an explicit colour (`srgbClr`, `scrgbClr`, `hslClr`, `sysClr`, `prstClr`) or one of
 // the theme's (`schemeClr`, through the slide's colour map), then changed by its children in order (`lumMod`, `tint`, `alpha`...).
 
 import type { XmlElement } from '@golemdocs/docx';

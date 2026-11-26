@@ -16,6 +16,7 @@ import { incomingBridge, watchIncoming } from './desktop/incoming.ts';
 import { importFiles, readZipFiles, sameBytes, type ZipContents } from './storage/zipImport.ts';
 import { showProgress } from './ui/progressToast.ts';
 import { SEAM_HIDE_CURSOR, SEAM_SHOW_CURSOR } from './ui/cursors.ts';
+import { edgeSpeed, scrollDragsAtEdges } from './ui/edgeScroll.ts';
 import { blankSource, lastNewKind, rememberNewKind } from './ui/newKinds.ts';
 import { addressDoc, builtInPageAt, lastDoc, noteAddressDoc, rememberLastDoc, setUrl, wantedDoc } from './address.ts';
 import { adoptGuestFolders, createFolder, renameEntry, setLinkKeeper } from './folderOps.ts';
@@ -135,7 +136,8 @@ import { cleanDocumentName } from './documentName.ts';
 import { PropertiesDialog } from './ui/propertiesDialog.ts';
 import { TrashActions } from './ui/trashActions.ts';
 import { VaultDialog } from './ui/vaultDialog.ts';
-import { copyText, desktopBridge, desktopUpdater, isDesktopApp, isTouchDevice, linkBridge, macPrinter, ShellTooOldError } from './desktop/bridge.ts';
+import { copyText, desktopBridge, desktopUpdater, isDesktopApp, linkBridge } from './desktop/bridge.ts';
+import { printPdf } from './ui/printPdf.ts';
 import { vaultMemory } from './desktop/vaultMemory.ts';
 import { findInManifest, folderName, headingsAbove, makeLink, parseLink, pathInVault, revealPath, sectionHeadings, shownText, vaultMatches } from './desktop/vaultLink.ts';
 import { saveFile } from './ui/saveFile.ts';
@@ -148,6 +150,9 @@ import { TrashStore, type TrashDeps, type TrashItem } from './trash.ts';
 import { TRASH_MS } from '@golemdocs/ops';
 import { deviceVersionBytes, restoreFromAccount, restoredName, type HistoryEntry, type HistoryTarget } from './history.ts';
 import { WordCountDialog } from './ui/wordCountDialog.ts';
+import { DocumentWords, periodWords, type WordPlace } from './wordHistory.ts';
+import { browserWordStore } from './storage/wordStore.ts';
+import { footerWordPeriod, onFooterWordPeriodChange, rereadFooterWordPeriod } from './ui/footerWords.ts';
 import { showOptions } from './ui/optionsDialog.ts';
 import { Footer } from './ui/footer.ts';
 import { Ruler } from './ui/ruler.ts';
@@ -162,6 +167,11 @@ import { TextEditor } from './textEditor/handle.ts';
 import { SheetEditor } from './sheet/handle.ts';
 import type { AudioEditor } from './media/edit/audioEditor.ts';
 import { MediaViewer, spokenTime, type CaptionTrack } from './media/viewer.ts';
+import type { PageController, PageHost, PageResults } from './pages/controller.ts';
+import { openingView } from './pages/detect.ts';
+import { pageBar } from './pages/pageBar.ts';
+import { PageMemory } from './pages/trust.ts';
+import type { PageOrigin } from './pages/trust.ts';
 import { isMediaName, mediaMime, playsInPlace } from './media/mediaFiles.ts';
 import { formatClock, momentFragment, parseMoment, type MediaMoment } from './media/timecode.ts';
 import { captionFilesFor, isSrtName, srtToVtt } from './media/captions.ts';
@@ -342,6 +352,9 @@ try {
 
 /** The counts of the whole document and of the selection, as the worker last gave them (null: none, or not asked for yet). */
 let footerWords: WordStats | null = null;
+/** The open document's word history (wordHistory.ts), when its writing is kept; and the account id it was opened with. */
+let docWords: DocumentWords | null = null;
+let docWordsCloudId: string | null = null;
 let footerSelection: WordStats | null = null;
 let footerTimer = 0;
 /** The pixel size of the open picture, found once per opening (and which are being looked up). */
@@ -683,7 +696,7 @@ function openTicket(): () => boolean {
 }
 
 /** `keepRoom`: the same document, opened again in place of itself (watching it, it was saved): it keeps its room; `version`: the save it is. */
-type OpenOptions = { delimited?: 'csv' | 'tsv'; sheetLayout?: SheetLayout; wdocChecked?: boolean; detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean; none?: boolean };
+type OpenOptions = { delimited?: 'csv' | 'tsv'; sheetLayout?: SheetLayout; wdocChecked?: boolean; detour?: boolean; grid?: boolean; localId?: string; cloudId?: string; shared?: CloudDocument; pictureEdit?: boolean; keepRoom?: boolean; version?: number; store?: boolean; asDocument?: boolean; none?: boolean; pageChecked?: boolean };
 
 /** Everything that starts a new document, before whatever shows it is asked for it: the old one is put away, the page's state is reset, and `current` is the new one. */
 /** How many documents have begun opening (the automation API's `doc.open` waits for the next). */
@@ -714,6 +727,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   textView.close();
   sheetView.close();
   closeMedia();
+  pageView.close();
   slidesView.close();
   drawLayer.cancel();
   // A drawing that was changed comes back as the same drawing, with the editor's own copy still in front of it.
@@ -772,6 +786,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   canUndo = canRedo = false;
   footerWords = footerSelection = null;
   window.clearTimeout(footerTimer);
+  startWordHistory(options);
   // One renderer for every document: clear() drops the old textures and any loads still under way.
   renderer.images?.clear();
   renderer.images ??= new ImageRenderer(gl!, { bytes: (part) => worker.media(part) }, assetLoaded, requestRender);
@@ -797,6 +812,22 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
 }
 
 function open(source: DocumentSource, options: OpenOptions = {}): void {
+  // An HTML file shows as the page it makes, as a document, or as its source, as it was last shown here (docs/html-pages.md §2).
+  if (!options.asDocument && !options.pageChecked && isHtmlSource(source)) {
+    const latest = openTicket();
+    const stored = new Uint8Array(source.bytes);
+    void pageHtmlOf(stored, source.name).then((html) => {
+      if (!latest()) return;
+      const key = pageKeyOf(options);
+      // A view picked from the menu this once (HTML as Document, which a page doesn't remember), else as it opens by itself.
+      const view = (pickedHtmlView?.key === key ? pickedHtmlView.view : null) ?? pageView.viewFor(key, html);
+      pickedHtmlView = null;
+      if (view === 'page') openPage(source, options, stored);
+      else if (view === 'source') void openLarge(source.name, new TextEncoder().encode(html), { localId: options.localId, cloudId: options.cloudId, shared: options.shared }).then(() => showSourceBar(source.name));
+      else open(source, { ...options, pageChecked: true });
+    });
+    return;
+  }
   // Audio and video play in the media viewer, from a blob of the saved bytes (a file from the computer comes through openMediaFile).
   if (source.kind === 'audio' || source.kind === 'video') {
     openMedia(source.name, source.kind, { blob: new Blob([source.bytes], { type: mediaMime(source.name) }) }, options);
@@ -881,6 +912,8 @@ function open(source: DocumentSource, options: OpenOptions = {}): void {
     },
     done(count, times) {
       loaded = true;
+      // The words it opened with, before anything is typed: where today's writing starts (wordHistory.ts).
+      if (docWords) send({ kind: 'countWords', whole: true, footer: true });
       // A book's place should have come with the last pages (or just after, when it was asked for late): if it hasn't, there is none to show.
       const hold = readingHold;
       if (hold?.y === null)
@@ -1369,6 +1402,7 @@ const sharedLive = (): boolean => current.room?.mode === 'shared';
 window.addEventListener('pagehide', () => {
   rememberView();
   void reading?.send(true);
+  void docWords?.flush(true);
   saveIfEdited();
   worker.leave();
   letPageGo();
@@ -1983,6 +2017,7 @@ const SETTING_APPLIED: Record<SyncedKey, (() => void) | null> = {
   'golem.mediaCaptions': () => mediaView.refreshCaptions(),
   'word.collapsePages': rereadViewOptions,
   'word.footer': rereadViewOptions,
+  'word.footerWords': rereadFooterWordPeriod,
   'word.toolbarsShown': rereadViewOptions,
   'word.fullScreenMenus': rereadFullScreenOptions,
   'golem.macInAppMenu': rereadFullScreenOptions,
@@ -2353,7 +2388,7 @@ async function copyDocumentLiveLink(): Promise<void> {
   await writeClipboardRich(`![[${source}]]`, `<div data-golem-live="${attr}"><p></p></div>`);
 }
 
-const fileName = () => (textView.active ? textFileNameOf(textView.fileName) : current.kind === 'txt' && hasExtension(current.name) ? current.name : current.kind === 'xlsx' && /\.(xlsx|xlsm|xltx|xltm)$/i.test(current.name) ? current.name : current.kind === 'pptx' && /\.(pptx|pptm|potx|potm|ppsx|ppsm)$/i.test(current.name) ? current.name : isMediaName(current.name) ? current.name : stem(current.name) + FORMATS[current.kind].extensions[0]);
+const fileName = () => (textView.active ? textFileNameOf(textView.fileName) : current.kind === 'txt' && hasExtension(current.name) ? current.name : current.kind === 'xlsx' && /\.(xlsx|xlsm|xltx|xltm)$/i.test(current.name) ? current.name : current.kind === 'pptx' && /\.(pptx|pptm|potx|potm|ppsx|ppsm)$/i.test(current.name) ? current.name : isMediaName(current.name) || current.kind === 'page' ? current.name : stem(current.name) + FORMATS[current.kind].extensions[0]);
 const returnTo = (params: Record<string, string>) => `${location.pathname}?${new URLSearchParams(params)}`;
 
 /** File ▸ Download All: every document saved in this browser (or the account's copies), as one ZIP. */
@@ -2544,6 +2579,7 @@ async function importDocuments(name: string, read: (signal: AbortSignal, onProgr
  * copy). Never fails the save: without a thumbnail the dashboard just shows a blank page.
  */
 async function makeThumbnail(info: SavedInfo): Promise<void> {
+  if (pageView.active) return;
   // A video's is a frame a little way in; audio's its waveform.
   if (mediaView.active) {
     const blob = await mediaView.thumbnail(audioEditor?.peaks()).catch(() => null);
@@ -2607,9 +2643,11 @@ function saveInBrowser(): Promise<string | null> {
   const sheetSave = sheetView.save();
   // Audio and video are kept as the files themselves.
   const mediaSave = mediaBytes();
+  // A page shown as a page is never changed there: it is kept as it came.
+  const pageSave = pageView.active && pageView.stored ? Promise.resolve(pageView.stored) : null;
   const deckSave = slidesView.save();
-  const marked = large || sheetSave || deckSave || mediaSave ? null : worker.saveMarked();
-  const bytes = source ? sourceMerged(source, textView.snapshot()!) : large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.stored) : deckSave ? deckSave : mediaSave ? mediaSave : marked!.then((saved) => saved.bytes);
+  const marked = large || sheetSave || deckSave || mediaSave || pageSave ? null : worker.saveMarked();
+  const bytes = source ? sourceMerged(source, textView.snapshot()!) : large ? Promise.resolve(traced('snapshot', () => textView.snapshot()!)) : sheetSave ? sheetSave.then((saved) => saved.stored) : deckSave ? deckSave : mediaSave ? mediaSave : pageSave ? pageSave : marked!.then((saved) => saved.bytes);
   bytes.catch(() => {}); // handled below, once earlier saves are written
   const done = saving.then(async () => {
     const created = !doc.localId;
@@ -2641,6 +2679,8 @@ function saveInBrowser(): Promise<string | null> {
           })
           .catch(() => undefined);
       doc.localId = info.id;
+      // A page opened from the computer and kept here: what is known of it (it came from outside) goes with its new key.
+      if (doc === current && pageView.active) pageView.keyed(info.id);
       rememberIgnored(doc);
       if (doc === current) {
         // Drawing it stalls the GPU, so it waits for a pause in typing. If the document is gone by then, opening it again draws it (backfillThumbnail).
@@ -3567,6 +3607,28 @@ async function vaultFolder(names: readonly string[]): Promise<string | null> {
   return parent;
 }
 
+/** Stores a document's new bytes by its vault path (made, with its folders, when `key` is null): a script's or a page's edit. Its key. */
+async function storeVaultDocument(path: string, bytes: Uint8Array, key: string | null): Promise<string> {
+  let entry = key ? library.entries.find((e) => e.key === key) : undefined;
+  // A document only the account has gets its browser copy first, linked to it, so the change is saved to it and not to a new document.
+  if (entry && !entry.local && entry.cloud && account) {
+    const { info } = await openFromCloud(entry.cloud, account.id);
+    library.putLocal(info);
+    entry = { ...entry, local: info };
+  }
+  if (entry && !entry.local) entry = undefined;
+  const isOpen = !!entry && entry.local!.id === current.localId;
+  const parts = path.split('/');
+  const name = parts.pop()!;
+  const info = await saveSaved(entry ? { id: entry.local!.id, name: entry.name, bytes, owner: account?.id } : { name, bytes, owner: account?.id, folderId: (await vaultFolder(parts)) ?? undefined });
+  library.putLocal(info);
+  if (!entry) void refreshLibrary();
+  if (account) scheduleUpload(info.id);
+  if (isOpen && current.localId === info.id && current.unsavedSince === 0 && !(await refreshFromStore(current))) await openLocal(info.id);
+  sourceSaved(info.id);
+  return info.id;
+}
+
 const scriptsApp: ScriptsApp = new ScriptsApp({
   documents: () => library.entries.filter((e) => e.local).map((e) => ({ key: e.key, path: vaultPath(e) })),
   async read(key) {
@@ -3576,19 +3638,7 @@ const scriptsApp: ScriptsApp = new ScriptsApp({
   },
   produce: (address) => liveKeeper.produce(`/${address.replace(/^\/+/, '')}`),
   saveOpen: async () => void (await saveNow()),
-  async store(path, bytes, key) {
-    const entry = key ? library.entries.find((e) => e.key === key && e.local) : undefined;
-    const isOpen = !!entry && entry.local!.id === current.localId;
-    const parts = path.split('/');
-    const name = parts.pop()!;
-    const info = await saveSaved(entry ? { id: entry.local!.id, name: entry.name, bytes, owner: account?.id } : { name, bytes, owner: account?.id, folderId: (await vaultFolder(parts)) ?? undefined });
-    library.putLocal(info);
-    if (!entry) void refreshLibrary();
-    if (account) scheduleUpload(info.id);
-    if (isOpen && current.localId === info.id && current.unsavedSince === 0 && !(await refreshFromStore(current))) await openLocal(info.id);
-    sourceSaved(info.id);
-    return info.id;
-  },
+  store: (path, bytes, key) => storeVaultDocument(path, bytes, key),
   fetch: (url, init) => fetchForScript(url, init),
   async remove(key) {
     const entry = library.entries.find((e) => e.key === key);
@@ -3624,6 +3674,7 @@ setTimeout(() => scriptsApp.startSchedules(), 15_000);
 function sourceSaved(id: string): void {
   liveKeeper.saved(id);
   scriptsApp.saved(id);
+  pageView.saved(id);
 }
 
 /** Tools › Run Script: picks a script and runs it as an action. */
@@ -3804,7 +3855,7 @@ async function share(): Promise<void> {
           ? { unavailable: t('app.notInAccountYet') }
           : { id: info.cloudId };
   const liveEntry = info ? library.entries.find((e) => e.local?.id === info.id) : undefined;
-  showShareDialog({ name: info?.name ?? current.name, people, ...(liveEntry && { liveSources: liveKeeper.tableSources(liveEntry.key).catch(() => []) }) });
+  showShareDialog({ name: info?.name ?? current.name, people, ...(liveEntry && { liveSources: liveKeeper.tableSources(liveEntry.key).catch(() => []), pageReads: pageReadsOf(liveEntry) }) });
 }
 
 async function openCloud(id: string): Promise<void> {
@@ -3878,10 +3929,8 @@ async function download(): Promise<void> {
 }
 
 /**
- * File ▸ Print and Print Preview. The document is exported as a PDF (the same export as
- * Download), then printed from a hidden frame, or opened in a new tab to look at first.
- * A phone or tablet can't do either: iOS prints only the first page of a PDF in a frame, Android shows none, and an app's web view has
- * no tabs. There the PDF goes to the system share sheet, whose Print has every page (`saveFile`). The Mac app opens it in Preview.
+ * File ▸ Print and Print Preview. The document is exported as a PDF (the same export as Download), then printed or opened to look at
+ * first, as ui/printPdf.ts does it on each kind of device.
  */
 async function print(preview: boolean): Promise<void> {
   // A workbook prints its active sheet as Excel does (its page setup, from the grid itself); anything else as a document.
@@ -3889,40 +3938,15 @@ async function print(preview: boolean): Promise<void> {
   const sheetPdf = sheetView.active ? sheetView.printPdf() : slidesView.active ? slidesView.printPdf() : null;
   if (!sheetPdf && !(await openAsDocument())) return;
   const name = fileName().replace(/\.[^.]*$/, '') + '.pdf'; // named now: another document may be open by the time the bytes come back
-  const bytes = sheetPdf ? await sheetPdf : await worker.convert('pdf');
-  if (isTouchDevice()) {
-    await saveFile(name, bytes as Uint8Array, FORMATS.pdf.mime);
-    return;
+  const bytes = (sheetPdf ? await sheetPdf : await worker.convert('pdf')) as Uint8Array;
+  try {
+    const outcome = await printPdf(name, bytes, preview);
+    if (outcome === 'preview') setStatus(t('app.printInPreview'));
+    else if (outcome === 'saved') setStatus(t('app.printSavedInstead', { name }));
+    else if (outcome === 'blocked') reportError(t('app.allowPopups'));
+  } catch (e) {
+    reportError(t('app.printFailed', { message: (e as Error).message }));
   }
-  // The Mac app's web view ignores print() and opens no tabs: Preview prints it. A shell without that command can still download.
-  const printer = macPrinter();
-  if (printer) {
-    try {
-      await printer.open(name, bytes as Uint8Array);
-      setStatus(t('app.printInPreview'));
-    } catch (e) {
-      if (!(e instanceof ShellTooOldError)) return reportError(t('app.printFailed', { message: (e as Error).message }));
-      if (await saveFile(name, bytes as Uint8Array, FORMATS.pdf.mime)) setStatus(t('app.printSavedInstead', { name }));
-    }
-    return;
-  }
-  const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: FORMATS.pdf.mime }));
-  if (preview) {
-    if (!window.open(url, '_blank')) reportError(t('app.allowPopups'));
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    return;
-  }
-  const frame = Object.assign(document.createElement('iframe'), { src: url });
-  frame.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
-  frame.addEventListener('load', () => {
-    frame.contentWindow?.focus();
-    frame.contentWindow?.print();
-    setTimeout(() => {
-      frame.remove();
-      URL.revokeObjectURL(url);
-    }, 60_000);
-  });
-  document.body.append(frame);
 }
 
 /** Said when a PDF's own pages are shown after its text was edited as something else. */
@@ -5194,9 +5218,12 @@ function applySelection(update: SelectionUpdate): void {
   }
   if (update.footerStats !== undefined) {
     if (update.footerStats?.selection) footerSelection = update.footerStats;
-    else footerWords = update.footerStats;
+    else {
+      footerWords = update.footerStats;
+      if (footerWords && !footerWords.table && loaded) noteWords(footerWords.words);
+    }
     requestRender();
-  } else if (footerOn) refreshFooterSoon();
+  } else if (footerOn || docWords) refreshFooterSoon();
   formLayer.update(update.fields ?? null);
   pdfTextLayer.update(update.pdfText ?? null);
   pdfTools.update(update.pdfText ?? null, update.pdfObject ?? null);
@@ -5346,6 +5373,45 @@ function requestCaretRender(): void {
   queueFrame();
 }
 
+/** Keeps the view over what the open document shows: each editor has its own bounds. */
+function clampView(): void {
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  // A big text file and a workbook run from their top-left corner however short or narrow they are.
+  if (textView.active) camera.clampToStart(textView.bounds(), width, height);
+  else if (mediaView.active) return;
+  else if (sheetView.active) camera.clampToStart(sheetView.bounds(), width, height);
+  else if (slidesView.active) camera.clamp(slidesView.bounds(), width, height, 48);
+  else {
+    if (!pendingView) camera.clamp(bounds, width, height); // a restored position may lie past the pages that have arrived so far
+    if (renderer.flat) camera.x = bounds.x;
+  }
+}
+
+// A selecting drag that reaches an edge of the view scrolls it, in every editor (see ui/edgeScroll.ts).
+scrollDragsAtEdges(canvas, {
+  scroll(dx, dy) {
+    const x = camera.x;
+    const y = camera.y;
+    camera.panBy(dx, dy);
+    clampView();
+    if (camera.x !== x || camera.y !== y) {
+      userMoved = true;
+      requestRender();
+    }
+  },
+  selecting() {
+    if (!loaded || mediaView.active) return false;
+    if (vector?.editor.active) return vector.editor.isSelecting;
+    if (drawLayer.active) return drawLayer.isSelecting;
+    if (sheetView.active) return sheetView.isSelecting;
+    if (slidesView.active) return slidesView.isSelecting;
+    // A big text file scrolls its own selection past the edges (textEditor/view.ts).
+    if (textView.active) return false;
+    return selecting && !pressed?.grab;
+  },
+});
+
 function queueFrame(): void {
   if (frameQueued) return;
   frameQueued = true;
@@ -5453,8 +5519,7 @@ function render(): void {
   renderer.joined = pagesJoined();
   if (textView.active) {
     // A big text file: its own bounds, from the top-left corner however short or narrow it is, and drawn by the large-text editor.
-    const area = textView.bounds();
-    camera.clampToStart(area, canvas.clientWidth, canvas.clientHeight);
+    clampView();
     const frame = textView.draw(pagesDark(), caretOn && document.hasFocus(), forcedColors());
     lastStats = { pages: frame?.chunks ?? 0, visiblePages: frame?.chunks ?? 0, glyphs: frame?.glyphs ?? 0, drawCalls: frame?.drawCalls ?? 0 };
   } else if (mediaView.active) {
@@ -5462,18 +5527,17 @@ function render(): void {
     lastStats = { pages: 0, visiblePages: 0, glyphs: 0, drawCalls: 0 };
   } else if (sheetView.active) {
     // A workbook: drawn by the spreadsheet editor, from the top-left of its cells.
-    camera.clampToStart(sheetView.bounds(), canvas.clientWidth, canvas.clientHeight);
+    clampView();
     sheetView.draw(pagesDark(), forcedColors());
     lastStats = { pages: 0, visiblePages: 0, glyphs: 0, drawCalls: 0 };
   } else if (slidesView.active) {
     // A deck: the desk is cleared, and the slides editor paints its slides over it on a canvas of its own.
-    camera.clamp(slidesView.bounds(), canvas.clientWidth, canvas.clientHeight, 48);
+    clampView();
     renderer.render(camera, [], undefined, false, pagesDark());
     slidesView.draw(pagesDark());
     lastStats = { pages: slidesView.slideCount(), visiblePages: 0, glyphs: 0, drawCalls: 0 };
   } else {
-    if (!pendingView) camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight); // a restored position may lie past the pages that have arrived so far
-    if (renderer.flat) camera.x = bounds.x;
+    clampView();
     renderer.forced = forcedColors();
     // The pages in view and a screen either side keep their glyphs unpacked, or get them back, and are where squiggles are found.
     const range = reach();
@@ -5509,9 +5573,11 @@ function render(): void {
     draw: { ...drawStyle, tool: drawLayer.tool, hasSelection: drawLayer.selection.length > 0, layers: layersOpen },
     vector: vector ? vector.state(layersOpen) : { ...DEFAULT_STATE.vector, layers: layersOpen },
     media: mediaState(),
+    slidesMaster: slidesView.active && slidesView.masterView,
     inTable,
     formattingMarks,
     markdownSource: markdownSource !== null,
+    htmlView: htmlViewNow(),
     viewMode: grid ? 'grid' : viewMode,
   });
   formLayer.position();
@@ -5797,8 +5863,6 @@ let touchPoint: { x: number; y: number } | null = null;
 let edgeFrame = 0;
 /** Within this far of the top or bottom of the view (CSS pixels), a selecting finger scrolls the document. */
 const EDGE_PX = 48;
-/** The fastest that scrolls, at the very edge (CSS pixels per frame). */
-const EDGE_SPEED = 14;
 const touches = new Map<number, { x: number; y: number }>();
 let touchTap: Press | null = null;
 /** Two or more fingers were down in this gesture: until every finger is up, nothing in it is a tap. */
@@ -5929,12 +5993,10 @@ function edgeScroll(): void {
   if (!touchSelecting) return;
   edgeFrame = requestAnimationFrame(edgeScroll);
   if (!touchPoint || grip?.anchor) return;
-  const height = canvas.clientHeight;
-  const y = touchPoint.y;
-  const speed = y < EDGE_PX ? -(EDGE_PX - Math.max(y, 0)) / EDGE_PX : y > height - EDGE_PX ? (Math.min(y, height) - (height - EDGE_PX)) / EDGE_PX : 0;
+  const speed = edgeSpeed(touchPoint.y, 0, canvas.clientHeight, EDGE_PX);
   if (!speed) return;
   userMoved = true;
-  camera.panBy(0, speed * EDGE_SPEED);
+  camera.panBy(0, speed);
   requestRender();
   dragTouchSelection();
 }
@@ -6136,11 +6198,13 @@ window.addEventListener('keyup', linkKeyChanged, true);
 window.addEventListener('blur', () => linkKeyChanged({ metaKey: false, ctrlKey: false }));
 /** The form that opens over a link: its text and address to change, or to take the link off. */
 const linkPopover = new LinkPopover({
-  editable: () => FORMATS[current.kind].editable && current.shared?.role !== 'viewer' && !annotating,
-  open: followLink,
+  editable: () => (FORMATS[current.kind].editable || (!!FORMATS[current.kind].sheetEditor && !sheetView.readOnly)) && current.shared?.role !== 'viewer' && !annotating,
+  // A sheet's link to a place in the workbook (#Sheet2!A1) is followed by the sheet.
+  open: (url) => (sheetView.active && url.startsWith('#') ? sheetView.followCellLink(url) : followLink(url)),
   focusEditor: focusInput,
   apply: (target, choice) => {
     // The caret goes into the link (the commands run in order), so the change is to that link.
+    if (target.page === undefined || target.x === undefined || target.y === undefined) return;
     send({ kind: 'pointer', page: target.page, x: target.x, y: target.y });
     send(choice ? { kind: 'setLink', url: choice.url, text: choice.text } : { kind: 'removeLink' });
     focusInput();
@@ -6835,7 +6899,7 @@ const chromeHost = createChromeHost({
   audioAction: (op) => void audioOp(op),
   newRecording: () => newRecording(),
   slidesAction: (op) => slidesView.slidesOp(op),
-  engine: () => (textView.active ? textEngine : sheetView.active ? sheetEngine : slidesView.active ? slidesEngine : mediaView.active ? mediaEngine : null),
+  engine: () => (textView.active ? textEngine : sheetView.active ? sheetEngine : slidesView.active ? slidesEngine : mediaView.active ? mediaEngine : pageView.active ? pageEngine : null),
   openSelection,
   openLarge,
   drawStyle: (change) => setDrawStyle(change),
@@ -6884,6 +6948,7 @@ const chromeHost = createChromeHost({
     worker.setMarks(formattingMarks);
   },
   toggleMarkdownSource: () => (markdownSource ? leaveMarkdownSource() : showMarkdownSource()),
+  setHtmlView: (view) => setHtmlView(view),
   markdownSource: () => markdownSource !== null,
   leaveMarkdownSource,
   viewChanged: () => {
@@ -7130,7 +7195,7 @@ async function connectVault(): Promise<void> {
 
 
 // Tools ▸ Word Count.
-const wordCountDialog = new WordCountDialog({ send, focusEditor: focusInput });
+const wordCountDialog = new WordCountDialog({ send, focusEditor: focusInput, words: () => docWords });
 
 // Tools ▸ Spelling and Grammar. The words the user adds to the dictionary are kept in this browser.
 const USER_WORDS_KEY = 'word.userDictionary.v1';
@@ -7424,7 +7489,7 @@ const libraryHost = {
   trash: trashActions,
   share: (id: string, name: string) => {
     const entry = library.entries.find((e) => e.cloud?.id === id);
-    showShareDialog({ name, people: { id }, ...(entry && { liveSources: liveKeeper.tableSources(entry.key).catch(() => []) }) });
+    showShareDialog({ name, people: { id }, ...(entry && { liveSources: liveKeeper.tableSources(entry.key).catch(() => []), pageReads: pageReadsOf(entry) }) });
   },
   rename: renameListed,
   // Whose documents to list: before the plan is known, the account last signed in here (a head start).
@@ -7806,6 +7871,15 @@ Object.assign(window, {
 });
 textView.onState = () => requestRender();
 
+/** A picture file the person picks (Insert › Picture on a slide or a sheet), or null. */
+function pickImageFile(): Promise<File | null> {
+  return new Promise((resolve) => {
+    const picker = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/heic,image/heif,.heic,.heif' });
+    picker.addEventListener('change', () => resolve(picker.files?.[0] ?? null));
+    picker.addEventListener('cancel', () => resolve(null));
+    picker.click();
+  });
+}
 const sheetView: SheetEditor = new SheetEditor(document.getElementById('viewport')!, {
   camera,
   gl: gl!,
@@ -7818,6 +7892,14 @@ const sheetView: SheetEditor = new SheetEditor(document.getElementById('viewport
   openFailed: (message) => void reportOpenFailure(message),
   appKey: () => false,
   author: () => commentAuthor(),
+  pickImage: () => pickImageFile(),
+  // Insert › Hyperlink and the card over a linked cell: the same form as a document's links.
+  links: {
+    edit: (draft, at) => linkPopover.edit(draft, at),
+    show: (target) => linkPopover.show(target),
+    leave: () => linkPopover.leave(),
+    open: (url) => followLink(url),
+  },
   // A live link pasted into the sheet: saved, then filled from its source at once.
   liveAdded: (source) => void updateLiveNow(source),
   blockBy: newBlockBy,
@@ -7846,6 +7928,7 @@ const sheetEngine: DocumentEngine = {
   find: (tab) => sheetView.find(tab === 'replace'),
   focus: () => sheetView.focus(),
   format: (action) => sheetView.formatAction(action),
+  link: () => sheetView.editLink(),
 };
 sheetView.onEdit = () => {
   documentEdited();
@@ -8366,6 +8449,240 @@ async function copyMomentLink(): Promise<void> {
   }
 }
 
+// --- HTML pages (pages/, docs/html-pages.md) ---------------------------------------------------------------------------
+// An HTML file shown as the page it makes, in a sandboxed frame over the document area. Nothing in it is edited there: Document
+// and Source open it to change it. It reads the vault through the same paths as live blocks and scripts.
+
+/** Whether a source is an HTML file (kept as uploaded, or as a document since it was edited as one). */
+const isHtmlSource = (source: DocumentSource): source is DocumentSource & { name: string; bytes: ArrayBuffer } =>
+  (source.kind === 'html' || source.kind === 'wdoc') && 'name' in source && 'bytes' in source && /\.(html?|xhtml)$/i.test(source.name);
+
+/** A page's HTML from its stored bytes: the file as it came, or written from the document it was kept as. */
+async function pageHtmlOf(stored: Uint8Array, name: string): Promise<string> {
+  if (stored[0] === 0x50 && stored[1] === 0x4b) {
+    const { toVaultFile } = await import('./desktop/vaultCodec.ts');
+    const file = await toVaultFile(stored, name).catch(() => null);
+    if (file) return new TextDecoder().decode(file);
+  }
+  return new TextDecoder().decode(stored).replace(/^\uFEFF/, '');
+}
+
+/** The library's key for what is being opened: its browser copy's, else the account's. */
+function pageKeyOf(options: OpenOptions): string | null {
+  if (options.localId) return library.entries.find((e) => e.local?.id === options.localId)?.key ?? options.localId;
+  return options.cloudId ?? options.shared?.id ?? null;
+}
+
+/** The page results last sent to the account, by document, so an unchanged page isn't sent again. */
+const keptPageResults = new Map<string, string>();
+
+/** What this device remembers about pages: always here, since it decides how an HTML file opens. */
+const pageMemory = new PageMemory(localStorage);
+
+/** Page view, once its chunk (pages/entry.ts) is loaded: the first time a page is shown as a page. */
+let pageController: PageController | null = null;
+let pageControllerLoading: Promise<PageController> | null = null;
+
+function loadPageView(): Promise<PageController> {
+  return (pageControllerLoading ??= import('./pages/entry.ts').then(({ PageController, askReads, confirmLink, confirmMine }) => {
+    pageController = new PageController(document.getElementById('viewport')!, pageHost({ askReads, confirmLink, confirmMine }), pageMemory);
+    return pageController;
+  }));
+}
+
+/** Page view as the rest of the app sees it, whether or not its chunk is loaded yet. */
+const pageView = {
+  get active(): boolean {
+    return pageController?.active ?? false;
+  },
+  /** The stored bytes of the page shown (what a save keeps: page view never changes them). */
+  get stored(): Uint8Array | null {
+    return pageController?.stored ?? null;
+  },
+  /** Its bar and frame (only while a page is shown). */
+  get view(): PageController['view'] {
+    return pageController!.view;
+  },
+  memory: pageMemory,
+  /** How an HTML file opens: as it was last shown on this device, else as a page when it is one. */
+  viewFor: (key: string | null, html: string): 'page' | 'document' | 'source' => openingView(html, key ? pageMemory.view(key) : null),
+  open: async (spec: { key: string | null; name: string; path: string; stored: Uint8Array; origin: Omit<PageOrigin, 'hash' | 'markedHash'> }): Promise<void> => (await loadPageView()).open(spec),
+  close: (): void => pageController?.close(),
+  saved: (key: string): void => pageController?.saved(key),
+  keyed: (key: string): void => pageController?.keyed(key),
+  state: () => pageController?.state() ?? { active: false, name: null, trust: null, scripts: false, allowed: false, asks: [], path: null, read: [], embeds: {} },
+};
+
+type PageDialogs = Pick<typeof import('./pages/entry.ts'), 'askReads' | 'confirmLink' | 'confirmMine'>;
+
+/** What page view is given of the app. */
+function pageHost(dialogs: PageDialogs): PageHost {
+  return {
+    // This browser's copies and the account's: a page reads either (`storedBytes`).
+    documents: () => library.entries.filter((e) => e.local || e.cloud).map((e) => ({ key: e.key, path: vaultPath(e) })),
+    async read(key) {
+      const entry = library.entries.find((e) => e.key === key);
+      const bytes = entry ? await storedBytes(entry) : null;
+      return bytes ? new Uint8Array(bytes) : null;
+    },
+    async file(path) {
+      const wanted = path.toLowerCase();
+      const entry = library.entries.find((e) => (e.local || e.cloud) && vaultPath(e).toLowerCase() === wanted);
+      const stored = entry ? await storedBytes(entry) : null;
+      if (entry && stored) {
+        const bytes = new Uint8Array(stored);
+        // Kept as a document (a Markdown note, say): the file it is on disk.
+        if (bytes[0] === 0x50 && bytes[1] === 0x4b && !/\.(docx|xlsx|pptx|odt|epub|zip)$/i.test(entry.name)) {
+          const { toVaultFile } = await import('./desktop/vaultCodec.ts');
+          return (await toVaultFile(bytes, entry.name).catch(() => null)) ?? bytes;
+        }
+        return bytes;
+      }
+      // A file the account doesn't keep (a stylesheet, a script): read from the vault folder, on a computer that has one.
+      const bridge = desktopBridge();
+      if (!bridge || !(await bridge.root().catch(() => null))) return null;
+      return bridge.read(path).catch(() => null);
+    },
+    html: (stored, name) => pageHtmlOf(stored, name),
+    async embed(address, fromKey) {
+      const from = fromKey ? liveDocuments().find((e) => e.key === fromKey) : undefined;
+      const result = await liveKeeper.produce(address, from);
+      return { result, paths: liveKeeper.sourcesFor(address, from).map(vaultPath) };
+    },
+    produce: (address) => liveKeeper.produce(`/${address.replace(/^\/+/, '')}`),
+    async store(file) {
+      const wanted = file.path.toLowerCase();
+      const entry = library.entries.find((e) => (e.local || e.cloud) && vaultPath(e).toLowerCase() === wanted);
+      await storeVaultDocument(file.path, file.after, entry?.key ?? null);
+    },
+    logged(page, files) {
+      scriptState.ran({ path: page.path, name: page.name, by: 'page', ok: true, changed: files.map((f) => ({ path: f.path, made: f.before === null })) }, files);
+      setStatus(t('pages.ran', { name: page.name, count: files.length }));
+    },
+    openPath(path) {
+      const wanted = path.toLowerCase();
+      const entry = library.entries.find((e) => vaultPath(e).toLowerCase() === wanted);
+      if (entry) openSource(sourceOf(entry));
+    },
+    openLink: (href) => followLink(href),
+    confirmLink: (name, href) => dialogs.confirmLink(name, href),
+    askReads: (name, folders) => dialogs.askReads(name, folders),
+    confirmMine: (name, asks) => dialogs.confirmMine(name, asks),
+    setView: (view) => void setHtmlView(view),
+    async keepResults(key, results: PageResults) {
+      const entry = library.entries.find((e) => e.key === key);
+      const cloudId = entry?.cloud?.id ?? entry?.local?.cloudId;
+      if (!account || !cloudId || entry?.cloud?.role === 'viewer' || entry?.encrypted) return;
+      const body = JSON.stringify(results);
+      if (keptPageResults.get(cloudId) === body) return;
+      const response = await fetch(`/api/documents/${encodeURIComponent(cloudId)}/page`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body });
+      if (response.ok) keptPageResults.set(cloudId, body);
+    },
+    status: (text) => setStatus(text),
+    error: (text) => reportError(text),
+  };
+}
+
+/** Page view as the chrome sees it (see documentEngine.ts): nothing to select, undo or type into. */
+const pageEngine: DocumentEngine = {
+  canUndo: false,
+  canRedo: false,
+  hasSelection: false,
+  snapshot: () => null,
+  bounds: () => ({ x: 0, y: 0, width: 0, height: 0 }),
+  undo: () => {},
+  redo: () => {},
+  selectAll: () => {},
+  insert: () => {},
+  copy: async () => {},
+  cut: async () => {},
+  paste: async () => {},
+  find: () => {},
+  focus: () => pageView.view.focus(),
+};
+
+/**
+ * Opens an HTML file as a page. Synchronous up to beginning the open, as `open` is; the page is put together (its files inlined, its
+ * embeds filled) and shown once that is done. Where it came from decides what it may do (docs/html-pages.md §1).
+ */
+function openPage(source: DocumentSource & { name: string }, options: OpenOptions, stored: Uint8Array): void {
+  const latest = openTicket();
+  const { name, opening } = beginOpen(source, { ...options, pageChecked: true });
+  current.kind = 'page';
+  worker.close();
+  // Nothing in it is edited here, so no room is ever asked for (see joinRoomOf).
+  opening.roomRequested = true;
+  const key = pageKeyOf(options);
+  const entry = key ? library.entries.find((e) => e.key === key) : undefined;
+  const path = entry ? vaultPath(entry) : name;
+  // Opened from the computer (or dropped): it came from outside the vault.
+  const imported = !options.localId && !options.cloudId && !options.shared;
+  void (async () => {
+    const bridge = desktopBridge();
+    const inVault = !!bridge && !!entry && (await bridge.root().catch(() => null)) !== null;
+    const downloaded = inVault ? await bridge!.downloaded(path).catch(() => false) : false;
+    if (!latest()) return;
+    await pageView.open({ key, name, path, stored, origin: { role: options.shared?.role ?? entry?.cloud?.role, byOther: entry?.cloud?.byOther === true, imported: imported || (key ? pageView.memory.imported(key) : false), downloaded } });
+    if (!latest() || current !== opening) return;
+    loaded = true;
+    documentReady();
+    loadingScreen.hide();
+    setStatus(t('app.ready', { name }));
+    // A file that came from the computer is kept in this browser at once, as a document is.
+    if (imported) documentEdited();
+  })().catch((e: unknown) => {
+    if (latest()) reportOpenFailure((e as Error).message);
+  });
+}
+
+/** How the open HTML file is shown: as a page, a document or its source; null when it isn't one. */
+function htmlViewNow(): 'page' | 'document' | 'source' | null {
+  if (pageView.active) return 'page';
+  if (current.none || current.builtIn || markdownSource || !/\.(html?|xhtml)$/i.test(current.name)) return null;
+  return textView.active ? 'source' : 'document';
+}
+
+/** HTML Source's bar (the page's name and the Page / Source switch, as page view has), while one shows. */
+let sourceBar: HTMLElement | null = null;
+
+/** Puts the Page / Source bar over the text editor once an HTML file shows there as its source. */
+function showSourceBar(name: string): void {
+  if (!textView.active || htmlViewNow() !== 'source' || current.name !== name) return;
+  const bar = pageBar((view) => void setHtmlView(view));
+  bar.setName(name);
+  bar.setView('source');
+  sourceBar = bar.el;
+  textView.editor?.setHeader(bar.el);
+}
+
+/** View › HTML as Page, as Document, Source: saves what was changed, then opens the file again shown that way (and remembers it). */
+async function setHtmlView(view: 'page' | 'document' | 'source'): Promise<void> {
+  if (htmlViewNow() === view) return;
+  await saveNow();
+  const id = current.localId;
+  if (!id) return;
+  const key = library.entries.find((e) => e.local?.id === id)?.key ?? id;
+  pageView.memory.setView(key, view);
+  pickedHtmlView = { key, view };
+  await openLocal(id);
+}
+
+/** The view View › HTML as … asked for, for the open that follows it (a page shown as a document is not remembered: openingView). */
+let pickedHtmlView: { key: string; view: 'page' | 'document' | 'source' } | null = null;
+
+/** For File › Share: the documents a page showed parts of when its results were last kept (empty when it isn't a page). */
+async function pageReadsOf(entry: LibraryEntry): Promise<string[]> {
+  const cloudId = entry.cloud?.id ?? entry.local?.cloudId;
+  if (!cloudId || !/\.(html?|xhtml)$/i.test(entry.name)) return [];
+  const response = await fetch(`/api/documents/${encodeURIComponent(cloudId)}/page`).catch(() => null);
+  if (!response?.ok) return [];
+  const results = (await response.json().catch(() => null)) as Partial<PageResults> | null;
+  return [...new Set((results?.read ?? []).filter((p) => typeof p === 'string').map((p) => p.replace(/\/$/, '').split('/').pop() || p))];
+}
+
+// What page view shows, for the end-to-end tests and agents.
+Object.assign(window, { pageViewer: { state: () => pageView.state() } });
+
 // What the media viewer shows, for the end-to-end tests and agents.
 Object.assign(window, {
   mediaViewer: {
@@ -8402,9 +8719,10 @@ const slidesView: SlidesEditor = new SlidesEditor(document.getElementById('viewp
   appKey: () => false,
   notify: (message) => reportError(message),
   openFailed: (message) => void reportOpenFailure(message),
-  pickImage: () =>
+  pickImage: () => pickImageFile(),
+  pickDeck: () =>
     new Promise((resolve) => {
-      const picker = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp,image/heic,image/heif,.heic,.heif' });
+      const picker = Object.assign(document.createElement('input'), { type: 'file', accept: '.pptx,.potx,.pptm,.potm,.thmx' });
       picker.addEventListener('change', () => resolve(picker.files?.[0] ?? null));
       picker.addEventListener('cancel', () => resolve(null));
       picker.click();
@@ -8750,6 +9068,45 @@ const footer = new Footer(document.getElementById('footer')!, {
   label: (action) => (action === 'zoom' ? t('chrome.control.zoom') : action === 'canvasSize' ? chrome.registry.get('vector.canvasSize').plainLabel : chrome.registry.get(action === 'goTo' ? 'edit.goTo' : 'tools.wordCount').plainLabel),
 });
 
+// --- Word history (wordHistory.ts) ---------------------------------------------------------
+
+/** The kinds whose writing is kept: documents of flowing text. Not a book, a PDF, a table, a picture or a plain text file. */
+const WORD_HISTORY_KINDS: ReadonlySet<DocumentKind> = new Set<DocumentKind>(['docx', 'odt', 'rtf', 'md', 'html', 'mhtml', 'tex', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'typst', 'docbook', 'jats', 'fb2']);
+
+/** Where the open document's history is kept: by its account id once it has one, else by this browser's id. */
+function wordPlace(): WordPlace {
+  const cloudId = current.shared?.id ?? (current.localId ? library.local.find((d) => d.id === current.localId)?.cloudId : undefined) ?? docWordsCloudId;
+  return { key: cloudId ? `cloud:${cloudId}` : current.localId ? `local:${current.localId}` : null, cloudId: cloudId ?? null };
+}
+
+/** A document opened: its word history, when its writing is kept (not one only read here, or the app's own documents). */
+function startWordHistory(options: OpenOptions): void {
+  docWords?.close();
+  docWords = null;
+  docWordsCloudId = options.cloudId ?? options.shared?.id ?? null;
+  const doc = current;
+  if (doc.builtIn || doc.none || doc.detour || doc.inPlace || doc.shared?.role === 'viewer' || !WORD_HISTORY_KINDS.has(doc.kind)) return;
+  const words = new DocumentWords(wordPlace(), browserWordStore, () => account !== null && !doc.encrypted);
+  words.onChange(requestRender);
+  docWords = words;
+}
+
+/** The open document's words now. */
+function noteWords(words: number): void {
+  if (!docWords) return;
+  void docWords.moved(wordPlace()); // first saved here, or first uploaded, since it was opened
+  docWords.count(words);
+}
+
+/** What the status bar says of the words written lately, when it is set to (null: the document's words). */
+function writtenForFooter(): { period: 'today' | 'week' | 'month' | 'year'; words: number } | null {
+  const period = footerWordPeriod();
+  if (period === 'total' || !docWords || !footerWords || footerWords.table || isBook()) return null;
+  return { period, words: periodWords(period, docWords.history(), footerWords.words, docWords.today()) };
+}
+
+onFooterWordPeriodChange(requestRender);
+
 /** Asks the worker for the counts, once the document has been still for a moment. */
 function refreshFooterSoon(): void {
   window.clearTimeout(footerTimer);
@@ -8757,7 +9114,7 @@ function refreshFooterSoon(): void {
 }
 
 function refreshFooter(): void {
-  if (!footerOn || !loaded || isPicture() || isDrawing() || textView.active) return;
+  if ((!footerOn && !docWords) || !loaded || isPicture() || isDrawing() || textView.active) return;
   send({ kind: 'countWords', whole: true, footer: true });
   if (selection.text.length > 0) send({ kind: 'countWords', footer: true });
   else footerSelection = null;
@@ -8883,6 +9240,7 @@ function updateFooter(): void {
     zoom: camera.zoom,
     // A book says how far through it the reader is, not how many words it has.
     words: isBook() ? null : footerWords,
+    written: writtenForFooter(),
     ...(isBook() && loaded && { progress: bookProgress() }),
     selection: selection.text.length > 0 ? footerSelection : null,
     picture,
@@ -8904,7 +9262,8 @@ function syncPagesPanel(): void {
       panelStrip = strip;
       pagesPanel.setPages(strip);
     }
-    pagesPanel.setEditable(!slidesView.readOnly);
+    // Master view's pages are masters and layouts, which are not deleted or moved from the strip.
+    pagesPanel.setEditable(!slidesView.readOnly && !slidesView.masterView);
     pagesPanel.setCurrent(slidesView.currentIndex);
     return;
   }
@@ -9037,7 +9396,11 @@ function focusRegions(): Region[] {
   // A workbook's own parts (formula bar, cells, sheet tabs) stand in for the document.
   // Audio or video: the player, its controls with it.
   const mediaRegion: Region = { el: audioEditor?.el ?? mediaView.el, focus: () => (mediaEngine.focus(), true) };
-  const documentRegions = sheetView.active ? sheetView.regions() : slidesView.active ? slidesView.regions() : mediaView.active ? [mediaRegion] : [documentRegion];
+  // An HTML page: its bar and its frame.
+  const pageRegion: Region = { el: pageView.view.el, focus: () => (pageView.view.focus(), true) };
+  // HTML Source: its Page / Source bar, then the text.
+  const sourceRegion: Region | null = sourceBar?.isConnected && textView.active ? { el: sourceBar, focus: () => (sourceBar!.querySelector<HTMLElement>('[tabindex="0"]')?.focus(), true) } : null;
+  const documentRegions = sheetView.active ? sheetView.regions() : slidesView.active ? slidesView.regions() : mediaView.active ? [mediaRegion] : pageView.active ? [pageRegion] : sourceRegion ? [sourceRegion, documentRegion] : [documentRegion];
   // The notes at the bottom of the window (a new version, reload, sign-in ran out), while they show (ui/notice.ts).
   const notices = [...document.querySelectorAll<HTMLElement>('.wm-notice:not([hidden])')].map(panel);
   return [...chrome.regions(), ...documentRegions, ...layers, panel(commentsPanel.el), panel(filesPanel.el), panel(pagesPanel.el), panel(footer.el), ...notices];
@@ -9097,19 +9460,26 @@ window.addEventListener('drop', (e) => {
 // The automation API (`window.golem`, see automation.ts): how agents and tests drive the app and read what it shows.
 installAutomation({
   registry: chrome.registry,
+  wordHistory: async () => {
+    const words = docWords;
+    if (!words) return null;
+    await words.ready();
+    return { today: words.today(), days: words.history() };
+  },
   loaded: () => loaded,
   status: () => status,
   selection: () => ({ text: selection.text, caret: selection.caret }),
-  outline: () => (textView.active || sheetView.active || slidesView.active || mediaView.active ? Promise.resolve(null) : worker.outline()),
+  outline: () => (textView.active || sheetView.active || slidesView.active || mediaView.active || pageView.active ? Promise.resolve(null) : worker.outline()),
   text: async () => {
     if (textView.active) return new TextDecoder().decode(textView.editor?.flatten() ?? new Uint8Array(0));
     if (sheetView.active) throw new Error('golem.doc.text: a workbook has no text; read its cells with sheetEditor.cell(row, col)');
     if (slidesView.active) return slidesView.text();
     if (mediaView.active) throw new Error('golem.doc.text: audio and video have no text; read the player with mediaViewer.state()');
+    if (pageView.active) throw new Error('golem.doc.text: a page is shown in its own frame; read it with pageViewer.state()');
     return new TextDecoder().decode(await worker.convert('txt'));
   },
   markdown: async () => {
-    if (textView.active || sheetView.active || slidesView.active || mediaView.active) throw new Error(`golem.doc.markdown: a ${current.kind} file can't be written as Markdown`);
+    if (textView.active || sheetView.active || slidesView.active || mediaView.active || pageView.active) throw new Error(`golem.doc.markdown: a ${current.kind} file can't be written as Markdown`);
     return new TextDecoder().decode(await worker.convert('md'));
   },
   select: (paragraph, from, to) => send({ kind: 'select', paragraph, from, to }),

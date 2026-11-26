@@ -1,0 +1,56 @@
+/* Slide › Background and Slide › Theme (designDialogs.ts): only what the shared dialog styles don't already give. */
+
+.wm-dialog.wm-slides-design {
+  width: 540px;
+  max-width: calc(100vw - 16px);
+}
+
+.wm-slides-design .wm-list-box {
+  width: 100%;
+}
+
+.wm-slides-bg-sample {
+  height: 96px;
+}
+
+.wm-slides-bg-file {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--wm-muted);
+}
+
+.wm-slides-swatches {
+  display: flex;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+.wm-slides-swatch {
+  flex: 1;
+  height: 16px;
+  border: 1px solid var(--wm-border);
+}
+
+.wm-slides-font-sample {
+  flex-direction: column;
+  gap: 2px;
+  height: auto;
+  margin-top: 6px;
+  padding: 8px;
+}
+
+.wm-slides-font-heading {
+  font-size: 20px;
+}
+
+.wm-slides-font-body {
+  font-size: 13px;
+}
+
+@media (forced-colors: active) {
+  .wm-slides-swatch {
+    forced-color-adjust: none;
+  }
+}

@@ -1,18 +1,58 @@
 # What’s New in Golem Docs
 
-## 0.48.0 - Unreleased
+## 0.49.0 - Unreleased
 
 ### Added
 
+- Code is in color in the text editor: HTML (with its CSS and JavaScript), CSS, Sass, JavaScript, TypeScript, JSON, YAML, XML, Python, Go, Java, Rust, C, C++, PHP and a Markdown note's source.
+- Shared documents and folders can be printed from the viewer's toolbar, and shown full screen with nothing but the document.
+- View › Files Sidebar has a keyboard shortcut: ⌃⌘S on a Mac, Ctrl+Shift+L elsewhere.
+- Slides can be restyled: Slide › Background sets a color, gradient or picture behind the slide or every slide, Slide › Theme swaps the deck's colors and fonts (from a built-in list or another presentation) and makes slides dark or light, and Slide › Edit Master opens the slide master and its layouts, where a change to a title or text style reaches every slide that uses them.
+- HTML pages: an HTML file with a script opens as the page it makes, right in Golem Docs, so an ai agent can write you a dashboard or a report as a file in your vault instead of hosting it somewhere else. A page can show parts of your other documents with `<golem-embed>` (a sheet's totals, a note's section, a chart) and read and change your notes from its scripts, and it keeps up as those documents change. View › HTML as Page, HTML as Document and HTML Source switch between the page, editing it as a document, and its HTML.
+- Spreadsheets: Insert › Hyperlink (⌘K, Ctrl+K on Windows and Linux) links a cell to a web page, an email address, a note in your vault, or another cell of the workbook (#Sheet2!A1). Resting the pointer on a linked cell shows the link, and Ctrl+click (⌘-click on a Mac) follows it. Links already in Excel files now work too, and are kept when you save, and so do cells with a HYPERLINK formula.
+- Spreadsheets: Insert › Function (⇧F3) finds any of Excel's functions by name, by category or by what it does, shows what it does and the arguments it takes, and starts typing it. While you type a formula, a hint under it shows the function's arguments with the one you're on in bold. The help is in every language Golem Docs speaks.
+- Spreadsheets: pictures, shapes and text boxes in Excel files are shown over the cells, and you can pick, move, size, turn and delete them, type in their text with bold, italics and colours, and change their fill and outline. Insert › Picture, Shapes and Text Box add new ones at the selected cell. They are printed and in the PDF and the file's thumbnail, and stay in place with frozen panes; text boxes and lines follow Dark Pages and high contrast, as the cells do. Everything is kept when you save, beside the file's charts.
+- Pages run walled off from your account. A page that came from somewhere else (a download, an email, someone else's change) can't read your documents until you allow it, and then runs none of its scripts, so nothing it shows can leave your computer. Mark as Mine trusts a page you wrote yourself.
+- A shared page shows the people you share it with what it last showed you, and File › Share lists the documents it shows parts of.
+- Tools › Word Count shows your progress: the words you wrote in the document today, this week, this month and this year, and a chart (or a table) of the words written each day or month. Days before you started are filled in from the document's version history. The status bar can count the words written today, this week, this month or this year instead of the whole document: choose it in Word Count or Tools › Options. A shared document keeps one history that everyone writing in it adds to.
 - Audio: sound files can be edited. Audio › Edit Audio shows the waveform to select, cut, copy, paste, delete, trim or silence, with zoom, undo and playing the selection. WAV and FLAC files are saved as you edit, with the same rate, sample format and tags. An MP3 is saved as an MP3 when you choose Save, and other kinds as a new FLAC beside the original; until then your edits are kept on this device.
 - Audio: Audio › Effects has Change Volume, Normalize, fades, Reverse, Speed and Pitch, Equalizer, Compressor and Reduce Noise, with a preview; Audio › Generate adds silence or a tone.
 - Audio: record from the microphone with Audio › Record, or start with File › New Audio Recording.
 - Audio: label parts of a sound with Audio › Label. Labels are kept as captions in a .vtt file beside it.
 - Audio: Audio › Spectrogram shows the pitches in a sound.
 
+### Changed
+
+- Website: the home page now leads with what Golem Docs is for: one editor for every file, kept as plain files that any ai can work on, and open source all the way through. Its sections follow that order, with every format Golem Docs opens after the ai demo. The Formats page now lists PowerPoint, and audio and video.
+- Shared documents and folders look like Golem Docs: the app's toolbar, icons, font and Files panel, your own color scheme, and a header with Golem Docs' name, the file you're looking at, and who shared it with you. A public link doesn't show the owner's name.
+- Help › Keyboard Shortcuts lists every command, by menu, with a search box, so you can give a key to any of them, not only to the ones that already have one. Your shortcuts follow your account to your other computers.
+- Format › Subscript is now ⇧⌘, (Ctrl+Shift+, on Windows and Linux), so ⌘, (Ctrl+,) opens Tools › Options as it always meant to. Subscript had been taking that key from it.
+- The Files sidebar comes back as you left it after a reload: scrolled to the same place, and still showing Trash if Trash was open.
+- The Files sidebar no longer opens with a tip about dropping files in. While it is empty, it says you can drop files or folders there.
+- Spreadsheets: the Insert menu lists everything a sheet can insert: rows, columns and a new sheet, Table (moved from the Sheet menu), PivotTable, Chart, Sparklines, a note and a page break. Ctrl+T makes a table, as in Excel (on a Mac, and on Windows and Linux in the desktop app; a browser there keeps Ctrl+T for a new tab).
+- Spreadsheets: filter buttons and list arrows grow and shrink with the zoom like the cells around them, rather than staying one size. They stay easy to click when you zoom far out, their arrows are smooth at any zoom, and the buttons on filter, table and pivot table headers sit level with the header's text, wherever that text is in the cell.
+- Slides: Insert › Shape shows a picture of each shape, in groups, with the same shapes and names as the drawing tools' Shapes list, and adds a 4- and 6-point star, a plus, a moon, a cloud, a lightning bolt and a speech bubble.
+
 ### Fixed
 
+- The Saved button at the top right keeps its size while a change is saving, rather than growing and shrinking with every save.
+- Shared spreadsheets, CSV files, presentations, audio and video open as themselves in a shared link: in the spreadsheet, slides and media views, read-only, instead of being turned into a document. HTML pages in a shared folder show as the page they make.
+- Desktop app: a folder moved or renamed in the vault folder (in Finder or with `mv`) is moved in your account as a whole, at once, and stays the same folder, still shared with the same people and by the same links. Before, each of its files was moved one by one into a new folder, the folder list showed the old place until that was done, and the old folder's sharing was lost with it. Copies of the same file in several moved folders also keep their history now, instead of being made again.
+- Slides: on a high-resolution screen, the round handle above a selected shape turns it when you grab the handle itself, not a spot beside it.
+- Slides: Shift+Tab with nothing selected selects the slide's last shape, rather than the one before it.
 - A link to a section of a note, such as [[Note#Budget]] or [text](#budget), goes to that heading, in another document or the one that is open.
+
+## 0.48.0 - 2026-11-25
+
+### Added
+
+- Shared folders: a folder shared view-only, or by its public link, has a Download All button beside its name that saves every file in it as one ZIP, in its folders. People a folder or document is shared with view-only can also download the file they are looking at.
+
+### Fixed
+
+- Dragging a selection to an edge of the window, or past it, now scrolls the view and keeps selecting, faster the further you go: text in documents and the document viewer, cells in spreadsheets, text and selection boxes in slides, and selection boxes in drawings and pictures.
+- SVG drawings: text is drawn in the fonts the file embeds, instead of a stand-in.
+- PDFs: text and logos over a solid panel that covers part of a picture are no longer hidden by the panel, gradients and fades in PDFs made by Chrome are drawn, and pictures no longer show past the edge of the page or of the box they are cut to.
 
 ## 0.47.0 - 2026-11-25
 

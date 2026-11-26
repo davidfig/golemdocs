@@ -20,7 +20,7 @@ test.describe('Keyboard Shortcuts dialog', () => {
     await app.blank();
     await choose(app, 'Help', 'Keyboard Shortcuts');
     await expect(shortcutsDialog(page)).toBeVisible();
-    await shortcutsDialog(page).getByRole('button', { name: 'OK' }).click();
+    await shortcutsDialog(page).getByRole('button', { name: 'OK', exact: true }).click();
     await app.toolbarButton('Keyboard Shortcuts').click();
     await expect(shortcutsDialog(page)).toBeVisible();
   });
@@ -91,6 +91,47 @@ test.describe('Keyboard Shortcuts dialog', () => {
     await dialog.getByRole('button', { name: 'Change shortcut for Page Grid' }).click();
     await page.keyboard.press('q');
     await expect(dialog.getByRole('status')).toContainText('Include Ctrl, Alt or');
+  });
+
+  test('every command is listed, by menu, a search narrows the list, and one with no key can be given one', async ({ app, page }) => {
+    await app.blank();
+    await page.keyboard.press('F1');
+    const dialog = shortcutsDialog(page);
+    await expect(dialog.locator('th', { hasText: /^View$/ })).toBeVisible();
+    const ruler = dialog.getByRole('button', { name: /^Change shortcut for Ruler\b/ });
+    await expect(ruler).toHaveText('None');
+    const search = dialog.getByRole('searchbox', { name: 'Search commands' });
+    await search.fill('ruler');
+    await expect(dialog.locator('.wm-shortcut-key')).toHaveCount(1);
+    await ruler.click();
+    await page.keyboard.press('F9');
+    await expect(ruler).toHaveText('F9');
+    await expect.poll(async () => JSON.parse((await stored(page, 'wm-shortcuts')) ?? '{}')['view.ruler']).toBe('F9');
+    await search.fill('no such command anywhere');
+    await expect(dialog.locator('.wm-shortcut-key')).toHaveCount(0);
+    await expect(dialog).toContainText('No commands match.');
+  });
+
+  test('Mod+, opens Options, and Subscript is Mod+Shift+,', async ({ app, page }) => {
+    await app.blank();
+    await app.focus();
+    await page.keyboard.press(`${MOD}+Comma`);
+    await expect(page.getByRole('dialog', { name: 'Options' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    const subscript = await page.evaluate(() => (window as unknown as { golem: { commands: { list(f: string): { id: string; shortcut: string }[] } } }).golem.commands.list('format.subscript')[0].shortcut);
+    expect(subscript).toBe((await isMac(page)) ? '⇧⌘,' : 'Ctrl+Shift+,');
+  });
+
+  test('no two commands share a key out of the box', async ({ app, page }) => {
+    await app.blank();
+    const commands = await page.evaluate(() => (window as unknown as { golem: { commands: { list(): { id: string; shortcut: string; scope?: string }[] } } }).golem.commands.list());
+    const byKey = new Map<string, string[]>();
+    for (const c of commands) {
+      if (!c.shortcut) continue;
+      const key = `${c.scope ?? 'document'} ${c.shortcut}`;
+      byKey.set(key, [...(byKey.get(key) ?? []), c.id]);
+    }
+    expect([...byKey].filter(([, ids]) => ids.length > 1)).toEqual([]);
   });
 
   test('giving a command keys another one has takes them away, and Restore Defaults puts everything back', async ({ app, page }) => {

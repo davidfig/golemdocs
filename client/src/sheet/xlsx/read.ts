@@ -9,6 +9,8 @@ import { readCharts } from '../charts/model.ts';
 import type { XmlElement } from '@golemdocs/docx';
 import { readTable } from '../tables.ts';
 import { readNotes } from '../notes.ts';
+import { resolveLinks } from '../links.ts';
+import { readDrawings } from '../drawings.ts';
 import type { Table } from '../tables.ts';
 import { OpcPackage, child, elements } from '@golemdocs/docx';
 import { StyleTable } from '../model/styles.ts';
@@ -54,7 +56,10 @@ export async function readWorkbook(bytes: Uint8Array, options: ReadOptions = {})
   const stylesPart = stylesRel ? rels.partName(stylesRel) : null;
   const stringsPart = stringsRel ? rels.partName(stringsRel) : null;
   if (stylesPart && pkg.has(stylesPart)) book.styles = StyleTable.parse(await pkg.text(stylesPart));
-  if (themeRel && pkg.has(rels.partName(themeRel))) book.theme = readTheme(await pkg.text(rels.partName(themeRel)));
+  if (themeRel && pkg.has(rels.partName(themeRel))) {
+    book.themeXml = await pkg.text(rels.partName(themeRel));
+    book.theme = readTheme(book.themeXml);
+  }
 
   const pr = child(workbookXml, 'workbookPr');
   book.date1904 = pr?.attrs.date1904 === '1' || pr?.attrs.date1904 === 'true';
@@ -140,10 +145,12 @@ export async function loadSheet(book: Workbook, index: number, onRows?: (sheet: 
   const root = parseAround(prefix, suffix);
   readAround(sheet, root);
   sheet.tables = await readTables(source.pkg, part, root);
+  if (sheet.links.some((l) => l.rId)) sheet.links = resolveLinks(sheet.links, await source.pkg.relationships(part));
   const { notes, parts } = await readNotes(source.pkg, part, root);
   sheet.notes = notes;
   sheet.noteParts = parts;
   sheet.charts = await readCharts(source.pkg, part, root, book.theme.colors);
+  sheet.drawings = await readDrawings(source.pkg, part, root);
   sheet.pivots = await readPivotTables(source.pkg, part);
 }
 

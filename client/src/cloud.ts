@@ -21,6 +21,8 @@ export interface CloudDocument {
   role?: 'owner' | 'editor' | 'viewer';
   /** A document shared with this user view-only: the share's own address for the viewer (/view?s=<token>), not the document's id. */
   viewToken?: string;
+  /** For the owner: another account made it or saved it last, so an HTML page in it is from elsewhere (docs/html-pages.md §1). */
+  byOther?: boolean;
   /** Who shared it (documents shared with this user). */
   owner?: { name: string | null; email: string | null };
   /** Encrypted (docs/encrypted-folders.md): its file and name are sealed, with the item key `wrappedKey` (the owner's only). */
@@ -621,6 +623,31 @@ export async function restoreCloudVersion(id: string, version: number, given?: s
   const name = given ? await nameToSend(given, { id }) : given;
   const query = name ? `?${new URLSearchParams({ name })}` : '';
   return (await check(await send(`/api/documents/${id}/versions/${version}/restore${query}`, { method: 'POST' }))).json();
+}
+
+/** A day of a document's word history (wordHistory.ts): its count at the end of the day, and when the day's writing began. */
+export interface CloudWordDay {
+  day: string;
+  words: number;
+  start: number | null;
+}
+
+/** A document's word history, oldest day first. Anyone who can open the document may ask. */
+export async function cloudWordDays(id: string): Promise<CloudWordDay[]> {
+  return ((await (await check(await send(`/api/documents/${id}/words`))).json()) as { days: CloudWordDay[] }).days;
+}
+
+/**
+ * Adds days to a document's word history (anyone who can edit it may). `fill`: counts of past versions, which never replace a day
+ * already kept. `leaving`: the page is going away, so the request is sent even as it goes.
+ */
+export async function keepCloudWordDays(id: string, days: readonly CloudWordDay[], options: { fill?: boolean; leaving?: boolean } = {}): Promise<void> {
+  await check(await send(`/api/documents/${id}/words`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ days, ...(options.fill && { fill: true }) }), ...(options.leaving && { keepalive: true }) }));
+}
+
+/** How many words a kept version has (null: none the server can count, such as a PDF's). */
+export async function cloudVersionWords(id: string, version: number): Promise<number | null> {
+  return ((await (await check(await send(`/api/documents/${id}/versions/${version}/words`))).json()) as { words: number | null }).words;
 }
 
 /** A deleted document, kept for 30 days. */

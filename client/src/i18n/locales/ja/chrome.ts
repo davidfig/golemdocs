@@ -316,6 +316,8 @@ export const chrome: Partial<Messages> = {
   'chrome.shortcuts.vector': 'ベクターエディター',
   'chrome.shortcuts.vectorHint': 'Illustrator と同じ描画ツールのキーです。ツールには文字・数字・記号のキー 1 つだけを割り当てられます。',
   'chrome.shortcuts.needKey': '文字、数字、記号のキーを押してください（Ctrl、Alt、⌘、Shift との組み合わせも可）。',
+  'chrome.shortcuts.search': 'コマンドを検索',
+  'chrome.shortcuts.noMatch': '一致するコマンドはありません。',
   'chrome.file.rename': '名前の変更(&R)…',
   'chrome.file.rename.tip': 'このドキュメントの名前を変更します',
   'chrome.title.label': 'ドキュメント名',

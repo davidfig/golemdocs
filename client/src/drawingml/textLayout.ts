@@ -1,10 +1,10 @@
-// Laying out a shape's text (docs/slides.md): paragraphs broken into lines that fit the text box, with bullets and
+// Laying out a shape's text (docs/architecture/drawingml.md): paragraphs broken into lines that fit the text box, with bullets and
 // numbers, alignment, line and paragraph spacing, and the box's vertical anchor. Positions are in CSS pixels from the text
 // box's top left. Measuring is given (the page measures with the canvas and the app's fonts; tests with a fixed advance), so
 // the same code lays out text for drawing, for the editor's caret and for fitting text to its shape.
 
 import { EMU_PER_PX } from './ooxml.ts';
-import type { Paragraph, RunStyle, Spacing } from './textStyle.ts';
+import type { Paragraph, RunStyle, Spacing } from './text.ts';
 
 export const PX_PER_PT = 96 / 72;
 

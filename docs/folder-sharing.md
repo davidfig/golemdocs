@@ -42,7 +42,7 @@ The folder id is the owner's (folders live in the owner's database); `owner_id` 
 - `/api/folders/:id/shares[/:userId]` and `/api/folders/:id/link` for the owner, as the document routes.
 - `GET /api/shared` also lists folders shared with the user (`{ folderId, ownerId, ownerName, name, role, viewToken? }`).
 - `GET /api/shared/folders/:id/tree` for a grantee: the tree under the shared folder (folders, and documents with their ids, names, dates, kinds). Editors need ids to open documents in the app.
-- `GET /api/folder-view/:token` and `/api/folder-public/:token` for the viewer: the tree as paths relative to the shared folder, never document or folder ids; `…/file?path=<path>` for a file's bytes (304 for `If-None-Match`). The person's token needs that person's session, as `viewShare`; the public one needs none and sends `cache-control: public, max-age=60` and `noindex`. Unknown, dropped and other people's tokens all answer 404.
+- `GET /api/folder-view/:token` and `/api/folder-public/:token` for the viewer: the tree as paths relative to the shared folder, never document or folder ids, and on the person's share who shared it (`owner`: name and picture; a public link names nobody); `…/file?path=<path>` for a file's bytes (304 for `If-None-Match`), and `…/page?path=<path>` for an HTML page's results as its owner's app kept them ([HTML pages](html-pages.md) §5). The person's token needs that person's session, as `viewShare`; the public one needs none and sends `cache-control: public, max-age=60` and `noindex`. Unknown, dropped and other people's tokens all answer 404.
 
 **Ending.** Unsharing, the folder being deleted (what was in it moves up, so it is no longer under the shared folder), the owner's sync ending and a file leaving the folder all end access the moment they happen, because access is checked on each request. Rooms of documents that lose a grantee kick them (`kickFromRoom`), as unsharing a document does. Deleting a folder calls a `forgetFolders` alongside `forgetDocuments`.
 
@@ -57,7 +57,7 @@ Built: the same page (`client/view/index.html`, `src/viewer/share.ts`), which ha
 - **Headings:** `#Section` goes to the heading once the file is laid out (`heading` in `mount`, the layout worker's `goToPlace`).
 - **Embeds:** not yet: an embed is drawn from what the file stores.
 - **Refresh and ending:** the tree and the open file are checked as the document viewer does: at once on each save of the open file (its live line, `/live?path=…`, see [Embeddable viewer](architecture/viewer.md)), and every 30 s for a person, 2 min for the public link, and when the tab is looked at again. A 404 or 403 on the tree destroys the viewer and the tree and says the folder is no longer shared; a 401 shows the sign-in buttons; a file gone from a folder that is still shared says just that.
-- **Download** on the public link, per file, as for a document.
+- **Download** on both pages: the bar's Download saves the file shown, as for a document's public link, and **Download All** beside the folder's name saves every file of the folder as one ZIP named for the folder, in its folders, each converted as Download converts it (`archiveFiles` and `zipDocuments` in `storage/archive.ts`, shared with the app's File › Download All). A person's view-only share downloads too: they can read every file anyway, so withholding it protects nothing.
 
 ## App (Can edit)
 

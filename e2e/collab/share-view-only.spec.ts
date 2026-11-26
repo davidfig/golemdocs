@@ -63,7 +63,14 @@ test('the owner shares a document with "Can view", and the other person opens it
   expect(guest.page.url()).not.toContain(doc.id);
   expect(new URL(guest.page.url()).searchParams.get('s')).toBe(await viewTokenOf(guest.page, doc.id));
   await expect(guest.page).toHaveTitle('Plan.docx (view only)');
-  await expect(guest.page.locator('.wm-viewer-title')).toHaveText('Plan.docx (view only)');
+  // Golem Docs' header: its name linking to the person's documents, the file shown view only, and who shared it.
+  const header = guest.page.getByRole('banner');
+  await expect(header.getByRole('heading', { level: 1 })).toHaveText(/Plan\.docx\s*View only/);
+  await expect(header.getByRole('link', { name: 'Golem Docs', exact: true })).toHaveAttribute('href', '/');
+  await expect(header.getByText(/^Shared by owner/)).toBeVisible();
+  await expect(header.getByRole('link', { name: 'Your Documents' })).toBeVisible();
+  await expect(header.getByRole('link', { name: 'Try Golem Docs' })).toHaveCount(0);
+  await expect(guest.page.getByRole('toolbar').getByRole('button', { name: 'Print' })).toBeVisible();
   await expect(guest.page.getByRole('textbox', { name: 'Page number' })).toHaveValue('1');
   await expect(guest.page.getByRole('menubar')).toHaveCount(0);
   await expect.poll(() => viewerText(guest.page)).toBe('the plan');
@@ -77,6 +84,9 @@ test('the owner shares a document with "Can view", and the other person opens it
   await guest.page.keyboard.type('changed by the viewer');
   await guest.page.keyboard.press('Enter');
   await expect.poll(() => viewerText(guest.page)).toBe('the plan');
+  // Download saves it under its name, as on a public link.
+  const [download] = await Promise.all([guest.page.waitForEvent('download'), guest.page.getByRole('button', { name: 'Download' }).click()]);
+  expect(download.suggestedFilename()).toBe('Plan.docx');
   await owner.context.close();
   await guest.context.close();
 });
@@ -149,7 +159,7 @@ const checkNow = (page: Page) => page.evaluate(() => document.dispatchEvent(new 
 async function expectGone(page: Page): Promise<void> {
   await expect(page.getByRole('status')).toContainText('no longer shared with you');
   await expect(page.locator('.wm-viewer canvas')).toHaveCount(0);
-  await expect(page.locator('.wm-viewer-title')).toHaveCount(0);
+  await expect(page.locator('.wm-viewer-heading')).toHaveCount(0);
   await expect(page).not.toHaveTitle(/Plan\.docx/);
   expect(await page.content()).not.toContain('the plan');
 }

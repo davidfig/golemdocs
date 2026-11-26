@@ -10,6 +10,9 @@ export const docxKey = (ownerId: string, docId: string): string => `${ownerId}/$
 /** The picture of its first page. */
 export const thumbKey = (ownerId: string, docId: string): string => `${ownerId}/${docId}.thumb`;
 
+/** What an HTML page showed when its owner last opened it, for the people it is shared with (docs/html-pages.md §5). */
+export const pageKey = (ownerId: string, docId: string): string => `${ownerId}/${docId}.page`;
+
 /** Its full-text search index (see docIndex.ts). */
 export const indexKey = (ownerId: string, docId: string): string => `${ownerId}/${docId}.idx`;
 

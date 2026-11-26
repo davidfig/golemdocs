@@ -9,7 +9,7 @@ import { openNames, withoutEncrypted } from './vaultEncrypted.ts';
 import { decryptedInVault, documentInVault, isEncryptedFolder, newKey, rememberInVault, sealNameWith } from '../encryption/session.ts';
 import { encryptDocument } from '../encryption/convert.ts';
 import type { Folder } from '../folders.ts';
-import { deleteLocalFolder, getSaved, keepVersion, listLocalFolders, listSaved, ownedBy, putLocalFolder, saveSaved, setSavedFolder, trashSaved } from '../storage/local.ts';
+import { deleteLocalFolder, getSaved, keepVersion, listLocalFolders, listSaved, ownedBy, putLocalFolder, saveSaved, setSavedFolder, trashSaved, updateLocalFolder } from '../storage/local.ts';
 import { safeName } from './vaultPlan.ts';
 import type { VaultCloud } from './vaultSync.ts';
 
@@ -35,6 +35,17 @@ export function guestCloud(): VaultCloud {
       parent = found.id;
     }
     return parent;
+  }
+
+  /** The folder at a vault path, without making any. */
+  function folderAt(directory: string[]): Folder | undefined {
+    let found: Folder | undefined;
+    for (const part of directory) {
+      const parentId = found?.id ?? null;
+      found = folders.find((f) => (f.parentId ?? null) === parentId && safeName(f.name) === part);
+      if (!found) return undefined;
+    }
+    return found;
   }
 
   async function stored(id: string) {
@@ -82,6 +93,17 @@ export function guestCloud(): VaultCloud {
     async removeFolder(id) {
       await deleteLocalFolder(id, folders.find((f) => f.id === id)?.parentId ?? null);
       folders = folders.filter((f) => f.id !== id);
+    },
+    async moveFolder(from, to) {
+      const folder = folderAt(from);
+      // Encrypted folders (decrypted into the vault) are moved document by document, as the account's are.
+      if (!folder || !to.length || folderAt(to) || folder.encrypted) return false;
+      const parentId = await folderFor(to.slice(0, -1));
+      if (parentId !== null && (isEncryptedFolder(parentId) || folders.find((f) => f.id === parentId)?.encrypted)) return false;
+      const name = to[to.length - 1];
+      if (!(await updateLocalFolder(folder.id, { name, parentId }, Date.now()))) return false;
+      folders = folders.map((f) => (f.id === folder.id ? { ...f, name, parentId } : f));
+      return true;
     },
   };
 }

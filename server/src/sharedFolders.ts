@@ -35,9 +35,9 @@ import {
 } from './folderShares.ts';
 import { removeFolders, type FolderRow } from './folders.ts';
 import { cleanName, HttpError, ID, json } from './http.ts';
-import { describe, listDocuments, ownStorage } from './documents.ts';
+import { describe, listDocuments, ownStorage, pageResults } from './documents.ts';
 import { kickFromRoom, listenToRoom, rejoinRoom } from './roomGate.ts';
-import { person, userByEmail } from './sharing.ts';
+import { person, sharer, userByEmail } from './sharing.ts';
 import { hasSync, subscriptionRequired } from './subscriptions.ts';
 import { existingUserDb, type UserDb } from './userDb.ts';
 import { refuseEncrypted } from './sealed.ts';
@@ -305,12 +305,13 @@ export function pathsOf(root: string, folders: readonly (FolderLink & { created_
 
 /**
  * GET /api/folder-view/:token (a person's view-only share, `userId` set) and /api/folder-public/:token (its public link, for anyone):
- * the folder's name and tree (`{ name, folders: [path], files: [{ path, updatedAt, size }] }`, every file). With /file?path=…, that
- * file (304 for `If-None-Match` while unchanged). Paths are inside the shared folder; nothing answered names an id. An unknown, dropped
+ * the folder's name and tree (`{ name, folders: [path], files: [{ path, updatedAt, size }] }`, every file), and for a person's share
+ * who shared it (`owner: { name, picture }`). With /file?path=…, that
+ * file (304 for `If-None-Match` while unchanged); with /page?path=…, an HTML page's results as its owner's app kept them. Paths are inside the shared folder; nothing answered names an id. An unknown, dropped
  * or someone else's token, a folder that is gone, an owner without sync and a path that is not in the tree all answer 404. Public
  * answers may be kept a minute and are never indexed.
  */
-export async function handleFolderView(request: Request, env: Env, url: URL, userId: string | null, token: string, part: 'file' | 'live' | undefined): Promise<Response> {
+export async function handleFolderView(request: Request, env: Env, url: URL, userId: string | null, token: string, part: 'file' | 'live' | 'page' | undefined): Promise<Response> {
   if (request.method !== 'GET') throw new HttpError(405, 'method not allowed');
   const target = userId === null ? await folderPublicShare(env, token) : await folderViewShare(env, token, userId);
   if (!target) throw new HttpError(404, 'not found');
@@ -326,12 +327,15 @@ export async function handleFolderView(request: Request, env: Env, url: URL, use
   const { folders, documents } = await contents(env, target.ownerId, db, target.folderId, all);
   const tree = pathsOf(target.folderId, folders as FolderRow[], documents);
   const headers: Record<string, string> = { 'x-robots-tag': 'noindex, nofollow', ...(userId === null ? { 'cache-control': 'public, max-age=60' } : {}) };
-  if (!part) return json({ name: root.name, folders: tree.folders, files: tree.files }, 200, headers);
+  // Who shared it, for the person it was shared with only: a public link's page names nobody.
+  if (!part) return json({ name: root.name, folders: tree.folders, files: tree.files, ...(userId !== null && { owner: await sharer(env, target.ownerId) }) }, 200, headers);
   const docId = tree.byPath.get(url.searchParams.get('path') ?? '');
   const row = docId && documents.find((d) => d.id === docId);
   if (!row) throw new HttpError(404, 'not found');
   // The WebSocket that tells the page of each save of the file it shows (`listenToRoom`).
   if (part === 'live') return listenToRoom(env, row.id, request, userId, target.ownerId);
+  // An HTML page's results, as its owner's app kept them (docs/html-pages.md §5), for a page in the folder.
+  if (part === 'page') return pageResults(env, target.ownerId, row.id);
   const response = await documentResponse(env, row.r2_key, target.ownerId, row.id, DOCX, request.headers.get('if-none-match'));
   if (!response) throw new HttpError(404, 'not found');
   const out = new Headers(response.headers);

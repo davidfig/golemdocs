@@ -147,6 +147,14 @@
 
 /* The in-cell editor: a real textarea over the cell, sized and styled as the cell and growing with what is typed (view.ts,
    placeEditor). Its frame is an outline, which takes no room from the text. */
+/* Pictures and shapes (drawingLayer.ts): drawn over the cells, under the cell editor; the sheet takes the pointer. */
+.wm-sheet-drawings {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
 .wm-sheet-editor {
   position: absolute;
   pointer-events: auto;

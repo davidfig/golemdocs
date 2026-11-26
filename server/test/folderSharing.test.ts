@@ -182,6 +182,7 @@ test('the viewer reads the folder by its share’s address, as paths, and names 
   for (const id of [projects, notes, plan]) assert.ok(!text.includes(id), 'no ids');
   const tree = JSON.parse(text);
   assert.equal(tree.name, 'Projects');
+  assert.equal(tree.owner.name, 'Olive', 'who shared it, for the person it was shared with');
   assert.deepEqual(tree.folders, ['Notes']);
   assert.deepEqual(tree.files.map((f: any) => f.path), ['Notes/Idea.md', 'Plan (2).md', 'Plan.md']);
   const file = await w.call(ALICE, 'GET', `/api/folder-view/${token}/file?path=${encodeURIComponent('Notes/Idea.md')}`);
@@ -202,13 +203,20 @@ test('the viewer reads the folder by its share’s address, as paths, and names 
 });
 
 test('a folder’s public link opens it for anyone, read only and not indexed; resetting or turning it off kills the old address', async () => {
-  const { projects } = await setup();
+  const { projects, plan } = await setup();
   const { token } = (await (await w.call(OWNER, 'PUT', `/api/folders/${projects}/link`)).json()) as any;
   const r = await w.call(null, 'GET', `/api/folder-public/${token}`);
   assert.equal(r.status, 200);
   assert.equal(r.headers.get('x-robots-tag'), 'noindex, nofollow');
   assert.equal(r.headers.get('cache-control'), 'public, max-age=60');
+  assert.equal(((await r.clone().json()) as any).owner, undefined, 'a public link names nobody');
   assert.equal((await w.call(null, 'GET', `/api/folder-public/${token}/file?path=Plan.md`)).status, 200);
+  // An HTML page's kept results (docs/html-pages.md §5), by its path in the folder: none yet, then what the owner's app kept.
+  assert.equal((await w.call(null, 'GET', `/api/folder-public/${token}/page?path=Plan.md`)).status, 404);
+  const results = { version: 1, hash: 'h', embeds: { 'Budget.xlsx#Total': '42' }, answers: {}, read: [] };
+  assert.equal((await w.call(OWNER, 'PUT', `/api/documents/${plan}/page`, body(results))).status, 200);
+  assert.deepEqual(await (await w.call(null, 'GET', `/api/folder-public/${token}/page?path=Plan.md`)).json(), results);
+  assert.equal((await w.call(null, 'GET', `/api/folder-public/${token}/page?path=../Private.md`)).status, 404);
   const { token: next } = (await (await w.call(OWNER, 'POST', `/api/folders/${projects}/link`)).json()) as any;
   assert.notEqual(next, token);
   assert.equal((await w.call(null, 'GET', `/api/folder-public/${token}`)).status, 404);

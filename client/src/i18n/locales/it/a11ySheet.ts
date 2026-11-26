@@ -4,6 +4,7 @@ export const a11ySheet: Partial<Messages> = {
   'a11y.sheet.blank': 'vuota',
   'a11y.sheet.formula': 'formula {formula}',
   'a11y.sheet.merged': 'unita {from} a {to}',
+  'a11y.sheet.link': 'collegamento a {address}',
   'a11y.sheet.note': 'nota: {text}',
   'a11y.sheet.list': 'elenco, Alt+Giù per le scelte',
   'a11y.sheet.filter': 'filtro, Alt+Giù per filtrare',

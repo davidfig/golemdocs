@@ -226,8 +226,8 @@ function usedRange(sheet: Worksheet): CellRange | null {
       c1 = Math.max(c1, c);
     });
   }
-  // Charts print too: the cells they reach count as in use.
-  for (const chart of sheet.charts) {
+  // Charts, pictures and shapes print too: the cells they reach count as in use.
+  for (const chart of [...sheet.charts, ...sheet.drawings]) {
     const { from, to, size } = chart.anchor;
     const end = to ?? {
       col: sheet.colSizes.indexAt(sheet.colSizes.position(from.col) + from.dx + (size?.width ?? 360)),

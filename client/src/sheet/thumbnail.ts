@@ -3,11 +3,11 @@
 // at this size the cells' own faces would not show). Made after a save, as a document's first page is.
 
 import { thumbnailSize } from '../thumbnail.ts';
-import type { CellTile, DrawStyle } from './protocol.ts';
+import type { CellTile, DrawnPicture, DrawStyle } from './protocol.ts';
 
 const css = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
-export async function sheetThumbnail(tile: CellTile, cols: number[], rows: number[]): Promise<Blob | null> {
+export async function sheetThumbnail(tile: CellTile, cols: number[], rows: number[], pictures: DrawnPicture[] = []): Promise<Blob | null> {
   const { width, height } = thumbnailSize(612, 792);
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -74,6 +74,15 @@ export async function sheetThumbnail(tile: CellTile, cols: number[], rows: numbe
     g.clip();
     g.fillText(cell.text, right_ ? x1 - pad : center ? (x0 + x1) / 2 : x0 + pad, y1 - 3 * scale);
     g.restore();
+  }
+  // Pictures and shapes over the cells (drawn by the page, in points).
+  for (const p of pictures) {
+    if (p.x * scale > width || p.y * scale > height) continue;
+    const { width: w, height: h, data } = p.pixels;
+    const bitmap = await createImageBitmap(new ImageData(new Uint8ClampedArray(data), w, h)).catch(() => null);
+    if (!bitmap) continue;
+    g.drawImage(bitmap, p.x * scale, p.y * scale, p.width * scale, p.height * scale);
+    bitmap.close();
   }
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.85));
 }

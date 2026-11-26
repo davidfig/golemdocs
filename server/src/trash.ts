@@ -6,11 +6,12 @@
 // for good (emptying the trash) purges at once.
 
 import { CHUNKED_FROM, deleteChunks } from './fileStore.ts';
-import { indexKey, thumbKey } from './keys.ts';
+import { indexKey, pageKey, thumbKey } from './keys.ts';
 import { perChunk } from './http.ts';
 import type { Env } from './cf.ts';
 import { deleteMedia } from './roomMedia.ts';
 import { deleteHistory, TRASH_MS } from './versions.ts';
+import { deleteWordCounts } from './wordCounts.ts';
 import type { UserDb } from './userDb.ts';
 
 export interface TrashRow {
@@ -60,7 +61,7 @@ export async function purge(env: Env, ownerId: string, db: UserDb, rows: readonl
   const ids = rows.map((r) => r.id);
   await db.runAll(perChunk(ids, (marks) => `UPDATE trash SET deleted_at = ${PURGING} WHERE id IN (${marks})`));
   // R2 refuses an empty list and more than 1000 keys at once.
-  const keys = rows.flatMap((row) => [row.r2_key, thumbKey(ownerId, row.id), indexKey(ownerId, row.id)]);
+  const keys = rows.flatMap((row) => [row.r2_key, thumbKey(ownerId, row.id), indexKey(ownerId, row.id), pageKey(ownerId, row.id)]);
   for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
   for (const row of rows) await deleteMedia(env, ownerId, row.id);
   // Chunks: a document kept as chunks has some, and a checkpoint may still name some of a document that is whole now.
@@ -71,6 +72,7 @@ export async function purge(env: Env, ownerId: string, db: UserDb, rows: readonl
   }
   for (const row of rows) if (row.size >= CHUNKED_FROM || chunkedVersions.has(row.id)) await deleteChunks(env, ownerId, row.id);
   await deleteHistory(env, ownerId, db, ids);
+  await deleteWordCounts(db, ids);
   await db.runAll(perChunk(ids, (marks) => `DELETE FROM trash WHERE id IN (${marks})`));
 }
 

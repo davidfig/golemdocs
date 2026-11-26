@@ -9,6 +9,7 @@ import { isWdoc, readWdoc, writeWdoc, type Extensions, type SvgExtension } from 
 import { decodeImage, encodeCanvas, makeCanvas } from './imageCodec.ts';
 import { imageToDocument } from './imageDoc.ts';
 import { sniffImage } from './images.ts';
+import { loadFonts } from '../vector/fonts.ts';
 import { gunzip, gzip, isGzip } from '../vector/gzip.ts';
 import { loadImages, paintScene } from '../vector/paint.ts';
 import { readSvg } from '../vector/svgRead.ts';
@@ -26,8 +27,12 @@ export async function sceneToPng(scene: Scene): Promise<Uint8Array> {
   const longest = Math.max(scene.width, scene.height, 1);
   const scale = Math.min(Math.max(1, Math.min(MOST_ENLARGED, SMALLEST_TARGET / longest)), LARGEST_SIDE / longest);
   const { canvas, context } = makeCanvas(scene.width * scale, scene.height * scale);
-  const images = await loadImages(scene, (bytes) => decodeImage(bytes));
-  paintScene(context, scene, canvas.width, canvas.height, { images });
+  const [images, fonts] = await Promise.all([loadImages(scene, (bytes) => decodeImage(bytes)), loadFonts(scene)]);
+  try {
+    paintScene(context, scene, canvas.width, canvas.height, { images, fonts: fonts.aliases });
+  } finally {
+    fonts.release();
+  }
   return encodeCanvas(canvas, 'png');
 }
 

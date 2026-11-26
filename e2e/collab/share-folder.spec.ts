@@ -3,13 +3,17 @@
 // another of the folder opens it in the same tab (Back goes back); a link to a document outside the folder goes nowhere. When the
 // share ends, an open page clears.
 
+import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import { CLIENT_ORIGIN } from '../ports.ts';
-import { clickTopLink, folderProject as project, newPerson, signedOutContext } from './helpers';
+import { clickTopLink, folderProject as project, newPerson, signedOutContext, unzip } from './helpers';
 
 /** Changes through the API come from the site, as the app's do. */
 const headers = { origin: CLIENT_ORIGIN };
+
+/** The paths in a downloaded ZIP, sorted. */
+const zipNames = (bytes: Buffer): string[] => Object.keys(unzip(bytes)).sort();
 
 const tree = (page: Page) => page.getByRole('navigation', { name: 'Files' });
 
@@ -29,11 +33,20 @@ test('a folder’s public link shows its tree; links inside it open in the tab, 
   // No file named: the README at the top, and the address says so.
   await expect(page).toHaveTitle('README.md (view only) · Project');
   await expect(page).toHaveURL(/[?&]path=README\.md/);
-  await expect(page.getByRole('heading', { name: 'Project' })).toBeVisible();
+  // Golem Docs' header names the file and its folder; the Files panel is headed by the folder's name, as the app's is by Files.
+  await expect(page.getByRole('banner').getByRole('heading', { level: 1 })).toHaveText(/README\.md\s*in Project\s*View only/);
+  await expect(page.getByRole('heading', { name: 'Project', exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByRole('banner').getByText(/Shared by/)).toHaveCount(0);
   await expect(tree(page).getByRole('link')).toHaveText(['Ideas.md', 'README.md']);
   await expect(tree(page).getByRole('link', { name: 'README.md' })).toHaveAttribute('aria-current', 'page');
   await expect(tree(page).getByText('Secret.md')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Download' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
+
+  // Download All: every file of the folder, in its folders, in one ZIP named for the folder; nothing from outside it.
+  const [zip] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download All' }).click()]);
+  expect(zip.suggestedFilename()).toBe('Project.zip');
+  expect(zipNames(readFileSync((await zip.path())!))).toEqual(['Notes/Ideas.md', 'README.md']);
+  await expect(page.getByRole('status').filter({ hasText: 'Downloaded 2 files' })).toBeVisible();
 
   // A link to a file of the folder: opened here, with its own address, and Back goes back.
   await clickTopLink(page);
@@ -116,10 +129,21 @@ test('a person with a folder shared view-only opens it from Shared with me, and 
   await expect(reader.page).toHaveURL(/\/view\?f=[\w-]+&path=README\.md/);
   await expect(reader.page).toHaveTitle('README.md (view only) · Project');
   await expect(tree(reader.page).getByRole('link')).toHaveText(['Ideas.md', 'README.md']);
+  // A person's share says who shared it.
+  await expect(reader.page.getByRole('banner').getByText(/^Shared by owner/)).toBeVisible();
+  // The Files panel closes from its own button, and the header's Files button brings it back.
+  await reader.page.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(tree(reader.page)).toBeHidden();
+  await expect(reader.page.getByRole('button', { name: 'Files' })).toHaveAttribute('aria-expanded', 'false');
+  await reader.page.getByRole('button', { name: 'Files' }).click();
+  await expect(tree(reader.page)).toBeVisible();
   await clickTopLink(reader.page);
   await expect(reader.page).toHaveTitle('Ideas.md (view only) · Project');
-  // Only the public link downloads.
-  await expect(reader.page.getByRole('button', { name: 'Download' })).toHaveCount(0);
+  // A person's view-only share downloads too: the file shown, and the whole folder.
+  const [one] = await Promise.all([reader.page.waitForEvent('download'), reader.page.getByRole('button', { name: 'Download', exact: true }).click()]);
+  expect(one.suggestedFilename()).toBe('Ideas.md');
+  const [zip] = await Promise.all([reader.page.waitForEvent('download'), reader.page.getByRole('button', { name: 'Download All' }).click()]);
+  expect(zipNames(readFileSync((await zip.path())!))).toEqual(['Notes/Ideas.md', 'README.md']);
 
   const people = (await (await owner.page.request.get(`/api/folders/${folderId}/shares`)).json()) as { userId: string }[];
   expect((await owner.page.request.delete(`/api/folders/${folderId}/shares/${people[0]!.userId}`, { headers })).ok()).toBe(true);

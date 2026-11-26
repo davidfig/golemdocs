@@ -34,6 +34,8 @@ export interface ShareTarget {
   people: { id: string } | { unavailable: string };
   /** The files the document's live blocks show (docs/live-blocks.md §6): visitors to its public link see their last results. */
   liveSources?: Promise<string[]>;
+  /** An HTML page: the documents it showed parts of when its results were last kept, which everyone it is shared with sees (docs/html-pages.md §5). */
+  pageReads?: Promise<string[]>;
   /** What is shared: a document (the default) or a folder, with everything in it (docs/folder-sharing.md). */
   api?: ShareApi;
 }
@@ -245,7 +247,15 @@ export function showShareDialog(target: ShareTarget): void {
     'id' in target.people
       ? section(t('dialogs.share.peopleHeading'), form, message, h('p', { class: 'wm-hint', text: api.note() }), people)
       : section(t('dialogs.share.peopleHeading'), h('p', { text: target.people.unavailable }));
-  const body = h('div', { class: 'wm-dialog-body' }, peopleSection, 'id' in target.people ? publicSection(api, target.people.id, target.name, target.liveSources) : null);
+  // A page shows parts of other documents, as it last showed them: whoever it is shared with sees those parts.
+  const pageNote = h('p', { class: 'wm-hint' });
+  pageNote.hidden = true;
+  void target.pageReads?.then((names) => {
+    if (!names.length) return;
+    pageNote.textContent = t('pages.share.reads', { names: names.join(', ') });
+    pageNote.hidden = false;
+  });
+  const body = h('div', { class: 'wm-dialog-body' }, pageNote, peopleSection, 'id' in target.people ? publicSection(api, target.people.id, target.name, target.liveSources) : null);
   dialog.append(dialogTitleBar(t('dialogs.share.title', { name: target.name }), () => dialog.close()), body, h('div', { class: 'wm-dialog-buttons' }, done));
   // Keys stay in the dialog: the document's handlers listen on the window.
   dialog.addEventListener('keydown', (e) => e.stopPropagation());

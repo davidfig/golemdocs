@@ -5,13 +5,13 @@
 // The page is drawn as the viewer draws it: the shapes the page paints (pdfDrawings.ts turns them into paths, with their
 // clips, gradients and patterns), its images, and its text as the outlines of the fonts it embeds (pdf's `FontProgram`),
 // or as text in a like font where it embeds none (the standard fonts, Type 3). Outlined text is a shape of its glyphs'
-// outlines. Shapes and images keep the order the page painted them in, those painted over text after the text. Like the viewer, a glyph run is set upright at its size: text the page turns or stretches is not.
+// outlines. Everything keeps the order the page painted it in, and images are cut by their clips. Like the viewer, a glyph run is set upright at its size: text the page turns or stretches is not.
 
 import { interpretPage, type DisplayImage, type DisplayPath, type GlyphRun, type PdfPage } from '@golemdocs/pdf';
 import { FontProgram, type Outline } from '@golemdocs/pdf/fontProgram';
 import { colorText } from '../vector/style.ts';
 import { emptyScene, type PathCommand, type Scene, type SceneNode, type TextNode } from '../vector/model.ts';
-import { Definitions, imageNode, nodesOf, strokedTextPath } from './pdfDrawings.ts';
+import { Definitions, clipped, imageNode, nodesOf, strokedTextPath } from './pdfDrawings.ts';
 import { writeSvg } from '../vector/svgWrite.ts';
 
 const color = (rgb: number): string => colorText([(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255, 1]);
@@ -77,32 +77,30 @@ export function pageScene(page: PdfPage): Scene {
     paths.push(path);
     if (run.stroke!.only) outlinedOnly.add(run);
   }
-  // The shapes and images under the text, or over it, in the order the page painted them.
-  const layer = (over: boolean): SceneNode[] => {
-    const items: (DisplayPath | DisplayImage)[] = [...paths.filter((p) => p.over === over), ...display.images.filter((i) => i.over === over)].sort((a, b) => a.order - b.order);
-    const nodes: SceneNode[] = [];
-    let shapes: DisplayPath[] = [];
-    const flush = (): void => {
-      if (shapes.length) nodes.push(...nodesOf(shapes, 0, 0, defs));
-      shapes = [];
-    };
-    for (const item of items) {
-      if ('subpaths' in item) shapes.push(item);
-      else {
-        flush();
-        const node = imageNode(page.doc, item);
-        if (node) nodes.push(node);
-      }
+  // Everything in the order the page painted it: shapes one after another are made together (they may share clips).
+  const texts = display.glyphRuns.filter((run) => !outlinedOnly.has(run));
+  const items: (DisplayPath | DisplayImage | GlyphRun)[] = [...paths, ...display.images, ...texts].sort((a, b) => a.order - b.order);
+  const nodes: SceneNode[] = [];
+  let shapes: DisplayPath[] = [];
+  const flush = (): void => {
+    if (shapes.length) nodes.push(...nodesOf(shapes, 0, 0, defs));
+    shapes = [];
+  };
+  for (const item of items) {
+    if ('subpaths' in item) {
+      shapes.push(item);
+      continue;
     }
     flush();
-    return nodes;
-  };
-  scene.children = [
-    { kind: 'rect', x: 0, y: 0, width: scene.width, height: scene.height, rx: 0, ry: 0, style: { fill: '#ffffff' }, attrs: {} },
-    ...layer(false),
-    ...display.glyphRuns.filter((run) => !outlinedOnly.has(run)).flatMap((run) => runNodes(run, programOf)),
-    ...layer(true),
-  ];
+    if ('glyphs' in item) {
+      nodes.push(...runNodes(item, programOf));
+      continue;
+    }
+    const node = imageNode(page.doc, item);
+    if (node) nodes.push(clipped([node], item.clips, 0, 0, defs));
+  }
+  flush();
+  scene.children = [{ kind: 'rect', x: 0, y: 0, width: scene.width, height: scene.height, rx: 0, ry: 0, style: { fill: '#ffffff' }, attrs: {} }, ...nodes];
   scene.defs = defs.elements;
   return scene;
 }

@@ -7,6 +7,7 @@
 import { elements, type XmlNode } from '@golemdocs/docx';
 import { makeCanvas } from '../formats/imageCodec.ts';
 import { readClip } from './clip.ts';
+import { aliasedFamily, type FontAliases } from './fonts.ts';
 import { findDefinition } from './gradients.ts';
 import { readFragment } from './svgRead.ts';
 import { readGradient, readPattern } from './gradients.ts';
@@ -16,6 +17,9 @@ import type { Bounds } from './pathData.ts';
 import { inherited, parseColor, parseLength, parseNumbers, strokeUnderFill, urlReference } from './style.ts';
 import type { Rgba } from './style.ts';
 
+// For callers that fetch the painter when first needed: what it draws with comes with it.
+export { loadFonts } from './fonts.ts';
+
 export type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 /** Pictures a scene shows, decoded ahead of painting (see `loadImages`), by their `href`. */
@@ -23,11 +27,15 @@ export type ImageCache = ReadonlyMap<string, CanvasImageSource>;
 
 export interface PaintOptions {
   images?: ImageCache;
+  /** The fonts the drawing embeds, loaded ahead of painting (see `loadFonts`). */
+  fonts?: FontAliases;
   /** Nodes not to paint (the editor hides the one it is drawing itself while it is being changed). */
   skip?: (node: SceneNode) => boolean;
+  /** Every colour of a fill, line or text as it is shown (a sheet's drawings under Dark Pages); pictures are left as they are. */
+  recolor?: (color: Rgba) => Rgba;
 }
 
-const rgba = ([r, g, b, a]: Rgba, opacity = 1): string => `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a * opacity))})`;
+const rgbaOf = ([r, g, b, a]: Rgba, opacity = 1): string => `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a * opacity))})`;
 
 /** Adds a path's commands to the context's current path. */
 export function tracePath(ctx: Context2D, commands: readonly PathCommand[]): void {
@@ -69,7 +77,7 @@ function patternFor(walk: Walk, id: string, box: Bounds | null, opacity: number)
   const scale = Math.sqrt(Math.abs(device.a * device.d - device.b * device.c)) * Math.sqrt(Math.abs(pattern.transform[0] * pattern.transform[3] - pattern.transform[1] * pattern.transform[2]));
   const width = Math.min(2048, Math.max(1, Math.ceil(w * scale)));
   const height = Math.min(2048, Math.max(1, Math.ceil(h * scale)));
-  const key = `${id}|${width}x${height}|${w}x${h}|${opacity}`;
+  const key = `${id}|${width}x${height}|${w}x${h}|${opacity}|${[...(walk.options.fonts?.values() ?? [])].join()}`;
   let cache = tiles.get(scene);
   if (!cache) tiles.set(scene, (cache = new Map()));
   let tile = cache.get(key);
@@ -98,6 +106,8 @@ function patternFor(walk: Walk, id: string, box: Bounds | null, opacity: number)
 function paintFor(walk: Walk, value: string | undefined, chain: readonly Style[], box: Bounds | null, opacity: number): string | CanvasGradient | CanvasPattern | null {
   const { ctx, scene } = walk;
   if (value === undefined || value === 'none') return null;
+  const recolor = walk.options.recolor;
+  const rgba = (c: Rgba, o: number) => rgbaOf(recolor ? recolor(c) : c, o);
   const current = (): Rgba | null => parseColor(inherited(chain, 'color') ?? 'black');
   const reference = urlReference(value);
   if (reference) {
@@ -189,10 +199,10 @@ function paintShape(walk: Walk, node: SceneNode, chain: readonly Style[], comman
 }
 
 /** The font shorthand for a run's style. */
-function fontFor(chain: readonly Style[]): string {
+function fontFor(chain: readonly Style[], fonts?: FontAliases): string {
   const style = inherited(chain, 'font-style');
   const weight = inherited(chain, 'font-weight');
-  const family = inherited(chain, 'font-family') ?? 'sans-serif';
+  const family = aliasedFamily(inherited(chain, 'font-family') ?? 'sans-serif', fonts);
   return `${style === 'italic' || style === 'oblique' ? 'italic ' : ''}${weight && weight !== 'normal' ? `${weight} ` : ''}${fontSizeOf(chain)}px ${family}`;
 }
 
@@ -203,7 +213,7 @@ function paintText(walk: Walk, node: TextNode, chain: readonly Style[]): void {
   ctx.textAlign = 'left';
   // Widths of the runs, so a chunk can be centred or right-aligned as a whole.
   const widths = node.runs.map((run) => {
-    ctx.font = fontFor([run.style, ...chain]);
+    ctx.font = fontFor([run.style, ...chain], walk.options.fonts);
     return ctx.measureText(run.text).width;
   });
   let total = 0;
@@ -216,7 +226,7 @@ function paintText(walk: Walk, node: TextNode, chain: readonly Style[]): void {
     if (run.y !== undefined) y = run.y;
     x += run.dx ?? 0;
     y += run.dy ?? 0;
-    ctx.font = fontFor(runChain);
+    ctx.font = fontFor(runChain, walk.options.fonts);
     const box = { x, y: y - fontSizeOf(runChain) * 0.8, width: widths[i], height: fontSizeOf(runChain) };
     const fillOpacity = parseFloat(inherited(runChain, 'fill-opacity') ?? '1');
     const fill = paintFor(walk, inherited(runChain, 'fill') ?? 'black', runChain, box, Number.isFinite(fillOpacity) ? fillOpacity : 1);

@@ -71,7 +71,7 @@ test.describe('toggling character marks', () => {
     await expect.poll(async () => propsFor(runsOf(await downloadDocumentXml(app)), '2')).toContain('vertAlign:superscript');
     await app.press(`${MOD}+.`);
     await expect.poll(async () => propsFor(runsOf(await downloadDocumentXml(app)), '2')).not.toContain('vertAlign:superscript');
-    await app.press(`${MOD},`.replace(',', '+,'));
+    await app.press(`${MOD}+Shift+Comma`);
     await expect.poll(async () => propsFor(runsOf(await downloadDocumentXml(app)), '2')).toContain('vertAlign:subscript');
     await menuSub(app, 'Format', 'Character', 'Subscript');
     await expect.poll(async () => propsFor(runsOf(await downloadDocumentXml(app)), '2')).not.toContain('vertAlign:subscript');
@@ -84,7 +84,7 @@ test.describe('toggling character marks', () => {
     await typeAndSelect(app, 'n');
     await app.press(`${MOD}+.`);
     await expect.poll(async () => propsFor(runsOf(await downloadDocumentXml(app)), 'n')).toContain('vertAlign:superscript');
-    await app.press(`${MOD}+,`);
+    await app.press(`${MOD}+Shift+Comma`);
     await expect
       .poll(async () => propsFor(runsOf(await downloadDocumentXml(app)), 'n').filter((p) => p.startsWith('vertAlign')))
       .toEqual(['vertAlign:subscript']);

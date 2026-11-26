@@ -166,6 +166,11 @@ export class DrawLayer {
     return this._tool;
   }
 
+  /** A drag is drawing a selection box with the Move tool: it scrolls at the view's edges. */
+  get isSelecting(): boolean {
+    return this.gesture?.kind === 'band';
+  }
+
   /** Calls `listener` when the shapes, the selection or the active layer change (the layers panel follows). */
   onUpdate(listener: () => void): void {
     this.listeners.add(listener);

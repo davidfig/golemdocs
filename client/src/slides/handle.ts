@@ -81,6 +81,11 @@ export class SlidesEditor {
     return this.view?.isSorter ?? false;
   }
 
+  /** Master view is open (the masters and layouts are shown and edited instead of the slides). */
+  get masterView(): boolean {
+    return this.view?.isMasterView ?? false;
+  }
+
   get notesOpen(): boolean {
     return this.view?.notesOpen ?? false;
   }
@@ -170,6 +175,11 @@ export class SlidesEditor {
     this.view?.release();
   }
 
+  /** A drag is selecting text or shapes (not moving, sizing or turning them). */
+  get isSelecting(): boolean {
+    return this.view?.isSelecting ?? false;
+  }
+
   cursorAt(x: number, y: number): string {
     return this.view?.cursorAt(x, y) ?? 'default';
   }
@@ -224,7 +234,7 @@ export class SlidesEditor {
     return this.view?.debugState() ?? null;
   }
 
-  screenOf(name: string): { x: number; y: number } | null {
+  screenOf(name: string): { x: number; y: number; corner: { x: number; y: number } } | null {
     return this.view?.screenOf(name) ?? null;
   }
 }

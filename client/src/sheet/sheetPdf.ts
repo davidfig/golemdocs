@@ -181,6 +181,8 @@ export async function sheetToPdf(data: PrintData, set: FontSet, fileName: string
   const headW = setup.headings ? HEADING_WIDTH : 0;
   const headH = setup.headings ? (rows[0] ?? 15) : 0;
   const date = new Date();
+  // Each picture or shape is embedded once, by the first page it is on.
+  const pictures: PdfImage[] = [];
   for (const [i, p] of pages.entries()) {
     const page = pdf.addPage([layout.width, layout.height]);
     const d = page.draw({ origin: 'top-left' });
@@ -344,6 +346,13 @@ export async function sheetToPdf(data: PrintData, set: FontSet, fileName: string
         const middle = calibri ? ((calibri.ascent - calibri.descent) * run.size) / 2 : run.size / 3;
         label(d, run.text, sx + run.x, sy + run.y + middle, run.align, run.color, run.bold, run.size, 'Calibri');
       }
+    }
+    // Pictures and shapes over the charts, in the file's order.
+    for (const [i, p] of (data.pictures ?? []).entries()) {
+      const px = ox + p.x - colX[c0];
+      const py = oy + p.y - rowY[r0];
+      if (px > ox + w || py > oy + h || px + p.width < ox || py + p.height < oy) continue;
+      d.image((pictures[i] ??= pdf.embedPixels(p.pixels)), px, py, p.width, p.height);
     }
     d.restore();
   }

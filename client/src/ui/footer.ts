@@ -22,6 +22,8 @@ export interface FooterInfo {
   /** The counts of the whole document, and of the selection (null with no selection); null when the document has none. */
   words: WordStats | null;
   selection: WordStats | null;
+  /** The status bar counts the words written in a period (ui/footerWords.ts), not the document's: that period and the count. */
+  written?: { period: 'today' | 'week' | 'month' | 'year'; words: number } | null;
   /** The pixel size of an open picture, once known. */
   picture: { width: number; height: number } | null;
   view: ViewMode;
@@ -58,6 +60,10 @@ const SEGMENT_ACTIONS: Partial<Record<MessageKey, FooterAction>> = {
   'panels.footer.page': 'goTo',
   'panels.footer.words': 'wordCount',
   'panels.footer.selection': 'wordCount',
+  'panels.footer.today': 'wordCount',
+  'panels.footer.week': 'wordCount',
+  'panels.footer.month': 'wordCount',
+  'panels.footer.year': 'wordCount',
   'panels.footer.zoom': 'zoom',
 };
 /** A drawing's size opens Canvas Size; a picture's is only a fact. */
@@ -92,6 +98,7 @@ export function footerSegments(info: FooterInfo): FooterSegment[] {
     if (total) {
       const chosen = info.selection;
       if (chosen && chosen.words > 0) out.push({ key: 'panels.footer.selection', params: { count: total.words, selected: chosen.words } });
+      else if (info.written) out.push({ key: `panels.footer.${info.written.period}`, params: { count: info.written.words } });
       else out.push({ key: 'panels.footer.words', params: { count: total.words } });
     }
   }

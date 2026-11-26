@@ -1,6 +1,6 @@
 # Plan: slides (.pptx, .odp)
 
-**Status (2026-11-23).** Built on the `worktree-slides` branch: M0 to M3 and most of M4 and M6, M5 in part. See *Progress* at the
+**Status (2026-11-26).** Built on the `worktree-slides` branch: M0 to M3 and most of M4 and M6, M5 in part (the design part, background, theme and master editing, is done). See *Progress* at the
 end for what exists, how it differs from the plan, and what is left.
 
 **Goal.** A presentation editor, not a viewer: open, edit, present and save `.pptx` (and later `.odp`) without damaging
@@ -187,27 +187,30 @@ M1 to M3 make it a usable editor; M4 makes it usable on stage.
 
 ### What exists (2026-11-23)
 
-All in `client/src/slides/`, one lazily loaded chunk (`view.ts` and what it imports, about 120 kB) behind `slides/handle.ts`.
+In `client/src/slides/`, one lazily loaded chunk (`view.ts` and what it imports, about 120 kB) behind `slides/handle.ts`. What a
+shape is, apart from the deck (reading, drawing, writing and editing shapes, colours, themes, geometry, text), lives in
+`client/src/drawingml/`, shared with the spreadsheet editor: see [DrawingML shapes](architecture/drawingml.md). The files named
+below without a folder are in whichever of the two holds them.
 
-- **Model** (`deck.ts`, `ooxml.ts`): the `.pptx` package (`OpcPackage`) with every slide, layout, master, theme, notes page, chart
+- **Model** (`deck.ts`, `ooxml.ts`, shared helpers in `drawingml/ooxml.ts`): the `.pptx` package (`OpcPackage`) with every slide, layout, master, theme, notes page, chart
   and SmartArt drawing parsed when the deck opens; the XML is the model, changed in place. Writing sets only changed parts, and
   leaves out parts nothing reaches any more (`unreachableUnder` in `OpcPackage.write`: deleted slides, their notes and media).
-- **Inheritance** (`shapes.ts`, `textStyle.ts`): placeholders take frame, geometry, fill, line and body settings from their
+- **Inheritance** (`shapes.ts`, `textStyle.ts`, on `drawingml/shape.ts` and `drawingml/text.ts`): placeholders take frame, geometry, fill, line and body settings from their
   layout's and master's; text levels from the master's title, body or other style (the presentation's default style for other
   shapes), each placeholder's list style, then the paragraph and run; `p:style` references into the theme's style matrix.
-- **Colours and themes** (`color.ts`, `theme.ts`): every colour kind and change (lumMod, tint, shade, alpha...), colour maps and
+- **Colours and themes** (`drawingml/color.ts`, `drawingml/theme.ts`): every colour kind and change (lumMod, tint, shade, alpha...), colour maps and
   their overrides.
-- **Geometry** (`geometry.ts`): the guide language and custom geometry in full (arcs included), and all 187 preset shapes,
+- **Geometry** (`drawingml/geometry.ts`): the guide language and custom geometry in full (arcs included), and all 187 preset shapes,
   which are the standard's own definitions in the same language (`presetData.ts`, packed from ECMA-376's
   `presetShapeDefinitions.xml` by `scripts/preset-shapes.ts`).
-- **Text** (`textLayout.ts`, `fonts.ts`): line breaking, bullets and automatic numbers, spacing, alignment, anchors, vertical
+- **Text** (`drawingml/textLayout.ts`, `fonts.ts`): line breaking, bullets and automatic numbers, spacing, alignment, anchors, vertical
   text, autofit scale; measured and drawn in the app's own font files (`fonts/manifest.json` substitutes, loaded as web fonts),
   or a font the computer has.
-- **Drawing** (`scene.ts`, `tables.ts`): a slide becomes a drawing scene (`vector/model.ts`), painted by `vector/paint.ts`,
+- **Drawing** (`scene.ts`, `tables.ts`, on `drawingml/scene.ts`'s `ShapeBuilder`): a slide becomes a drawing scene (`vector/model.ts`), painted by `vector/paint.ts`,
   written as a vector PDF by `vector/pdfOut.ts` (`scenesToPdf`). Pictures (cropped, clipped to their shape), gradients, lines
   with dashes and arrowheads, tables with table styles (PowerPoint's default style is built in), charts through the
   spreadsheet's chart layout (`sheet/charts/scene.ts`, `sheet/charts/svg.ts`), SmartArt from its drawing part.
-- **Editor** (`view.ts`, `edit.ts`, `textEdit.ts`, `history.ts`): slides down the page or in Slide Sorter on the app's camera;
+- **Editor** (`view.ts`, `edit.ts`, `history.ts`; shapes and their text through `drawingml/editor.ts`'s `ShapeEditor`, `drawingml/build.ts` and `drawingml/textEdit.ts`): slides down the page or in Slide Sorter on the app's camera;
   select (click, Shift, marquee, Tab), move (with snapping to the slide's edges and middle), size, turn, nudge, order, delete,
   copy and paste shapes; edit text in place with a caret, selection, typing, Enter, line breaks, levels with Tab, and the
   toolbar's formatting; slides added, copied, moved, hidden, deleted and put on another layout; notes in a pane; undo and redo
@@ -219,9 +222,23 @@ All in `client/src/slides/`, one lazily loaded chunk (`view.ts` and what it impo
   To in both directions, New › PowerPoint Presentation (`blank.ts`, the app's own 16:9 deck), and a `slides` room kind,
   watched as workbooks are (`sheet/sheetSync.ts` with `kind: 'slides'`).
 
+- **Design** (`design.ts`, `designDialogs.ts`): Slide › Background writes a solid, gradient or picture `p:bg` on the slide in
+  hand, or (Apply to All) on the master while every slide and layout under it lets its own go; Reset Background removes the
+  page's own. Slide › Theme writes a colour scheme and the Latin heading and body fonts into each master's theme part (from a
+  built-in list, `COLOR_SCHEMES` and `FONT_PAIRS`, or read from another `.pptx` or `.thmx`), and dark or light slides as the
+  master's colour map (`bg1`/`tx1` on `dk1`/`lt1`); `Deck.refreshThemes` re-reads them after a change or an undo. Slide ›
+  Edit Master (also in View) is master view: the editor's pages (`pages` in `view.ts`) become each master followed by its
+  layouts, drawn and edited as slides are (`slideShapes` and `slideScene` take a master or layout), with a bar to close it
+  (or Escape with nothing selected), and the commands about slides themselves (`SLIDE_ONLY_OPS`) disabled. Text formatting
+  on a master's placeholder is also written to the master's title, body or other style, and on a layout's placeholder to
+  its list style, for each level the text has (`inheritedStyleOf`, the editor host's `mirrorStyle`), so it reaches every slide that does
+  not set it itself; moving or sizing a master placeholder moves every slide's that has no place of its own. Each change
+  touches only the parts it is about, so the rest of the package is written back byte for byte. Checked in PowerPoint
+  16.115: a python-pptx deck restyled this way opens with no repair prompt and looks as set.
+
 ### How it differs from the plan
 
-- **Text in shapes has its own editor** (`textEdit.ts` and the text half of `view.ts`), not the document editor (decision 2).
+- **Text in shapes has its own editor** (`drawingml/textEdit.ts` and the text half of `drawingml/editor.ts`), not the document editor (decision 2).
   The document editor lives in the layout worker on whole documents; giving each shape a document there and drawing it on
   the slide would have been far larger than editing DrawingML paragraphs directly, which also keeps every run's own XML.
   Documents still don't edit Word text boxes.
@@ -229,10 +246,13 @@ All in `client/src/slides/`, one lazily loaded chunk (`view.ts` and what it impo
 
 ### Left to do
 
-- Editing animations and transitions (they are kept and played, not edited); master and layout editing; themes; charts
+- Editing animations and transitions (they are kept and played, not edited); charts
   edited in the sheet editor; tables' rows and columns added or removed (cells' text is edited).
 - The yellow handles that drag a shape's adjustments (the table's handles are left out until then).
 - `.odp`; Keynote stays out.
+- Design: adding, renaming and deleting layouts and masters; theme effects and the full font scheme (East Asian and complex
+  script fonts are kept as they were); Georgia has no TTF in `client/public/fonts`, so slides can't draw it yet and it is
+  left out of the built-in fonts.
 - Rooms where several people edit a deck at once (it is watched: one edits, the others look).
 - Live blocks: a slide as a source (`#slide:3`), shapes as hosts.
 - A screen reader pass by hand (the shapes, the caret's paragraph and slide changes are announced).

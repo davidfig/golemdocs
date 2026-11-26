@@ -44,9 +44,36 @@ test('the owner turns on a public link, and someone signed out reads, downloads 
   // Signed out: the document, read-only, with a Download button that saves it under its name.
   const stranger = await signedOutContext(browser);
   const page = await stranger.newPage();
+  // The frame's print() is stubbed, as in e2e/files/print.spec.ts: headless Chromium's print preview of a PDF can crash the page.
+  await page.addInitScript(() => {
+    (window as unknown as { printed: string[] }).printed = [];
+    Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+      get(this: HTMLIFrameElement) {
+        return { focus() {}, print: () => (window as unknown as { printed: string[] }).printed.push(this.src) };
+      },
+    });
+  });
   await page.goto(url);
   await expect(page).toHaveTitle('Plan.docx (view only)');
   await expect.poll(() => viewerText(page)).toBe('the plan');
+  // Golem Docs' header, naming nobody: a public link may be anywhere, so the owner's name is not on it.
+  const header = page.getByRole('banner');
+  await expect(header.getByRole('heading', { level: 1 })).toHaveText(/Plan\.docx\s*View only/);
+  await expect(header.getByRole('link', { name: 'Golem Docs', exact: true })).toHaveAttribute('href', '/home');
+  await expect(header.getByRole('link', { name: 'Try Golem Docs' })).toHaveAttribute('href', '/home');
+  await expect(header.getByText(/Shared by/)).toHaveCount(0);
+  // Print makes the document a PDF and prints it from a hidden frame, as the app's File › Print does.
+  await page.getByRole('toolbar').getByRole('button', { name: 'Print' }).click();
+  const printFrame = page.locator('iframe[src^="blob:"]');
+  await printFrame.waitFor({ state: 'attached', timeout: 15_000 });
+  // Headless Chromium may have no PDF viewer, so the frame never says it loaded: it is told here, as print.spec.ts does.
+  await printFrame.dispatchEvent('load');
+  await expect.poll(() => page.evaluate(() => (window as unknown as { printed: string[] }).printed.length)).toBeGreaterThanOrEqual(1);
+  const printed = await page.evaluate(async () => {
+    const bytes = new Uint8Array(await (await fetch((window as unknown as { printed: string[] }).printed[0]!)).arrayBuffer());
+    return String.fromCharCode(...bytes.subarray(0, 5));
+  });
+  expect(printed).toBe('%PDF-');
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download' }).click()]);
   expect(download.suggestedFilename()).toBe('Plan.docx');
   expect(readFileSync((await download.path())!)).toEqual(Buffer.from(docx));
@@ -57,6 +84,12 @@ test('the owner turns on a public link, and someone signed out reads, downloads 
   const frame = host.frameLocator('iframe');
   await expect(frame.locator('.wm-viewer-title')).toHaveText('Plan.docx');
   await expect(frame.getByRole('button', { name: 'Download' })).toBeVisible();
+  // No header in someone else's page, and no Print (its dialog would cover their page): a small mark opens the document's own page.
+  await expect(frame.getByRole('banner')).toHaveCount(0);
+  await expect(frame.getByRole('button', { name: 'Print' })).toHaveCount(0);
+  const mark = frame.getByRole('link', { name: 'Golem Docs', exact: true });
+  await expect(mark).toHaveAttribute('href', new URL(url).pathname + new URL(url).search);
+  await expect(mark).toHaveAttribute('target', '_blank');
 
   // Reopened, the dialog shows the link that is on.
   await dialog.getByRole('button', { name: 'Done' }).click();

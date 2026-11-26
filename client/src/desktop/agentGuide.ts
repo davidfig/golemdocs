@@ -13,7 +13,7 @@ export const GUIDE_PATH = '.golemdocs/AGENTS.md';
 export const INSTRUCTION_FILES = ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md'] as const;
 
 /** Raise when the guide's text changes, so folders get the new one (an older app never overwrites a newer guide). */
-export const GUIDE_VERSION = 1;
+export const GUIDE_VERSION = 2;
 
 const MARKER = /^<!-- golemdocs-guide (\d+) -->/;
 
@@ -60,12 +60,37 @@ share the document with, within seconds. There is no special API: read and write
 - **Names starting with a dot are not documents**: \`.git\`, or a \`.scratch/\` folder for your own working files, stay
   private to this computer. So do names no format reads (a \`.zip\`, a file with no extension).
 
+## HTML pages
+
+An \`.html\` file with a \`<script>\`, a \`<golem-embed>\` or a \`golem-*\` meta opens in Golem Docs as the page it makes, in a
+sandboxed frame: write a dashboard, a report or an explainer as one, instead of hosting it somewhere else. A page can show
+parts of the person's other documents, kept up to date as they change:
+
+- \`<golem-embed src="Budget.xlsx#Q3 Totals"></golem-embed>\` shows what a live block of that address would: a sheet's
+  range or named table, a note's section (\`Notes.md#Plan\`), a table by its title (\`Report.docx#table:Sales\`), a chart
+  (\`Budget.xlsx#chart:Revenue\`), a PDF page (\`Contract.pdf#page:3\`), a front matter field (\`Book.md#field:status\`), a
+  folder's notes (\`@list:Books/\`) or a script's result (\`Scripts/reading-list.ts\`). Add \`inline\` to show it in a line of text.
+- From a script, \`golem\` is there before the page's own code runs: \`await golem.notes('Books/')\` (each note's \`title\`,
+  \`text\` and front matter \`fields\`), \`golem.read('Books/Dune.md')\`, \`golem.sheet('Budget.xlsx#Total')\`,
+  \`golem.result('Scripts/x.ts')\`, \`golem.embed(address)\` (its HTML), and \`golem.on('change', fn)\` when something it read
+  changes. To change a note: \`golem.append(path, markdown, { create: true })\`, \`prepend\`, \`replace\`,
+  \`appendToSection(path, heading, markdown)\`, \`replaceSection\`, \`setField(path, key, value)\`. Each change can be undone
+  in Tools › Scripts.
+- Scripts and styles may load from https addresses (a CDN). \`fetch\` reaches only the hosts the page names in
+  \`<meta name="golem-network" content="api.example.com">\`.
+- Files beside the page (\`<img src="chart.png">\`, \`<link rel="stylesheet" href="style.css">\`, \`<script src="app.js">\`)
+  are read from the vault, on every device. A module's own \`import\` of another file is not: bundle it, or use a CDN.
+- Links to other files of the vault (\`<a href="Notes.md">\`) open them in Golem Docs; web links open in the browser.
+- A page that came from somewhere else (another person, a download, an email) can't read the person's documents until they
+  allow it, and then runs none of its scripts. Pages you write here are the person's own.
+
 ## What the sync does
 
 - **The file wins.** When a file here changed, it replaces the document. If the document was changed in the app too, the
   app's version is kept in the document's history first, so nothing is lost.
 - **Earlier versions are kept** before each burst of changes, and every ten minutes while changes go on.
-- **Moving or renaming a file** keeps it the same document, with its history. Folders here are folders in the app.
+- **Moving or renaming a file** keeps it the same document, with its history. Folders here are folders in the app, and moving
+  or renaming a whole folder keeps it the same folder, still shared with the same people.
 - **Encrypted documents and folders are not here**, unless the person decrypts an encrypted folder into this one for a while,
   for you to work on. Its files are then here like any other, and what you change, add, rename or delete in it is encrypted
   before it leaves this computer. A document moved into it is encrypted; one moved out of it stays encrypted. When the person

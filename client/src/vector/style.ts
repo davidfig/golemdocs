@@ -123,16 +123,13 @@ function parseSelector(text: string): Selector | null {
 
 const specificityOf = (s: Selector): number => s.reduce((n, c) => n + (c.id ? 10000 : 0) + c.classes.length * 100 + (c.tag ? 1 : 0), 0);
 
-/** The rules of a stylesheet. At-rules (@font-face, @media, @keyframes...) are skipped: they stay in the file as they were. */
-export function parseStylesheet(css: string): Rule[] {
-  const rules: Rule[] = [];
+/** A stylesheet's rules, at-rules included, as what comes before the braces and what is inside them. */
+function* blocks(css: string): Generator<{ prelude: string; body: string }> {
   const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
-  let order = 0;
   let i = 0;
   while (i < text.length) {
     const open = text.indexOf('{', i);
-    if (open < 0) break;
-    const prelude = text.slice(i, open).trim();
+    if (open < 0) return;
     // Find the matching brace (at-rules nest rules).
     let depth = 1;
     let j = open + 1;
@@ -141,8 +138,16 @@ export function parseStylesheet(css: string): Rule[] {
       else if (text[j] === '}') depth--;
       j++;
     }
-    const body = text.slice(open + 1, j - 1);
+    yield { prelude: text.slice(i, open).trim(), body: text.slice(open + 1, depth ? j : j - 1) };
     i = j;
+  }
+}
+
+/** The rules of a stylesheet. At-rules (@font-face, @media, @keyframes...) are skipped: they stay in the file as they were. */
+export function parseStylesheet(css: string): Rule[] {
+  const rules: Rule[] = [];
+  let order = 0;
+  for (const { prelude, body } of blocks(css)) {
     if (prelude.startsWith('@')) continue;
     const declarations = parseDeclarations(body);
     for (const part of prelude.split(',')) {
@@ -151,6 +156,36 @@ export function parseStylesheet(css: string): Rule[] {
     }
   }
   return rules;
+}
+
+/** A font a stylesheet embeds: an `@font-face` rule with a `data:` source. */
+export interface FontFaceRule {
+  family: string;
+  weight?: string;
+  style?: string;
+  stretch?: string;
+  unicodeRange?: string;
+  /** Its `data:` URIs, the preferred one first. */
+  sources: string[];
+}
+
+/** The fonts a stylesheet embeds. Rules with only `local()` fonts or addresses are left out: those are not loaded. */
+export function parseFontFaces(css: string): FontFaceRule[] {
+  const out: FontFaceRule[] = [];
+  for (const { prelude, body } of blocks(css)) {
+    // What is before the braces also holds any `@import` or `@charset` statement in front of the rule.
+    if (!/(^|;)\s*@font-face$/i.test(prelude)) continue;
+    const d = new Map(parseDeclarations(body));
+    const family = d.get('font-family')?.trim().replace(/^(['"])(.*)\1$/, '$2').trim().replace(/\s+/g, ' ');
+    const sources = [...(d.get('src') ?? '').matchAll(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^)'"]*))\s*\)/gi)].map((m) => (m[1] ?? m[2] ?? m[3]).trim()).filter((u) => /^data:/i.test(u));
+    if (!family || !sources.length) continue;
+    const weight = d.get('font-weight');
+    const style = d.get('font-style');
+    const stretch = d.get('font-stretch') ?? d.get('font-width');
+    const unicodeRange = d.get('unicode-range');
+    out.push({ family, sources, ...(weight && { weight }), ...(style && { style }), ...(stretch && { stretch }), ...(unicodeRange && { unicodeRange }) });
+  }
+  return out;
 }
 
 /** What a stylesheet match needs to know about an element and its ancestors. */

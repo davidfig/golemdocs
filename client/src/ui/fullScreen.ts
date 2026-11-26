@@ -3,8 +3,8 @@
 // the key and says so with a `fullscreenchange`, which is what puts the chrome back, so the two
 // can't disagree. Tools ▸ Options can keep the menu bar showing.
 //
-// Where the browser can't go full screen (a phone: Safari on an iPhone and the phone apps), the app
-// only hides its own chrome, and a button in the corner (or Esc) brings it back.
+// Where the browser can't go full screen (a phone: Safari on an iPhone and the phone apps), or refuses
+// (a frame not allowed to), the app only hides its own chrome, and a button in the corner (or Esc) brings it back.
 
 import { t } from '../i18n/index.ts';
 import { iconButton } from './dom.ts';
@@ -119,5 +119,10 @@ export function toggleFullScreen(): Promise<void> {
     apply();
     return Promise.resolve();
   }
-  return (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {});
+  if (document.fullscreenElement) return document.exitFullscreen().catch(() => {});
+  // Refused (a frame without `allowfullscreen`, a browser that says no): the app's own chrome goes all the same, as on a phone.
+  return document.documentElement.requestFullscreen().catch(() => {
+    inApp = true;
+    apply();
+  });
 }

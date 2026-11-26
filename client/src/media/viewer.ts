@@ -41,9 +41,9 @@ export interface MediaViewerHooks {
   /** Whether captions should show when there are any (a setting that follows the account). */
   captionsOn(): boolean;
   setCaptionsOn(on: boolean): void;
-  /** Whether the open file can be edited (audio/edit), and editing it. */
-  canEdit(): boolean;
-  edit(): void;
+  /** Whether the open file can be edited (audio/edit), and editing it. A read-only host (a shared link) leaves them out. */
+  canEdit?(): boolean;
+  edit?(): void;
 }
 
 /** Seconds that J and L, and the Back and Forward buttons, jump; the arrow keys jump half as far. */
@@ -135,7 +135,7 @@ export class MediaViewer {
       this.showCaptions(true);
     });
     this.fullButton = button('mediaFullScreen', t('media.op.fullScreen'), 'F', () => this.op('fullScreen'));
-    this.editButton = button('pencil', t('media.audio.edit'), '', () => this.hooks.edit());
+    this.editButton = button('pencil', t('media.audio.edit'), '', () => this.hooks.edit?.());
     this.bar = h(
       'div',
       { class: 'wm-media-bar', attrs: { role: 'toolbar', 'aria-label': t('media.controls') } },
@@ -546,7 +546,7 @@ export class MediaViewer {
     this.captionsButton.hidden = !hasCaptions;
     this.captionsButton.setAttribute('aria-pressed', String(this.captionsShown));
     this.fullButton.hidden = !this.showsVideo;
-    this.editButton.hidden = !this.hooks.canEdit();
+    this.editButton.hidden = !this.hooks.canEdit?.();
     this.fullButton.setAttribute('aria-pressed', String(document.fullscreenElement === this.el));
   }
 

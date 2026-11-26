@@ -86,6 +86,10 @@ export class SheetEditor {
     return this.view?.isDragging ?? false;
   }
 
+  get isSelecting(): boolean {
+    return this.view?.isSelecting ?? false;
+  }
+
   /** The file (.xlsx, or the CSV or TSV it was), what to store of it (see `SheetEditorView.save`) and its memory image (null when nothing is open). */
   save(): Promise<{ file: Uint8Array; stored: Uint8Array; image: Uint8Array; sha256: string }> | null {
     return this.view?.isOpen ? this.view.save() : null;
@@ -216,6 +220,20 @@ export class SheetEditor {
 
   screenOf(x: number, y: number): { x: number; y: number } | null {
     return this.view?.screenOf(x, y) ?? null;
+  }
+
+  /** Insert › Hyperlink: the link form for the active cell. */
+  editLink(): void {
+    this.view?.editLink();
+  }
+
+  /** Follows a cell's link (`#Sheet2!A1` goes to that cell). */
+  followCellLink(address: string): void {
+    this.view?.followCellLink(address);
+  }
+
+  get readOnly(): boolean {
+    return this.view?.readOnly ?? false;
   }
 
   set readOnly(value: boolean) {

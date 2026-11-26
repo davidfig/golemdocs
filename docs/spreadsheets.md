@@ -677,7 +677,7 @@ the engine (`Host.structured`, `resolveStructured`); a formula typed in a table 
 it, `T[[#This Row],[Price]]` (`expandStructured`). The built-in styles (Light, Medium, Dark) are drawn in their shape: the
 header in the style's theme colour, banded rows tinted from it, the totals row bold (`tablePaint`, `TileCache.tableStyle`;
 a cell's own fill and colour win). Checked by the oracle's `tables` group (a table on the Data sheet) and in Excel, which
-keeps a table grown by an inserted row. Sheet › Insert Table makes one (`createTable`, `newTable`: the first row its
+keeps a table grown by an inserted row. Insert › Table (Ctrl+T on a Mac and in the desktop app) makes one (`createTable`, `newTable`: the first row its
 header, empty header cells named Column1...); the writer gives a new table its part and relationship, removes those of
 tables gone, and writes `<tableParts>` from the model; Excel opens it.
 
@@ -697,6 +697,57 @@ rules (`allows`: whole, decimal, date, time, text length, list, custom) and take
 (`History.refuse`) when one refuses it, showing the rule's own message. Learnt in Excel: a rule refuses a value only when
 it has `showErrorMessage="1"`. The tests' fixture `validation.xlsx` is written by our writer (`scripts/sheets/fixtures.ts`)
 and opened in Excel by `check.ts`.
+
+**Pictures, shapes and text boxes** (`drawings.ts`, `drawingLayer.ts`): the anchors of a sheet's drawing part that are not
+charts are read into `Worksheet.drawings`, each kept whole (its anchor XML) with the relationships its shape uses
+(`readDrawings`). Written only when they changed (`drawingsChanged`): `writeCharts` replaces the drawing part's non-chart
+anchors with them (`writeDrawings`: corners from `anchor`, relationships added again, pictures added here made image parts,
+every `cNvPr` id unique; a new chart's id comes after all of them). They move with inserted and deleted rows and columns
+(`moveDrawingAnchors`), are in the undo snapshot and the memory image. The `drawings` edit replaces the sheet's whole list
+from the page's (`applyDrawingEdits`: each shape's new XML and box, its anchor kept, new corners only when its box moved);
+new pictures' bytes come with it as `media:<name>` until they are written. On the page, `DrawingLayer` asks for a sheet's
+drawings when its info's `drawings.version` changes (not for the page's own edits: their elements are the ones being
+edited), puts each shape at its anchor's box, and draws them with the shared DrawingML code (`drawingml/`) onto a 2D canvas
+over the cells, region by region, with the shape editor's selection, handles and caret; presses, drags, keys, typing and
+the toolbar's formatting go to the shape editor while a shape is picked or its text edited. Insert › Picture, Shapes (the
+shared shape picker) and Text Box add one at the active cell (text 11 points, as Excel's); the right-click menu (or the menu
+key) has Delete Shape, Fill, Line, Bring to Front and Send to Back; ⌘⌥5 / Ctrl+Alt+5 steps through the charts and then the
+drawings. Each pane of the cells draws them, and the selection, handles and caret, clipped to it, as Excel does: a shape
+across a frozen pane's edge shows each part (and its frame) where that pane has it; hit tests go through the pane a point
+is in. Under Dark Pages and a contrast theme, a line or a shape with no fill (a text box) shows its colours as the cells
+do, being drawn on them (`recolorFor`, a `recolor` option of `paintScene`); a filled shape keeps its own, as pictures and
+charts do. The memory image keeps the theme's XML (`Workbook.themeXml`), which shapes take their fills and fonts from. The drawing code is a lazy chunk (`drawingLayer.ts` and what it re-exports): the view loads it
+for a sheet that has drawings, or when one is inserted. For a printout, a PDF and a thumbnail the page draws each drawing
+on its own into pixels (`DrawingLayer.drawn`, 3 a point for print), sent as `PrintData.pictures` for `sheetPdf.ts` to place
+on each page it reaches, over the charts; the print area reaches the last drawing as it does the last chart. The fixture `drawings-handmade.xlsx` is Excel's
+`charts-excel.xlsx` with a picture and a shape added in Excel's markup, not a file Excel saved.
+
+**Function help** (`formula/help/`, `functionDialog.ts`, `formulaHint.ts`): every function in `CATALOGUE` has its argument
+list (Excel's names; optional ones in `[ ]`, a bracketed group that repeats, `…` when more may follow) and one sentence on
+what it does, in every language the app has, one module a language (`help/<tag>.ts`), fetched with `import()` the first
+time help is needed (`functionHelp`, falling back to English). Function names stay in English, as formulas are written. A
+test holds every language to every function, with the argument lists of the same shape as English, and English to the
+registry's `min` and `max`. Insert › Function (⇧F3) opens `askFunction` at once (what is typed goes into its search box;
+the help fills in when it has come): search by name (names that match first) or description, or pick a category; OK types
+`=NAME(` into the cell, or `NAME(` at the caret of a formula being edited. While a formula is edited, `callAt` finds the
+innermost call around the caret and which argument it is in (commas in strings, quoted sheet names and array constants
+don't count), and `FormulaHint` shows the arguments under the cell editor (or the formula bar, when the cell is out of
+view) in the tooltip's look, in the top layer, with the current one in bold; a screen reader hears the argument as it
+changes. The Traditional Chinese help is made from the Simplified with Taiwan Excel's terms (列 a row, 欄 a column).
+
+**Hyperlinks** (`links.ts`): a sheet's `<hyperlinks>` are read into `Worksheet.links` (`readLinks`), each with its cells,
+its `location` (a place in the workbook, `Sheet2!A1`) or its `target` (an address out of it, kept in the sheet's
+relationships as `TargetMode="External"` and looked up when the sheet is loaded, `resolveLinks`). The writer gives every
+external address a relationship and drops those no longer used (`linkRelationships`), then writes `<hyperlinks>` from the
+model. The memory image keeps them with their addresses (it keeps no relationships). The `link` edit sets or takes away
+the link on a range: a new link's first cell gets the text typed for it (an empty cell shows the address), and the cells
+are given the Hyperlink look (blue, underlined; taken away, they lose it). Links move with inserted and deleted rows and
+columns (`moveLinks`) and are part of the undo snapshot. On the page, Insert › Hyperlink (⌘K) and resting the pointer on
+a linked cell open the app's link form (`ui/linkPopover.ts`, through `SheetEditorDeps.links`); Open link, or Ctrl/⌘-click
+on the cell, follows it: `#Sheet2!A1` goes to that cell (`goTo`), anything else is opened by the app (`followLink`).
+Screen readers hear "link to …" with the cell. A `HYPERLINK()` formula is followed the same way, and shows the same card:
+its first argument, a quoted address or a cell on the sheet that holds one (`hyperlinkArgument`); one worked out otherwise
+(`"https://" & A1`) is not followed.
 
 **Notes** (`notes.ts`, `noteCard.ts`): Excel's notes (comments) are read from the sheet's comments part; tiles mark their
 cells (`CellPaint.note`, a red corner), and resting the pointer on one shows it in a card in the documents' comment look

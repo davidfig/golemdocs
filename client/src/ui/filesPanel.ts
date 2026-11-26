@@ -14,7 +14,7 @@ import { t } from '../i18n/index.ts';
 import type { LibraryStore } from '../libraryStore.ts';
 import type { LibraryEntry } from '../sync.ts';
 import type { User } from '../auth.ts';
-import { CLOSE_ICON, h, iconButton, isFileDrag, PADLOCK, PADLOCK_OPEN, smallIcon, toggleClass } from './dom.ts';
+import { chevronIcon, CLOSE_ICON, h, iconButton, isFileDrag, PADLOCK, PADLOCK_OPEN, smallIcon, toggleClass } from './dom.ts';
 import { setDocumentDrag } from './documentDrag.ts';
 import { fileIcon, setFileName, splitExtension } from './fileIcons.ts';
 import { renamedFileName } from '../documentName.ts';
@@ -26,9 +26,11 @@ import { showInFileManagerLabel } from '../desktop/bridge.ts';
 import { newMenuItems } from './newKinds.ts';
 import type { DocumentKind } from './actions.ts';
 import { makeResizable } from './sidebarResize.ts';
+import { parseFilesView, ScrollRestore, type FilesView } from './scrollRestore.ts';
 import { iconElement } from './icons.ts';
 import type { TrashActions } from './trashActions.ts';
 import { trashKey, type TrashItem } from '../trash.ts';
+import './fileRows.css';
 import './filesPanel.css';
 
 export interface FilesPanelHost {
@@ -69,8 +71,8 @@ export interface FilesPanelHost {
 /** What is being dragged onto a folder. */
 /** Folders left open, kept in this browser. */
 const OPEN_KEY = 'word.filesOpen';
-/** Set once the tip about dropping files here is dismissed, kept in this browser. */
-const TIP_KEY = 'word.filesDropTipDismissed';
+/** Whether Trash was showing and how far the documents and Trash were scrolled, kept in this browser. */
+const VIEW_KEY = 'word.filesView';
 
 /** The padlock of an encrypted folder or document: shut while locked, open while unlocked (none for anything else). */
 function lockOf(item: { encrypted?: boolean; locked?: boolean }): HTMLElement[] {
@@ -94,8 +96,6 @@ export class FilesPanel {
   private readonly trashNote = h('p', { class: 'wm-files-empty' });
   private readonly emptyTrash = h('button', { class: 'wm-button wm-danger', text: t('trash.emptyTrash'), attrs: { type: 'button' } });
   private readonly trashView = h('div', { class: 'wm-files-trash-view' }, this.trashNote, this.trashList, h('div', { class: 'wm-files-trash-actions' }, this.emptyTrash));
-  /** How to drop files here (`dropTip`); not shown in Trash, where nothing can be dropped. */
-  private tip: HTMLElement | null = null;
   /** Looking in Trash rather than at the documents. */
   private inTrash = false;
   /** Trash was just opened before it was listed: the keyboard goes to its first document once there is one. */
@@ -110,6 +110,9 @@ export class FilesPanel {
   private revealed = '';
   /** The row Tab goes to in the tree (one row at a time is in the tab order): the last one focused. */
   private tabStop: string | null = null;
+  /** Where the documents and Trash were scrolled to before the page was loaded, until they are put back there. */
+  private treeRestore = new ScrollRestore(null);
+  private trashRestore = new ScrollRestore(null);
 
   /** `library`: the documents and folders, the same copy the Documents screen shows. */
   constructor(
@@ -131,6 +134,7 @@ export class FilesPanel {
     } catch {
       // Storage unavailable: the folders start closed.
     }
+    this.inTrash = this.loadView().trash;
     // The collapse button is a stacked box with a minus: the usual sign for closing every folder in a tree.
     const close = iconButton('wm-files-close', CLOSE_ICON, t('panels.files.close'));
     close.addEventListener('click', () => host.close());
@@ -142,7 +146,7 @@ export class FilesPanel {
     onContextMenu(this.trashEntry, (e) => this.menuAt(e.clientX, e.clientY, [{ label: t('panels.files.openItem'), run: () => this.enterTrash() }, this.host.trash.emptyItem()], this.trashEntry));
     this.makeTrashTarget(this.trashEntry);
     this.emptyTrash.addEventListener('click', () => void this.host.trash.emptyAll());
-    this.el.append(h('header', { class: 'wm-files-bar' }, this.back, this.title, this.collapse, close), this.notice, this.empty, this.tree, this.trashView, this.trashEntry, this.dropTip());
+    this.el.append(h('header', { class: 'wm-files-bar' }, this.back, this.title, this.collapse, close), this.notice, this.empty, this.tree, this.trashView, this.trashEntry);
     this.notice.hidden = true;
     // Right click, or a long press on a touch screen.
     onContextMenu(this.el, (e) => {
@@ -158,30 +162,18 @@ export class FilesPanel {
         if (row?.dataset.row) this.setTabStop(row);
       });
     }
+    for (const [list, restore] of [
+      [this.tree, () => this.treeRestore],
+      [this.trashList, () => this.trashRestore],
+    ] as const) {
+      // Scrolling by the person (not the rows being drawn, or the list being put back) is kept for the next load.
+      for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) list.addEventListener(type, () => restore().cancel(), { passive: true });
+      list.addEventListener('scroll', () => {
+        if (!restore().pending && this.visible) this.saveView();
+      });
+    }
     parent.append(this.el);
     makeResizable(this.el, { key: 'word.filesWidth', min: 140, max: 480, initial: 200 });
-  }
-
-  /** How to drop files and folders here; gone for good once dismissed. */
-  private dropTip(): HTMLElement {
-    const tip = h('div', { class: 'wm-files-tip', attrs: { role: 'note' } });
-    try {
-      if (localStorage.getItem(TIP_KEY)) tip.hidden = true;
-    } catch {
-      // Storage unavailable: shown each time.
-    }
-    const dismiss = iconButton('wm-files-close', CLOSE_ICON, t('panels.files.dismissTip'));
-    dismiss.addEventListener('click', () => {
-      tip.hidden = true;
-      try {
-        localStorage.setItem(TIP_KEY, '1');
-      } catch {
-        // Storage unavailable: it comes back next time.
-      }
-    });
-    tip.append(h('p', { text: t('panels.files.dropTip') }), dismiss);
-    this.tip = tip;
-    return tip;
   }
 
   get visible(): boolean {
@@ -193,6 +185,8 @@ export class FilesPanel {
     this.el.hidden = !visible;
     if (visible) {
       this.revealed = '';
+      // A hidden list forgets how far it was scrolled: it goes back to where it was.
+      this.loadView();
       // What the library has shows at once; the listing brings it up to date.
       this.render();
       this.reveal();
@@ -209,6 +203,7 @@ export class FilesPanel {
   /** Shows what was deleted in place of the tree, with the keyboard on the first of it (or on the way back, if there is none). */
   private enterTrash(): void {
     this.inTrash = true;
+    this.saveView();
     this.render();
     void this.host.trash.store.refresh();
     const first = this.trashList.querySelector<HTMLElement>('.wm-files-row');
@@ -220,6 +215,7 @@ export class FilesPanel {
   private leaveTrash(): void {
     this.inTrash = false;
     this.focusTrash = false;
+    this.saveView();
     this.render();
     this.trashEntry.focus();
   }
@@ -303,6 +299,7 @@ export class FilesPanel {
       this.tree.querySelector<HTMLElement>('.wm-files-row');
     if (stop) stop.tabIndex = 0;
     if (focused) this.tree.querySelector<HTMLElement>(`[data-row="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+    if (!this.inTrash) this.treeRestore.apply(this.tree);
   }
 
   private row(row: TreeRow<LibraryEntry>, here: { localId: string | null; cloudId: string | null }): HTMLElement {
@@ -316,7 +313,7 @@ export class FilesPanel {
       renaming ? 'div' : 'button',
       { class: `wm-files-row ${folder ? 'wm-files-folder' : 'wm-files-file'}`, attrs: { ...(renaming ? {} : { type: 'button' }), role: 'treeitem', 'data-row': id, tabindex: '-1', 'aria-level': String(row.depth + 1) }, title: name },
       // A file's icon sits in the column of its sibling folders' chevrons, so the indent shows the hierarchy.
-      folder ? h('span', { class: 'wm-files-twist', text: row.open ? '▾' : '▸' }) : fileIcon(name),
+      folder ? h('span', { class: 'wm-files-twist' }, chevronIcon() as unknown as Node) : fileIcon(name),
       label,
       // Encrypted: a padlock, shut while locked (when the name also says so, so the padlock is not the only sign), open while unlocked.
       ...(lockOf(folder ? row.folder : row.item)),
@@ -381,7 +378,6 @@ export class FilesPanel {
     this.back.hidden = !trash;
     this.collapse.hidden = trash;
     this.title.textContent = trash ? t('trash.title') : t('panels.files.label');
-    this.tip?.classList.toggle('wm-files-tip-away', trash);
   }
 
   /** What was deleted, newest first, with what to say when there is nothing (or it is still being listed). */
@@ -396,6 +392,7 @@ export class FilesPanel {
     const rows = store.items.map((item) => this.trashRow(item));
     this.trashList.replaceChildren(...rows);
     this.emptyTrash.disabled = !store.items.length || store.emptying !== null;
+    this.trashRestore.apply(this.trashList);
     const stop = (this.tabStop && rows.find((r) => r.dataset.row === this.tabStop)) ?? rows[0];
     if (stop) stop.tabIndex = 0;
     if (this.focusTrash && store.loaded) {
@@ -698,6 +695,32 @@ export class FilesPanel {
     else this.expanded.delete(id);
     this.saveExpanded();
     this.render();
+  }
+
+  /** What was saved of the sidebar's place; each list is put back where it was scrolled to as its rows come. */
+  private loadView(): FilesView {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(VIEW_KEY);
+    } catch {
+      // Storage unavailable: the documents show, at the top.
+    }
+    const view = parseFilesView(saved);
+    this.treeRestore = new ScrollRestore(view.treeScroll);
+    this.trashRestore = new ScrollRestore(view.trashScroll);
+    return view;
+  }
+
+  /** Keeps whether Trash is showing and how far each list is scrolled (a hidden list, or one still being put back, keeps what was saved). */
+  private saveView(): void {
+    try {
+      const before = parseFilesView(localStorage.getItem(VIEW_KEY));
+      const tree = this.treeRestore.pending || this.tree.hidden ? before.treeScroll : this.tree.scrollTop;
+      const trash = this.trashRestore.pending || this.trashView.hidden ? before.trashScroll : this.trashList.scrollTop;
+      localStorage.setItem(VIEW_KEY, JSON.stringify({ trash: this.inTrash, treeScroll: tree, trashScroll: trash }));
+    } catch {
+      // Storage unavailable: the sidebar starts at the top next time.
+    }
   }
 
   private saveExpanded(): void {

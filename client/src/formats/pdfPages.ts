@@ -5,8 +5,8 @@
 // can change is the layer of markup annotations over it (highlights, notes...: see
 // @golemdocs/pdf annotations), which are drawn from the appearance streams they're given.
 
-import { FontSet, PageLayout, isCjk, type GlyphList, isHangul, langOfFontName, packColor, type CjkLang, type FaceMetrics, type ManifestFace, type ResolvedFont } from '@golemdocs/layout';
-import { PdfDocument, applyAnnotations, applyEdits, applyFields, blockFromRuns, collectCharacters, collectFonts, encodePng, findBlocks, imageBytes, interpretPage, readAnnotations, readFields, scanPage, type Annotation, type ApplyResult, type Box, type FormField, type DisplayImage, type DisplayPath, type FontStyle, type PageDisplay, type GlyphRun, type PageObject, type PdfEdit, type TextBlock, type TextRun } from '@golemdocs/pdf';
+import { FontSet, PageLayout, isCjk, type GlyphList, type ImageItem, isHangul, langOfFontName, packColor, type CjkLang, type FaceMetrics, type ManifestFace, type ResolvedFont } from '@golemdocs/layout';
+import { PdfDocument, applyAnnotations, applyEdits, applyFields, blockFromRuns, collectCharacters, collectFonts, encodePng, findBlocks, imageBytes, interpretPage, readAnnotations, readFields, scanPage, type Annotation, type ApplyResult, type Box, type FormField, type DisplayImage, type DisplayPath, type DisplayRect, type FontStyle, type PageDisplay, type GlyphRun, type PageObject, type PdfEdit, type TextBlock, type TextRun } from '@golemdocs/pdf';
 import { drawingSvg, strokedTextPath, type DrawingGroup } from './pdfDrawings.ts';
 import { PdfFaces } from './pdfFaces.ts';
 import { pageCharacters, type PdfCharacter } from './pdfText.ts';
@@ -90,6 +90,93 @@ export function pictures(display: PageDisplay): Picture[] {
   }
   flush();
   return out;
+}
+
+/** Boxes on a page in square cells, for finding what overlaps a box without looking at them all. */
+class BoxGrid {
+  private readonly cells = new Map<string, { box: PageBox; order: number }[]>();
+
+  private static *keys([x0, y0, x1, y1]: PageBox): Generator<string> {
+    for (let cx = Math.floor(x0 / LAYER_CELL); cx <= Math.floor(x1 / LAYER_CELL); cx++) for (let cy = Math.floor(y0 / LAYER_CELL); cy <= Math.floor(y1 / LAYER_CELL); cy++) yield `${cx},${cy}`;
+  }
+
+  add(box: PageBox, order: number): void {
+    if (!(box[2] > box[0]) || !(box[3] > box[1])) return;
+    const entry = { box, order };
+    for (const key of BoxGrid.keys(box)) {
+      const list = this.cells.get(key);
+      if (list) list.push(entry);
+      else this.cells.set(key, [entry]);
+    }
+  }
+
+  /** Whether one painted before (`side` -1) or after (1) `order` overlaps the box. */
+  hit(box: PageBox, order: number, side: -1 | 1): boolean {
+    for (const key of BoxGrid.keys(box)) for (const e of this.cells.get(key) ?? []) if ((e.order - order) * side > 0 && e.box[0] < box[2] && e.box[2] > box[0] && e.box[1] < box[3] && e.box[3] > box[1]) return true;
+    return false;
+  }
+}
+
+type PageBox = readonly [x0: number, y0: number, x1: number, y1: number];
+
+/**
+ * Sorts the page's rectangles into those drawn under its pictures, and those drawn over its pictures and text. A page is
+ * drawn as rectangles, pictures (images and vector art), text, then rectangles again, so a rectangle painted over a picture
+ * and then painted over in turn (a panel over a photo, with lettering on it) belongs with neither: it becomes one of the
+ * shapes of the vector pictures, at its place in the painting order (a path added to `display.paths`). One over text stays
+ * in front of it, whatever came after. Call it after `outlineText`, on every reading of a page.
+ */
+export function sortRects(display: PageDisplay): { under: DisplayRect[]; over: DisplayRect[] } {
+  const boxOf = (r: DisplayRect): PageBox => [r.x, r.y, r.x + r.w, r.y + r.h];
+  const pictures = new BoxGrid();
+  const later = new BoxGrid();
+  const painted: { box: PageBox; order: number }[] = [...display.images.map((i) => ({ box: i.shown, order: i.order })), ...display.paths.filter((p) => p.vectorOnly).map((p) => ({ box: [p.x0, p.y0, p.x1, p.y1] as const, order: p.order }))];
+  const under: DisplayRect[] = [];
+  const over: DisplayRect[] = [];
+  if (!painted.length) {
+    for (const r of display.rects) (r.over ? over : under).push(r);
+    return { under, over };
+  }
+  for (const p of painted) {
+    pictures.add(p.box, p.order);
+    later.add(p.box, p.order);
+  }
+  for (const run of display.glyphRuns) {
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const g of run.glyphs) [x0, y0, x1, y1] = [Math.min(x0, g.x), Math.min(y0, g.y - run.size * 0.8), Math.max(x1, g.x + Math.abs(g.advance)), Math.max(y1, g.y + run.size * 0.2)];
+    later.add([x0, y0, x1, y1], run.order);
+  }
+  // Those over a picture, or over another rectangle that is.
+  const raised = new Set<DisplayRect>();
+  for (const r of display.rects)
+    if (pictures.hit(boxOf(r), r.order, -1)) {
+      raised.add(r);
+      pictures.add(boxOf(r), r.order);
+    }
+  // Of those, the ones painted over again by text, a picture, or another rectangle that is.
+  const among = new Set<DisplayRect>();
+  for (const r of [...display.rects].reverse())
+    if (raised.has(r) && !r.overText && later.hit(boxOf(r), r.order, 1)) {
+      among.add(r);
+      later.add(boxOf(r), r.order);
+    }
+  for (const r of display.rects) {
+    if (!among.has(r)) {
+      (r.over || raised.has(r) ? over : under).push(r);
+      continue;
+    }
+    const [x0, y0, x1, y1] = boxOf(r);
+    display.paths.push({ subpaths: [{ pts: [x0, y0, x1, y0, x1, y1, x0, y1], closed: true }], fill: { color: r.color, alpha: r.alpha, evenOdd: false }, x0, y0, x1, y1, plain: true, over: r.over, order: r.order, vectorOnly: true });
+  }
+  return { under, over };
+}
+
+/** An image's place on the page: the part of it that shows, and which part of the picture that is. */
+function placed(image: DisplayImage): Pick<ImageItem, 'x' | 'y' | 'width' | 'height' | 'crop'> {
+  const [x0, y0, x1, y1] = image.shown;
+  const cut = [x0 - image.x, y0 - image.y, image.x + image.w - x1, image.y + image.h - y1];
+  if (cut.every((c) => c < 0.01)) return { x: image.x, y: image.y, width: image.w, height: image.h };
+  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0, crop: [cut[0] / image.w, cut[1] / image.h, 1 - cut[2] / image.w, 1 - cut[3] / image.h] };
 }
 
 /**
@@ -334,7 +421,10 @@ export async function openPdfView(
     if (lastShapes?.page !== index) {
       const pdfPage = doc.pages[index];
       const display = pdfPage && interpretPage(pdfPage, { hideFields: true, paths: true, strips: false });
-      if (display) outlineText(display, embedded);
+      if (display) {
+        outlineText(display, embedded);
+        sortRects(display);
+      }
       lastShapes = { page: index, groups: display ? pictures(display).flatMap((item) => (item.kind === 'shapes' ? [item.group] : [])) : [] };
     }
     return lastShapes.groups;
@@ -491,13 +581,15 @@ export async function openPdfView(
       }
       for (const w of display.warnings) warn(`page ${index + 1}: ${w}`);
       const page = new PageLayout(id, display.width, display.height, 0, index + 1);
-      for (const r of display.rects) (r.over ? page.foreground : page.background).push(r.x, r.y, r.w, r.h, packColor(r.color, r.alpha));
       try {
         embedded.prepare(display.glyphRuns);
       } catch (e) {
         warn(`page ${index + 1}: embedded fonts could not be drawn (${(e as Error).message})`);
       }
       const outlinedOnly = outlineText(display, embedded);
+      const { under, over } = sortRects(display);
+      for (const r of under) page.background.push(r.x, r.y, r.w, r.h, packColor(r.color, r.alpha));
+      for (const r of over) page.foreground.push(r.x, r.y, r.w, r.h, packColor(r.color, r.alpha));
       const layers = textLayers(display.glyphRuns.filter((run) => !outlinedOnly.has(run)));
       for (const [run, layer] of layers) pushRun(page, run, layer);
       if (lastShapes?.page === index) lastShapes = undefined;
@@ -523,7 +615,7 @@ export async function openPdfView(
           partById.set(image.id, part);
           images.set(part, image);
         }
-        page.images.push({ part, x: image.x, y: image.y, width: image.w, height: image.h, behind: false });
+        page.images.push({ part, ...placed(image), behind: false });
       }
       return page;
     },

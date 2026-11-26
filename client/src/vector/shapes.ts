@@ -1,4 +1,6 @@
-// The ready-made shapes of the Shapes tool: each one is drawn into the box the person drags, as a path.
+// The ready-made shapes: each one is drawn into the box the person drags, as a path. One catalogue for every editor: the
+// Shapes tool of drawings and pictures offers SHAPE_IDS; Insert › Shape on a slide offers these and the few more in
+// MORE_SHAPE_IDS (drawingml/shapeChoices.ts), all shown with the same pictures (ui/shapePreview.ts) and names.
 
 import type { PathCommand } from './model.ts';
 
@@ -8,11 +10,18 @@ export const SHAPE_IDS = [
   'cloud', 'bubble', 'lightning',
 ] as const;
 
-export type ShapeId = (typeof SHAPE_IDS)[number];
+/** Shapes the other tools draw themselves (Rectangle, Ellipse, Line), and DrawingML's flowchart shapes and callouts: offered where shapes are inserted as DrawingML (a slide), not by the Shapes tool. */
+export const MORE_SHAPE_IDS = ['rect', 'ellipse', 'line', 'leftRightArrow', 'rectCallout', 'ovalCallout', 'process', 'decision', 'terminator'] as const;
 
-export const DEFAULT_SHAPE: ShapeId = 'star';
+/** A shape the Shapes tool offers. */
+export type ToolShapeId = (typeof SHAPE_IDS)[number];
+/** Any shape of the catalogue. */
+export type ShapeId = ToolShapeId | (typeof MORE_SHAPE_IDS)[number];
 
-export const isShapeId = (value: unknown): value is ShapeId => (SHAPE_IDS as readonly string[]).includes(value as string);
+export const DEFAULT_SHAPE: ToolShapeId = 'star';
+
+/** Whether a value is a shape the Shapes tool offers. */
+export const isShapeId = (value: unknown): value is ToolShapeId => (SHAPE_IDS as readonly string[]).includes(value as string);
 
 type Point = [number, number];
 
@@ -85,6 +94,15 @@ const SHAPES: Record<ShapeId, (w: number, h: number) => PathCommand[]> = {
     ['L', 0.2, 1], ['L', 0.2, 0.7], ['L', 0.1, 0.7], ['C', 0.04, 0.7, 0, 0.66, 0, 0.6], ['L', 0, 0.1], ['C', 0, 0.04, 0.04, 0, 0.1, 0], ['Z'],
   ],
   lightning: () => polygon([[0.6, 0], [0.1, 0.55], [0.45, 0.55], [0.3, 1], [0.9, 0.4], [0.55, 0.4]]),
+  rect: () => polygon([[0, 0], [1, 0], [1, 1], [0, 1]]),
+  ellipse: () => [['M', 0.5, 0], ['C', 0.776, 0, 1, 0.224, 1, 0.5], ['C', 1, 0.776, 0.776, 1, 0.5, 1], ['C', 0.224, 1, 0, 0.776, 0, 0.5], ['C', 0, 0.224, 0.224, 0, 0.5, 0], ['Z']],
+  line: () => [['M', 0, 1], ['L', 1, 0]],
+  leftRightArrow: () => polygon([[0, 0.5], [0.25, 0], [0.25, 0.3], [0.75, 0.3], [0.75, 0], [1, 0.5], [0.75, 1], [0.75, 0.7], [0.25, 0.7], [0.25, 1]]),
+  rectCallout: () => polygon([[0, 0], [1, 0], [1, 0.7], [0.45, 0.7], [0.2, 1], [0.25, 0.7], [0, 0.7]]),
+  ovalCallout: () => [['M', 0.5, 0], ['C', 0.78, 0, 1, 0.16, 1, 0.36], ['C', 1, 0.56, 0.78, 0.72, 0.5, 0.72], ['C', 0.44, 0.72, 0.38, 0.71, 0.33, 0.7], ['L', 0.15, 1], ['L', 0.2, 0.64], ['C', 0.08, 0.58, 0, 0.48, 0, 0.36], ['C', 0, 0.16, 0.22, 0, 0.5, 0], ['Z']],
+  process: () => polygon([[0, 0.1], [1, 0.1], [1, 0.9], [0, 0.9]]),
+  decision: () => polygon([[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]]),
+  terminator: () => [['M', 0.25, 0.15], ['L', 0.75, 0.15], ['C', 0.94, 0.15, 1, 0.33, 1, 0.5], ['C', 1, 0.67, 0.94, 0.85, 0.75, 0.85], ['L', 0.25, 0.85], ['C', 0.06, 0.85, 0, 0.67, 0, 0.5], ['C', 0, 0.33, 0.06, 0.15, 0.25, 0.15], ['Z']],
 };
 
 /** The shape's outline, filling the box at (x, y) of this size. */

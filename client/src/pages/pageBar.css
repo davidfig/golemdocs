@@ -1,0 +1,54 @@
+/* The bar over an HTML page (pages/pageBar.ts), in page view and in HTML Source alike. */
+
+.wm-page-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--wm-toolbar-border);
+  background: linear-gradient(var(--wm-bar-top), var(--wm-bar-bottom));
+  color: var(--wm-text);
+  font: 13px/1.2 var(--wm-font);
+  pointer-events: auto;
+}
+
+.wm-page-bar [hidden] {
+  display: none;
+}
+
+.wm-page-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.wm-page-extras {
+  display: contents;
+}
+
+.wm-page-spacer {
+  flex: 1;
+}
+
+/* Where the page came from, in words (never colour alone). */
+.wm-page-badge {
+  padding: 1px 8px;
+  border: 1px solid var(--wm-border);
+  border-radius: 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.wm-page-badge-foreign {
+  border-color: var(--wm-warning);
+  font-weight: 600;
+}
+
+@media (forced-colors: active) {
+  .wm-page-bar {
+    border-color: CanvasText;
+  }
+}

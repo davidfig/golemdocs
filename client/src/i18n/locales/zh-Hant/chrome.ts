@@ -316,6 +316,8 @@ export const chrome: Partial<Messages> = {
   'chrome.shortcuts.vector': '向量編輯器',
   'chrome.shortcuts.vectorHint': '繪圖工具的快速鍵，與 Illustrator 相同。工具可以只用一個字母、數字或符號鍵。',
   'chrome.shortcuts.needKey': '請按一個字母、數字或符號鍵（也可同時按 Ctrl、Alt、⌘ 或 Shift）。',
+  'chrome.shortcuts.search': '搜尋命令',
+  'chrome.shortcuts.noMatch': '沒有符合的命令。',
   'chrome.file.rename': '重新命名(&R)…',
   'chrome.file.rename.tip': '變更此文件的名稱',
   'chrome.title.label': '文件名稱',

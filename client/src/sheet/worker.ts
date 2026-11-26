@@ -4,6 +4,8 @@
 //
 // Reading gives way to the event loop between pieces, so tile requests are answered while a big sheet is still coming in.
 
+import { anchorBox, type SheetDrawing } from './drawings.ts';
+import { linkAddress } from './links.ts';
 import { pivotButtons, pivotChoice, pivotFieldItems, pivotLookOf } from './pivot.ts';
 import { calculateDataTables, goalSeek, runSolver, scenarioSummaryRows } from './whatIf.ts';
 import { readSolverModel } from './solver.ts';
@@ -61,6 +63,15 @@ let loading: Promise<unknown> | null = null;
 /** Settles once the workbook being opened can be shown; messages that come before then wait for it. */
 let ready: Promise<void> | null = null;
 
+/** A number for each list of a sheet's drawings: a new list (they are never changed in place) gets a new one. */
+const drawingVersions = new WeakMap<readonly SheetDrawing[], number>();
+let nextDrawingVersion = 1;
+const drawingsVersion = (list: readonly SheetDrawing[]): number => {
+  let v = drawingVersions.get(list);
+  if (v === undefined) drawingVersions.set(list, (v = nextDrawingVersion++));
+  return v;
+};
+
 const post = (message: FromWorker, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(message, transfer);
 
 /**
@@ -100,21 +111,23 @@ export function info(b: Workbook): BookInfo {
         loaded: b.source?.parts[i]?.loaded ?? true,
         outline: sheet.rowOutline.size || sheet.colOutline.size ? { rows: [...sheet.rowOutline].slice(0, 200000).map(([i, o]): [number, number, boolean] => [i, o.level, o.collapsed]), cols: [...sheet.colOutline].map(([i, o]): [number, number, boolean] => [i, o.level, o.collapsed]) } : undefined,
         charts: sheet.charts.length || undefined,
+        drawings: sheet.drawings.length ? { count: sheet.drawings.length, version: drawingsVersion(sheet.drawings) } : undefined,
         sparklines: sheet.sparklines.some((g) => g.sparklines.length) || undefined,
         pivots: sheet.pivots.length ? sheet.pivots.map((p) => ({ name: p.name, range: { ...p.location, r0: Math.max(0, p.location.r0 - (p.pageFields.length ? p.pageFields.length + 1 : 0)) } })) : undefined,
         pivotButtons: sheet.pivots.length
           ? sheet.pivots.flatMap((p, pivot) => {
               const look = pivotLookOf(b, p);
-              return look ? pivotButtons(p, look).map((x) => ({ ...x, pivot, fields: x.fields.map((field) => ({ field, name: p.cache.fields[field]?.name ?? '' })) })) : [];
+              return look ? pivotButtons(p, look).map((x) => ({ ...x, pivot, style: cellStyleAt(sheet, x.row, x.col), fields: x.fields.map((field) => ({ field, name: p.cache.fields[field]?.name ?? '' })) })) : [];
             })
           : undefined,
         protection: isProtected(sheet.protection) ? { password: hasPassword(sheet.protection) } : undefined,
         notes: sheet.notes.length ? sheet.notes.slice(0, 20000).map((n): [number, number] => [n.row, n.col]) : undefined,
-        filter: sheet.autoFilter ? { range: sheet.autoFilter.range, filtered: sheet.autoFilter.columns.map((c) => sheet.autoFilter!.range.c0 + c.col) } : undefined,
+        links: sheet.links.length ? sheet.links.slice(0, 20000).map((l) => ({ ref: l.ref, address: linkAddress(l), ...(l.tooltip && { tooltip: l.tooltip }) })) : undefined,
+        filter: sheet.autoFilter ? { range: sheet.autoFilter.range, filtered: sheet.autoFilter.columns.map((c) => sheet.autoFilter!.range.c0 + c.col), heads: headerStyles(sheet, sheet.autoFilter.range) } : undefined,
         tableFilters: sheet.tables.some((t) => tableFilter(t))
           ? sheet.tables.flatMap((t) => {
               const f = tableFilter(t);
-              return f ? [{ table: t.displayName, range: f.range, filtered: f.columns.filter((c) => c.values !== null).map((c) => f.range.c0 + c.col) }] : [];
+              return f ? [{ table: t.displayName, range: f.range, filtered: f.columns.filter((c) => c.values !== null).map((c) => f.range.c0 + c.col), heads: headerStyles(sheet, f.range) }] : [];
             })
           : undefined,
       };
@@ -266,6 +279,21 @@ function columnTexts(sheet: Worksheet, col: number): [string, number][] {
   const out: [string, number][] = [];
   for (const [style, list] of byStyle) for (const text of list.sort((a, b) => b.length - a.length).slice(0, 8)) out.push([text, style]);
   return out;
+}
+
+/** A filter's header cells' styles, so each button can stand level with its header's text. */
+function headerStyles(sheet: Worksheet, range: CellRange): [number, number][] {
+  const out: [number, number][] = [];
+  const row = range.r0;
+  for (let col = range.c0; col <= Math.min(range.c1, range.c0 + 4096); col++) out.push([col, cellStyleAt(sheet, row, col)]);
+  return out;
+}
+
+/** The style a cell is drawn with: its own, or its row's or column's when it is empty. */
+function cellStyleAt(sheet: Worksheet, row: number, col: number): number {
+  const column = sheet.grid.columns[col];
+  const kind = column?.kind(row) ?? Kind.Empty;
+  return kind === Kind.Empty ? (sheet.rowStyles.get(row) ?? sheet.colStyles.get(col) ?? 0) : (column?.style(row) ?? 0);
 }
 
 function cellContent(sheet: Worksheet, row: number, col: number): CellContent {
@@ -500,6 +528,18 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
         const scenes = ok ? sheet.charts.map((c, i) => chartScene(book!, engine!, m.sheet, sheet, c, `${m.sheet}:${i}`)) : [];
         const sparklines = ok ? sparklineScene(book!, engine!, m.sheet, sheet) : null;
         return post({ t: 'charts', id: m.id, scenes, sparklines }, [...scenes, ...(sparklines ? [sparklines] : [])].flatMap((s) => [s.points.buffer, s.colors.buffer]));
+      }
+      case 'drawings': {
+        const sheet = book.sheets[m.sheet];
+        const items = sheet && isWorksheet(sheet) ? sheet.drawings.map((d) => ({ xml: d.xml, rels: d.rels, box: anchorBox(sheet.rowSizes, sheet.colSizes, d.anchor) })) : [];
+        return post({ t: 'drawings', id: m.id, items, theme: book.themeXml });
+      }
+      case 'media': {
+        const added = book.media.get(m.part);
+        const pkg = book.source?.pkg;
+        const bytes = added ?? (pkg?.has(m.part) ? await pkg.bytes(m.part) : null);
+        const copy = bytes ? bytes.slice().buffer : null;
+        return post({ t: 'media', id: m.id, bytes: copy }, copy ? [copy] : []);
       }
       case 'note': {
         const sheet = book.sheets[m.sheet];

@@ -4,30 +4,7 @@
 // fixed (disabled controls grey them out with a CSS filter); the font color and highlight
 // icons show the current color through the --swatch custom property.
 
-const INK = '#2e3148';
-const BLUE = '#5b8def';
-const SKY = '#cfe0ff';
-const YELLOW = '#ffc93c';
-const BUTTER = '#ffd66b';
-const ORANGE = '#f5a623';
-const RED = '#ff6b6b';
-const PINK = '#ff8fab';
-const GREEN = '#4cc38a';
-const PURPLE = '#9b7bf7';
-const PAPER = '#ffffff';
-const MIST = '#e8ecf3';
-const LINE = '#a3abbf';
-
-const svg = (body: string) =>
-  `<svg viewBox="1 1 22 22" width="20" height="20" fill="none" stroke="${INK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
-
-/** A stroke with an ink outline: a wide ink line under a narrower colored one. */
-const outlined = (d: string, color: string, width = 2.4) =>
-  `<path d="${d}" stroke-width="${width + 1.8}"/><path d="${d}" stroke="${color}" stroke-width="${width}"/>`;
-
-/** Text lines on a page or card. */
-const textLines = (x: number, ys: number[], widths: number[], color = LINE) =>
-  ys.map((y, i) => `<path d="M${x} ${y}h${widths[i]}" stroke="${color}"/>`).join('');
+import { BASIC_ICONS, INK, BLUE, SKY, YELLOW, BUTTER, ORANGE, RED, PINK, GREEN, PURPLE, PAPER, MIST, LINE, svg, outlined, textLines } from './iconKit.ts';
 
 /** Paragraph lines for the alignment icons: [x1, x2] per row. */
 const rows = (spans: [number, number][]) => spans.map(([x1, x2], i) => `<path d="M${x1} ${5 + i * 4.6}H${x2}" stroke-width="2.2"/>`).join('');
@@ -38,6 +15,7 @@ const SWATCH = `<rect x="2.5" y="19" width="19" height="3.5" rx="1.5" fill="var(
 const page = (fill = PAPER) => `<path d="M6.5 2.5H14l5 5v13a1 1 0 0 1-1 1H6.5a1 1 0 0 1-1-1v-17a1 1 0 0 1 1-1z" fill="${fill}"/><path d="M14 2.5v4a1 1 0 0 0 1 1h4" fill="${SKY}"/>`;
 
 export const ICONS: Record<string, string> = {
+  ...BASIC_ICONS,
   new: svg(
     page() +
       `<path d="M4.5 1.5l1 2.3 2.3 1-2.3 1-1 2.3-1-2.3-2.3-1 2.3-1z" fill="${YELLOW}" stroke-width="1.1"/>`,
@@ -52,13 +30,6 @@ export const ICONS: Record<string, string> = {
       `<path d="M7.5 3h8.5v5a1 1 0 0 1-1 1H8.5a1 1 0 0 1-1-1z" fill="${MIST}"/><path d="M13.5 4.8v2.4" stroke-width="1.8"/>` +
       `<rect x="6.5" y="12.5" width="11" height="8.5" rx="1" fill="${PAPER}"/>` +
       textLines(8.8, [15.3, 18], [6.4, 4.2]),
-  ),
-  print: svg(
-    `<path d="M7 8V3.5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1V8" fill="${PAPER}"/>` +
-      `<path d="M3 10a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z" fill="${PURPLE}"/>` +
-      `<circle cx="17.8" cy="11" r="1.1" fill="${GREEN}" stroke-width="1"/>` +
-      `<path d="M7 14h10v7a.5.5 0 0 1-.5.5h-9A.5.5 0 0 1 7 21z" fill="${PAPER}"/>` +
-      textLines(9.2, [17, 19.3], [5.6, 3.6]),
   ),
   printPreview: svg(
     page() +
@@ -261,13 +232,6 @@ export const ICONS: Record<string, string> = {
   ),
   paragraphMarks: svg(
     `<path d="M11 4.5H9.2a4 4 0 0 0 0 8H11z" fill="${BLUE}"/>` + `<path d="M11 4.5h7.5M11 4.5v15M15.5 4.5v15" stroke-width="2.2"/>`,
-  ),
-  find: svg(
-    `<circle cx="10" cy="10" r="6.3" fill="${SKY}"/><path d="M6.8 8.8a3.6 3.6 0 0 1 2.8-2.6" stroke="${PAPER}" stroke-width="1.6"/>` +
-      outlined('M14.8 14.8l5.5 5.5', PURPLE, 2.6),
-  ),
-  zoom: svg(
-    `<circle cx="10" cy="10" r="6.3" fill="${PAPER}"/><path d="M7.2 10h5.6M10 7.2v5.6" stroke-width="2"/>` + outlined('M14.8 14.8l5.5 5.5', PURPLE, 2.6),
   ),
   alignLeft: svg(rows([[3, 21], [3, 14], [3, 21], [3, 12]])),
   alignCenter: svg(rows([[3, 21], [7, 17], [3, 21], [8, 16]])),

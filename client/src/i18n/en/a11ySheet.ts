@@ -4,6 +4,7 @@ export const a11ySheet = {
   'a11y.sheet.blank': 'blank',
   'a11y.sheet.formula': 'formula {formula}',
   'a11y.sheet.merged': 'merged {from} to {to}',
+  'a11y.sheet.link': 'link to {address}',
   'a11y.sheet.note': 'note: {text}',
   'a11y.sheet.list': 'list, Alt+Down for choices',
   'a11y.sheet.filter': 'filter, Alt+Down to filter',

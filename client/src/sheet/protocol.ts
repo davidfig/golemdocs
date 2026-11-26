@@ -3,6 +3,7 @@
 // widths) and what it has drawn. Cells reach the page as tiles: level 0 is a block of cells with their text and look
 // (the page lays the glyphs out, where the fonts are); levels 1 and up are the overview, a picture of the cells as laid out.
 
+import type { DrawingEdit, DrawingItem } from './drawings.ts';
 import type { DelimitedKind } from './delimited.ts';
 import type { SheetLayout } from '../formats/wdoc.ts';
 import type { PageSetup, PrintLayout } from './print.ts';
@@ -169,22 +170,26 @@ export interface SheetInfo {
   loaded: boolean;
   /** Outline groups: (index, level, collapsed here) for rows and columns that have a level or a collapsed group's summary. */
   outline?: { rows: [number, number, boolean][]; cols: [number, number, boolean][] };
+  /** Hyperlinks: their cells, and where each goes (an address, or `#` and a place in the workbook). */
+  links?: { ref: CellRange; address: string; tooltip?: string }[];
   /** Cells with notes (row, column), so resting the pointer on one shows it. */
   notes?: [number, number][];
   /** How many charts the sheet has (the page asks for them, `charts`). */
   charts?: number;
+  /** Pictures and shapes on the sheet: how many, and a number that changes whenever they do (the page asks for them again). */
+  drawings?: { count: number; version: number };
   /** The sheet's pivot tables: each one's place (its filters above it included). */
   pivots?: { name: string; range: CellRange }[];
-  /** The pivots' field buttons: a cell, its pivot and the fields it sorts and filters (its card chooses among several). */
-  pivotButtons?: { row: number; col: number; pivot: number; fields: { field: number; name: string }[]; filtered: boolean }[];
+  /** The pivots' field buttons: a cell, its style (the button stands level with its text), its pivot and the fields it sorts and filters (its card chooses among several). */
+  pivotButtons?: { row: number; col: number; pivot: number; style: number; fields: { field: number; name: string }[]; filtered: boolean }[];
   /** The sheet has sparklines (they come with the charts). */
   sparklines?: boolean;
   /** Protect Sheet is on; `password`: unprotecting asks for one. */
   protection?: { password: boolean };
-  /** The AutoFilter: its range, and the columns it filters by values (sheet columns). */
-  filter?: { range: CellRange; filtered: number[] };
+  /** The AutoFilter: its range, the columns it filters by values (sheet columns), and its header cells' styles (column, style), so each button stands level with its header's text. */
+  filter?: { range: CellRange; filtered: number[]; heads?: [number, number][] };
   /** Tables' own AutoFilters, by table name. */
-  tableFilters?: { table: string; range: CellRange; filtered: number[] }[];
+  tableFilters?: { table: string; range: CellRange; filtered: number[]; heads?: [number, number][] }[];
 }
 
 export interface BookInfo {
@@ -255,6 +260,10 @@ export type EditOp =
   | { kind: 'outlineLevel'; axis: 'row' | 'col'; level: number }
   /** Sheet › New Note or Delete Note: a cell's note given this text (made, if it had none), or taken away (null). */
   | { kind: 'note'; row: number; col: number; text: string | null; author: string }
+  /** Insert › Hyperlink: the range's link set (its first cell given `text` when there is some), or taken away (null). */
+  /** Pictures and shapes changed on the page (moved, sized, edited, added, deleted): all of the sheet's, in order; new pictures' bytes by the name their relationship has for them. */
+  | { kind: 'drawings'; edits: DrawingEdit[]; media?: { name: string; bytes: ArrayBuffer }[] }
+  | { kind: 'link'; range: CellRange; link: { target?: string; location?: string; tooltip?: string } | null; text?: string }
   /** Sheet › Protect Sheet (`on`, with a password or '') or Unprotect Sheet (its password, if it has one). */
   | { kind: 'protect'; on: boolean; password: string }
   /** Insert › PivotTable: a pivot of a block of cells (one cell: the block around it) on a new sheet before this one. */
@@ -355,6 +364,10 @@ export type ToWorker =
   | { t: 'choices'; id: number; sheet: number; row: number; col: number }
   /** A cell's note. */
   | { t: 'note'; id: number; sheet: number; row: number; col: number }
+  /** The sheet's pictures and shapes (drawings.ts), and the theme they take colours and fonts from. */
+  | { t: 'drawings'; id: number; sheet: number }
+  /** A picture's bytes: an image part, or one added here (`media:...`). */
+  | { t: 'media'; id: number; part: string }
   /** The field list's facts: a source's fields and their values, and (for an existing pivot) its fields' places. */
   | { t: 'pivotFields'; id: number; sheet: number; index?: number; range?: CellRange }
   /** The sheet's charts, laid out with its data as it is now. */
@@ -392,6 +405,8 @@ export type FromWorker =
   | { t: 'columnTexts'; id: number; texts: [string, number][] }
   | { t: 'choices'; id: number; items: string[] }
   | { t: 'note'; id: number; note: { author: string; text: string } | null }
+  | { t: 'drawings'; id: number; items: DrawingItem[]; theme: string | null }
+  | { t: 'media'; id: number; bytes: ArrayBuffer | null }
   | { t: 'charts'; id: number; scenes: ChartScene[]; sparklines: ChartScene | null }
   | { t: 'pivotFields'; id: number; names: string[]; values: string[][]; choice: PivotChoice | null }
   | { t: 'filterValues'; id: number; values: string[]; blanks: boolean; shown: string[] | null; shownBlanks: boolean }
@@ -425,4 +440,15 @@ export interface PrintData {
   rows: number[];
   /** The sheet's charts and sparklines, laid out (in sheet points). */
   charts?: ChartScene[];
+  /** Its pictures and shapes, drawn by the page (in sheet points). */
+  pictures?: DrawnPicture[];
+}
+
+/** A picture or shape as pixels (unpremultiplied RGBA) and where it goes on the sheet, in points. */
+export interface DrawnPicture {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  pixels: { width: number; height: number; channels: 4; data: Uint8Array };
 }

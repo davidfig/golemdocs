@@ -20,7 +20,7 @@ import { Worksheet, cellKey, keyCol, keyRow } from './model/worksheet.ts';
 import type { CellRange, Pane } from './model/worksheet.ts';
 import { expandStructured, fromFileFormula, toFileFormula } from './formula/fileNames.ts';
 import { shiftFormula } from './formula/shift.ts';
-import { deleteSheetText, moveCharts, moveSparklines, moveConditional, moveFilter, moveFormulas, moveNotes, moveScenarioCells, moveTables, moveValidations, moveNames, quoteSheet, renameText, rewriteAll } from './formula/move.ts';
+import { deleteSheetText, moveCharts, moveSparklines, moveConditional, moveFilter, moveFormulas, moveLinks, moveNotes, moveScenarioCells, moveTables, moveValidations, moveNames, quoteSheet, renameText, rewriteAll } from './formula/move.ts';
 import type { Move } from './formula/move.ts';
 import { restyle } from './format/styleChange.ts';
 import { fillRange } from './fill.ts';
@@ -28,6 +28,8 @@ import { pasteCells, pasteTarget } from './pasteCells.ts';
 import { applyFilter } from './filter.ts';
 import { calculatedFormula, dataRows, newTable, tableFilter, withCalculated } from './tables.ts';
 import { newNote, withText } from './notes.ts';
+import { setLink } from './links.ts';
+import { applyDrawingEdits, moveDrawingAnchors } from './drawings.ts';
 import { passwordOpens, protect, refuses } from './protection.ts';
 import { displayText, editText } from './format/display.ts';
 import type { Edges, StyleChange } from './format/styleChange.ts';
@@ -57,6 +59,8 @@ interface SheetSnapshot {
     autoFilter: Worksheet['autoFilter'];
     tables: Worksheet['tables'];
     validations: Worksheet['validations'];
+    links: Worksheet['links'];
+    drawings: Worksheet['drawings'];
     notes: Worksheet['notes'];
     protection: Worksheet['protection'];
     scenarios: Worksheet['scenarios'];
@@ -214,6 +218,8 @@ function columnsOf(op: EditOp): number[] | 'all' | 'cells' | null {
       return [...new Set(op.ranges.flatMap((r) => range(r.c0, r.c1)))];
     case 'format':
       return [...new Set(op.ranges.flatMap((r) => range(r.c0, Math.min(r.c1, r.c0 + 4096))))];
+    case 'link':
+      return range(op.range.c0, Math.min(op.range.c1, op.range.c0 + 4096));
     case 'replace':
       return op.cells ? [...new Set(op.cells.map((c) => c.col))] : 'cells';
     case 'sort':
@@ -275,7 +281,7 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
   if (structural || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'rowHeight' || op.kind === 'columnWidth' || op.kind === 'hideRows' || op.kind === 'hideColumns' || op.kind === 'autoFilter' || op.kind === 'filter') {
     snap.sizes = { rows: copySizes(sheet.rowSizes.state()), cols: copySizes(sheet.colSizes.state()) };
   }
-  if (structural || op.kind === 'refreshPivots' || op.kind === 'pivotFields' || op.kind === 'pivotField' || op.kind === 'dataTable' || op.kind === 'scenarios' || op.kind === 'showScenario' || op.kind === 'pageSetup' || op.kind === 'printArea' || op.kind === 'pageBreak' || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
+  if (structural || op.kind === 'refreshPivots' || op.kind === 'pivotFields' || op.kind === 'pivotField' || op.kind === 'dataTable' || op.kind === 'scenarios' || op.kind === 'showScenario' || op.kind === 'pageSetup' || op.kind === 'printArea' || op.kind === 'pageBreak' || op.kind === 'insertSparklines' || op.kind === 'clearSparklines' || op.kind === 'insertChart' || op.kind === 'chart' || (op.kind === 'input' && op.text.startsWith('=') && !!calculatedColumn(sheet, op.range)) || op.kind === 'protect' || op.kind === 'note' || op.kind === 'link' || op.kind === 'drawings' || op.kind === 'group' || op.kind === 'collapse' || op.kind === 'outlineLevel' || op.kind === 'freeze' || op.kind === 'merge' || op.kind === 'unmerge' || op.kind === 'clear' || op.kind === 'format' || op.kind === 'pasteCells' || op.kind === 'createTable' || op.kind === 'autoFilter' || op.kind === 'filter' || op.kind === 'sort') {
     snap.meta = {
       rowStyles: new Map(sheet.rowStyles),
       colStyles: new Map(sheet.colStyles),
@@ -289,6 +295,8 @@ function snapshot(book: Workbook, index: number, op: EditOp): BookSnapshot {
       autoFilter: sheet.autoFilter,
       tables: sheet.tables,
       validations: sheet.validations,
+      links: sheet.links,
+      drawings: sheet.drawings,
       notes: sheet.notes,
       protection: sheet.protection,
       scenarios: sheet.scenarios,
@@ -352,6 +360,9 @@ function restore(book: Workbook, snap: BookSnapshot): void {
     sheet.autoFilter = s.meta.autoFilter;
     sheet.tables = s.meta.tables;
     sheet.validations = s.meta.validations;
+    sheet.links = s.meta.links;
+    if (sheet.drawings !== s.meta.drawings) sheet.drawingsChanged = true;
+    sheet.drawings = s.meta.drawings;
     sheet.notes = s.meta.notes;
     sheet.protection = s.meta.protection;
     sheet.scenarios = s.meta.scenarios;
@@ -672,6 +683,22 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
       return { ranges: [] };
     case 'note':
       return noteEdit(sheet, op);
+    case 'drawings':
+      for (const m of op.media ?? []) book.media.set(m.name, new Uint8Array(m.bytes));
+      sheet.drawings = applyDrawingEdits(sheet.rowSizes, sheet.colSizes, sheet.drawings, op.edits);
+      sheet.drawingsChanged = true;
+      return { ranges: [] };
+    case 'link': {
+      sheet.links = setLink(sheet.links, op.range, op.link);
+      if (op.link && op.text !== undefined) {
+        const parsed = parseInput(op.text, book.date1904);
+        setValue(book, grid, op.range.r0, op.range.c0, parsed.kind === 'formula' ? { kind: Kind.String, text: op.text } : parsed);
+      }
+      // A link looks like one (Excel's Hyperlink style: blue, underlined); taken away, the cells look as before it.
+      formatCells(book, sheet, [op.range], op.link ? { color: 0x0563c1, underline: true } : { color: null, underline: false });
+      grid.measure();
+      return { ranges: [op.range] };
+    }
     case 'group':
     case 'collapse':
     case 'outlineLevel':
@@ -1080,6 +1107,12 @@ function moveReferences(book: Workbook, change: Move, moveCells: () => void): vo
   moveTables(book, change);
   moveValidations(book, change);
   moveNotes(book, change);
+  moveLinks(book, change);
+  const moved = book.sheets[change.sheet];
+  if (isWorksheet(moved) && moved.drawings.length) {
+    moved.drawings = moveDrawingAnchors(moved.drawings, change.axis, change.at, change.n);
+    moved.drawingsChanged = true;
+  }
   moveScenarioCells(book, change);
   moveCharts(book, change);
   moveSparklines(book, change);

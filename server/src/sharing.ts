@@ -101,6 +101,15 @@ export async function person(env: Env, userId: string): Promise<Person> {
   return { userId, name: row?.name ?? null, email: row?.email ?? null, picture: await pictureOf(env, userId) };
 }
 
+/**
+ * Who shared something, as the viewer page's header shows them to the person it was shared with: their name (their email if they
+ * have none) and picture. Only for a share with a person, never a public link, whose page anyone may open (docs/architecture/viewer.md).
+ */
+export async function sharer(env: Env, userId: string): Promise<{ name: string | null; picture: string | null }> {
+  const who = await person(env, userId);
+  return { name: who.name ?? who.email, picture: who.picture };
+}
+
 /** The user who signed in with this verified email, if there is one. */
 export async function userByEmail(env: Env, email: string): Promise<string | null> {
   const row = await env.DIRECTORY.prepare('SELECT user_id FROM identities WHERE email = ? AND email_verified = 1 ORDER BY last_login_at DESC LIMIT 1')

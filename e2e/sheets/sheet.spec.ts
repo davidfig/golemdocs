@@ -55,6 +55,19 @@ test('a workbook opens in the spreadsheet editor, with its sheets', async ({ app
   await expect(page.getByRole('textbox', { name: 'Formula bar' })).toHaveValue('formula');
 });
 
+test('dragging a cell selection past the bottom of the view scrolls the sheet', async ({ app, page }) => {
+  await open(app, page);
+  const pointOf = (r: number, c: number) => page.evaluate(([row, col]) => (window as unknown as { sheetEditor: { pointOf(r: number, c: number): { x: number; y: number } | null } }).sheetEditor.pointOf(row, col), [r, c] as const);
+  const first = (await pointOf(0, 0))!;
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.move(box.x + first.x, box.y + first.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + first.x, box.y + box.height + 30, { steps: 5 });
+  // The pointer stays put below the view, and the rows keep coming up.
+  await expect.poll(async () => (await pointOf(0, 0))?.y ?? -Infinity, { timeout: 10_000 }).toBeLessThan(first.y - 100);
+  await page.mouse.up();
+});
+
 test('typing into a cell keeps the value, Enter moves down, and undo takes it back', async ({ app, page }) => {
   await open(app, page);
   await clickCell(page, 1, 4);
@@ -234,14 +247,14 @@ test('Sheet › Group groups rows; the outline’s box collapses them and its le
   await expect.poll(async () => (await outline()).outline).toBe(null);
 });
 
-test('a table made with Insert Table has filter buttons of its own, and a formula typed in a new column fills it', async ({ app, page }) => {
+test('a table made with Insert › Table has filter buttons of its own, and a formula typed in a new column fills it', async ({ app, page }) => {
   await open(app, page);
   // C1:C27 is empty beside the A:B block: a header there makes it part of the table.
   await clickCell(page, 0, 2);
   await page.keyboard.type('Twice');
   await page.keyboard.press('Enter');
   await clickCell(page, 0, 0);
-  await app.menu('Sheet', 'Insert Table');
+  await app.menu('Insert', 'Table');
   await expect.poll(async () => ((await state(page)) as unknown as { tableFilters: { table: string }[] | null }).tableFilters?.map((f) => f.table)).toEqual(['Table1']);
   await clickCell(page, 3, 2);
   await page.keyboard.type('=LEN(A4)');
@@ -261,6 +274,195 @@ test('a table made with Insert Table has filter buttons of its own, and a formul
   await card.getByRole('checkbox', { name: 'five', exact: true }).check();
   await card.getByRole('button', { name: 'OK' }).click();
   await expect.poll(async () => ((await state(page)) as unknown as { hiddenRows: number }).hiddenRows).toBe(24);
+});
+
+test('Insert lists what a sheet can insert, and Ctrl+T makes a table of the block around the cell', async ({ app, page }) => {
+  await open(app, page);
+  await app.menubar.getByRole('menuitem', { name: 'Insert', exact: true }).click();
+  const menu = page.getByRole('menu').last();
+  for (const name of ['Insert Rows Above', 'Insert Columns Left', 'New Sheet', 'Date and Time', 'Symbol', 'Table', 'PivotTable', 'Chart', 'Sparklines', 'Function', 'New Note', 'Insert Page Break', 'Hyperlink']) {
+    await expect(menu.getByRole('menuitem', { name: new RegExp(`^${name}(…|\\s|$)`) })).toBeVisible();
+  }
+  // A word processor's entries are not offered.
+  await expect(menu.getByRole('menuitem', { name: /^Footnote/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  // Insert Table moved to Insert: the Sheet menu no longer lists it.
+  await app.menubar.getByRole('menuitem', { name: 'Sheet', exact: true }).click();
+  await expect(page.getByRole('menu').last().getByRole('menuitem', { name: /^Insert Table/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  // Ctrl+T: the Control key on a Mac too (a browser elsewhere keeps Ctrl+T for a new tab, so only the desktop app has it there).
+  test.skip(process.platform !== 'darwin', 'Ctrl+T reaches the page only on a Mac in a browser');
+  await clickCell(page, 0, 0);
+  await page.keyboard.press('Control+t');
+  await expect.poll(async () => ((await state(page)) as unknown as { tableFilters: { table: string }[] | null }).tableFilters?.map((f) => f.table)).toEqual(['Table1']);
+});
+
+test('Insert › Hyperlink links a cell; the card over it opens the link, and a link into the workbook goes to its cell', async ({ app, page }) => {
+  await open(app, page);
+  const links = async () => ((await state(page)) as unknown as { links: { ref: { r0: number; c0: number }; address: string }[] | null }).links;
+  // An empty cell: the link shows its address.
+  await clickCell(page, 0, 4);
+  await app.menu('Insert', 'Hyperlink');
+  const form = page.getByRole('dialog', { name: 'Insert Hyperlink' });
+  await form.getByRole('textbox', { name: 'Address' }).fill('#Data!B3');
+  await form.getByRole('button', { name: 'OK' }).click();
+  await expect.poll(links).toEqual([{ ref: { r0: 0, c0: 4, r1: 0, c1: 4 }, address: '#Data!B3' }]);
+  await expect.poll(async () => (await state(page)).content.display).toBe('#Data!B3');
+  // Resting the pointer on it shows the link; Open link goes to the cell on the other sheet.
+  const at = await page.evaluate(() => (window as unknown as { sheetEditor: { pointOf(r: number, c: number): { x: number; y: number } } }).sheetEditor.pointOf(0, 4));
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.mouse.move(box.x + at.x, box.y + at.y);
+  await form.getByRole('button', { name: 'Open link' }).click();
+  await expect.poll(async () => { const s = await state(page); return [s.info?.name, s.active]; }).toEqual(['Data', { row: 2, col: 1 }]);
+  // ⌘K on the cell again, from the keyboard: Remove Link takes it off.
+  await page.getByRole('tab', { name: 'Cases' }).click();
+  await clickCell(page, 0, 4);
+  await page.keyboard.press(`${MOD}+k`);
+  await form.getByRole('button', { name: 'Remove Link' }).click();
+  await expect.poll(links).toBeNull();
+});
+
+test('Insert › Function finds a function by name or what it does and starts the formula; the hint under it follows the argument', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 5, 4);
+  await page.keyboard.press('Shift+F3');
+  const dialog = page.getByRole('dialog', { name: 'Insert Function' });
+  // The dialog takes what is typed at once.
+  await page.keyboard.type('round');
+  const list = dialog.getByRole('listbox', { name: 'Functions' });
+  await expect(list.getByRole('option').first()).toHaveText('ROUND');
+  await expect(dialog.getByText('Rounds a number to a given number of digits.')).toBeVisible();
+  // A word from a description finds functions too.
+  await dialog.getByRole('searchbox', { name: 'Search for a function' }).fill('standard deviation');
+  await expect(list.getByRole('option', { name: 'STDEV.S', exact: true })).toBeVisible();
+  await dialog.getByRole('searchbox', { name: 'Search for a function' }).fill('round');
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeHidden();
+  await page.keyboard.type('A2, ');
+  const hint = page.locator('.wm-formula-hint');
+  await expect(hint).toHaveText('ROUND(number, num_digits)');
+  await expect(hint.locator('b')).toHaveText('num_digits');
+  await page.keyboard.type('1)');
+  await expect(hint).toBeHidden();
+  await page.keyboard.press('Enter');
+  await clickCell(page, 5, 4);
+  await expect.poll(async () => (await state(page)).content.input).toBe('=ROUND(A2, 1)');
+});
+
+test('a workbook’s pictures and shapes are drawn over its cells; one is picked, moved and kept where it was put', async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'drawings.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/drawings-handmade.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'drawings.xlsx');
+  type Hooks = { sheetEditor: { pointOf(r: number, c: number): { x: number; y: number } | null; state(): { drawings: { count: number } | null; drawingBoxes: number[][] } } };
+  const drawings = () => page.evaluate(() => (window as unknown as Hooks).sheetEditor.state().drawingBoxes);
+  await expect.poll(async () => (await drawings()).length).toBe(2);
+  // The shape's middle (G20 is inside it): a press picks it, a drag moves it two columns right.
+  const at = await page.evaluate(() => (window as unknown as Hooks).sheetEditor.pointOf(19, 6)!);
+  const box = (await page.locator('#canvas').boundingBox())!;
+  const [, before] = await drawings();
+  await page.mouse.move(box.x + at.x, box.y + at.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + at.x + 60, box.y + at.y, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.round((await drawings())[1][0] - before[0])).toBe(45);
+  // Saved and opened again, it is where it was put.
+  const file = await app.download(() => app.menu('File', 'Download'));
+  const drawing = readZip(file.bytes).find((p) => p.name === 'xl/drawings/drawing1.xml')!.bytes.toString('utf8');
+  const shape = /<xdr:twoCellAnchor>(?:(?!<\/xdr:twoCellAnchor>)[\s\S])*Quarterly sales/.exec(drawing)![0];
+  // Moved 45 points right (from F into G), its corners in the file followed it.
+  expect(shape).toMatch(/<xdr:from><xdr:col>6<\/xdr:col>/);
+});
+
+test('a workbook’s pictures and shapes are in its Print Preview', async ({ app, page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { __opened: string[] }).__opened = [];
+    window.open = ((url?: string | URL) => {
+      (window as unknown as { __opened: string[] }).__opened.push(String(url));
+      return {} as Window;
+    }) as typeof window.open;
+  });
+  await app.goto('?doc=welcome');
+  await dropFile(page, { name: 'drawings.xlsx', buffer: readFileSync(resolve(process.cwd(), 'client/test/fixtures/sheets/drawings-handmade.xlsx')), mimeType: 'application/octet-stream' });
+  await waitForOpen(app, 'drawings.xlsx');
+  await expect.poll(async () => (await state(page)).loaded).toBe(true);
+  await app.menu('File', 'Print Preview');
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __opened: string[] }).__opened.length), { timeout: 20_000 }).toBe(1);
+  const text = await page.evaluate(async () => {
+    const bytes = new Uint8Array(await (await fetch((window as unknown as { __opened: string[] }).__opened[0])).arrayBuffer());
+    let out = '';
+    for (const b of bytes) out += String.fromCharCode(b);
+    return out;
+  });
+  // The picture and the shape, each an image (their see-through parts a soft mask, itself an image).
+  const images = text.match(/\/Subtype\s*\/Image/g) ?? [];
+  expect(images.length).toBeGreaterThanOrEqual(2);
+});
+
+test('a cell with a HYPERLINK formula is followed with Ctrl/⌘-click, as a link is', async ({ app, page }) => {
+  await open(app, page);
+  await clickCell(page, 0, 4);
+  await page.keyboard.type('=HYPERLINK("#Data!B3","Go")');
+  await page.keyboard.press('Enter');
+  // Back to it from the keyboard (a second click there so soon would be a double click, which edits the cell).
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(async () => (await state(page)).content.display).toBe('Go');
+  const at = await page.evaluate(() => (window as unknown as { sheetEditor: { pointOf(r: number, c: number): { x: number; y: number } } }).sheetEditor.pointOf(0, 4));
+  const box = (await page.locator('#canvas').boundingBox())!;
+  await page.keyboard.down(MOD);
+  await page.mouse.click(box.x + at.x, box.y + at.y);
+  await page.keyboard.up(MOD);
+  await expect.poll(async () => { const s = await state(page); return [s.info?.name, s.active]; }).toEqual(['Data', { row: 2, col: 1 }]);
+});
+
+test('Insert › Text Box, Shapes and Picture put them at the active cell; they are saved in the drawing, and undone', async ({ app, page }) => {
+  await open(app, page);
+  type Hooks = { sheetEditor: { state(): { drawingBoxes: number[][] } } };
+  const count = async () => (await page.evaluate(() => (window as unknown as Hooks).sheetEditor.state().drawingBoxes)).length;
+  // A text box takes the typing at once.
+  await clickCell(page, 2, 5);
+  await app.menu('Insert', 'Text Box');
+  await expect.poll(count).toBe(1);
+  await page.keyboard.type('Totals heree');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  // A shape from the shapes' menu.
+  await clickCell(page, 8, 5);
+  await app.menu('Insert', 'Shapes');
+  await page.getByRole('menuitem', { name: 'Rounded Rectangle' }).click();
+  await expect.poll(count).toBe(2);
+  await page.keyboard.press('Escape');
+  // A picture from a file.
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGNQaHAAIgYIBQAYDgOB5/Xb2wAAAABJRU5ErkJggg==', 'base64');
+  await clickCell(page, 14, 5);
+  const chooser = page.waitForEvent('filechooser');
+  await app.menu('Insert', 'Picture');
+  await (await chooser).setFiles({ name: 'dot.png', mimeType: 'image/png', buffer: png });
+  await expect.poll(count).toBe(3);
+  const file = await app.download(() => app.menu('File', 'Download'));
+  const parts = readZip(file.bytes);
+  const drawing = parts.find((p) => /^xl\/drawings\/drawing\d+\.xml$/.test(p.name))!.bytes.toString('utf8');
+  expect(drawing).toContain('Totals here');
+  expect(drawing).toContain('txBox="1"');
+  expect(drawing).toContain('prst="roundRect"');
+  expect(drawing).toMatch(/<a:blip r:embed="rId\d+"/);
+  expect(parts.some((p) => /^xl\/media\/image\d+\.png$/.test(p.name))).toBe(true);
+  // Undone, the picture goes.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press(`${MOD}+z`);
+  await expect.poll(count).toBe(2);
+  // From the cells, the keyboard reaches the drawings (there are no charts here), Delete takes one away, and the menu key
+  // opens the other's menu, where Delete Shape does the same.
+  const picked = () => page.evaluate(() => (window as unknown as { sheetEditor: { state(): { drawingsPicked: number } } }).sheetEditor.state().drawingsPicked);
+  await page.keyboard.press(`${MOD}+Alt+5`);
+  await expect.poll(picked).toBe(1);
+  await page.keyboard.press('Delete');
+  await expect.poll(count).toBe(1);
+  await page.keyboard.press(`${MOD}+Alt+5`);
+  await expect.poll(picked).toBe(1);
+  await page.keyboard.press('Shift+F10');
+  await page.getByRole('menuitem', { name: 'Delete Shape' }).click();
+  await expect.poll(count).toBe(0);
 });
 
 test('a workbook’s charts are drawn over its cells, and follow their data', async ({ app, page }) => {
@@ -867,6 +1069,7 @@ const editorLook = (page: Page) =>
 test('the cell editor is in the cell\'s font, the size of the cell, and grows with what is typed', async ({ app, page }) => {
   await open(app, page);
   await clickCell(page, 3, 4);
+  await expect.poll(async () => (await state(page)).active).toEqual({ row: 3, col: 4 });
   await page.keyboard.press(`${MOD}+b`);
   await expect.poll(async () => (await state(page)).content.look?.bold).toBe(true);
   await page.keyboard.type('a');

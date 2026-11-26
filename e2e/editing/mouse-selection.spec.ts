@@ -1,4 +1,4 @@
-import { test, expect, type App } from '../fixtures';
+import { MOD, test, expect, type App } from '../fixtures';
 import { DOC, caretClient, clickAt, lineGaps, waitCaretSettled, tool } from './helpers';
 
 const LINE = 'alpha beta gamma';
@@ -179,5 +179,39 @@ test.describe('mouse on the canvas', () => {
     await expect(tool(app, 'Bold')).toHaveAttribute('aria-pressed', 'true');
     await app.type('Z');
     await expect.poll(() => app.text()).toMatch(/^Zbeta gamma|^Z beta gamma/);
+  });
+});
+
+test.describe('selecting past an edge of the view', () => {
+  const LINES = Array.from({ length: 80 }, (_, i) => `line ${i + 1}`).join('\n');
+
+  test('dragging a selection above the view scrolls the document up and selects on', async ({ app, page }) => {
+    await app.blank();
+    await app.type(LINES);
+    await app.settle();
+    const gaps = await lineGaps(app, 7); // the caret's line, the last ("line 80")
+    await page.mouse.move(gaps[7].x, gaps[7].y);
+    await page.mouse.down();
+    const canvas = (await page.locator('#canvas').boundingBox())!;
+    // Past the top edge: the document keeps scrolling while the pointer stays put.
+    await page.mouse.move(gaps[0].x, canvas.y - 20, { steps: 5 });
+    await expect.poll(() => app.selectedText(), { timeout: 15_000 }).toMatch(/^line 1\n/);
+    await page.mouse.up();
+    expect(await app.selectedText()).toBe(LINES);
+  });
+
+  test('dragging a selection to the bottom edge scrolls the document down and selects on', async ({ app, page }) => {
+    await app.blank();
+    await app.type(LINES);
+    await app.press(`${MOD}+Home`);
+    await app.settle();
+    const gaps = await lineGaps(app, 6); // "line 1"
+    await page.mouse.move(gaps[0].x, gaps[0].y);
+    await page.mouse.down();
+    const canvas = (await page.locator('#canvas').boundingBox())!;
+    // Just inside the bottom edge.
+    await page.mouse.move(gaps[6].x + 200, canvas.y + canvas.height - 4, { steps: 5 });
+    await expect.poll(() => app.selectedText(), { timeout: 15_000 }).toMatch(/\nline 80$/);
+    await page.mouse.up();
   });
 });

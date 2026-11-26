@@ -4,6 +4,7 @@ export const a11ySheet: Partial<Messages> = {
   'a11y.sheet.blank': '빈 셀',
   'a11y.sheet.formula': '수식 {formula}',
   'a11y.sheet.merged': '병합 {from}~{to}',
+  'a11y.sheet.link': '링크: {address}',
   'a11y.sheet.note': '메모: {text}',
   'a11y.sheet.list': '목록, Alt+아래쪽 화살표로 선택',
   'a11y.sheet.filter': '필터, Alt+아래쪽 화살표로 필터',

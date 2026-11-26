@@ -14,6 +14,8 @@ import type { PageSetup } from '../print.ts';
 import type { SheetChart } from '../charts/model.ts';
 import type { SparklineGroup } from '../sparklines.ts';
 import type { PivotTable } from '../pivot.ts';
+import type { SheetLink } from '../links.ts';
+import type { SheetDrawing } from '../drawings.ts';
 import { Grid, MAX_COLUMNS, MAX_ROWS } from './column.ts';
 import { Sizes } from './sizes.ts';
 
@@ -67,6 +69,10 @@ export class Worksheet {
   pivots: PivotTable[] = [];
   /** Sparklines, by group (sparklines.ts), read from the sheet's `<extLst>` and written back from here. */
   sparklines: SparklineGroup[] = [];
+  /** Pictures, shapes, lines and text boxes over the cells (drawings.ts), from its drawing part beside the charts. */
+  drawings: SheetDrawing[] = [];
+  /** For the next write only: the drawings changed, so the drawing part's anchors that are not charts are written from them. */
+  drawingsChanged = false;
   /** Charts on the sheet (charts/model.ts), read from its drawing; their parts are written back as they were. */
   charts: SheetChart[] = [];
   /** Protect Sheet: `<sheetProtection>`'s attributes (protection.ts), or null. */
@@ -80,6 +86,8 @@ export class Worksheet {
   legacyDrawing: string | null | undefined = undefined;
   /** For the next write only: the sheet's `<drawing>`, when the writer made a drawing part for its first chart. */
   drawingRId: string | undefined = undefined;
+  /** Hyperlinks (links.ts), read from `<hyperlinks>` and the sheet's relationships. */
+  links: SheetLink[] = [];
   /** Data validation rules (what may be typed into cells). */
   validations: Validation[] = [];
   /** Its tables (Format as Table), read from its table parts. */

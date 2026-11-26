@@ -1467,6 +1467,13 @@ html.wm-titlebar .wm-format {
   opacity: 0.75;
 }
 
+.wm-shortcuts-search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 4px;
+}
+
 .wm-shortcuts-status {
   min-height: 1.3em;
   margin-bottom: 4px;
@@ -1795,6 +1802,28 @@ html.wm-titlebar .wm-format {
   color: #fff;
   background: var(--wm-hot-border);
   border-color: var(--wm-hot-border);
+}
+
+/* The label and unseen copies of "Saved" and "Saving…" share one grid cell, so it is as wide as the widest (syncButton.ts).
+   Pseudo-elements: they take room without being part of the button's text, which a screen reader reads. */
+.wm-sync-label {
+  display: inline-grid;
+}
+
+.wm-sync-label > *,
+.wm-sync-label::before,
+.wm-sync-label::after {
+  grid-area: 1 / 1;
+}
+
+.wm-sync-label::before {
+  content: attr(data-saved);
+  visibility: hidden;
+}
+
+.wm-sync-label::after {
+  content: attr(data-saving);
+  visibility: hidden;
 }
 
 .wm-sync-dot {
@@ -2812,6 +2841,93 @@ html.wm-titlebar .wm-format {
 
 .wm-wordcount .wm-find-message {
   color: var(--wm-muted);
+}
+
+/* Progress: the words written day by day (wordCountDialog.ts, progressChart.ts). */
+.wm-writing-heading {
+  margin: 10px 0 4px;
+  font: inherit;
+}
+
+.wm-writing-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin: 8px 0 6px;
+}
+
+.wm-writing-chart-box {
+  display: flex;
+  justify-content: center;
+}
+
+.wm-writing-chart {
+  display: block;
+  height: auto;
+}
+
+.wm-writing-table th.wm-stat-value {
+  text-align: right;
+}
+
+.wm-writing-table {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.wm-writing-chart .wm-writing-bar {
+  fill: var(--wm-accent);
+}
+
+.wm-writing-chart .wm-writing-cut {
+  fill: var(--wm-muted);
+}
+
+.wm-writing-chart .wm-writing-hit {
+  fill: transparent;
+}
+
+.wm-writing-chart .wm-writing-grid {
+  stroke: var(--wm-etch-dark);
+  stroke-width: 1;
+}
+
+.wm-writing-chart .wm-writing-axis {
+  stroke: var(--wm-muted);
+  stroke-width: 1;
+}
+
+.wm-writing-chart .wm-writing-label {
+  fill: var(--wm-muted);
+  font-size: 10px;
+}
+
+.wm-wordcount-footer {
+  display: flex;
+  white-space: nowrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+@media (forced-colors: active) {
+  .wm-writing-chart .wm-writing-bar {
+    fill: Highlight;
+  }
+
+  .wm-writing-chart .wm-writing-cut {
+    fill: GrayText;
+  }
+
+  .wm-writing-chart .wm-writing-grid,
+  .wm-writing-chart .wm-writing-axis {
+    stroke: CanvasText;
+  }
+
+  .wm-writing-chart .wm-writing-label {
+    fill: CanvasText;
+  }
 }
 
 /* --- Page Setup ------------------------------------------------------------------------------ */

@@ -144,6 +144,8 @@ A test that fails in the full run but passes when run alone (several times, on t
 | 2026-11-22 | `e2e/files/edit-journal.spec.ts` › a document whose journal has outlived it leaves nothing behind | Failed at 34 s in pass one of the 0.45.0 release run, with side runs going; alone, passed in 7 s |
 | 2026-11-22 | `e2e/shell/agent-guide.spec.ts` › Instructions for ai apps in the vault › the guide is written once the folder syncs, and a folder with no AGENTS.md gets one with the line | Timed out at 1 min in pass one of the 0.45.0 release run, and on its retry, with three side runs going; alone, passed. If it turns up again, look at how long the first vault sync takes under load |
 | 2026-11-23 | `e2e/viewer/sandbox.spec.ts` › Chromium: the sandboxed viewer starts its worker, draws with WebGL and loads its fonts under a strict CSP | Already `@heavy`, fourth time here: hit its 3.0 min limit (no assertion failed) in the heavy pass of the 0.46.2 release run, passed its retry in 28.8 s; alone, passed in 19.7 s. Its build was not timed this time; its limit should allow for one |
+| 2026-11-25 | `e2e/collab/signin.spec.ts` › a sign-in that runs out › signing out on purpose shows no note | Failed at 5.6 s in the 0.48.0 release run (`pnpm e2e:rest` after the Mac slept through pass one): `waitForURL` saw the sign-out's page load aborted by the next one. Passed its retry; alone, passed. Now `@heavy` |
+| 2026-11-25 | `e2e/collab/comments.spec.ts` › comments panel › editing a comment changes its text; Cancel keeps the old text | Timed out at 1 min at the start of the same run, while its servers started; passed its retry; alone, passed in 3 s |
 
 ## Performance traces (`golem:*`)
 
@@ -177,7 +179,7 @@ One Worker serves API and client. `pnpm --filter @golemdocs/server deploy:prod` 
 
 ## Invariants and gotchas
 
-- Do not start, restart or stop dev servers in the main checkout (worktrees may, on other ports). Do not use `git stash` in the main checkout.
+- Start the dev server yourself when it is needed (reuse one already on :5173 rather than starting a second; worktrees use other ports). Do not use `git stash` in the main checkout.
 - A static plus a dynamic import of the same module defeats chunk splitting.
 - Editing app source during a full e2e run hot-reloads running pages, causing spurious failures.
 - `wrangler.generated.jsonc` and `wrangler.local.json` are git-ignored; the committed config has `REPLACE_...` placeholders.

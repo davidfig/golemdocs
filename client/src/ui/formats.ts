@@ -54,6 +54,8 @@ export interface FormatProfile {
   mediaViewer: boolean;
   /** A deck, shown in the slides editor (see ../slides): its own shapes, text, undo and clipboard. */
   slidesEditor?: boolean;
+  /** An HTML page, shown in page view (see ../pages): looked at, never edited there. */
+  pageViewer?: boolean;
 }
 
 const WORD_STYLES = [
@@ -171,6 +173,9 @@ const SHEET: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { .
 
 /** Audio or video: played in the media viewer (see ../media), with nothing to edit. */
 const MEDIA: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, mediaViewer: true };
+
+/** An HTML page shown as a page (see ../pages): nothing to edit; Document and Source open it to edit. */
+const PAGE: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, pageViewer: true };
 
 /** A deck: edited in the slides editor (see ../slides). */
 const SLIDES: Omit<FormatProfile, 'kind' | 'label' | 'extensions' | 'mime'> = { ...NOTHING, editable: false, slidesEditor: true };
@@ -304,6 +309,7 @@ export const FORMATS: Record<DocumentKind, FormatProfile> = {
   audio: { ...MEDIA, kind: 'audio', get label() { return t('menus.format.audio'); }, extensions: AUDIO_EXTENSIONS, mime: 'audio/mpeg' },
   video: { ...MEDIA, kind: 'video', get label() { return t('menus.format.video'); }, extensions: VIDEO_EXTENSIONS, mime: 'video/mp4' },
   pptx: { ...SLIDES, kind: 'pptx', get label() { return t('menus.format.pptx'); }, extensions: ['.pptx', '.pptm', '.potx', '.potm', '.ppsx', '.ppsm'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+  page: { ...PAGE, kind: 'page', get label() { return t('menus.format.html'); }, extensions: [], mime: 'text/html' },
   largetext: { ...LARGE_TEXT, kind: 'largetext', get label() { return t('menus.format.txt'); }, extensions: [], mime: 'text/plain' },
   png: { ...PICTURE, kind: 'png', get label() { return t('menus.format.png'); }, extensions: ['.png', '.gif', '.bmp'], mime: 'image/png' },
   jpeg: { ...PICTURE, kind: 'jpeg', get label() { return t('menus.format.jpeg'); }, extensions: ['.jpg', '.jpeg', '.heic', '.heif'], mime: 'image/jpeg' },
@@ -371,6 +377,7 @@ export function formatGroup(kind: DocumentKind): (typeof FORMAT_GROUPS)[number][
 /** The kinds a document of this kind can be switched to, grouped and in order: the document's own group first (an image lists the other images first), then the popular formats and the rest (its own kind included, if it isn't one of them). */
 export function convertTargets(kind: DocumentKind): DocumentKind[] {
   if (kind === 'largetext') return convertTargets('txt');
+  if (kind === 'page') return convertTargets('html');
   const order = PICTURE_KINDS.includes(kind) ? PICTURE_CONVERT_ORDER : VECTOR_KINDS.includes(kind) ? VECTOR_CONVERT_ORDER : CONVERT_ORDER;
   const all = order.includes(kind) ? order : [...order, kind];
   const own = FORMAT_GROUPS.find((g) => g.kinds.includes(kind));
@@ -433,6 +440,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       case 'paste':
       case 'selectAll':
       case 'insertText':
+      case 'insertLink':
       case 'sheet':
       case 'setFont':
       case 'setFontSize':
@@ -449,6 +457,24 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       case 'dialog':
         return action.name === 'find' || action.name === 'replace' || action.name === 'goTo' || action.name === 'searchAll' || action.name === 'pageSetup';
     }
+  }
+  // An HTML file: page, document or source, wherever it is shown (the command shows only for one).
+  if (action.kind === 'htmlView') return profile.kind === 'html' || !!profile.pageViewer || !!profile.textEditor;
+  // Page view shows the page: what any file can do (close, share, download), and Document and Source to change it.
+  if (profile.pageViewer) {
+    switch (action.kind) {
+      case 'close':
+      case 'share':
+      case 'download':
+      case 'downloadAll':
+      case 'toggleFilesPanel':
+      case 'toggleFooter':
+      case 'toggleToolbars':
+        return true;
+      case 'dialog':
+        return action.name === 'searchAll' || action.name === 'options' || action.name === 'properties' || action.name === 'trash' || action.name === 'vault' || action.name === 'updates';
+    }
+    return worksWithoutDocument(action);
   }
   // The media viewer plays the file: its own playback commands, copying a link to the moment, and what any file can do (close, share, download).
   if (profile.mediaViewer) {

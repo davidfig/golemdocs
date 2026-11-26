@@ -205,6 +205,8 @@ export interface AppHooks {
   /** Whether a Markdown document's source is showing, and going back from it (before what needs the document itself). */
   markdownSource(): boolean;
   leaveMarkdownSource(): Promise<void>;
+  /** Shows an HTML file as the page it makes, as a document, or as its HTML (docs/html-pages.md §2). */
+  setHtmlView(view: 'page' | 'document' | 'source'): Promise<void>;
   /** Print layout (pages), Flow (the text reflowed to the window) or the page grid. */
   setViewMode(mode: ViewMode): void;
   /** The camera moved: stop auto-placing it, and redraw. */
@@ -270,6 +272,7 @@ const SUPPORTED = new Set<ActionKind>([
   'jump',
   'toggleFormattingMarks',
   'toggleMarkdownSource',
+  'htmlView',
   'insertText',
   'convert',
   'insertComment',
@@ -445,6 +448,7 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'download':
           return app.download();
         case 'insertLink':
+          if (app.engine()?.link) return app.engine()!.link!();
           return app.showLinkDialog();
         case 'insertMath':
           return app.showMathDialog();
@@ -561,6 +565,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
           return app.toggleFormattingMarks();
         case 'toggleMarkdownSource':
           return app.toggleMarkdownSource();
+        case 'htmlView':
+          return app.setHtmlView(action.view);
         case 'toggleGrid':
           return app.toggleGrid();
         case 'togglePagesPanel':

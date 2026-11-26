@@ -11,6 +11,7 @@ import {
   AUDIO_OPS,
   type AudioOp,
   SLIDES_OPS,
+  SLIDE_ONLY_OPS,
   type Action,
   type Alignment,
   type CaseChange,
@@ -34,6 +35,7 @@ import { BRUSH_GROUPS, BRUSH_PRESETS, DASHES } from '../vector/brushPresets.ts';
 import { brushPreview } from './brushPreview.ts';
 import { dropdown, lineSample } from './dropdown.ts';
 import { shapePreview } from './shapePreview.ts';
+import { shapeListBox, shapeName } from './shapePicker.ts';
 import { SHAPE_IDS } from '../vector/shapes.ts';
 import { CONVERT_ORDER, FORMATS, PICTURE_CONVERT_ORDER, PICTURE_KINDS, VECTOR_CONVERT_ORDER, VECTOR_KINDS, convertTargets, formatGroup } from './formats.ts';
 import { billingPanel } from './billingPanel.ts';
@@ -43,7 +45,7 @@ import { MenuBar, cmd, sep, sub, type MenuItem, type TopMenu } from './menu.ts';
 import type { DrawerDocument, DrawerEntry } from './menuDrawer.ts';
 import { closePopup, openPopup, popupOpenFor, setPopupLayer, showConfirm, showDialog } from './popup.ts';
 import { showZoomList, zoomPresets } from './zoomList.ts';
-import { IS_MAC, isUsableShortcut, matches, shortcutFromEvent, type Shortcut } from './shortcuts.ts';
+import { IS_MAC, isUsableShortcut, matches, shortcutFromEvent, type Shortcut, type ShortcutSpec } from './shortcuts.ts';
 import { inAppMenuOnMac, installFullScreen, isFullScreen, onFullScreenChange, onInAppMenuChange, toggleFullScreen } from './fullScreen.ts';
 import { Toolbar, btn, colorButton, comboBox, control, tableGridButton, tsep, type Control, type PaletteControl, type ToolbarItem } from './toolbar.ts';
 import { debugSettings } from './debugSettings.ts';
@@ -54,7 +56,7 @@ import { lockGuidesOn, selectAfterPencilOn, setLockGuides, setSelectAfterPencil,
 import { SCHEMES, currentAppearance, currentScheme, isDark, pagesDark, setAppearance, setScheme, toggleDark, toggleDarkPages } from './theme.ts';
 import { showCustomize, type CatalogItem } from './customize.ts';
 import { ICONS, iconElement } from './icons.ts';
-import { CommandPalette } from './commandPalette.ts';
+import { CommandPalette, filterEntries } from './commandPalette.ts';
 import { AccountButton } from './accountButton.ts';
 import { SyncButton } from './syncButton.ts';
 import { DocumentTitle } from './documentTitle.ts';
@@ -401,10 +403,14 @@ export class Chrome {
         checked: (s) => s.markdownSource,
         visible: (s) => s.kind === 'md' || s.markdownSource,
       }),
+      ...(['page', 'document', 'source'] as const).map((view) =>
+        a(`view.html.${view}`, t(`pages.menu.${view}`), { kind: 'htmlView', view }, { tooltip: t('pages.menu.tip'), checked: (s) => s.htmlView === view, radio: true, visible: (s) => s.htmlView !== null }),
+      ),
       a('view.fillForm', t('chrome.view.fillForm'), { kind: 'setFormMode', mode: 'fill' }, { checked: (s) => s.formMode === 'fill', radio: true, tooltip: t('chrome.view.fillForm.tip') }),
       a('view.editForm', t('chrome.view.editForm'), { kind: 'setFormMode', mode: 'edit' }, { checked: (s) => s.formMode === 'edit', radio: true, tooltip: t('chrome.view.editForm.tip') }),
       a('view.pagesPanel', t('chrome.view.pagesPanel'), { kind: 'togglePagesPanel' }, { shortcut: 'Alt+P', checked: (s) => s.pagesPanel }),
-      a('view.filesPanel', t('chrome.view.filesPanel'), { kind: 'toggleFilesPanel' }, { checked: (s) => s.filesPanel }),
+      // ⌃⌘S is a Mac's Show Sidebar (Finder, Mail, Notes); Ctrl+Shift+L is free in the app and in every browser.
+      a('view.filesPanel', t('chrome.view.filesPanel'), { kind: 'toggleFilesPanel' }, { shortcut: { mac: 'Ctrl+Mod+S', other: 'Mod+Shift+L' }, checked: (s) => s.filesPanel }),
       a('view.toolbars', t('chrome.view.showToolbars'), { kind: 'toggleToolbars' }, { checked: (s) => s.toolbars }),
       a('view.footer', t('chrome.view.footer'), { kind: 'toggleFooter' }, { checked: (s) => s.footer }),
       a('view.ruler', t('chrome.view.ruler'), { kind: 'toggleRuler' }, { checked: (s) => s.rulerVisible }),
@@ -488,7 +494,8 @@ export class Chrome {
       mark('underline', t('chrome.format.underline'), 'Mod+U'),
       mark('strikethrough', t('chrome.format.strikethrough'), { other: 'Alt+Shift+5', mac: 'Mod+Shift+X' }),
       mark('superscript', t('chrome.format.superscript'), 'Mod+.'),
-      mark('subscript', t('chrome.format.subscript'), 'Mod+,'),
+      // Mod+, is Tools › Options (a Mac's Settings key), so subscript takes it with Shift, beside superscript's Mod+.
+      mark('subscript', t('chrome.format.subscript'), 'Mod+Shift+,'),
       mark('code', t('chrome.format.code')),
       a('format.growFont', t('chrome.format.growFont'), { kind: 'growFont' }, { icon: 'growFont', shortcut: 'Mod+]' }),
       a('format.shrinkFont', t('chrome.format.shrinkFont'), { kind: 'shrinkFont' }, { icon: 'shrinkFont', shortcut: 'Mod+[' }),
@@ -663,15 +670,27 @@ export class Chrome {
       r.add(a(`audio.${op}`, t(`media.audio.${op}`), { kind: 'audio', op }, { ...(AUDIO_ICONS[op] && { icon: AUDIO_ICONS[op] }), enabled, ...(AUDIO_CHECKED[op] && { checked: AUDIO_CHECKED[op] }) }));
     }
 
-    for (const op of SHEET_OPS) r.add(a(`sheet.${op}`, t(`sheet.op.${op}`), { kind: 'sheet', op }, SHEET_ICONS[op] ? { icon: SHEET_ICONS[op] } : {}));
+    // Excel's Ctrl+T makes a table (Control on a Mac too, where ⌘T is the browser's). A browser elsewhere keeps Ctrl+T for a
+    // new tab and never hands it to the page, so there only the desktop app has it.
+    const SHEET_KEYS: Partial<Record<(typeof SHEET_OPS)[number], ShortcutSpec>> = { insertTable: { mac: 'Ctrl+T', ...(isDesktopApp() && { other: 'Ctrl+T' }) }, insertFunction: 'Shift+F3' };
+    for (const op of SHEET_OPS) r.add(a(`sheet.${op}`, t(`sheet.op.${op}`), { kind: 'sheet', op }, { ...(SHEET_ICONS[op] && { icon: SHEET_ICONS[op] }), ...(SHEET_KEYS[op] && { shortcut: SHEET_KEYS[op] }) }));
 
     // Slides: the Slide menu, Insert's slide items and View's (the editor's own keys and context menus do the rest; see slides/view.ts).
     const SLIDE_ICONS: Partial<Record<(typeof SLIDES_OPS)[number], string>> = { textBox: 'text', picture: 'image', table: 'table', shape: 'shapes' };
     for (const op of SLIDES_OPS) {
       if (op === 'cut' || op === 'copy' || op === 'paste') continue;
       // The show, the notes pane and the lists of layouts, shapes and table sizes take the keyboard: it is not handed back to the slides.
-      const takesKeyboard = op === 'presentStart' || op === 'presentCurrent' || op === 'notes' || op === 'layout' || op === 'shape' || op === 'table' || op === 'picture';
-      r.add(a(`slides.${op}`, t(`slides.op.${op}`), { kind: 'slides', op }, { ...(SLIDE_ICONS[op] && { icon: SLIDE_ICONS[op] }), ...(takesKeyboard && { takesKeyboard }) }));
+      const takesKeyboard = op === 'presentStart' || op === 'presentCurrent' || op === 'notes' || op === 'layout' || op === 'shape' || op === 'table' || op === 'picture' || op === 'background' || op === 'theme';
+      // Master view shows masters and layouts, not slides: the commands about slides themselves wait until it is closed.
+      const slideOnly = SLIDE_ONLY_OPS.has(op);
+      r.add(
+        a(`slides.${op}`, t(`slides.op.${op}`), { kind: 'slides', op }, {
+          ...(SLIDE_ICONS[op] && { icon: SLIDE_ICONS[op] }),
+          ...(takesKeyboard && { takesKeyboard }),
+          ...(op === 'editMaster' && { checked: (s: ChromeState) => !!s.slidesMaster }),
+          ...(slideOnly && { enabled: (s: ChromeState) => !s.slidesMaster }),
+        }),
+      );
     }
 
     // Drawing (vector): the tools stay picked, so they show as pressed; the rest act on the selection.
@@ -821,6 +840,9 @@ export class Chrome {
       cmd('view.flow'),
       cmd('view.grid'),
       cmd('view.markdownSource'),
+      cmd('view.html.page'),
+      cmd('view.html.document'),
+      cmd('view.html.source'),
       cmd('view.formattingMarks'),
       cmd('view.pageWidth'),
       cmd('view.darkMode'),
@@ -938,7 +960,12 @@ export class Chrome {
           cmd('view.flow'),
           cmd('view.grid'),
           cmd('slides.sorter'),
+          cmd('slides.editMaster'),
           cmd('view.markdownSource'),
+          sep,
+          cmd('view.html.page'),
+          cmd('view.html.document'),
+          cmd('view.html.source'),
           sep,
           sub(t('chrome.view.toolbars'), [cmd('view.toolbars'), sep, cmd('view.toolbar.standard'), cmd('view.toolbar.formatting'), sep, cmd('view.customizeToolbars')]),
           sub(t('chrome.view.colorScheme'), [...SCHEMES.map(({ id }) => cmd(`view.theme.${id}`)), sep, cmd('view.darkMode'), cmd('view.darkPages'), cmd('view.matchSystem')]),
@@ -983,6 +1010,13 @@ export class Chrome {
       {
         label: t('chrome.menu.insert'),
         items: [
+          // Spreadsheets: cells first, in the Sheet menu's order.
+          cmd('sheet.insertRowsAbove'),
+          cmd('sheet.insertRowsBelow'),
+          cmd('sheet.insertColumnsLeft'),
+          cmd('sheet.insertColumnsRight'),
+          cmd('sheet.addSheet'),
+          sep,
           sub(t('chrome.insert.break'), [cmd('insert.pageBreak'), cmd('insert.columnBreak'), cmd('insert.lineBreak'), sep, cmd('insert.sectionNext'), cmd('insert.sectionContinuous')], 'pageBreak'),
           cmd('insert.pageNumbers'),
           sub(t('chrome.insert.dateTime'), () => {
@@ -1008,9 +1042,17 @@ export class Chrome {
           cmd('slides.shape'),
           cmd('slides.picture'),
           cmd('slides.table'),
+          cmd('sheet.insertTable'),
           cmd('sheet.insertPivot'),
+          cmd('sheet.insertPicture'),
+          cmd('sheet.insertShape'),
+          cmd('sheet.insertTextBox'),
           sub(t('sheet.chart'), [cmd('sheet.chartColumn'), cmd('sheet.chartBar'), cmd('sheet.chartLine'), cmd('sheet.chartArea'), cmd('sheet.chartPie'), cmd('sheet.chartDoughnut'), cmd('sheet.chartScatter')]),
           sub(t('sheet.sparklines'), [cmd('sheet.sparklineLine'), cmd('sheet.sparklineColumn'), cmd('sheet.sparklineWinLoss'), sep, cmd('sheet.clearSparklines')]),
+          sep,
+          cmd('sheet.insertFunction'),
+          cmd('sheet.newNote'),
+          cmd('sheet.insertPageBreak'),
           sep,
           cmd('insert.horizontalRule'),
           cmd('insert.codeBlock'),
@@ -1106,7 +1148,6 @@ export class Chrome {
           cmd('sheet.filter'),
           sub(t('sheet.group'), [cmd('sheet.groupRows'), cmd('sheet.ungroupRows'), cmd('sheet.groupColumns'), cmd('sheet.ungroupColumns')]),
           sep,
-          cmd('sheet.insertTable'),
           sub(t('sheet.pivot'), [cmd('sheet.pivotFields'), cmd('sheet.refreshPivots')]),
           sub(t('sheet.whatIf'), [cmd('sheet.scenarioManager'), cmd('sheet.goalSeek'), cmd('sheet.dataTable'), cmd('sheet.solver')]),
           sep,
@@ -1213,6 +1254,10 @@ export class Chrome {
           cmd('slides.moveSlideDown'),
           cmd('slides.layout'),
           cmd('slides.resetSlide'),
+          sep,
+          cmd('slides.background'),
+          cmd('slides.theme'),
+          cmd('slides.editMaster'),
           sep,
           cmd('slides.duplicateShape'),
           cmd('slides.deleteShape'),
@@ -1784,18 +1829,11 @@ export class Chrome {
     });
     caret.addEventListener('click', () => {
       if (popupOpenFor(el)) return closePopup();
-      const list = h('div', { class: 'wm-list wm-shape-list', attrs: { role: 'listbox', 'aria-label': label } });
-      for (const id of SHAPE_IDS) {
-        const chosen = id === current;
-        const name = t(`vector.shape.${id}` as MessageKey);
-        const row = h('div', { class: chosen ? 'wm-option wm-shape-row chosen' : 'wm-option wm-shape-row', title: name, attrs: { role: 'option', 'aria-selected': String(chosen), 'aria-label': name } }, shapePreview(id));
-        row.addEventListener('click', () => {
-          closePopup();
-          r.perform({ kind: 'vector', op: `shape:${id}` }, label);
-          r.focusEditor();
-        });
-        list.append(row);
-      }
+      const list = shapeListBox(SHAPE_IDS, current, label, (id) => {
+        closePopup();
+        r.perform({ kind: 'vector', op: `shape:${id}` }, label);
+        r.focusEditor();
+      });
       openPopup(el, list);
     });
     return {
@@ -1803,7 +1841,7 @@ export class Chrome {
       refresh: (state) => {
         current = state.vector.shape;
         main.replaceChildren(shapePreview(current as (typeof SHAPE_IDS)[number]));
-        main.title = `${label}: ${t(`vector.shape.${current}` as MessageKey)}`;
+        main.title = `${label}: ${shapeName(current as (typeof SHAPE_IDS)[number])}`;
         main.setAttribute('aria-pressed', String(state.vector.tool === 'shape'));
         main.disabled = caret.disabled = !r.allows({ kind: 'vector', op: 'shape' });
       },
@@ -1870,18 +1908,11 @@ export class Chrome {
     });
     caret.addEventListener('click', () => {
       if (popupOpenFor(el)) return closePopup();
-      const list = h('div', { class: 'wm-list wm-shape-list', attrs: { role: 'listbox', 'aria-label': label } });
-      for (const id of SHAPE_IDS) {
-        const chosen = id === current;
-        const name = t(`vector.shape.${id}` as MessageKey);
-        const row = h('div', { class: chosen ? 'wm-option wm-shape-row chosen' : 'wm-option wm-shape-row', title: name, attrs: { role: 'option', 'aria-selected': String(chosen), 'aria-label': name } }, shapePreview(id));
-        row.addEventListener('click', () => {
-          closePopup();
-          r.perform({ kind: 'image', op: `shape:${id}` }, label);
-          r.focusEditor();
-        });
-        list.append(row);
-      }
+      const list = shapeListBox(SHAPE_IDS, current, label, (id) => {
+        closePopup();
+        r.perform({ kind: 'image', op: `shape:${id}` }, label);
+        r.focusEditor();
+      });
       openPopup(el, list);
     });
     return {
@@ -1889,7 +1920,7 @@ export class Chrome {
       refresh: (state) => {
         current = state.draw.shape;
         main.replaceChildren(shapePreview(current as (typeof SHAPE_IDS)[number]));
-        main.title = `${label}: ${t(`vector.shape.${current}` as MessageKey)}`;
+        main.title = `${label}: ${shapeName(current as (typeof SHAPE_IDS)[number])}`;
         main.setAttribute('aria-pressed', String(state.draw.tool === 'shape'));
         main.disabled = caret.disabled = !r.allows({ kind: 'image', op: 'shape' });
       },
@@ -2172,34 +2203,49 @@ export class Chrome {
     const table = h('table', { class: 'wm-shortcuts' });
     const status = h('div', { class: 'wm-shortcuts-status', attrs: { role: 'status' } });
     const reset = h('button', { class: 'wm-button', text: t('chrome.shortcuts.default'), attrs: { type: 'button' } });
+    const search = h('input', { class: 'wm-input wm-shortcuts-search', attrs: { type: 'search', placeholder: t('chrome.shortcuts.search'), 'aria-label': t('chrome.shortcuts.search') } });
     let recording: (() => void) | null = null;
+
+    // Every command is listed, so any of them can be given a key: the document's under the menu they come from, then the
+    // vector editor's and the picture tools' own.
+    const sectionName = (command: Command, category: string) => (command.scope === 'picture' ? t('chrome.shortcuts.picture') : command.scope === 'vector' ? t('chrome.shortcuts.vector') : category);
+    const entries = () => {
+      const all = [...this.registry.all()].map((command) => {
+        const { label, category } = this.commandInfo(command, command.plainLabel);
+        return { id: command.id, label, category: sectionName(command, category), command };
+      });
+      const order = [...new Set(all.filter((e) => !e.command.scope).map((e) => e.category))];
+      const rank = (e: (typeof all)[number]) => (e.command.scope === 'vector' ? order.length : e.command.scope === 'picture' ? order.length + 1 : order.indexOf(e.category));
+      return all.map((e, i) => [rank(e), i, e] as const).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]);
+    };
 
     const render = () => {
       recording = null;
       table.replaceChildren();
-      const commands = [...this.registry.all()];
-      const rows = [...commands.filter((c) => !c.scope), ...commands.filter((c) => c.scope === 'vector'), ...commands.filter((c) => c.scope === 'picture')];
-      const headers = new Set<string>();
-      for (const command of rows) {
+      const all = entries();
+      const shown = new Set(filterEntries(all, search.value).map((e) => e.id));
+      let section: string | null = null;
+      for (const { command, label, category } of all) {
+        if (!shown.has(command.id)) continue;
         const vector = command.scope !== undefined;
-        // The vector editor's and the picture tools' sections list every command, so any of them can be given a key.
-        if (!vector && !command.shortcutParsed && !command.defaultShortcut) continue;
-        if (command.scope && !headers.has(command.scope)) {
-          headers.add(command.scope);
-          const picture = command.scope === 'picture';
-          table.append(h('tr', { class: 'wm-shortcuts-section' }, h('th', { text: t(picture ? 'chrome.shortcuts.picture' : 'chrome.shortcuts.vector'), attrs: { colspan: '2', scope: 'colgroup' } })));
-          table.append(h('tr', {}, h('td', { class: 'wm-shortcuts-note', text: t(picture ? 'chrome.shortcuts.pictureHint' : 'chrome.shortcuts.vectorHint'), attrs: { colspan: '2' } })));
+        if (category !== section) {
+          section = category;
+          table.append(h('tr', { class: 'wm-shortcuts-section' }, h('th', { text: category, attrs: { colspan: '2', scope: 'colgroup' } })));
+          if (command.scope) {
+            const picture = command.scope === 'picture';
+            table.append(h('tr', {}, h('td', { class: 'wm-shortcuts-note', text: t(picture ? 'chrome.shortcuts.pictureHint' : 'chrome.shortcuts.vectorHint'), attrs: { colspan: '2' } })));
+          }
         }
         const key = h('button', {
           class: 'wm-shortcut-key',
-          attrs: { type: 'button', 'aria-label': t('chrome.shortcuts.change', { label: command.plainLabel }) },
+          attrs: { type: 'button', 'aria-label': t('chrome.shortcuts.change', { label }) },
         });
         const show = () => {
           key.classList.remove('recording');
           key.textContent = command.shortcutText || t('chrome.shortcuts.none');
           key.classList.toggle('none', !command.shortcutText);
           // Its name says the key it has now, which its label would otherwise hide.
-          key.setAttribute('aria-label', t('a11y.withValue', { label: t('chrome.shortcuts.change', { label: command.plainLabel }), value: key.textContent }));
+          key.setAttribute('aria-label', t('a11y.withValue', { label: t('chrome.shortcuts.change', { label }), value: key.textContent }));
         };
         show();
         if (command.nativeShortcut) {
@@ -2248,10 +2294,12 @@ export class Chrome {
             key.addEventListener('blur', stop);
           });
         }
-        table.append(h('tr', {}, h('td', { text: command.plainLabel }), h('td', {}, key)));
+        table.append(h('tr', {}, h('td', { text: label }), h('td', {}, key)));
       }
+      if (!shown.size) table.append(h('tr', {}, h('td', { class: 'wm-shortcuts-note', text: t('chrome.shortcuts.noMatch'), attrs: { colspan: '2' } })));
     };
     render();
+    search.addEventListener('input', render);
     reset.addEventListener('click', () => {
       this.registry.resetShortcuts();
       this.refresh();
@@ -2260,7 +2308,7 @@ export class Chrome {
     });
 
     const footer = h('div', { class: 'wm-shortcuts-footer' }, h('span', { class: 'wm-shortcuts-hint', text: t('chrome.shortcuts.hint') }), reset);
-    showDialog(t('chrome.shortcuts.title'), h('div', {}, footer, status, h('div', { class: 'wm-scroll' }, table)), () => this.options.host.focusEditor());
+    showDialog(t('chrome.shortcuts.title'), h('div', {}, footer, search, status, h('div', { class: 'wm-scroll' }, table)), () => this.options.host.focusEditor());
   }
 }
 

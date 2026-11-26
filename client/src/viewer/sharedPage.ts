@@ -20,9 +20,9 @@ export async function sharedPageHtml(bytes: Uint8Array, name: string): Promise<s
   return isPageHtml(html) ? html : null;
 }
 
-/** The results a page's owner kept, or null when there are none. */
-async function results(api: string): Promise<PageResults | null> {
-  const response = await fetch(`${api}/page`, { cache: 'no-store' }).catch(() => null);
+/** The results a page's owner kept (read from `url`), or null when there are none. */
+async function results(url: string): Promise<PageResults | null> {
+  const response = await fetch(url, { cache: 'no-store' }).catch(() => null);
   if (!response?.ok) return null;
   const parsed = (await response.json().catch(() => null)) as PageResults | null;
   return parsed && typeof parsed === 'object' && parsed.embeds && parsed.answers ? parsed : null;
@@ -34,9 +34,12 @@ export interface SharedPage {
   destroy(): void;
 }
 
-/** Shows a shared page in `el`, under a bar with its title. */
-export async function showSharedPage(el: HTMLElement, spec: { api: string; name: string; title: string; html: string }): Promise<SharedPage> {
-  let kept = await results(spec.api);
+/**
+ * Shows a shared page in `el`, under a bar with its title. `results` is where what its owner's app kept is read: `<api>/page` for a
+ * shared page, `<api>/page?path=` for one in a shared folder.
+ */
+export async function showSharedPage(el: HTMLElement, spec: { results: string; name: string; title: string; html: string }): Promise<SharedPage> {
+  let kept = await results(spec.results);
   const notShared = (): never => {
     throw new Error(t('pages.error.notShared'));
   };
@@ -68,7 +71,7 @@ export async function showSharedPage(el: HTMLElement, spec: { api: string; name:
   show(spec.html, false);
   return {
     async reload(html) {
-      kept = await results(spec.api);
+      kept = await results(spec.results);
       show(html, true);
     },
     destroy: () => view.close(),

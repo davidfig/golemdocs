@@ -29,6 +29,8 @@ import { showZoomList } from '../ui/zoomList.ts';
 import { CLOSE_ICON, h, iconButton, stripMnemonic } from '../ui/dom.ts';
 import { BASIC_ICONS, iconSpan } from '../ui/iconKit.ts';
 import { installFullScreen, toggleFullScreen } from '../ui/fullScreen.ts';
+import { editorFor } from './editorKinds.ts';
+import { openEditorView, type EditorView } from './editorViews.ts';
 import { ScreenReaderSupport } from '../screenReaderSupport.ts';
 import { scrollDragsAtEdges } from '../ui/edgeScroll.ts';
 import { announce } from '../ui/announce.ts';
@@ -123,6 +125,8 @@ export interface Viewer {
   reload(bytes: ArrayBuffer | Uint8Array): void;
   /** The document as a PDF, as the editor's File › Print makes it (the layout worker's export); rejects if it isn't open yet. */
   pdf(): Promise<Uint8Array>;
+  /** Puts the keyboard focus in the document (or the editor showing it). */
+  focus(): void;
 }
 
 /** Points of grey between pages. */
@@ -183,6 +187,10 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   const zoomLabel = h('button', { class: 'wm-tbutton wm-viewer-zoom', attrs: { type: 'button' } });
   // The page buttons, field and count: hidden in Flow, which has no pages.
   const pageNav = h('div', { class: 'wm-toolbar wm-viewer-pages' });
+  // The zoom and Find group, Print and Find: hidden for what has no use for them (`updateBar`).
+  let viewGroup: HTMLElement = h('div');
+  let printButton: HTMLButtonElement | null = null;
+  let findButton: HTMLButtonElement | null = null;
   const query = h('input', { class: 'wm-input wm-viewer-query', attrs: { type: 'search', autocomplete: 'off', spellcheck: 'false' } });
   const findMessage = h('span', { class: 'wm-find-message', attrs: { role: 'status' } });
   const findBar = h('div', { class: 'wm-viewer-bar wm-viewer-find', attrs: { role: 'search' } });
@@ -225,6 +233,8 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   let selectionHtml: { text: string; html: string } | null = null;
   let frame = 0;
   let destroyed = false;
+  /** A workbook, deck, audio or video, shown by the app's own editor read-only instead of the layout worker (editorViews.ts). */
+  let editor: EditorView | null = null;
 
   const renderer = gl ? new PageRenderer(gl, () => desk) : null;
   // The glyphs of pages away from the view are kept packed small, as in the editor.
@@ -246,6 +256,14 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   function render(): void {
     frame = 0;
     if (!renderer || !selection) return;
+    if (editor) {
+      editor.clamp(camera, canvas.clientWidth, canvas.clientHeight);
+      // A sheet paints the whole canvas; under a deck (its own canvas) and media (its own elements) the desk is cleared.
+      if (editor.kind !== 'sheet') renderer.render(camera, [], selection, false, dark);
+      editor.draw(dark, forcedColors());
+      updateBar();
+      return;
+    }
     camera.clamp(bounds, canvas.clientWidth, canvas.clientHeight, SIDE_PADDING, SIDE_PADDING_X);
     // Windows' contrast themes: the pages and their text in the system's colors, as in the app.
     renderer.forced = forcedColors();
@@ -270,6 +288,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   }
 
   function focusView(): void {
+    if (editor) return editor.focus();
     input.focus({ preventScroll: true });
   }
 
@@ -499,6 +518,12 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
 
   function updateFooter(): void {
     if (!footer) return;
+    if (editor) {
+      // Audio and video have their own bar, with the time; nothing of the status bar applies to them.
+      footer.el.hidden = editor.kind === 'media';
+      footer.update({ kind, page: null, zoom: camera.zoom, words: null, selection: null, picture: null, view: 'print', canFlow: false, text: null });
+      return;
+    }
     const here = reflowing() || !pages.length ? -1 : currentPage();
     footer.update({
       kind,
@@ -519,8 +544,11 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   let shownZoom = '';
   function updateBar(): void {
     updateFooter();
-    // Flow has no pages to go between.
-    pageNav.hidden = reflowing();
+    // Flow has no pages to go between, nor has a workbook, a deck or media; media has nothing to zoom, find or print either.
+    pageNav.hidden = reflowing() || !!editor;
+    viewGroup.hidden = editor?.kind === 'media';
+    if (printButton) printButton.hidden = editor?.kind === 'media';
+    if (findButton) findButton.hidden = !!editor && !editor.find;
     const page = pages.length ? String(currentPage() + 1) : '';
     if (page !== shownPage && doc.activeElement !== pageField) pageField.value = shownPage = page;
     const count = pages.length ? t('viewer.pageCount', { count: pages.length.toLocaleString(options.locale) }) : '';
@@ -609,6 +637,11 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       return;
     }
     if (e.button !== 0) return;
+    if (editor) {
+      press = { x: e.clientX, y: e.clientY, id: e.pointerId, moved: false, extend: e.shiftKey };
+      editor.press(e.offsetX, e.offsetY, e.shiftKey, clickCount(e), e.metaKey || e.ctrlKey);
+      return requestRender();
+    }
     const hit = pageAt(e.offsetX, e.offsetY);
     if (!hit) return;
     const clicks = clickCount(e);
@@ -623,6 +656,11 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       userMoved = true;
       camera.panBy(pan.x - e.clientX, pan.y - e.clientY);
       pan = { x: e.clientX, y: e.clientY };
+      return requestRender();
+    }
+    if (editor) {
+      if (press) editor.drag(e.offsetX, e.offsetY, e.shiftKey);
+      else canvas.style.cursor = editor.cursorAt(e.offsetX, e.offsetY);
       return requestRender();
     }
     if (!press) return hover(e);
@@ -645,6 +683,10 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     pan = null;
     const was = press;
     press = null;
+    if (editor) {
+      editor.release();
+      return requestRender();
+    }
     // A click (not a drag, not extending a selection) on a link hands the link to the host.
     if (was && !was.moved && !was.extend && e.type === 'pointerup' && lastClick.count === 1 && worker) {
       const hit = pageAt(e.offsetX, e.offsetY);
@@ -729,6 +771,7 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   };
 
   function openFind(): void {
+    if (editor) return void editor.find?.();
     findBar.hidden = false;
     findMessage.textContent = fixedPages ? t('viewer.findUnavailable') : '';
     if (!query.value && selectedText && !selectedText.includes('\n')) query.value = selectedText;
@@ -758,6 +801,8 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
   function onKeyDown(e: KeyboardEvent): void {
     // Handled already (a toolbar's arrow keys).
     if (e.defaultPrevented) return;
+    // An editor's keys go to its own field, which hands the viewer's (zoom, Find) back through `viewKey`.
+    if (editor) return;
     if (matches(parseShortcut(SCREEN_READER_SHORTCUT)!, e)) {
       e.preventDefault();
       return setScreenReader(!screenReaderOn());
@@ -955,19 +1000,22 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     query.placeholder = t('viewer.find');
     pageNav.append(tool(ICON_UP, t('viewer.previousPage'), () => goToPage(currentPage() - 1)), tool(ICON_DOWN, t('viewer.nextPage'), () => goToPage(currentPage() + 1)), pageField, pageCount);
     const group = (...items: Node[]): HTMLElement => h('div', { class: 'wm-toolbar' }, ...items);
-    const files = [...(options.onPrint ? [tool('print', t('viewer.print'), options.onPrint)] : []), ...(options.onDownload ? [withWords(tool('download', t('viewer.download'), options.onDownload), t('viewer.download'))] : [])];
+    printButton = options.onPrint ? tool('print', t('viewer.print'), options.onPrint) : null;
+    findButton = tool('find', t('viewer.find'), openFind);
+    const files = [...(printButton ? [printButton] : []), ...(options.onDownload ? [withWords(tool('download', t('viewer.download'), options.onDownload), t('viewer.download'))] : [])];
     const showTitle = options.title && options.barTitle !== false;
     bar.append(
       ...(showTitle ? [h('span', { class: 'wm-viewer-title', text: options.title, title: options.title })] : []),
       pageNav,
-      group(
+      (viewGroup = group(
         tool('zoomOut', t('viewer.zoomOut'), () => zoomTo(stepZoom(camera.zoom, -1))),
         // With a status bar the zoom is shown there, as in the editor.
         ...(footer ? [] : [zoomLabel]),
         tool('zoom', t('viewer.zoomIn'), () => zoomTo(stepZoom(camera.zoom, 1))),
-        tool('find', t('viewer.find'), openFind),
-        ...(options.fullScreen ? [tool('fullScreen', t('viewer.fullScreen'), () => void toggleFullScreen())] : []),
-      ),
+        findButton,
+      )),
+      // Full Screen stays for every kind, media included.
+      ...(options.fullScreen ? [group(tool('fullScreen', t('viewer.fullScreen'), () => void toggleFullScreen()))] : []),
       ...(files.length ? [group(...files)] : []),
       ...(options.barEnd?.length ? [h('span', { class: 'wm-viewer-spacer' }), ...options.barEnd] : []),
     );
@@ -998,6 +1046,35 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     const source = sourceFromFile(options.name, bufferOf(options.bytes));
     if (!source) return fail(t('viewer.cannotOpen', { name: options.name }));
     loading.show(options.name, options.waited);
+    if (editorFor(source)) {
+      const shown = await openEditorView(source, {
+        parent: view,
+        canvas,
+        camera,
+        gl,
+        atlases: atlases!,
+        fontBase,
+        locale,
+        render: requestRender,
+        viewKey: editorKey,
+        fail,
+      }).catch((error: unknown) => {
+        fail((error as Error).message || t('viewer.cannotOpen', { name: options.name }));
+        return null;
+      });
+      if (destroyed) return shown?.destroy();
+      if (shown) {
+        editor = shown;
+        // The layout worker has nothing to do for it.
+        worker.terminate();
+        loading.hide();
+        if (shown.kind === 'media') canvas.hidden = true;
+        options.onOpened?.({ name: options.name, format: source.kind, pages: 0 });
+        requestRender();
+        focusView();
+        return;
+      }
+    }
     // A picture's size, for the status bar, before its bytes go to the worker.
     if (footer && source.kind === 'image') {
       const size = sniffImage(new Uint8Array(source.bytes));
@@ -1012,12 +1089,33 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
     focusView();
   })();
 
+  /** The viewer's keys while an editor has the focus: zoom, and Find. True if one was taken. */
+  function editorKey(e: KeyboardEvent): boolean {
+    const mod = MAC ? e.metaKey : e.ctrlKey;
+    if (!mod || e.altKey) return false;
+    const zoom = e.key === '=' || e.key === '+' ? 1 : e.key === '-' ? -1 : e.key === '0' ? 0 : null;
+    if (zoom !== null) {
+      e.preventDefault();
+      zoomTo(zoom === 0 ? 1 : stepZoom(camera.zoom, zoom));
+      return true;
+    }
+    if (e.key.toLowerCase() === 'f' && editor?.find) {
+      e.preventDefault();
+      editor.find();
+      return true;
+    }
+    return false;
+  }
+
   return {
+    focus: focusView,
     pdf() {
+      if (editor) return editor.pdf() ?? Promise.reject(new Error(t('app.notAvailable', { name: t('viewer.print') })));
       if (!worker || destroyed) return Promise.reject(new Error(t('app.webglUnsupported')));
       return worker.convert('pdf');
     },
     reload(bytes) {
+      if (editor) return void editor.reload(bufferOf(bytes)).catch((error: unknown) => console.error(error));
       const source = sourceFromFile(options.name, bufferOf(bytes));
       if (destroyed || !worker || !source) return;
       replacing = true;
@@ -1033,6 +1131,8 @@ export function mount(el: HTMLElement, options: ViewerOptions): Viewer {
       win.clearTimeout(wordsTimer);
       stopReaderMode();
       stopContrast();
+      editor?.destroy();
+      editor = null;
       reader?.dispose();
       resize.disconnect();
       doc.removeEventListener('copy', onCopy);

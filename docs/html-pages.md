@@ -4,8 +4,7 @@
 foreign page allowed to read runs none of its scripts (§1, *Reading plus a way out*), so its reads are only its
 `<golem-embed>` elements, and the `golem` API serves own pages only; writes need no prompt for an own page, and each is a
 run in Tools › Scripts' log with Undo This Run. Not done yet: checking the frame in the real web views (WKWebView inside
-Tauri, WebView2, WebKitGTK), a manual screen reader pass of page view, a shared folder's viewer showing pages as pages
-(`folderPage.ts` still shows an HTML file as a document), Download in a shared page's view, and `saved_by` for saves a
+Tauri, WebView2, WebKitGTK), a manual screen reader pass of page view, Download in a shared page's view, and `saved_by` for saves a
 shared room makes (only `PUT` sets it). The "came in from outside" mark is per device, so a page opened from the computer
 on one device is own on the person's others. Links in a page whose scripts don't run can't be handed to the app (nothing in
 the frame can catch the click), so following one only shows the page again.

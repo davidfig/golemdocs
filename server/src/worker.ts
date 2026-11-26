@@ -80,9 +80,9 @@ const routes: ExportedHandler = {
       const publicMatch = /^\/api\/public\/([^/]+)(?:\/(file|thumbnail|live|page))?$/.exec(path);
       if (publicMatch) return await handlePublic(request, env, publicMatch[1]!, publicMatch[2] as 'file' | 'thumbnail' | 'live' | 'page' | undefined);
 
-      // GET /api/folder-public/:token[/file?path=…|/live?path=…]: a folder's public link, for anyone (see handleFolderView).
-      const folderPublicMatch = /^\/api\/folder-public\/([^/]+)(?:\/(file|live))?$/.exec(path);
-      if (folderPublicMatch) return await handleFolderView(request, env, url, null, folderPublicMatch[1]!, folderPublicMatch[2] as 'file' | 'live' | undefined);
+      // GET /api/folder-public/:token[/file?path=…|/live?path=…|/page?path=…]: a folder's public link, for anyone (see handleFolderView).
+      const folderPublicMatch = /^\/api\/folder-public\/([^/]+)(?:\/(file|live|page))?$/.exec(path);
+      if (folderPublicMatch) return await handleFolderView(request, env, url, null, folderPublicMatch[1]!, folderPublicMatch[2] as 'file' | 'live' | 'page' | undefined);
 
       if (path.startsWith('/api/auth/')) return await handleAuth(request, env, url);
 
@@ -132,10 +132,10 @@ const routes: ExportedHandler = {
       if (viewMatch?.[2] === 'live' && request.headers.get('origin') !== url.origin) throw new HttpError(403, 'bad origin');
       if (viewMatch) return await handleView(request, env, userId, viewMatch[1]!, viewMatch[2] as 'file' | 'live' | 'page' | undefined);
 
-      // GET /api/folder-view/:token[/file?path=…|/live?path=…]: a folder shared view-only, by its share's own address (see handleFolderView).
-      const folderViewMatch = /^\/api\/folder-view\/([^/]+)(?:\/(file|live))?$/.exec(path);
+      // GET /api/folder-view/:token[/file?path=…|/live?path=…|/page?path=…]: a folder shared view-only, by its share's own address (see handleFolderView).
+      const folderViewMatch = /^\/api\/folder-view\/([^/]+)(?:\/(file|live|page))?$/.exec(path);
       if (folderViewMatch?.[2] === 'live' && request.headers.get('origin') !== url.origin) throw new HttpError(403, 'bad origin');
-      if (folderViewMatch) return await handleFolderView(request, env, url, userId, folderViewMatch[1]!, folderViewMatch[2] as 'file' | 'live' | undefined);
+      if (folderViewMatch) return await handleFolderView(request, env, url, userId, folderViewMatch[1]!, folderViewMatch[2] as 'file' | 'live' | 'page' | undefined);
 
       // /api/shared-folders[/:ownerId/:folderId[/tree|/folders/:id]]: folders other people shared with this user (sharedFolders.ts).
       const sharedFoldersMatch = /^\/api\/shared-folders(?:\/([^/]+)\/([^/]+)(?:\/(tree|folders)(?:\/([^/]+))?)?)?$/.exec(path);

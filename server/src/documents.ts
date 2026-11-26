@@ -289,7 +289,7 @@ export async function ownStorage(env: Env, userId: string, method: string): Prom
  * names the document's id. GET /api/view/:token/live is the WebSocket that tells the page of each save (`listenToRoom`).
  */
 /** What a shared HTML page showed when last opened by someone who may change it (docs/html-pages.md §5); 404 when there is none. */
-async function pageResults(env: Env, ownerId: string, docId: string): Promise<Response> {
+export async function pageResults(env: Env, ownerId: string, docId: string): Promise<Response> {
   const object = await env.FILES.get(pageKey(ownerId, docId));
   if (!object) throw new HttpError(404, 'not found');
   return new Response(object.body, { headers: { 'content-type': 'application/json', 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' } });

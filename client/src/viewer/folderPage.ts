@@ -28,6 +28,7 @@ import { saveFile } from '../ui/saveFile.ts';
 import { savedViewMode } from '../ui/viewMode.ts';
 import { CHECK_MS, downloader, downloading, PAGE_TITLE, printShown, PUBLIC_CHECK_MS, say, sayIn, siteTheme, toFile } from './page.ts';
 import { PageHeader, type Sharer } from './pageHeader.ts';
+import { sharedPageHtml, showSharedPage, type SharedPage } from './sharedPage.ts';
 import { followSaves, type LiveLine } from './live.ts';
 import { checkOutcome } from './protocol.ts';
 import { mount, type Viewer } from './viewer.ts';
@@ -212,6 +213,8 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
   // --- The document ------------------------------------------------------------------------------
   const save = downloader();
   let viewer: Viewer | null = null;
+  // An HTML page shows as the page it makes, as on a shared page's own address (sharedPage.ts, docs/html-pages.md §5).
+  let page: SharedPage | null = null;
   let shown: { path: string; etag: string | null; stored: Uint8Array | null } | null = null;
   let opening = 0;
   const theme = siteTheme();
@@ -226,6 +229,8 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
     live = null;
     viewer?.destroy();
     viewer = null;
+    page?.destroy();
+    page = null;
     shown = null;
   };
 
@@ -267,6 +272,14 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
     shown = opened;
     live = followSaves(`${api}/live?path=${encodeURIComponent(path)}`, () => void check());
     docEl.replaceChildren();
+    const pageHtml = await sharedPageHtml(new Uint8Array(bytes), name);
+    if (ticket !== opening || ended) return;
+    if (pageHtml !== null) {
+      const shownPage = await showSharedPage(docEl, { results: `${api}/page?path=${encodeURIComponent(path)}`, name, title, html: pageHtml });
+      if (ticket !== opening || ended) return shownPage.destroy();
+      page = shownPage;
+      return;
+    }
     const shownViewer = (viewer = mount(docEl, {
       bytes,
       name,
@@ -324,7 +337,10 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
         const newer = await file!.arrayBuffer();
         if (shown !== was) return;
         if (was.stored) was.stored = new Uint8Array(newer.slice(0));
-        viewer?.reload(newer);
+        if (page) {
+          const html = await sharedPageHtml(new Uint8Array(newer), fileName(was.path));
+          if (shown === was && html !== null) await page.reload(html);
+        } else viewer?.reload(newer);
       } else if (fileOutcome === 'signedOut') {
         end('signedOut');
       } else if (fileOutcome === 'ended') {
@@ -359,7 +375,10 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
     if (e.key !== 'F6' || e.altKey || e.ctrlKey || e.metaKey) return;
     e.preventDefault();
     const inTree = nav.contains(document.activeElement) || head.contains(document.activeElement);
-    if (inTree) docEl.querySelector<HTMLElement>('.wm-viewer-input')?.focus();
+    if (inTree) {
+      if (viewer) viewer.focus();
+      else docEl.querySelector<HTMLElement>('.wm-page-view')?.focus();
+    }
     else focusTree();
   };
   const onPopState = (): void => {

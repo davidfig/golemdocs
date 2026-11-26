@@ -102,7 +102,7 @@ async function start(): Promise<void> {
   }
   // An HTML page shows as the page it makes, with what its owner's app kept of what it read (sharedPage.ts, docs/html-pages.md §5).
   const pageHtml = await sharedPageHtml(new Uint8Array(bytes), name);
-  const page: SharedPage | null = pageHtml === null ? null : await showSharedPage(place, { api, name, title, html: pageHtml });
+  const page: SharedPage | null = pageHtml === null ? null : await showSharedPage(place, { results: `${api}/page`, name, title, html: pageHtml });
   const viewer: Viewer | null = page ? null : mount(place, {
     bytes,
     name,

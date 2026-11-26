@@ -11,7 +11,7 @@ import type { PageAsks, PageTrust } from './compose.ts';
 import { answerKey } from './answers.ts';
 import { resultHtml } from './embedHtml.ts';
 import { PageRequests, sayLiveError } from './requests.ts';
-import { fingerprint, trustOf } from './trust.ts';
+import { fingerprint, SessionGrants, shouldReportOutside, trustOf } from './trust.ts';
 import type { PageMemory, PageOrigin, PageView as PageViewKind } from './trust.ts';
 import { PageViewer } from './view.ts';
 
@@ -64,6 +64,12 @@ export interface PageHost {
   confirmMine(name: string, asks: PageAsks): Promise<boolean>;
   /** Page, Document or Source was picked in the bar. */
   setView(view: PageViewKind): void;
+  /**
+   * Tells the account whether a page the person owns came from outside (true: this device saw it imported or downloaded) or is
+   * theirs (false: Mark as Mine), so their other devices treat it the same. Resolves true once the account has it; false when the
+   * page isn't the account's (or isn't theirs), or it couldn't be told.
+   */
+  setOutside(key: string, outside: boolean): Promise<boolean>;
   /** Keeps what a page showed for the people it is shared with (a page the account has, shared or not). */
   keepResults(key: string, results: PageResults): Promise<void>;
   status(text: string): void;
@@ -93,15 +99,16 @@ interface Shown {
   answers: Map<string, unknown>;
 }
 
+/** Whether the file has, or may have (an old shell can't tell), the system's download mark. */
+const isDownloaded = (origin: Pick<PageOrigin, 'downloaded'>): boolean => origin.downloaded !== false && origin.downloaded !== undefined;
 const folderOfPath = (path: string): string => path.split('/').slice(0, -1).join('/');
 const MAX_RESULTS_CHARS = 7_500_000;
 
 export class PageController {
   readonly view: PageViewer;
   private shown: Shown | null = null;
-  /** Allowed once, for this page load only: folders a foreign page may read, and pages marked as own (by key or name). */
-  private readonly onceReads = new Map<string, string[]>();
-  private readonly onceMine = new Set<string>();
+  /** Allowed for this session only (by key or name, for the bytes it was allowed for): folders a foreign page may read, and pages marked as own. */
+  private readonly once = new SessionGrants();
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private keepTimer: ReturnType<typeof setTimeout> | null = null;
   /** Bumped by every show, so a slow one that finishes after another started is dropped. */
@@ -141,12 +148,14 @@ export class PageController {
   async open(spec: { key: string | null; name: string; path: string; stored: Uint8Array; origin: Omit<PageOrigin, 'hash' | 'markedHash'> }, keepScroll = false): Promise<void> {
     const ticket = ++this.ticket;
     const html = await this.host.html(spec.stored, spec.name);
-    const hash = fingerprint(spec.stored);
+    const hash = await fingerprint(spec.stored);
     const id = spec.key ?? spec.name;
-    const marked = this.onceMine.has(id) ? hash : spec.key ? this.memory.marked(spec.key) : null;
-    const trust = trustOf({ ...spec.origin, hash, markedHash: marked });
+    const onceMarked = this.once.marked(id);
+    const marked = onceMarked === hash ? onceMarked : spec.key ? this.memory.marked(spec.key) : null;
+    const origin = { ...spec.origin, acceptedDownload: spec.key ? this.memory.acceptedDownload(spec.key) : false };
+    const trust = trustOf({ ...origin, hash, markedHash: marked });
     const asks = pageAsks(html);
-    const reads = trust === 'own' ? [''] : (this.onceReads.get(id) ?? (spec.key ? this.memory.reads(spec.key, hash) : null));
+    const reads = trust === 'own' ? [''] : (this.once.reads(id, hash) ?? (spec.key ? this.memory.reads(spec.key, hash) : null));
     const policy = policyFor(trust, trust === 'foreign' && reads !== null, asks);
     const folder = folderOfPath(spec.path);
     const read = new Set<string>();
@@ -168,8 +177,12 @@ export class PageController {
       { path: spec.path, name: spec.name, trust },
     );
     this.shown = { ...spec, hash, html, trust, asks, reads, scripts: policy.scripts, requests, embeds, read, answers: new Map() };
-    const srcdoc = composePage(fillEmbeds(inlined.html, embeds), pageCsp(policy), policy.scripts ? { path: spec.path, trust, scroll: keepScroll ? Math.round(this.view.scrollY) : 0 } : null);
-    this.view.show({ name: spec.name, srcdoc, trust, scripts: policy.scripts, asks: asks.reads, allowed: trust === 'foreign' && reads !== null }, keepScroll);
+    const filled = fillEmbeds(inlined.html, embeds);
+    const csp = pageCsp(policy);
+    const scroll = keepScroll ? Math.round(this.view.scrollY) : 0;
+    const compose = (token: string): string => composePage(filled, csp, policy.scripts ? { path: spec.path, trust, scroll, token } : null);
+    if (spec.key) this.reportOutside(spec.key, { ...origin, hash });
+    this.view.show({ name: spec.name, compose, trust, scripts: policy.scripts, forms: policy.forms, asks: asks.reads, allowed: trust === 'foreign' && reads !== null }, keepScroll);
     this.scheduleKeep();
   }
 
@@ -203,8 +216,21 @@ export class PageController {
     if (!s || s.key === key) return;
     if (s.key) this.memory.moved(s.key, key);
     else if (s.origin.imported) this.memory.setImported(key);
-    if (this.onceMine.has(s.name)) this.memory.markMine(key, s.hash);
+    if (this.once.marked(s.name) === s.hash) this.memory.markOwn(key, s.hash, isDownloaded(s.origin));
+    const reads = this.once.reads(s.name, s.hash);
+    if (reads) this.once.allowReads(key, s.hash, reads);
     s.key = key;
+  }
+
+  /** Tells the account, once for these bytes, that a page its owner has came from outside (see `shouldReportOutside`). */
+  private reportOutside(key: string, origin: Omit<PageOrigin, 'markedHash'>): void {
+    if (!shouldReportOutside(origin, this.memory.reported(key))) return;
+    void this.host
+      .setOutside(key, true)
+      .then((sent) => {
+        if (sent) this.memory.setReported(key, origin.hash);
+      })
+      .catch(() => undefined);
   }
 
   // --- Answers ---------------------------------------------------------------------------------
@@ -288,7 +314,7 @@ export class PageController {
     if (!s?.key) return;
     const stored = await this.host.read(s.key);
     // The same bytes (its own save, or the account's copy of it): nothing to show again, and its scripts keep their state.
-    if (!stored || this.shown !== s || fingerprint(stored) === s.hash) return;
+    if (!stored || this.shown !== s || (await fingerprint(stored)) === s.hash || this.shown !== s) return;
     await this.open({ key: s.key, name: s.name, path: s.path, stored, origin: s.origin }, true);
   }
 
@@ -337,9 +363,12 @@ export class PageController {
     const s = this.shown;
     if (!s || s.trust === 'own') return;
     if (!(await this.host.confirmMine(s.name, s.asks))) return;
-    if (s.key) this.memory.markMine(s.key, s.hash);
-    else this.onceMine.add(s.name);
-    await this.open({ key: s.key, name: s.name, path: s.path, stored: s.stored, origin: s.origin }, true);
+    if (s.key) {
+      // Theirs on this device (for these bytes, and its file's download mark accepted), and in the account, for their others.
+      this.memory.markOwn(s.key, s.hash, isDownloaded(s.origin));
+      void this.host.setOutside(s.key, false).catch(() => false);
+    } else this.once.markMine(s.name, s.hash);
+    await this.open({ key: s.key, name: s.name, path: s.path, stored: s.stored, origin: s.key ? { ...s.origin, imported: false } : s.origin }, true);
   }
 
   private async allowReads(): Promise<void> {
@@ -348,7 +377,7 @@ export class PageController {
     const answer = await this.host.askReads(s.name, s.asks.reads);
     if (!answer || this.shown !== s) return;
     if (answer === 'always' && s.key) this.memory.allowReads(s.key, s.hash, s.asks.reads);
-    else this.onceReads.set(s.key ?? s.name, s.asks.reads);
+    else this.once.allowReads(s.key ?? s.name, s.hash, s.asks.reads);
     await this.open({ key: s.key, name: s.name, path: s.path, stored: s.stored, origin: s.origin }, true);
   }
 

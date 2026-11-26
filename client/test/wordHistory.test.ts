@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { memoryWordStore, trimRecord } from '../src/storage/wordStore.ts';
 import { CloudError } from '../src/cloud.ts';
-import { DocumentWords, addDays, dailyProgress, dayOf, mergeDays, periodStart, periodWords, progressBars, writtenBetween, type WordApi, type WordDay } from '../src/wordHistory.ts';
+import { DocumentWords, addDays, dailyProgress, dayOf, firstDayOfWeek, mergeDays, periodStart, periodWords, progressBars, writtenBetween, type WordApi, type WordDay } from '../src/wordHistory.ts';
 
 const day = (d: string, words: number, start: number | null = null): WordDay => ({ day: d, words, start });
 
@@ -83,6 +83,8 @@ function fakeAccount(options: { refuse?: number } = {}) {
   const kept = new Map<string, Map<string, WordDay>>();
   const puts: { days: WordDay[]; fill: boolean }[] = [];
   const versionWords = new Map<number, number | null>();
+  /** Versions that can't be asked about (offline). */
+  const unreachable = new Set<number>();
   const api: WordApi = {
     async get(id) {
       if (options.refuse) throw new CloudError(options.refuse, 'no');
@@ -96,17 +98,19 @@ function fakeAccount(options: { refuse?: number } = {}) {
       for (const d of days) {
         const had = rows.get(d.day);
         if (had && o.fill) continue;
-        rows.set(d.day, { ...d, start: had?.start ?? d.start });
+        // As the server: the day keeps its first start, unless the new one was moved past changes made elsewhere.
+        rows.set(d.day, { day: d.day, words: d.words, start: d.shifted ? d.start : (had?.start ?? d.start) });
       }
     },
     async versions() {
       return [...versionWords.keys()].map((version) => ({ version }));
     },
     async versionWords(_id, version) {
+      if (unreachable.has(version)) throw new Error('offline');
       return versionWords.get(version) ?? null;
     },
   };
-  return { api, kept, puts, versionWords };
+  return { api, kept, puts, versionWords, unreachable, options };
 }
 
 const clock = (text: string) => {
@@ -210,4 +214,111 @@ test('the days before the history began are filled in from the last version of e
   const again = new DocumentWords({ key: 'cloud:d1', cloudId: 'd1' }, store, () => true, account.api, time.now);
   assert.equal(await again.fillFromVersions(), 0);
   again.close();
+});
+
+test('the week starts where the person is: a language with no region takes the browser’s', () => {
+  assert.equal(firstDayOfWeek('en', ['en-GB']), 1, 'English in Britain: Monday');
+  assert.equal(firstDayOfWeek('en', ['en-US']), 7, 'English in the United States: Sunday');
+  assert.equal(firstDayOfWeek('en', ['fr', 'en-AU']), 1, 'the first language that names a region');
+  assert.equal(firstDayOfWeek('de', ['en-US']), 7, 'the region decides, not the language');
+  assert.equal(firstDayOfWeek('en-GB', ['en-US']), 1, 'a locale with a region keeps it');
+  assert.equal(firstDayOfWeek('de', []), 1);
+  assert.equal(firstDayOfWeek('en', ['not a tag', 'en-GB']), 1);
+});
+
+test('words changed elsewhere between two sessions of a day are not counted as written', async () => {
+  const store = memoryWordStore();
+  const account = fakeAccount();
+  const time = clock('2026-11-26T09:00:00');
+  const morning = new DocumentWords({ key: 'cloud:d1', cloudId: 'd1' }, store, () => true, account.api, time.now);
+  await morning.ready();
+  morning.count(1000);
+  morning.count(1100); // 100 written
+  morning.close();
+  await new Promise((r) => setTimeout(r, 0));
+
+  // At noon an agent adds 2000 words to the file; the afternoon's session opens it with them.
+  time.set('2026-11-26T14:00:00');
+  const afternoon = new DocumentWords({ key: 'cloud:d1', cloudId: 'd1' }, store, () => true, account.api, time.now);
+  await afternoon.ready();
+  afternoon.count(3100);
+  assert.equal(writtenBetween(afternoon.history(), '2026-11-26', '2026-11-26'), 100, 'only the morning’s writing');
+  afternoon.count(3150);
+  // 100 in the morning and 50 now: the 2000 between are moved past.
+  assert.deepEqual(afternoon.history(), [{ day: '2026-11-26', words: 3150, start: 3000, shifted: true }]);
+  await afternoon.flush();
+  assert.deepEqual([...account.kept.get('d1')!.values()], [day('2026-11-26', 3150, 3000)], 'the account takes the moved start');
+  assert.deepEqual(afternoon.history(), [day('2026-11-26', 3150, 3000)], 'and it is not sent to replace it again');
+  afternoon.close();
+
+  // Opened again with nothing changed in between: nothing moves.
+  await new Promise((r) => setTimeout(r, 0));
+  const evening = new DocumentWords({ key: 'cloud:d1', cloudId: 'd1' }, store, () => true, account.api, time.now);
+  await evening.ready();
+  evening.count(3150);
+  assert.deepEqual(evening.history(), [day('2026-11-26', 3150, 3000)]);
+  evening.close();
+});
+
+test('words cut elsewhere between sessions are not counted either, and a count before the days arrive is settled once they do', async () => {
+  const account = fakeAccount();
+  await account.api.put('d1', [day('2026-11-26', 500, 400)]);
+  const time = clock('2026-11-26T15:00:00');
+  const words = new DocumentWords({ key: 'cloud:d1', cloudId: 'd1' }, memoryWordStore(), () => true, account.api, time.now);
+  // Counted before this device's and the account's days are in.
+  words.count(450);
+  words.count(470);
+  await words.ready();
+  await words.flush();
+  assert.deepEqual(words.history(), [day('2026-11-26', 470, 350)], '100 before, and 20 now');
+  assert.deepEqual([...account.kept.get('d1')!.values()], [day('2026-11-26', 470, 350)]);
+  words.close();
+});
+
+test('versions that could not be asked about are asked about the next time', async () => {
+  const store = memoryWordStore();
+  const account = fakeAccount();
+  const at = (t: string) => new Date(t).getTime();
+  account.versionWords.set(at('2026-11-20T18:00:00'), 140);
+  account.versionWords.set(at('2026-11-21T18:00:00'), 160);
+  account.unreachable.add(at('2026-11-21T18:00:00'));
+  const time = clock('2026-11-26T15:00:00');
+  const words = new DocumentWords({ key: 'cloud:d1', cloudId: 'd1' }, store, () => true, account.api, time.now);
+  assert.equal(await words.fillFromVersions(), 1);
+  assert.deepEqual(words.history(), [day('2026-11-20', 140)]);
+  assert.equal(store.records.get('cloud:d1')?.filled, false, 'not done with');
+  account.unreachable.clear();
+  assert.equal(await words.fillFromVersions(), 1, 'only the one it could not ask about');
+  assert.deepEqual(words.history(), [day('2026-11-20', 140), day('2026-11-21', 160)]);
+  assert.equal(await words.fillFromVersions(), 0, 'then done');
+  words.close();
+});
+
+test('refused by the account, then signed in again or moved: what was written goes to the account', async () => {
+  const account = fakeAccount({ refuse: 401 });
+  const time = clock('2026-11-26T10:00:00');
+  const words = new DocumentWords({ key: 'cloud:d1', cloudId: 'd1' }, memoryWordStore(), () => true, account.api, time.now);
+  await words.ready();
+  words.count(10);
+  words.count(20);
+  await words.flush();
+  assert.equal(account.puts.length, 0);
+  delete account.options.refuse;
+  words.retry();
+  await new Promise((r) => setTimeout(r, 0));
+  await words.flush();
+  assert.deepEqual([...account.kept.get('d1')!.values()], [day('2026-11-26', 20, 10)]);
+  words.close();
+
+  const other = fakeAccount({ refuse: 404 });
+  const moving = new DocumentWords({ key: 'cloud:d2', cloudId: 'd2' }, memoryWordStore(), () => true, other.api, time.now);
+  await moving.ready();
+  moving.count(5);
+  moving.count(8);
+  await moving.flush();
+  delete other.options.refuse;
+  await moving.moved({ key: 'cloud:d3', cloudId: 'd3' });
+  await moving.flush();
+  assert.deepEqual([...other.kept.get('d3')!.values()], [day('2026-11-26', 8, 5)]);
+  moving.close();
 });

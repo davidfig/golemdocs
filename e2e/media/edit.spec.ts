@@ -341,3 +341,32 @@ test('a microphone that isn’t allowed says so', async ({ app, page }) => {
   await expect(page.getByText('isn’t allowed to use the microphone')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Record', exact: true })).toBeEnabled();
 });
+
+test('what is recorded takes the place of what was selected when recording started, whatever is pressed meanwhile', async ({ app, page }) => {
+  await page.addInitScript(() => {
+    navigator.mediaDevices.getUserMedia = async () => {
+      const context = new AudioContext();
+      const out = context.createMediaStreamDestination();
+      const tone = context.createOscillator();
+      tone.connect(out);
+      tone.start();
+      return out.stream;
+    };
+  });
+  await edit(app, 'over.wav', 6);
+  const wave = page.getByRole('slider', { name: 'Waveform' });
+  await drag(app, 1 / 3, 2 / 3);
+  await expect(wave).toHaveAttribute('aria-valuenow', '2');
+  await page.keyboard.press('r');
+  await expect(page.getByRole('button', { name: 'Stop Recording' })).toBeVisible();
+  // None of these moves where it goes.
+  for (const key of ['End', 'Escape', 'Home', 'ArrowRight', 'Shift+End']) await page.keyboard.press(key);
+  await expect(wave).toHaveAttribute('aria-valuenow', '2');
+  await page.waitForTimeout(1500);
+  await page.keyboard.press('r');
+  await expect(page.getByRole('button', { name: 'Record', exact: true })).toBeVisible();
+  // The recording is selected where the two seconds were, and they are gone.
+  await expect(wave).toHaveAttribute('aria-valuenow', '2');
+  await expect.poll(async () => Number(await wave.getAttribute('aria-valuemax'))).toBeLessThanOrEqual(6);
+  await expect(wave).toHaveAttribute('aria-valuetext', /^2 seconds to \d seconds selected$/);
+});

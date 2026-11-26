@@ -64,9 +64,13 @@ export async function showSharedPage(el: HTMLElement, spec: { results: string; n
       const src = (m[1] ?? m[2] ?? '').trim();
       filled.set(src, kept?.embeds[src] ?? missing);
     }
-    // The owner's page, run as the owner wrote it, but with nothing of the reader's to read: the policy of an own page.
-    const policy = policyFor('own', false, pageAsks(html));
-    view.show({ name: spec.title, srcdoc: composePage(fillEmbeds(html, filled), pageCsp(policy), { path: spec.name, trust: 'own', scroll: keepScroll ? Math.round(view.scrollY) : 0 }), trust: 'own', scripts: true, asks: [], allowed: false, shared: true }, keepScroll);
+    // The owner's page, run as the owner wrote it, but with nothing of the reader's to read: the policy of an own page, without forms
+    // (on the site's address, a form could pose as its sign-in and post what is typed anywhere).
+    const policy = { ...policyFor('own', false, pageAsks(html)), forms: false };
+    const page = fillEmbeds(html, filled);
+    const csp = pageCsp(policy);
+    const scroll = keepScroll ? Math.round(view.scrollY) : 0;
+    view.show({ name: spec.title, compose: (token) => composePage(page, csp, { path: spec.name, trust: 'own', scroll, token }), trust: 'own', scripts: true, forms: false, asks: [], allowed: false, shared: true }, keepScroll);
   };
   show(spec.html, false);
   return {
@@ -74,6 +78,6 @@ export async function showSharedPage(el: HTMLElement, spec: { results: string; n
       kept = await results(spec.results);
       show(html, true);
     },
-    destroy: () => view.close(),
+    destroy: () => view.destroy(),
   };
 }

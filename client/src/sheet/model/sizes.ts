@@ -9,6 +9,8 @@ export class Sizes {
   private hiddenFlags: Uint8Array | null = null;
   /** Fenwick tree (1-based) of shown sizes; null while uniform. */
   private tree: Float64Array | null = null;
+  /** Goes up with every change of a size, so what was placed from them (a sheet's drawings) knows to be placed again. */
+  revision = 0;
 
   constructor(
     readonly count: number,
@@ -22,6 +24,7 @@ export class Sizes {
   /** Changes the default size (a sheet's `defaultRowHeight`, `defaultColWidth`). */
   setDefault(size: number): void {
     this.defaultSize = size;
+    this.revision++;
     if (this.tree) this.rebuild();
   }
 
@@ -121,6 +124,7 @@ export class Sizes {
       array.copyWithin(at + n, at, this.count - n);
       array.fill(array === this.own ? NaN : 0, at, Math.min(this.count, at + n));
     }
+    this.revision++;
     this.rebuild();
   }
 
@@ -132,6 +136,7 @@ export class Sizes {
       array.copyWithin(at, at + n);
       array.fill(array === this.own ? NaN : 0, this.count - n);
     }
+    this.revision++;
     this.rebuild();
   }
 
@@ -155,6 +160,7 @@ export class Sizes {
 
   private changed(i: number, before: number): void {
     const after = this.size(i);
+    if (after !== before) this.revision++;
     if (after === before && this.tree) return;
     if (!this.tree) {
       if (after !== before) this.rebuild();

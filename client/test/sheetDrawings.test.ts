@@ -112,3 +112,40 @@ test('drawings’ colours turn with the cells’: flipped under Dark Pages, two 
   assert.deepEqual(forced([250, 250, 250, 1]), [0, 0, 0, 1]);
   assert.deepEqual(forced([20, 40, 200, 1]), [255, 255, 0, 1]);
 });
+
+test('a picture deleted leaves its image out of the saved file; undone, even after the save, it comes back with it', async () => {
+  const { book, sheet, history } = await open();
+  assert.ok((await OpcPackage.read(await writeWorkbook(book))).has('xl/media/image1.png'));
+  history.apply(0, { kind: 'drawings', edits: [asIs(sheet)[1]] });
+  const without = await OpcPackage.read(await writeWorkbook(book));
+  assert.equal(without.has('xl/media/image1.png'), false, 'no relationship points at it any more');
+  history.undo();
+  const back = await OpcPackage.read(await writeWorkbook(book));
+  assert.ok(back.has('xl/media/image1.png'));
+  const rels = (await back.relationships('xl/drawings/drawing1.xml')).list.filter((r) => r.type.endsWith('/image'));
+  assert.deepEqual(rels.map((r) => r.target), ['../media/image1.png']);
+});
+
+test('the drawings’ version changes when a row they are placed by is resized or hidden, so the page places them again', async () => {
+  (globalThis as { self?: unknown }).self ??= globalThis;
+  const { info } = await import('../src/sheet/worker.ts');
+  const { book, history } = await open();
+  const version = () => info(book).sheets[0].drawings!.version;
+  const before = version();
+  assert.equal(version(), before, 'unchanged while nothing changes');
+  history.apply(0, { kind: 'rowHeight', rows: [2], size: 60 });
+  const resized = version();
+  assert.notEqual(resized, before);
+  history.apply(0, { kind: 'hideRows', rows: [3], hidden: true });
+  assert.notEqual(version(), resized);
+});
+
+test('a protected sheet refuses changes to its pictures and shapes', async () => {
+  const { sheet, history } = await open();
+  history.apply(0, { kind: 'protect', on: true, password: '' });
+  const edits = asIs(sheet);
+  edits[1] = { ...edits[1], box: { ...edits[1].box, x: edits[1].box.x + 50 } };
+  const before = sheet.drawings;
+  assert.equal(history.apply(0, { kind: 'drawings', edits }).message, 'sheetProtected');
+  assert.equal(sheet.drawings, before);
+});

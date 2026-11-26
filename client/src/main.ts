@@ -170,7 +170,7 @@ import { MediaViewer, spokenTime, type CaptionTrack } from './media/viewer.ts';
 import type { PageController, PageHost, PageResults } from './pages/controller.ts';
 import { openingView } from './pages/detect.ts';
 import { pageBar } from './pages/pageBar.ts';
-import { PageMemory } from './pages/trust.ts';
+import { PageMemory, readsAny } from './pages/trust.ts';
 import type { PageOrigin } from './pages/trust.ts';
 import { isMediaName, mediaMime, playsInPlace } from './media/mediaFiles.ts';
 import { formatClock, momentFragment, parseMoment, type MediaMoment } from './media/timecode.ts';
@@ -1745,12 +1745,12 @@ function documentEdited(): void {
 /** Saves now if there are unsaved edits (another document is opening, or the page is going away). */
 function saveIfEdited(): void {
   thumbnailQuiet.flush(); // the document may be about to go: its last save's thumbnail is drawn from what is on screen
+  // What is being recorded is part of the document (shared or not: it marks it edited now), and a lossy file's edits are kept here.
+  if (audioEditor?.recording) void audioEditor.finishRecording();
   if (current.shared) {
     if (current.shared.dirty) void uploadShared();
     return;
   }
-  // What is being recorded is part of the document, and a lossy file's edits are kept here.
-  if (audioEditor?.recording) void audioEditor.finishRecording();
   audioEditor?.flushDraft();
   if (current.unsavedSince) void saveInBrowser();
 }
@@ -1953,6 +1953,8 @@ async function connect(lookup: Promise<User | null> = currentUser()): Promise<vo
   account = signedIn && plan?.sync !== false ? signedIn : null;
   accountResolved = true;
   markAccountKnown();
+  // Signed in (again): the open document's word history goes to the account once more, if it was refused before.
+  if (account) docWords?.retry();
   loadLiveOwner();
   // Signed in but no sync (never subscribed, or it ended): what they made here stays in view as this browser's own.
   if (signedIn && !account) await releaseToGuest(signedIn.id).catch(() => {});
@@ -2799,6 +2801,8 @@ async function signOutQuietly(): Promise<boolean> {
   if (!user) return true;
   saveIfEdited();
   await saving;
+  // A lossy file's edits being written as a draft: once there, signing out says it would lose them, and removes them.
+  await audioEditor?.draftsWritten();
   uploads.backOnline();
   await flushUploads();
   // The same copies the Documents page lists (not those of documents already deleted from the account).
@@ -8572,11 +8576,25 @@ function pageHost(dialogs: PageDialogs): PageHost {
     async keepResults(key, results: PageResults) {
       const entry = library.entries.find((e) => e.key === key);
       const cloudId = entry?.cloud?.id ?? entry?.local?.cloudId;
-      if (!account || !cloudId || entry?.cloud?.role === 'viewer' || entry?.encrypted) return;
+      // Only the owner's results go to the page's viewers, and never what it read of an encrypted document: kept here, it would be
+      // plain text on the server, for anyone the page is shared with (docs/html-pages.md §5).
+      if (!account || !cloudId || (entry?.cloud?.role && entry.cloud.role !== 'owner') || entry?.encrypted) return;
+      const encryptedPaths = library.entries.filter((e) => e.encrypted && (e.local || e.cloud)).map((e) => vaultPath(e));
+      if (readsAny(results.read, encryptedPaths)) return;
       const body = JSON.stringify(results);
       if (keptPageResults.get(cloudId) === body) return;
       const response = await fetch(`/api/documents/${encodeURIComponent(cloudId)}/page`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body });
       if (response.ok) keptPageResults.set(cloudId, body);
+    },
+    async setOutside(key, outside) {
+      const entry = library.entries.find((e) => e.key === key);
+      const cloudId = entry?.cloud?.id ?? entry?.local?.cloudId;
+      if (!account || !cloudId || (entry?.cloud?.role && entry.cloud.role !== 'owner') || entry?.encrypted) return false;
+      const response = await fetch(`/api/documents/${encodeURIComponent(cloudId)}/outside`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ outside }) });
+      if (!response.ok) return false;
+      // What the account now says, until the catalogue is read again.
+      if (entry?.cloud) entry.cloud.byOther = outside;
+      return true;
     },
     status: (text) => setStatus(text),
     error: (text) => reportError(text),
@@ -8620,7 +8638,8 @@ function openPage(source: DocumentSource & { name: string }, options: OpenOption
   void (async () => {
     const bridge = desktopBridge();
     const inVault = !!bridge && !!entry && (await bridge.root().catch(() => null)) !== null;
-    const downloaded = inVault ? await bridge!.downloaded(path).catch(() => false) : false;
+    // Null when the shell can't tell (too old) or the question failed: counted as downloaded, so foreign until marked (trustOf).
+    const downloaded = inVault ? await bridge!.downloaded(path).catch(() => null) : false;
     if (!latest()) return;
     await pageView.open({ key, name, path, stored, origin: { role: options.shared?.role ?? entry?.cloud?.role, byOther: entry?.cloud?.byOther === true, imported: imported || (key ? pageView.memory.imported(key) : false), downloaded } });
     if (!latest() || current !== opening) return;
@@ -9106,6 +9125,17 @@ function writtenForFooter(): { period: 'today' | 'week' | 'month' | 'year'; word
 }
 
 onFooterWordPeriodChange(requestRender);
+
+/** A new day begins the status bar's words written today (and, some days, this week, month or year) with nothing typed to count. */
+function renderAtMidnight(): void {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+  window.setTimeout(() => {
+    if (docWords && footerWordPeriod() !== 'total') requestRender();
+    renderAtMidnight();
+  }, next.getTime() - now.getTime());
+}
+renderAtMidnight();
 
 /** Asks the worker for the counts, once the document has been still for a moment. */
 function refreshFooterSoon(): void {

@@ -99,7 +99,10 @@ export function refuses(book: Workbook, sheet: Worksheet, op: EditOp): boolean {
       return !allows(p, 'sort') || locked(op.range);
     case 'filter':
       return !allows(p, 'autoFilter');
+    case 'link':
+      return locked(op.range);
     case 'note':
+    case 'drawings':
     case 'insertChart':
     case 'chart':
     case 'insertSparklines':

@@ -25,6 +25,7 @@ import { Kind, MAX_COLUMNS, MAX_ROWS } from './model/column.ts';
 import { isWorksheet } from './model/workbook.ts';
 import type { Workbook } from './model/workbook.ts';
 import type { Worksheet } from './model/worksheet.ts';
+import type { Sizes } from './model/sizes.ts';
 import { displayText, editText } from './format/display.ts';
 import { look } from './format/styleChange.ts';
 import { fromFileFormula } from './formula/fileNames.ts';
@@ -63,13 +64,17 @@ let loading: Promise<unknown> | null = null;
 /** Settles once the workbook being opened can be shown; messages that come before then wait for it. */
 let ready: Promise<void> | null = null;
 
-/** A number for each list of a sheet's drawings: a new list (they are never changed in place) gets a new one. */
-const drawingVersions = new WeakMap<readonly SheetDrawing[], number>();
+/**
+ * A number for each sheet's drawings as placed: a new list (they are never changed in place) gets a new one, and so does a
+ * change of the row heights or column widths they are placed by (a resize, hiding, a filter), so the page places them again.
+ */
+const drawingVersions = new WeakMap<readonly SheetDrawing[], { sizes: string; version: number }>();
 let nextDrawingVersion = 1;
-const drawingsVersion = (list: readonly SheetDrawing[]): number => {
-  let v = drawingVersions.get(list);
-  if (v === undefined) drawingVersions.set(list, (v = nextDrawingVersion++));
-  return v;
+const drawingsVersion = (list: readonly SheetDrawing[], rows: Sizes, cols: Sizes): number => {
+  const sizes = `${rows.revision}:${cols.revision}`;
+  let known = drawingVersions.get(list);
+  if (known?.sizes !== sizes) drawingVersions.set(list, (known = { sizes, version: nextDrawingVersion++ }));
+  return known.version;
 };
 
 const post = (message: FromWorker, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(message, transfer);
@@ -111,7 +116,7 @@ export function info(b: Workbook): BookInfo {
         loaded: b.source?.parts[i]?.loaded ?? true,
         outline: sheet.rowOutline.size || sheet.colOutline.size ? { rows: [...sheet.rowOutline].slice(0, 200000).map(([i, o]): [number, number, boolean] => [i, o.level, o.collapsed]), cols: [...sheet.colOutline].map(([i, o]): [number, number, boolean] => [i, o.level, o.collapsed]) } : undefined,
         charts: sheet.charts.length || undefined,
-        drawings: sheet.drawings.length ? { count: sheet.drawings.length, version: drawingsVersion(sheet.drawings) } : undefined,
+        drawings: sheet.drawings.length ? { count: sheet.drawings.length, version: drawingsVersion(sheet.drawings, sheet.rowSizes, sheet.colSizes) } : undefined,
         sparklines: sheet.sparklines.some((g) => g.sparklines.length) || undefined,
         pivots: sheet.pivots.length ? sheet.pivots.map((p) => ({ name: p.name, range: { ...p.location, r0: Math.max(0, p.location.r0 - (p.pageFields.length ? p.pageFields.length + 1 : 0)) } })) : undefined,
         pivotButtons: sheet.pivots.length

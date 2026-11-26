@@ -2,7 +2,7 @@
 
 import workletUrl from './recorderWorklet.js?url&no-inline';
 import { resampler, type Stream } from './effects.ts';
-import { SoundWriter, type PageStore, type Sound } from './sound.ts';
+import { MemoryFull, SoundWriter, type PageStore, type Sound } from './sound.ts';
 
 export class Recorder {
   private readonly writer: SoundWriter;
@@ -30,7 +30,8 @@ export class Recorder {
         const channels = channelCount <= part.length && channelCount === 1 && part.length === 2 ? [part[0]!.map((v, i) => (v + part[1]![i]!) / 2)] : Array.from({ length: channelCount }, (_, c) => part[Math.min(c, part.length - 1)]!);
         this.level = channels[0]!.reduce((peak, v) => Math.max(peak, Math.abs(v)), this.level * 0.9);
         const out = this.converter ? this.converter.put(channels) : channels;
-        this.writing = this.writing.then(() => this.writer.append(out)).catch((e: unknown) => void (this.failed ??= e));
+        // Out of memory (with nowhere else to keep it): what was recorded is kept, and recording is stopped (see `full`).
+        this.writing = this.writing.then(() => (this.writer.full ? undefined : this.writer.append(out))).catch((e: unknown) => void (e instanceof MemoryFull || (this.failed ??= e)));
       }
       heard();
     };
@@ -67,6 +68,11 @@ export class Recorder {
 
   get frames(): number {
     return this.writer.length;
+  }
+
+  /** There is no memory for more: it should be stopped. */
+  get full(): boolean {
+    return this.writer.full;
   }
 
   private silence(): void {

@@ -129,7 +129,9 @@ export async function writeWorkbook(book: Workbook, options: WriteOptions = {}):
 
   if (book.dirty || (cellsChanged && recalculate)) writeWorkbookPart(book, recalculate && cellsChanged);
   await writeExternals(pkg, book.externals);
-  return pkg.write();
+  // Pictures deleted here leave their images: left out of the file when nothing points at them any more, but kept in the
+  // package, so an undo that brings a picture back (even after a save) still finds its image.
+  return pkg.write({ unreferencedUnder: 'xl/media/' });
 }
 
 /** The cell metadata Excel writes for dynamic arrays: entry 1 (cm="1") is a dynamic array. */

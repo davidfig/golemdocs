@@ -55,6 +55,17 @@ test('a later count of a day replaces it, and the day keeps the start it was fir
   assert.deepEqual(await days(doc.id), [{ day: '2026-11-26', words: 140, start: 90 }]);
 });
 
+test('a start moved past changes made elsewhere replaces the one kept, and is not sent back as moved', async () => {
+  const doc = await create();
+  await put(OWNER, doc.id, { days: [{ day: '2026-11-26', words: 1100, start: 1000 }] });
+  await put(OWNER, doc.id, { days: [{ day: '2026-11-26', words: 3150, start: 3000, shifted: true }] });
+  assert.deepEqual(await days(doc.id), [{ day: '2026-11-26', words: 3150, start: 3000 }]);
+  // Without a start there is nothing to move to; and filling in never moves one.
+  await put(OWNER, doc.id, { days: [{ day: '2026-11-26', words: 3160, shifted: true }] });
+  await put(OWNER, doc.id, { days: [{ day: '2026-11-26', words: 3170, start: 5, shifted: true }], fill: true });
+  assert.deepEqual(await days(doc.id), [{ day: '2026-11-26', words: 3160, start: 3000 }]);
+});
+
 test('filling in (from versions) never replaces a day already kept', async () => {
   const doc = await create();
   await put(OWNER, doc.id, { days: [{ day: '2026-11-26', words: 140, start: 90 }] });

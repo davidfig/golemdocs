@@ -102,30 +102,34 @@ async function start(): Promise<void> {
   }
   // An HTML page shows as the page it makes, with what its owner's app kept of what it read (sharedPage.ts, docs/html-pages.md §5).
   const pageHtml = await sharedPageHtml(new Uint8Array(bytes), name);
-  const page: SharedPage | null = pageHtml === null ? null : await showSharedPage(place, { results: `${api}/page`, name, title, html: pageHtml });
-  const viewer: Viewer | null = page ? null : mount(place, {
-    bytes,
-    name,
-    fontBase: '/fonts/',
-    ...siteTheme(),
-    locale,
-    title,
-    // The header shows the name; embedded, the bar does.
-    barTitle: embedded,
-    barEnd: mark ? [mark] : [],
-    // Embedded in another site's page the viewer stays compact, as in a mail client's pane.
-    statusBar: !embedded,
-    // Embedded too: the embed code's frame allows it (`allowfullscreen`, ui/shareDialog.ts).
-    fullScreen: true,
-    view: savedViewMode(),
-    waited,
-    onError: (message) => console.error(message),
-    onDownload: () => void download(),
-    // Printing opens the browser's dialog over the page: not in another site's.
-    onPrint: embedded ? undefined : () => void printShown(viewer!, name, (text) => header?.tell(text)),
-    // The page is the site's: a link opens in a tab of its own.
-    onLink: (url) => void window.open(url, '_blank', 'noopener,noreferrer'),
-  });
+  let page: SharedPage | null = pageHtml === null ? null : await showSharedPage(place, { results: `${api}/page`, name, title, html: pageHtml });
+  const mountViewer = (file: ArrayBuffer, waitedFor: boolean): Viewer => {
+    const shown: Viewer = mount(place, {
+      bytes: file,
+      name,
+      fontBase: '/fonts/',
+      ...siteTheme(),
+      locale,
+      title,
+      // The header shows the name; embedded, the bar does.
+      barTitle: embedded,
+      barEnd: mark ? [mark] : [],
+      // Embedded in another site's page the viewer stays compact, as in a mail client's pane.
+      statusBar: !embedded,
+      // Embedded too: the embed code's frame allows it (`allowfullscreen`, ui/shareDialog.ts).
+      fullScreen: true,
+      view: savedViewMode(),
+      waited: waitedFor,
+      onError: (message) => console.error(message),
+      onDownload: () => void download(),
+      // Printing opens the browser's dialog over the page: not in another site's.
+      onPrint: embedded ? undefined : () => void printShown(shown, name, (text) => header?.tell(text)),
+      // The page is the site's: a link opens in a tab of its own.
+      onLink: (url) => void window.open(url, '_blank', 'noopener,noreferrer'),
+    });
+    return shown;
+  };
+  let viewer: Viewer | null = page ? null : mountViewer(bytes, waited);
 
   let checking = false;
   let ended = false;
@@ -139,9 +143,19 @@ async function start(): Promise<void> {
         etag = response!.headers.get('etag');
         const newer = await response!.arrayBuffer();
         if (stored) stored = new Uint8Array(newer.slice(0));
-        const html = page ? await sharedPageHtml(new Uint8Array(newer), name) : null;
+        const html = await sharedPageHtml(new Uint8Array(newer), name);
         if (page && html !== null) await page.reload(html);
-        else viewer?.reload(newer);
+        else if (html !== null) {
+          // It became a page: shown as the page it makes from now on.
+          viewer?.destroy();
+          viewer = null;
+          page = await showSharedPage(place, { results: `${api}/page`, name, title, html });
+        } else if (page) {
+          // It is no page any more (its scripts and embeds were taken out): shown as a document.
+          page.destroy();
+          page = null;
+          viewer = mountViewer(newer, false);
+        } else viewer?.reload(newer);
       } else if (outcome === 'ended' || outcome === 'signedOut') {
         // Access is over: the document goes, pages, text and worker with it (not just hidden), and nothing more is asked.
         ended = true;

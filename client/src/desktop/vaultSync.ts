@@ -494,9 +494,9 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
       await attempt({ kind: 'moveFolder', ...move });
     }
   }
-  /** Where a path in the account is now, after the folder moves above. */
+  /** Where a path in the account (a document's, or a folder's) is now, after the folder moves above. */
   function follow(path: string): string {
-    const move = movedFolders.find((m) => path.startsWith(`${m.from}/`));
+    const move = movedFolders.find((m) => path === m.from || path.startsWith(`${m.from}/`));
     return move ? move.to + path.slice(move.from.length) : path;
   }
   // What the plan placed by the account's old paths (a document new there, one moved there) goes where its folder is now.
@@ -554,6 +554,9 @@ export async function syncVault(host: VaultHost, options: { allowMassDelete?: bo
   // Folders removed from the vault (deleted, or renamed: their files are in the new one by now) go from the account once empty there.
   // Only those the vault had at the last sync: with no memory of folders yet, nothing is removed. One that is not removed yet
   // (it still holds documents, say a held-back delete's, or the account could not be reached) is looked at again next time.
+  // The folders remembered from the last sync, where the folder moves above took them: a folder moved whole is not one removed
+  // from the vault and made in it, and an empty one deleted inside it while it moved is removed from the account, not brought back.
+  if (movedFolders.length && state.folders) state.folders = [...new Set(state.folders.map(follow))];
   const stillGone = new Set((state.folders ?? []).filter((path) => !onDisk.has(path)));
   // With the vault's folders listed, the two sides have the same folders, empty ones included (`mirrorFolders`).
   let mirrored: string[] | null = null;

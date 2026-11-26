@@ -101,3 +101,15 @@ test('a HYPERLINK formula goes to its first argument: a quoted address, or the c
   assert.equal(hyperlinkArgument('=SUM(A1:A3)'), null);
   assert.equal(hyperlinkArgument('HYPERLINK("https://example.com")'), null);
 });
+
+test('a protected sheet refuses a link on a locked cell, and takes one on an unlocked cell', () => {
+  const { sheet, history } = book();
+  history.apply(0, { kind: 'input', range: cell(0, 0), text: 'locked' });
+  history.apply(0, { kind: 'format', ranges: [cell(0, 1)], change: { locked: false } });
+  history.apply(0, { kind: 'protect', on: true, password: '' });
+  const link = { target: 'https://example.com' };
+  assert.equal(history.apply(0, { kind: 'link', range: cell(0, 0), link, text: 'changed' }).message, 'sheetProtected');
+  assert.equal(sheet.links.length, 0);
+  assert.equal(history.apply(0, { kind: 'link', range: cell(0, 1), link }).message, undefined);
+  assert.equal(sheet.links.length, 1);
+});

@@ -11,6 +11,11 @@ const BLOCKS = PAGE / BLOCK;
 
 /** The most that is kept in memory by all sounds together, before pages go to disk. */
 const MEMORY = 256 * 1024 * 1024;
+/**
+ * The most all sounds together may hold where there is no disk to put pages on (an encrypted document's, or a browser without
+ * locks): past it, making another sound is refused rather than running out of memory. As much as a file that opens decodes to.
+ */
+export const MEMORY_WITHOUT_STORE = 1.5 * 1024 * 1024 * 1024;
 /** Pages of one sound kept in memory after being read back from disk. */
 const CACHED = 12;
 
@@ -147,7 +152,14 @@ export function loudest(sound: Sound, from: number, length: number): number {
   return peak;
 }
 
-/** Makes a sound a stretch at a time. With a store, what doesn't fit in memory goes to disk. */
+/** A sound was refused: without a store, there is no memory left for it. */
+export class MemoryFull extends Error {
+  constructor() {
+    super(t('media.audio.noMemory'));
+  }
+}
+
+/** Makes a sound a stretch at a time. With a store, what doesn't fit in memory goes to disk; without one, past `MEMORY_WITHOUT_STORE`, `append` throws `MemoryFull`. */
 export class SoundWriter {
   readonly id = crypto.randomUUID();
   length = 0;
@@ -156,6 +168,8 @@ export class SoundWriter {
   private readonly pages: (Float32Array[] | null)[] = [];
   private readonly peaks: PagePeaks[][] = [];
   private kept = 0;
+  /** Without a store, memory ran out: what was written is kept, and no more is taken. */
+  full = false;
 
   constructor(
     readonly channelCount: number,
@@ -171,6 +185,7 @@ export class SoundWriter {
   /** Adds frames (copied): one array per channel, or one for every channel. */
   async append(channels: readonly Float32Array[], from = 0, to = channels[0]?.length ?? 0): Promise<void> {
     while (from < to) {
+      if (this.full) throw new MemoryFull();
       const n = Math.min(to - from, PAGE - this.filled);
       for (let c = 0; c < this.channelCount; c++) this.page[c]!.set(channels[Math.min(c, channels.length - 1)]!.subarray(from, from + n), this.filled);
       this.filled += n;
@@ -194,6 +209,7 @@ export class SoundWriter {
     } else {
       this.kept += bytes;
       this.pages.push(page);
+      if (!this.store && held + this.kept + PAGE * this.channelCount * 4 > MEMORY_WITHOUT_STORE) this.full = true;
     }
   }
 

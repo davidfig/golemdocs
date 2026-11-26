@@ -95,6 +95,7 @@ export const media: Catalog = {
   'media.audio.recording': 'Aufnahme läuft',
   'media.audio.recorded': '{time} aufgenommen',
   'media.audio.recordingFull': 'Aufnahme beendet: Die Datei ist so groß, wie Golem Docs sie aufbewahren kann (50 MB).',
+  'media.audio.noMemory': 'Dafür reicht der Speicher nicht. Versuchen Sie es mit einem kürzeren Abschnitt oder machen Sie eine Bearbeitung rückgängig, die einen langen erzeugt hat.',
   'media.audio.recordingTime': 'Aufnahme {time}',
   'media.audio.microphoneRefused': 'Golem Docs darf das Mikrofon nicht verwenden. Erlaube es in den Einstellungen des Browsers oder des Systems.',
   'media.audio.noMicrophone': 'Das Mikrofon kann nicht verwendet werden.',

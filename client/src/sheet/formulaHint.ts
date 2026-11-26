@@ -45,6 +45,8 @@ export class FormulaHint {
   private loading: Promise<void> | null = null;
   /** What was said last, so a screen reader hears it once each time the argument changes. */
   private said = '';
+  /** Goes up with every `hide`: an update waiting for the help is dropped once editing ended meanwhile. */
+  private generation = 0;
 
   constructor(private readonly locale: () => string) {
     document.body.append(this.el);
@@ -57,7 +59,10 @@ export class FormulaHint {
       this.loading ??= functionHelp(this.locale()).then((help) => {
         this.help = help;
       });
-      void this.loading.then(() => this.update(text, caret, at));
+      const generation = this.generation;
+      void this.loading.then(() => {
+        if (generation === this.generation) this.update(text, caret, at);
+      });
       return;
     }
     const entry = this.help[call.name];
@@ -79,6 +84,7 @@ export class FormulaHint {
   }
 
   hide(): void {
+    this.generation++;
     if (this.el.matches(':popover-open')) this.el.hidePopover?.();
     this.said = '';
   }

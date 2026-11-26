@@ -42,6 +42,8 @@ interface DocumentRow {
   created_by?: string | null;
   /** Who saved its file last, when that was not the owner (docs/html-pages.md §1). */
   saved_by?: string | null;
+  /** 1: bytes came from outside since the owner last marked it as theirs; 0: marked as theirs; null: neither (schema.ts, 14). */
+  outside?: number | null;
   /** 1 for an encrypted document (sealed.ts): the server keeps its file, name and versions sealed, and never reads them. */
   encrypted?: number | null;
   /** An encrypted document's item key, wrapped by the person's own key. */
@@ -61,7 +63,10 @@ export function describe(row: DocumentRow, role: Role = 'owner') {
     // Folders are the owner's own arrangement: nobody else sees where a document is kept.
     folderId: role === 'owner' ? (row.folder_id ?? null) : null,
     // For the owner: another account made it or saved it last, so an HTML page in it is not only theirs (docs/html-pages.md §1).
-    ...(role === 'owner' && (row.created_by || row.saved_by) ? { byOther: true } : {}),
+    // For the owner: something from outside put bytes in since they last said it was theirs, so an HTML page in it is not only theirs;
+    // or they said it was (docs/html-pages.md §1). Older rows without `outside` fall back to who made or saved it.
+    ...(role === 'owner' && (row.outside === 1 || (row.outside == null && (row.created_by || row.saved_by))) ? { byOther: true } : {}),
+    ...(role === 'owner' && row.outside === 0 ? { mine: true } : {}),
     ...(row.encrypted ? { encrypted: true, ...(role === 'owner' && row.wrapped_key ? { wrappedKey: row.wrapped_key } : {}) } : {}),
   };
 }
@@ -258,7 +263,7 @@ export interface DocumentRoute {
   collection: 'documents' | 'shared' | 'trash';
   /** The document, or `batch` for the batch upload; undefined for the collection itself. */
   id?: string;
-  sub?: 'thumbnail' | 'index' | 'shares' | 'versions' | 'link' | 'page' | 'words';
+  sub?: 'thumbnail' | 'index' | 'shares' | 'versions' | 'link' | 'page' | 'words' | 'outside';
   /** Whose share a DELETE /api/documents/:id/shares/:userId removes, or which version /api/documents/:id/versions/:version is. */
   granteeId?: string;
   /**
@@ -516,7 +521,7 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     let size = bytes.byteLength;
     if (delta) size = (await applyDelta(env, owner, docId, docxKey(owner, docId), bytes, null, { maxBytes: MAX_BYTES, ...(encrypted ? { sealedWith: key } : {}) })).manifest.size;
     else await env.FILES.put(docxKey(owner, docId), bytes, { httpMetadata: { contentType: DOCX } });
-    if (createdBy) await db.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [docId, name, size, docxKey(owner, docId), now, now, folderId, createdBy]);
+    if (createdBy) await db.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id, created_by, outside) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)', [docId, name, size, docxKey(owner, docId), now, now, folderId, createdBy]);
     else await db.run('INSERT INTO documents (id, name, size, r2_key, created_at, updated_at, folder_id, encrypted, wrapped_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [docId, name, size, docxKey(owner, docId), now, now, folderId, encrypted ? 1 : 0, key]);
     await registerOwner(env, docId, owner);
     if (createdBy) return json({ role: 'editor', id: docId, name, size, createdAt: now, updatedAt: now, thumbAt: null, folderId, createdByYou: true }, 201);
@@ -819,6 +824,8 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     }
     if (request.method === 'PUT' || request.method === 'DELETE') {
       requireWrite();
+      // What a page showed comes from the vault of whoever ran it: only the owner's goes out to the page's viewers (docs/html-pages.md).
+      if (role !== 'owner') throw new HttpError(403, 'only the owner keeps what a page showed');
       refuseEncrypted(row, 'page results');
       if (request.method === 'DELETE') {
         await env.FILES.delete(pageKey(ownerId, id));
@@ -835,6 +842,18 @@ export async function handleDocuments(request: Request, env: Env, userId: string
       return json({ ok: true });
     }
     throw new HttpError(405, 'method not allowed');
+  }
+
+  // PUT /api/documents/:id/outside {outside}: the owner's word on whether an HTML page in it is theirs (docs/html-pages.md §1). `true`:
+  // their app saw it come from outside (a download, an import); `false`: Mark as Mine. Only the owner may say so.
+  if (sub === 'outside') {
+    if (request.method !== 'PUT') throw new HttpError(405, 'method not allowed');
+    if (role !== 'owner') throw new HttpError(403, 'only the owner can mark a document as theirs');
+    const body = (await request.json().catch(() => null)) as { outside?: unknown } | null;
+    if (typeof body?.outside !== 'boolean') throw new HttpError(400, 'outside must be true or false');
+    const outside = body.outside ? 1 : 0;
+    await db.run('UPDATE documents SET outside = ? WHERE id = ?', [outside, id]);
+    return json(describe({ ...row, outside }, role));
   }
 
   // GET/PUT /api/documents/:id/thumbnail: a small image of the first page, made by the client.
@@ -957,8 +976,8 @@ export async function handleDocuments(request: Request, env: Env, userId: string
     // base it also has to be the version the save started from; and the row may be gone (deleted
     // meanwhile), which RETURNING tells apart from success.
     const updated = await db.run<{ updated_at: number }>(
-      `UPDATE documents SET name = ?, size = ?, encrypted = ?, wrapped_key = ?, saved_by = ?, thumb_at = ${encrypting !== null ? 'NULL' : 'thumb_at'}, updated_at = MAX(?, updated_at + 1) WHERE id = ?${base !== null ? ' AND updated_at = ?' : ''} RETURNING updated_at`,
-      [name, size, encrypted ? 1 : 0, key, userId === ownerId ? null : userId, Date.now(), id, ...(base !== null ? [row.updated_at] : [])],
+      `UPDATE documents SET name = ?, size = ?, encrypted = ?, wrapped_key = ?, saved_by = ?, outside = CASE WHEN ? THEN 1 ELSE outside END, thumb_at = ${encrypting !== null ? 'NULL' : 'thumb_at'}, updated_at = MAX(?, updated_at + 1) WHERE id = ?${base !== null ? ' AND updated_at = ?' : ''} RETURNING updated_at`,
+      [name, size, encrypted ? 1 : 0, key, userId === ownerId ? null : userId, userId === ownerId ? 0 : 1, Date.now(), id, ...(base !== null ? [row.updated_at] : [])],
     );
     if (!updated[0]) {
       if (base !== null && (await db.first('SELECT 1 FROM documents WHERE id = ?', [id]))) {

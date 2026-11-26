@@ -107,12 +107,17 @@ export async function getDraft(key: string): Promise<Draft | null> {
 /** Set while there are drafts, so that signing out needn't load the editor to know (see main.ts). */
 export const DRAFTS_FLAG = 'golem.audioDrafts';
 
-export async function putDraft(draft: Draft): Promise<void> {
+/** Says there are drafts: set before a draft's pages are written, so that signing out while they are still being written asks too. */
+export function markDrafts(): void {
   try {
     localStorage.setItem(DRAFTS_FLAG, '1');
   } catch {
     // signing out won't ask about it
   }
+}
+
+export async function putDraft(draft: Draft): Promise<void> {
+  markDrafts();
   await done((await store(DRAFTS, 'readwrite')).put(draft));
 }
 

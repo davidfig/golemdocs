@@ -247,7 +247,7 @@ const routes: ExportedHandler = {
       }
 
       // The rest are the user's folders (folders.ts) and documents (documents.ts).
-      const match = /^\/api\/(documents|shared|folders|trash)(?:\/([^/]+)(?:\/(thumbnail|index|shares|versions|link|page|restore|file|words)(?:\/([^/]+)(?:\/(restore|words))?)?)?)?$/.exec(path);
+      const match = /^\/api\/(documents|shared|folders|trash)(?:\/([^/]+)(?:\/(thumbnail|index|shares|versions|link|page|restore|file|words|outside)(?:\/([^/]+)(?:\/(restore|words))?)?)?)?$/.exec(path);
       if (!match) throw new HttpError(404, 'not found');
       const [, collection, id, sub0, granteeId, action0] = match;
       // `/api/trash/:id/restore` and `/api/trash/:id/file` have their action where the other collections have a sub-resource.

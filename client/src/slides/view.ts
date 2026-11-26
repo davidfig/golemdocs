@@ -31,7 +31,7 @@ import { colorContext, slideScene, type ShapeView, type SlideScene } from './sce
 import { backgroundFill, cNvPr, placeholderOf, xfrmOf, type Frame } from './shapes.ts';
 import { addSlide, changeLayout, deleteShapes, deleteSlides, duplicateShapes, duplicateSlide, isHidden, moveSlides, newPicture, newShape, newTable, reorder, resetToLayout, setHidden, setNotes, treeOf, type Order } from './edit.ts';
 import { Presenter } from './present.ts';
-import { backgroundOf, currentDesign, inheritedStyleOf, readOtherTheme, setBackground, setBackgroundEverywhere, setDarkPages, setThemeColors, setThemeFonts } from './design.ts';
+import { applyTheme, backgroundOf, currentDesign, inheritedStyleOf, readOtherTheme, setBackground, setBackgroundEverywhere } from './design.ts';
 import { showBackgroundDialog, showThemeDialog } from './designDialogs.ts';
 import { deckPdf, sceneWithData } from './export.ts';
 import { deckLines } from './outline.ts';
@@ -1244,15 +1244,10 @@ export class SlidesEditorView {
     this.focus();
     if (!answer || this.deck !== deck) return;
     const step = new Transaction(deck, t('slides.theme.title'));
-    const themes = new Set(deck.masters.map((m) => deck.themePart(m)).filter((p) => !!p));
-    for (const theme of themes) {
-      setThemeColors(theme!, answer.colors, step);
-      setThemeFonts(theme!, answer.fonts, step);
-    }
-    for (const m of deck.masters) if ((m.colorMap.bg1 === 'dk1') !== answer.dark) setDarkPages(m, answer.dark, step);
-    deck.refreshThemes();
+    const { themeMissing } = applyTheme(deck, master, answer, step);
     this.commit(step);
-    announce(t('slides.theme.done'));
+    if (themeMissing) this.deps.notify(t('slides.theme.noThemePart'));
+    else if (step.touched.size) announce(t('slides.theme.done'));
   }
 
   get isMasterView(): boolean {
@@ -1273,7 +1268,7 @@ export class SlidesEditorView {
       this.current = Math.max(0, slide ? this.pages.indexOf(slide.layout) : 0);
     } else {
       this.masterView = false;
-      this.current = Math.min(this.slideBeforeMaster, deck.slides.length - 1);
+      this.current = Math.max(0, Math.min(this.slideBeforeMaster, deck.slides.length - 1));
     }
     this.masterBar.hidden = !this.masterView;
     this.layout();

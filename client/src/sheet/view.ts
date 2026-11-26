@@ -112,6 +112,8 @@ const FORMULA_BAR = 30;
 const TABS_BAR = 30;
 /** How far out a sheet zooms (0.1%): far enough to see most of a big sheet whole, drawn from the overview. */
 const SHEET_MIN_ZOOM = 0.001;
+/** Pictures added in this session, counted so each one's name until it is saved (`media:...`) is its own. */
+let mediaCount = 0;
 
 const single = (row: number, col: number): CellRange => ({ r0: row, c0: col, r1: row, c1: col });
 const norm = (a: { row: number; col: number }, b: { row: number; col: number }): CellRange => ({ r0: Math.min(a.row, b.row), c0: Math.min(a.col, b.col), r1: Math.max(a.row, b.row), c1: Math.max(a.col, b.col) });
@@ -2106,7 +2108,8 @@ export class SheetEditorView {
     const at = this.activeCorner();
     const frame = layer.frameAt(at.x - box.left + w / 2 + 4, at.y - box.top + h / 2 + 4, w, h);
     // Named for the picture until it is saved, when it becomes the workbook's own image part.
-    const name = `media:${Date.now().toString(36)}.${ext}`;
+    // The time and a count: two pictures added in the same millisecond still get names of their own.
+    const name = `media:${Date.now().toString(36)}-${++mediaCount}.${ext}`;
     const element = kit.newPicture(kit.nextShapeId(layer.tree), 'rId1', frame, file.name.replace(/\.[^.]*$/, ''), '', 'xdr');
     layer.addImage(name, bitmap);
     layer.add(element, { rId1: { type: IMAGE_REL, target: name, external: false } }, [{ name, bytes: bytes.slice().buffer }]);

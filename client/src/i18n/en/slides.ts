@@ -79,6 +79,7 @@ export const slides = {
   'slides.theme.fromFile': "From Presentation…",
   'slides.theme.fromName': "{name} (from {file})",
   'slides.theme.noTheme': "{name} has no theme to use.",
+  'slides.theme.noThemePart': "This presentation has no theme, so its colors and fonts can't be changed.",
   'slides.theme.current': "Current: {name}",
   'slides.theme.fontPair': "{name}: {pair}",
   'slides.theme.fontPairPlain': "{major} / {minor}",

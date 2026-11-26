@@ -7,17 +7,20 @@ import { t } from '../i18n/index.ts';
 import { h } from '../ui/dom.ts';
 import { pageBar } from './pageBar.ts';
 import type { PageBar } from './pageBar.ts';
+import { frameMessage, newToken } from './compose.ts';
 import type { PageTrust } from './compose.ts';
 import type { PageView as PageViewKind } from './trust.ts';
 import './pages.css';
 
 export interface PageShow {
   name: string;
-  /** The frame's whole page (composePage). */
-  srcdoc: string;
+  /** The frame's whole page (composePage) for one load, given that load's secret (`RuntimeStart.token`). */
+  compose(token: string): string;
   trust: PageTrust;
   /** Its scripts run (an own page, or a foreign one that may read nothing). */
   scripts: boolean;
+  /** It may post forms (an own page in the app; never one from elsewhere or one shared with the viewer). */
+  forms: boolean;
   /** For a foreign page: what it asks to read, and whether that was allowed. */
   asks: string[];
   allowed: boolean;
@@ -36,18 +39,6 @@ export interface PageViewHooks {
   allowReads(): void;
 }
 
-interface FrameMessage {
-  golem: 1;
-  type: string;
-  id?: number;
-  op?: string;
-  args?: unknown[];
-  href?: string;
-  y?: number;
-}
-
-const isMessage = (data: unknown): data is FrameMessage => !!data && typeof data === 'object' && (data as { golem?: unknown }).golem === 1 && typeof (data as { type?: unknown }).type === 'string';
-
 export class PageViewer {
   readonly el: HTMLElement;
   private readonly bar: HTMLElement;
@@ -61,6 +52,8 @@ export class PageViewer {
   private shown: PageShow | null = null;
   /** Loads of the frame still expected from setting its page; any other is the page moving itself on. */
   private expectedLoads = 0;
+  /** The secret of the frame's current load; null while it is leaving (nothing is answered then). A new one each load. */
+  private token: string | null = null;
   /** Where the page was scrolled to, kept through a reload. */
   scrollY = 0;
   private readonly onMessage = (e: MessageEvent): void => this.message(e);
@@ -123,8 +116,8 @@ export class PageViewer {
     this.frame?.remove();
     // A new frame each time: whatever the last page left running ends with it.
     const frame = h('iframe', { class: 'wm-page-frame', attrs: { title: page.name, referrerpolicy: 'no-referrer' } });
-    // Scripts only where they may run; forms only with the network (the policy's form-action says where to).
-    frame.setAttribute('sandbox', page.scripts ? 'allow-scripts allow-forms' : '');
+    // Scripts only where they may run; forms only for an own page (the policy's form-action says where to).
+    frame.setAttribute('sandbox', [page.scripts ? 'allow-scripts' : '', page.scripts && page.forms ? 'allow-forms' : ''].filter(Boolean).join(' '));
     this.frame = frame;
     this.expectedLoads = 1;
     frame.addEventListener('load', () => {
@@ -133,11 +126,13 @@ export class PageViewer {
         this.expectedLoads--;
         return;
       }
-      // The page went somewhere else in its frame: it is shown again as it is, not wherever it went.
+      // The page went somewhere else in its frame: it is shown again as it is, not wherever it went, with a new secret.
       this.expectedLoads = 1;
-      frame.srcdoc = this.shown!.srcdoc;
+      this.token = newToken();
+      frame.srcdoc = this.shown!.compose(this.token);
     });
-    frame.srcdoc = page.srcdoc;
+    this.token = newToken();
+    frame.srcdoc = page.compose(this.token);
     this.el.append(frame);
     window.removeEventListener('message', this.onMessage);
     window.addEventListener('message', this.onMessage);
@@ -146,30 +141,41 @@ export class PageViewer {
   /** Sends the page what its embeds now show, and that something it read changed. */
   update(filled: Record<string, string>, detail: unknown): void {
     const target = this.frame?.contentWindow;
-    if (!target || !this.shown?.scripts) return;
-    target.postMessage({ golem: 1, type: 'embeds', filled }, '*');
-    target.postMessage({ golem: 1, type: 'changed', detail }, '*');
+    const token = this.token;
+    if (!target || !token || !this.shown?.scripts) return;
+    target.postMessage({ golem: 1, token, type: 'embeds', filled }, '*');
+    target.postMessage({ golem: 1, token, type: 'changed', detail }, '*');
   }
 
   focus(): void {
     this.el.focus();
   }
 
+  /** Hides the page (it may be shown again). */
   close(): void {
     window.removeEventListener('message', this.onMessage);
     this.frame?.remove();
     this.frame = null;
+    this.token = null;
     this.shown = null;
     this.el.hidden = true;
   }
 
+  /** Done with it for good: closed, and its element taken out of the page. */
+  destroy(): void {
+    this.close();
+    this.el.remove();
+  }
+
   private message(e: MessageEvent): void {
     const frame = this.frame;
-    // Only this frame's page, and only messages shaped like the runtime's: anything else is ignored.
-    if (!frame || e.source !== frame.contentWindow || !isMessage(e.data)) return;
-    const m = e.data;
+    // Only this frame, only messages shaped like the runtime's, and only with this load's secret: anything else is ignored.
+    const token = this.token;
+    const m = frame && e.source === frame.contentWindow ? frameMessage(e.data, token) : null;
+    if (!frame || !m) return;
+    // Answered only while the same load is there: not to whatever the frame went on to meanwhile.
     const reply = (body: { ok: true; value: unknown } | { ok: false; error: string }) => {
-      if (this.frame === frame) frame.contentWindow?.postMessage({ golem: 1, type: 'reply', id: m.id, ...body }, '*');
+      if (this.frame === frame && token && this.token === token) frame.contentWindow?.postMessage({ golem: 1, token, type: 'reply', id: m.id, ...body }, '*');
     };
     switch (m.type) {
       case 'request':
@@ -185,8 +191,14 @@ export class PageViewer {
       case 'scroll':
         if (typeof m.y === 'number' && Number.isFinite(m.y)) this.scrollY = Math.max(0, m.y);
         return;
+      case 'leaving':
+        // The page is going (it reloads, or moves on): nothing more is answered until it is shown again, with a new secret.
+        this.token = null;
+        return;
       case 'escape':
-        this.bar.querySelector<HTMLElement>('[tabindex="0"], button:not([hidden])')?.focus();
+        // Out of the page to its region (F6 and Tab go on from there); never onto one of the bar's buttons, where a page could
+        // otherwise put the next key the person presses.
+        this.el.focus();
         return;
     }
   }

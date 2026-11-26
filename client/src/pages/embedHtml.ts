@@ -7,7 +7,7 @@ import { documentToHtml } from '../formats/html.ts';
 import { sniffImage } from '../formats/images.ts';
 import type { ImageData } from '../formats/images.ts';
 import type { LiveResult } from '../live/result.ts';
-import { dataUrl, escapeHtml } from './compose.ts';
+import { dataUrl, decodeEntities, escapeHtml } from './compose.ts';
 
 const cellHtml = (text: string): string => escapeHtml(text).replace(/\r\n|\r|\n/g, '<br>');
 
@@ -44,6 +44,19 @@ export function scopeCss(css: string): string {
   return out.join('\n');
 }
 
+/**
+ * The document's links with any that would run code (`javascript:`, `vbscript:`, `data:`) made inert: the text may be anyone's (a
+ * note in a shared folder), and the page it is put in may be one whose scripts may read the vault. The writer escapes everything
+ * else (text, attributes, style names), and leaves out what it keeps verbatim from an HTML source (scripts, forms), so links are
+ * the one way in.
+ */
+export function safeLinks(html: string): string {
+  return html.replace(/(<a\b[^>]*?\shref=")([^"]*)"/gi, (whole, lead: string, href: string) => {
+    const plain = decodeEntities(href).replace(/[\u0000-\u0020]/g, '');
+    return /^(javascript|vbscript|data):/i.test(plain) ? `${lead}#"` : whole;
+  });
+}
+
 /** Part of a text document as HTML: its blocks written by the HTML writer, with the document's paragraph styles. */
 export function blocksHtml(result: Extract<LiveResult, { kind: 'blocks' }>): string {
   const doc = Object.assign(Object.create(Object.getPrototypeOf(result.from) as object) as WordDocument, result.from, { body: result.blocks });
@@ -56,7 +69,7 @@ export function blocksHtml(result: Extract<LiveResult, { kind: 'blocks' }>): str
   // The document's styles apply to the embed only, never to the page around it.
   const styles = [...page.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => `<style>${scopeCss(m[1])}</style>`).join('');
   const body = /<body\b[^>]*>([\s\S]*)<\/body>/i.exec(page)?.[1] ?? page;
-  return styles + body.trim();
+  return styles + safeLinks(body.trim());
 }
 
 /** What an embed shows for a result; `say` gives an error's words in the person's language. */
@@ -69,7 +82,9 @@ export function resultHtml(result: LiveResult, say: (result: Extract<LiveResult,
     case 'blocks':
       return blocksHtml(result);
     case 'picture': {
-      if (result.svg) return result.svg.replace(/^\s*<\?xml[^>]*>\s*/, '');
+      // A drawing's SVG is a picture, never markup in the page: an SVG from anyone (a download, a shared folder) could hold a script
+      // or an `onload` that would run with the page's rights. As an <img>, nothing in it runs.
+      if (result.svg) return `<img src="${dataUrl(new TextEncoder().encode(result.svg), 'image/svg+xml')}" width="${result.width}" height="${result.height}" alt="">`;
       const image = sniffImage(result.bytes);
       return `<img src="${dataUrl(result.bytes, image ? `image/${image.type}` : 'image/png')}" width="${result.width}" height="${result.height}" alt="">`;
     }

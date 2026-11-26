@@ -67,11 +67,14 @@ export function readLabels(text: string, rate: number): LabelFile {
       continue;
     }
     const m = TIMES.exec(lines[at]!)!;
-    const frame = (i: number): number => Math.round((Number(m[i] ?? 0) * 3600 + Number(m[i + 1]) * 60 + Number(m[i + 2]) + Number(m[i + 3]!.padEnd(3, '0')) / 1000) * rate);
+    const seconds = (i: number): number => Number(m[i] ?? 0) * 3600 + Number(m[i + 1]) * 60 + Number(m[i + 2]) + Number(m[i + 3]!.padEnd(3, '0')) / 1000;
+    const frame = (i: number): number => Math.round(seconds(i) * rate);
     const settings = m[9]!.trim();
+    // A cue no longer than a moment's (see writeLabels) is a moment.
+    const moment = seconds(5) - seconds(1) <= MOMENT_S + 1e-9;
     labels.push({
       from: frame(1),
-      to: Math.max(frame(1), frame(5)),
+      to: moment ? frame(1) : Math.max(frame(1), frame(5)),
       text: plain(lines.slice(at + 1).join('\n')),
       ...(settings && { settings }),
       ...(at === 1 && { id: lines[0]! }),

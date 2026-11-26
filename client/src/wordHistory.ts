@@ -4,7 +4,8 @@
 // A day is a row { day, words, start }: `words` is the count at the end of the day (the last one seen), `start` the count when
 // the day's writing began (the first one seen that day, by whichever device). What was written on a day is `words - start`;
 // a day with no start (filled in from a kept version) is measured from the day before it. So edits made elsewhere between two
-// sessions (in another app, by an agent in the vault) are not counted as written in the app, and a day's count is always the
+// sessions (in another app, by an agent in the vault) are not counted as written in the app (within a day too: a session that
+// finds the count moved since the day's last one moves the day's start past it, `shifted`), and a day's count is always the
 // app's own (the server counts versions with the same rules, docx/src/edit/wordCount.ts, but a document converted from
 // Markdown or HTML can count a little differently there).
 //
@@ -21,6 +22,11 @@ export interface WordDay {
   day: string;
   words: number;
   start: number | null;
+  /**
+   * Its start was moved past words changed elsewhere (in another app, by an agent) between two sessions of the day, and the
+   * account has not taken it yet: sent so that it replaces the start kept there (server/src/wordCounts.ts).
+   */
+  shifted?: boolean;
 }
 
 /** What the status bar's word count says: the document's words, or the words written in a span of time up to today. */
@@ -44,10 +50,34 @@ export function addDays(day: string, n: number): string {
   return dayOf(date);
 }
 
-/** The first day of the week where the person is: 1 Monday … 7 Sunday (Monday when the browser can't say). */
-export function firstDayOfWeek(locale = getLocale()): number {
+/** The browser's languages, which say where the person is (`en-GB`), when the app's language alone (`en`) does not. */
+const browserLanguages = (): readonly string[] => {
+  if (typeof navigator === 'undefined') return [];
+  return navigator.languages?.length ? navigator.languages : navigator.language ? [navigator.language] : [];
+};
+
+/**
+ * The first day of the week where the person is: 1 Monday … 7 Sunday (Monday when the browser can't say). A week starts by
+ * region, not language: English in Britain starts on Monday, in the United States on Sunday. So a language with no region
+ * (the app's `en`) takes the region of the browser's languages.
+ */
+export function firstDayOfWeek(locale = getLocale(), languages: readonly string[] = browserLanguages()): number {
   try {
-    const info = new Intl.Locale(locale) as Intl.Locale & { getWeekInfo?: () => { firstDay: number }; weekInfo?: { firstDay: number } };
+    let where = new Intl.Locale(locale);
+    if (!where.region) {
+      for (const language of languages) {
+        try {
+          const region = new Intl.Locale(language).region;
+          if (region) {
+            where = new Intl.Locale(locale, { region });
+            break;
+          }
+        } catch {
+          // Not a language tag: the next one.
+        }
+      }
+    }
+    const info = where as Intl.Locale & { getWeekInfo?: () => { firstDay: number }; weekInfo?: { firstDay: number } };
     const first = info.getWeekInfo?.().firstDay ?? info.weekInfo?.firstDay;
     return first && first >= 1 && first <= 7 ? first : 1;
   } catch {
@@ -115,7 +145,8 @@ export function mergeDays(account: readonly WordDay[], pending: readonly WordDay
   const byDay = new Map(account.map((d) => [d.day, d]));
   for (const mine of pending) {
     const theirs = byDay.get(mine.day);
-    byDay.set(mine.day, { ...mine, start: theirs?.start ?? mine.start });
+    // A start moved past changes made elsewhere replaces theirs (see `WordDay.shifted`).
+    byDay.set(mine.day, { ...mine, start: mine.shifted ? mine.start : (theirs?.start ?? mine.start) });
   }
   return [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1));
 }
@@ -163,6 +194,13 @@ export class DocumentWords {
   private last: { day: string; words: number } | null = null;
   /** The count when this session first saw today's text (whether or not anything has been written yet). */
   private sessionStart = new Map<string, number>();
+  /**
+   * Days as this device and the account had them before this session (`load`): a session's first count that differs from
+   * one's words found changes made elsewhere since (another app, an agent), which were not written here (`settle`).
+   */
+  private before = new Map<string, WordDay>();
+  /** Days this device had not sent when this session began: for those, its own copy is later than the account's. */
+  private unsentBefore = new Set<string>();
   private closed = false;
   /** The account won't keep it (no sync, read-only, an encrypted document): this device keeps it alone. */
   private refused = false;
@@ -204,18 +242,25 @@ export class DocumentWords {
   count(words: number): void {
     if (this.closed) return;
     const today = this.today();
-    if (!this.sessionStart.has(today)) {
+    const first = !this.sessionStart.has(today);
+    if (first) {
       // A new day: if the document was open at midnight, the day starts where the last one ended.
       this.sessionStart.set(today, this.last && this.last.day !== today ? this.last.words : words);
     }
     this.last = { day: today, words };
+    if (first && this.settle(today)) return;
     const row = this.days.get(today);
     const start = row?.start ?? this.sessionStart.get(today)!;
     // Nothing written today (just opened, or read): nothing to keep.
     if (!row && words === start) return;
     if (row && row.words === words && row.start === start) return;
-    this.days.set(today, { day: today, words, start });
-    this.pending.add(today);
+    this.days.set(today, { day: today, words, start, ...(row?.shifted && { shifted: true }) });
+    this.wrote(today);
+  }
+
+  /** A day's row changed here: kept on this device in a moment, and sent to the account a little after. */
+  private wrote(day: string): void {
+    this.pending.add(day);
     this.changed();
     clearTimeout(this.keepTimer);
     this.keepTimer = setTimeout(() => void this.keep(), KEEP_MS);
@@ -223,11 +268,42 @@ export class DocumentWords {
     this.sendTimer = setTimeout(() => void this.send(), SEND_MS);
   }
 
+  /**
+   * Moves a day's start past the words changed elsewhere between the end of its last session (`before`) and this session's
+   * first count, so they are not counted as written here: what was written before stays, and this session's writing is added.
+   * True when the row changed. Measured from what was known before this session only, so it can be done again as that comes in.
+   */
+  private settle(day: string): boolean {
+    const first = this.sessionStart.get(day);
+    const before = this.before.get(day);
+    // A day that began while the document was open starts where the last one ended: nothing came between.
+    if (first === undefined || !before || before.start === null || this.last === null) return false;
+    const start = before.start + (first - before.words);
+    const row = this.days.get(day) ?? before;
+    const words = this.last.day === day ? this.last.words : row.words;
+    if (row.start === start && row.words === words) return false;
+    // Sent to replace the account's start only when it differs from what was there (or was already to replace it).
+    const shifted = start !== before.start || !!before.shifted || !!row.shifted;
+    this.days.set(day, { day, words, start, ...(shifted && { shifted: true }) });
+    this.wrote(day);
+    return true;
+  }
+
+  /** The account will take it again (signed in again, or the document has a new place there). */
+  retry(): void {
+    if (this.closed || !this.refused) return;
+    this.refused = false;
+    // What was written while refused is still to send (`pending`): it goes with the account's days.
+    void this.fromAccount().then(() => this.send());
+  }
+
   /** The document was saved somewhere new (first saved here, or first uploaded): its history moves with it. */
   async moved(place: WordPlace): Promise<void> {
     if (place.key === this.place.key && place.cloudId === this.place.cloudId) return;
     const old = this.place.key;
     this.place = place;
+    // A new place in the account: what refused the old one says nothing of it.
+    this.refused = false;
     // Everything this device knew goes to the account under the new id.
     if (place.cloudId) for (const day of this.days.keys()) this.pending.add(day);
     await this.keep();
@@ -281,11 +357,18 @@ export class DocumentWords {
     }
     const wanted = [...lastOfDay].sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, MAX_FILLED_DAYS);
     const found: WordDay[] = [];
+    let failed = false;
     for (const [day, version] of wanted) {
       if (this.closed) return 0;
-      const words = await this.api.versionWords(id, version).catch(() => null);
+      const words = await this.api.versionWords(id, version).catch(() => {
+        failed = true; // offline, or the server could not answer: asked again next time
+        return null;
+      });
       if (words !== null) found.push({ day, words, start: null });
     }
+    // Only a version with no text the server can read is done with: one that could not be asked about is tried again (the days
+    // found now have rows by then, so only the rest are asked for).
+    if (failed) this.filled = false;
     if (!found.length) {
       await this.saveRecord();
       return 0;
@@ -302,13 +385,18 @@ export class DocumentWords {
     const record = key ? await this.store.get(key).catch(() => null) : null;
     if (record) {
       for (const d of record.days) {
+        this.before.set(d.day, d);
         // A count that came in while this was loading is later; the day's start, though, is the one kept.
         const mine = this.pending.has(d.day) ? this.days.get(d.day) : undefined;
-        this.days.set(d.day, mine ? { ...mine, start: d.start ?? mine.start } : d);
+        this.days.set(d.day, mine ? { ...mine, start: d.start ?? mine.start, ...(d.shifted && { shifted: true }) } : d);
       }
-      for (const day of record.pending) this.pending.add(day);
+      for (const day of record.pending) {
+        this.pending.add(day);
+        this.unsentBefore.add(day);
+      }
       this.filled = record.filled;
     }
+    this.settle(this.today());
     this.changed();
     await this.fromAccount();
   }
@@ -324,8 +412,11 @@ export class DocumentWords {
       return;
     }
     if (this.closed) return;
+    // What this device has not sent yet is later than the account's; the rest of the account's is what was there before.
+    for (const d of theirs) if (!this.unsentBefore.has(d.day)) this.before.set(d.day, d);
     const mine = [...this.pending].map((day) => this.days.get(day)!).filter(Boolean);
     this.days = new Map(mergeDays(theirs, mine).map((d) => [d.day, d]));
+    this.settle(this.today());
     await this.saveRecord();
     this.changed();
     if (this.pending.size) void this.send();
@@ -356,8 +447,13 @@ export class DocumentWords {
       this.refusedBy(e);
       return; // offline: sent with the next change, or the next time the document opens
     }
-    // What changed again while this was on its way stays to be sent.
-    for (const d of days.slice(-120)) if (this.days.get(d.day)?.words === d.words) this.pending.delete(d.day);
+    // What changed again while this was on its way stays to be sent. A start the account has taken needs no more replacing there.
+    for (const d of days.slice(-120)) {
+      const now = this.days.get(d.day);
+      if (now?.words !== d.words || now.start !== d.start) continue;
+      this.pending.delete(d.day);
+      if (now.shifted) this.days.set(d.day, { day: now.day, words: now.words, start: now.start });
+    }
     if (leaving) return;
     await this.saveRecord();
     if (this.pending.size > 0 && sent.length > 120) this.sendTimer = setTimeout(() => void this.send(), 0);

@@ -79,6 +79,7 @@ export const slides = {
   'slides.theme.fromFile': "从演示文稿…",
   'slides.theme.fromName': "{name}（来自 {file}）",
   'slides.theme.noTheme': "{name} 中没有可用的主题。",
+  'slides.theme.noThemePart': "此演示文稿没有主题，因此无法更改其颜色和字体。",
   'slides.theme.current': "当前：{name}",
   'slides.theme.fontPair': "{name}：{pair}",
   'slides.theme.fontPairPlain': "{major} / {minor}",

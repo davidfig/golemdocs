@@ -28,6 +28,9 @@ interface ListenerState {
   userId: string | null;
 }
 
+/** Messages that change nothing in the document: who is there, where they look, and the room's own bookkeeping. */
+const PASSIVE = new Set<string>(['hello', 'sync', 'presence', 'pointer', 'quiet', 'takeOver', 'released', 'flushed']);
+
 const isListener = (state: unknown): state is ListenerState => (state as ListenerState | null)?.listener === true;
 
 declare const WebSocketPair: new () => { 0: WebSocketHandle; 1: WebSocketHandle };
@@ -123,6 +126,8 @@ export class CloudFiles implements RoomFiles {
     private readonly doc: () => string,
     /** A new version went in (its `updated_at`). */
     private readonly written?: (updatedAt: number) => void,
+    /** Whether someone other than the owner changed the document since the last write (an HTML page in it is then not only theirs). */
+    private readonly outside?: { pending(): boolean; written(): void },
   ) {}
 
   private key = () => docxKey(this.owner(), this.doc());
@@ -146,7 +151,10 @@ export class CloudFiles implements RoomFiles {
     if (isChunked(before)) await deleteChunks(this.env, this.owner(), this.doc(), await retainedChunks(this.env, this.owner(), db, this.doc())).catch((error) => console.error('removing chunks failed', error));
     // Strictly increasing, like an upload's: clients tell versions apart by it.
     const updatedAt = Math.max(Date.now(), row.updated_at + 1);
-    await db.run('UPDATE documents SET size = ?, updated_at = ? WHERE id = ?', [bytes.byteLength, updatedAt, this.doc()]);
+    // Changes from someone other than the owner went into these bytes: the owner's app no longer treats a page in it as only theirs.
+    const outside = this.outside?.pending() ?? false;
+    await db.run(`UPDATE documents SET size = ?, updated_at = ?${outside ? ', outside = 1' : ''} WHERE id = ?`, [bytes.byteLength, updatedAt, this.doc()]);
+    if (outside) this.outside?.written();
     await prune(this.env, this.owner(), db, this.doc(), bytes.byteLength);
     this.written?.(updatedAt);
     return true;
@@ -178,7 +186,10 @@ export class Room {
       alarm: (at: number | null) => void (at === null ? ctx.storage.deleteAlarm() : ctx.storage.setAlarm(at)).catch((e) => console.error('room alarm', e)),
       log: (message: string, error?: unknown) => console.error(message, error),
     };
-    const files = new CloudFiles(env, () => this.store.get('owner') ?? '', () => this.store.get('doc') ?? '', (at) => this.tellListeners(at));
+    const files = new CloudFiles(env, () => this.store.get('owner') ?? '', () => this.store.get('doc') ?? '', (at) => this.tellListeners(at), {
+      pending: () => this.store.get('outside') === '1',
+      written: () => this.store.set('outside', '0'),
+    });
     this.core = new RoomCore(this.store, files, host, DEFAULT_TIMINGS);
     // After being evicted, the sockets that stayed open are still ours.
     for (const socket of ctx.getWebSockets()) {
@@ -338,6 +349,8 @@ export class Room {
     } catch {
       return peer.close(ROOM_CLOSE.badMessage, 'bad message');
     }
+    // An edit from someone other than the owner: kept (so it outlasts an eviction) until the next write records it.
+    if (!PASSIVE.has(message.type) && peer.state.userId && peer.state.userId !== this.store.get('owner') && this.store.get('outside') !== '1') this.store.set('outside', '1');
     try {
       await this.core.message(peer, message);
     } catch (error) {

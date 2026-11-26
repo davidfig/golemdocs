@@ -493,6 +493,29 @@ test('a document added in the account to a folder the vault just moved comes dow
   assert.equal(counts(await s.sync()), quiet);
 });
 
+test('an empty folder deleted inside a folder while it moved goes from the account, and is not made again in the vault', async () => {
+  const s = setup('u1', { folders: true });
+  s.add('Old/a.md', 'a');
+  s.folderFor(['Old', 'Empty']);
+  s.folderFor(['Old', 'Kept']);
+  await s.sync();
+  assert.deepEqual(s.folder.folders(), ['Old', 'Old/Empty', 'Old/Kept']);
+  const uid = s.folders.get('Old')!.uid;
+  // Old is renamed New, and Empty, inside it, is deleted.
+  s.folder.files.set('New/a.md', s.folder.files.get('Old/a.md')!);
+  s.folder.rmrf('Old');
+  await s.folder.disk.makeFolder!('New/Kept');
+  const report = await s.sync();
+  assert.deepEqual(report.errors, []);
+  assert.equal(report.foldersMoved, 1);
+  assert.equal(s.folders.get('New')?.uid, uid, 'the same folder');
+  assert.deepEqual(accountFolders(s), ['New', 'New/Kept']);
+  assert.deepEqual(s.folder.folders(), ['New', 'New/Kept'], 'Empty is not brought back');
+  assert.equal(counts(await s.sync()), quiet);
+  assert.deepEqual(s.folder.folders(), ['New', 'New/Kept']);
+  assert.deepEqual(accountFolders(s), ['New', 'New/Kept']);
+});
+
 test('a folder whose files went to different places is not moved whole: its documents are, one by one', async () => {
   const s = setup('u1', { folders: true });
   const a = s.add('Mixed/a.md', 'a');

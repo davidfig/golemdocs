@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
-import { bounce, fitChannels, listLength, listOf, loudest, render, replace, silence, slice, soundsOf, type EditList } from '../src/media/edit/editList.ts';
+import { bounce, fitChannels, listLength, listOf, loudest, render, replace, sameList, silence, slice, soundsOf, type EditList } from '../src/media/edit/editList.ts';
 import { chain, compressor, decibels, equalizer, fade, gain, noiseProfile, reduceNoise, resampler, speedAndPitch, tone, type Stream } from '../src/media/edit/effects.ts';
 import { Fft } from '../src/media/edit/fft.ts';
 import { FlacWriter, flacInfo, readFlac } from '../src/media/edit/flac.ts';
@@ -412,11 +412,40 @@ test('labels are read and written as WebVTT, with what else the file holds', () 
   const file = readLabels(text, 1000);
   assert.deepEqual(file.labels, [
     { from: 1500, to: 2000, text: 'Hello & <i>welcome</i>', settings: 'align:start', id: 'intro' },
-    { from: 3_600_000, to: 3_600_001, text: 'A moment' },
+    { from: 3_600_000, to: 3_600_000, text: 'A moment' },
   ]);
   assert.equal(writeLabels(file, 1000), text.replace('00:01.500', '00:00:01.500'));
   assert.deepEqual(readLabels('', 1000), { labels: [], head: 'WEBVTT' });
   const odd = writeLabels({ labels: [{ from: 5, to: 5, text: 'a --> b\n\n1 < 2' }], head: 'WEBVTT' }, 1000);
   assert.equal(readLabels(odd, 1000).labels[0]!.text, 'a --> b\n1 < 2');
   assert.equal(soundsOf(silence(5)).size, 0);
+});
+
+test('a moment is read back as a moment, wherever it is and at any rate', () => {
+  for (const rate of [8000, 44100, 48000, 96000]) {
+    for (const seconds of [0, 1.0005, 12.3456, 3599.9995, 7261.25]) {
+      const at = Math.round(seconds * rate);
+      const text = writeLabels({ labels: [{ from: at, to: at, text: 'here' }], head: 'WEBVTT' }, rate);
+      const [label] = readLabels(text, rate).labels;
+      assert.equal(label!.to, label!.from, `${rate} ${seconds}`);
+      assert.ok(Math.abs(label!.from - at) <= rate / 1000, `${rate} ${seconds}`);
+    }
+  }
+  // A stretch two milliseconds long stays one.
+  const [stretch] = readLabels('WEBVTT\n\n00:00:01.000 --> 00:00:01.002\nshort\n', 48000).labels;
+  assert.deepEqual([stretch!.from, stretch!.to], [48000, 48096]);
+});
+
+test('an edit undone, or a cut pasted back, is the same sound as before (nothing to save)', () => {
+  const edited = replace(list, { from: 1, to: 3 });
+  assert.ok(!sameList(edited, list));
+  // Pasted back where it was: other objects, the same pieces.
+  const back = replace(edited, { from: 1, to: 1 }, slice(list, { from: 1, to: 3 }));
+  assert.notEqual(back, list);
+  assert.ok(sameList(back, list));
+  // The same frames of another sound are not the same.
+  const copy = listOf(soundOf([Float32Array.from([1, 2, 3, 4, 5, 6])]));
+  assert.ok(!sameList(copy, list));
+  assert.ok(sameList(silence(4), replace(silence(4), { from: 1, to: 3 }, silence(2))));
+  assert.ok(!sameList(replace(list, { from: 2, to: 4 }, silence(2)), list));
 });

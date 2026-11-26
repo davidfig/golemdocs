@@ -151,6 +151,23 @@ test('files are dated in whole milliseconds, and a shell that cannot date them i
   assert.equal(old.length, 1);
 });
 
+test('whether a file was downloaded: the shell’s answer, null (unknown) from a shell too old to tell, and a real failure comes through', async () => {
+  const calls = recordingShell({ vault_downloaded: (args) => args?.path === 'page.html' });
+  const bridge = desktopBridge()!;
+  assert.equal(await bridge.downloaded('page.html'), true);
+  assert.equal(await bridge.downloaded('mine.html'), false);
+  assert.deepEqual(calls, [
+    { command: 'vault_downloaded', args: { path: 'page.html' } },
+    { command: 'vault_downloaded', args: { path: 'mine.html' } },
+  ]);
+
+  recordingShell({});
+  assert.equal(await desktopBridge()!.downloaded('page.html'), null, 'the previous shell has no such command: unknown');
+
+  recordingShell({ vault_downloaded: () => Promise.reject('path is outside the vault') });
+  await assert.rejects(desktopBridge()!.downloaded('../x.html'), /outside the vault/);
+});
+
 test('a real failure of the base64 commands comes through', async () => {
   recordingShell({ vault_write_base64: () => Promise.reject('No space left on device'), vault_write: () => 1 });
   await assert.rejects(desktopBridge()!.write('a.md', Uint8Array.of(1)), /No space left/);

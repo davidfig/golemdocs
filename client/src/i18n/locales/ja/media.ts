@@ -92,6 +92,7 @@ export const media: Catalog = {
   'media.audio.recording': '録音中',
   'media.audio.recorded': '{time}を録音しました',
   'media.audio.recordingFull': '録音を停止しました。ファイルが Golem Docs で保存できる上限の 50 MB に達しました。',
+  'media.audio.noMemory': 'メモリが足りません。もっと短い範囲で試すか、長い音声を作った編集を取り消してください。',
   'media.audio.recordingTime': '録音中 {time}',
   'media.audio.microphoneRefused': 'Golem Docs にはマイクの使用が許可されていません。ブラウザーまたはシステムの設定で許可してください。',
   'media.audio.noMicrophone': 'マイクを使用できません。',

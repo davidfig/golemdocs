@@ -14,9 +14,13 @@ import { backgroundFill, slideShapes } from '../src/slides/shapes.ts';
 import { colorContext, slideScene } from '../src/slides/scene.ts';
 import { ROUGH_MEASURE } from '../src/drawingml/textLayout.ts';
 import { placeholderOf } from '../src/slides/shapes.ts';
+import { cloneElement } from '@golemdocs/docx';
+import { readTheme } from '../src/drawingml/theme.ts';
+import { REL_TYPE } from '../src/slides/ooxml.ts';
 import {
   COLOR_SCHEMES,
   FONT_PAIRS,
+  applyTheme,
   backgroundOf,
   currentDesign,
   inheritedStyleOf,
@@ -30,7 +34,7 @@ import {
   setThemeColors,
   setThemeFonts,
 } from '../src/slides/design.ts';
-import type { PagePart } from '../src/slides/deck.ts';
+import type { MasterPart, PagePart } from '../src/slides/deck.ts';
 
 const viewsOf = (deck: Deck, page: PagePart) => slideScene(deck, page, { measure: ROUGH_MEASURE, family: (f) => f.family, number: 1 }).views;
 const childNames = (e: { children: unknown[] } | undefined) => kids(e as never).map((c) => c.name);
@@ -205,4 +209,87 @@ test("master view's pages: a master shows its own placeholders, a layout the mas
   // A layout placeholder inherits from the master's, so moving the master's title moves the layout's unless it has its own place.
   const scene = slideScene(deck, layout, { measure: ROUGH_MEASURE, family: (f) => f.family, number: 1, prompts: true });
   assert.ok(scene.views.length >= layoutShapes.length);
+});
+
+/** A second master with its own theme (a copy of the first's, renamed), so a deck has two designs. */
+async function addSecondMaster(deck: Deck): Promise<MasterPart> {
+  const first = deck.masters[0];
+  const themeXml = cloneElement(deck.themePart(first)!.xml);
+  at(themeXml, 'a:themeElements/a:clrScheme')!.attrs.name = 'Second';
+  const secondTheme = await deck.addPart('ppt/theme/theme9.xml', themeXml);
+  const part = await deck.addPart('ppt/slideMasters/slideMaster9.xml', cloneElement(first.xml));
+  part.rels.add(REL_TYPE.theme, secondTheme.name);
+  const master = Object.assign(part, { theme: readTheme(themeXml), colorMap: { ...first.colorMap } }) as MasterPart;
+  deck.masters.push(master);
+  return master;
+}
+
+test("Slide › Theme writes only to the page's master's theme, and only what changed", async () => {
+  const bytes = await blankDeck();
+  const deck = await Deck.read(bytes);
+  const first = deck.masters[0];
+  const second = await addSecondMaster(deck);
+  const secondBefore = JSON.stringify(deck.themePart(second)!.xml);
+  const now = currentDesign(first);
+  const green = COLOR_SCHEMES.find((s) => s.id === 'green')!;
+  const tx = new Transaction(deck, 'Theme');
+  const result = applyTheme(deck, first, { colors: green, fonts: { id: 'current', name: 'Office', major: now.major, minor: now.minor }, dark: false }, tx);
+  assert.equal(result.themeMissing, false);
+  assert.equal(first.theme.colors.accent1.r, 0x54);
+  // The other master keeps its own theme.
+  assert.equal(JSON.stringify(deck.themePart(second)!.xml), secondBefore);
+  // Fonts left alone keep their panose; the scheme's colours that did not change keep how they are written (system colours).
+  const theme = deck.themePart(first)!.xml;
+  assert.equal(at(theme, 'a:themeElements/a:fontScheme/a:majorFont/a:latin')!.attrs.panose, '02110004020202020204');
+  assert.ok(at(theme, 'a:themeElements/a:clrScheme/a:dk1/a:sysClr'));
+  assert.equal(at(theme, 'a:themeElements/a:clrScheme/a:accent1/a:srgbClr')!.attrs.val, '549E39');
+});
+
+test('Slide › Theme with only dark pages chosen writes the masters and leaves every theme as it was', async () => {
+  const bytes = await blankDeck();
+  const deck = await Deck.read(bytes);
+  const master = deck.masters[0];
+  const now = currentDesign(master);
+  const tx = new Transaction(deck, 'Theme');
+  applyTheme(deck, master, { colors: { id: 'current', name: 'Office', label: 'Current (Office Theme)', colors: now.colors }, fonts: { id: 'current', name: 'Office', label: 'Current (Office Theme)', major: now.major, minor: now.minor }, dark: true }, tx);
+  assert.equal(master.colorMap.bg1, 'dk1');
+  assert.deepEqual(await changedParts(bytes, await deck.write()), ['ppt/slideMasters/slideMaster1.xml']);
+});
+
+test('a master with no theme part is reported, not changed', async () => {
+  const deck = await Deck.read(await blankDeck());
+  const master = deck.masters[0];
+  const rel = master.rels.byType(REL_TYPE.theme)[0];
+  master.rels.remove(rel.id);
+  const tx = new Transaction(deck, 'Theme');
+  const result = applyTheme(deck, master, { colors: COLOR_SCHEMES.find((s) => s.id === 'green')!, fonts: FONT_PAIRS[0], dark: false }, tx);
+  assert.equal(result.themeMissing, true);
+  assert.equal(tx.touched.size, 0);
+});
+
+test("a scheme's display label is never written: the theme keeps the scheme's own name", async () => {
+  const deck = await Deck.read(await blankDeck());
+  const master = deck.masters[0];
+  const violet = COLOR_SCHEMES.find((s) => s.id === 'violet')!;
+  const tx = new Transaction(deck, 'Theme');
+  applyTheme(deck, master, { colors: { ...violet, id: 'file:Other', name: 'Violet', label: 'Violet (from Other.pptx)' }, fonts: { id: 'file:Other', name: 'Times', label: 'Times (from Other.pptx)', major: 'Times New Roman', minor: 'Arial' }, dark: false }, tx);
+  const theme = deck.themePart(master)!.xml;
+  assert.equal(at(theme, 'a:themeElements/a:clrScheme')!.attrs.name, 'Violet');
+  assert.equal(at(theme, 'a:themeElements/a:fontScheme')!.attrs.name, 'Times');
+  // A typeface that changed loses the old one's panose.
+  assert.deepEqual(at(theme, 'a:themeElements/a:fontScheme/a:majorFont/a:latin')!.attrs, { typeface: 'Times New Roman' });
+});
+
+test("a master's footer, date and slide number pass on their own list style, never the text style of every shape", async () => {
+  const deck = await Deck.read(await blankDeck());
+  const master = deck.masters[0];
+  const others = kids(treeOf(master), 'p:sp').filter((sp) => ['dt', 'ftr', 'sldNum'].includes(placeholderOf(sp)?.type ?? ''));
+  assert.ok(others.length > 0);
+  for (const sp of others) {
+    const list = inheritedStyleOf(master, sp, true)!;
+    assert.equal(list.name, 'a:lstStyle');
+    assert.equal(list, kid(kid(sp, 'p:txBody'), 'a:lstStyle'));
+  }
+  const body = kids(treeOf(master), 'p:sp').find((sp) => placeholderOf(sp)?.type === 'body')!;
+  assert.equal(inheritedStyleOf(master, body, true)!.name, 'p:bodyStyle');
 });

@@ -93,6 +93,7 @@ export const media = {
   'media.audio.recording': 'Recording',
   'media.audio.recorded': 'Recorded {time}',
   'media.audio.recordingFull': 'Recording stopped: the file is as big as Golem Docs can keep (50 MB).',
+  'media.audio.noMemory': 'There isn’t enough memory for that. Try it on a shorter stretch, or undo an edit that made a long one.',
   'media.audio.recordingTime': 'Recording {time}',
   'media.audio.microphoneRefused': 'Golem Docs isn’t allowed to use the microphone. Allow it in the browser’s or the system’s settings.',
   'media.audio.noMicrophone': 'The microphone can’t be used.',

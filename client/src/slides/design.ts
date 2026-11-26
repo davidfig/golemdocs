@@ -2,8 +2,9 @@
 // change is made on the XML of the part that holds it (a slide, layout or master; the theme part), recorded in a transaction,
 // and touches only the elements it is about, so everything else in those parts is written back as it came.
 
-import { el, type XmlElement } from '@golemdocs/docx';
+import { OpcPackage, el, parseXml, type XmlElement } from '@golemdocs/docx';
 import { hexOf } from '../drawingml/color.ts';
+import { readTheme } from '../drawingml/theme.ts';
 import { Deck, isLayoutPart, isMasterPart, isSlidePart, type DeckPart, type MasterPart, type PagePart } from './deck.ts';
 import type { Transaction } from './history.ts';
 import { REL_TYPE, at, findAll, insertBefore, kid, kids, replaceKid } from './ooxml.ts';
@@ -94,13 +95,19 @@ export type SchemeName = (typeof SCHEME_NAMES)[number];
 export interface ColorScheme {
   /** The id of a built-in scheme (its name is localized), or a scheme's own name (one read from another deck). */
   id: string;
+  /** The name written to the theme (`a:clrScheme name`). */
   name: string;
+  /** What the dialog shows, when not the name (never written to the file). */
+  label?: string;
   colors: Record<SchemeName, string>;
 }
 
 export interface FontPair {
   id: string;
+  /** The name written to the theme (`a:fontScheme name`). */
   name: string;
+  /** What the dialog shows, when not the name (never written to the file). */
+  label?: string;
   /** Headings and body text (Latin script). */
   major: string;
   minor: string;
@@ -141,16 +148,33 @@ export function currentDesign(master: MasterPart): { colors: Record<SchemeName, 
   return { colors, major: master.theme.major.latin, minor: master.theme.minor.latin, dark: master.colorMap.bg1 === 'dk1' };
 }
 
-/** Puts a colour scheme in a theme part (`a:clrScheme`): each colour becomes a plain RGB value. */
+/** Whether two colour schemes differ in any of their twelve colours. */
+export function colorsDiffer(a: Record<SchemeName, string>, b: Record<SchemeName, string>): boolean {
+  return SCHEME_NAMES.some((n) => hex(a[n] ?? '') !== hex(b[n] ?? ''));
+}
+
+/** The colour a scheme entry holds now (`srgbClr`, or a system colour's last value), as RRGGBB. */
+function heldColor(holder: XmlElement | undefined): string | null {
+  const v = kid(holder, 'a:srgbClr')?.attrs.val ?? kid(holder, 'a:sysClr')?.attrs.lastClr;
+  return v ? hex(v) : null;
+}
+
+/** Puts a colour scheme in a theme part (`a:clrScheme`): each colour that differs becomes a plain RGB value. */
 export function setThemeColors(themePart: DeckPart, colors: ColorScheme, tx: Transaction): void {
   const clrScheme = at(themePart.xml, 'a:themeElements/a:clrScheme');
   if (!clrScheme) return;
   tx.touch(themePart);
   clrScheme.attrs = { ...clrScheme.attrs, name: colors.name };
   for (const name of SCHEME_NAMES) {
-    const holder = kid(clrScheme, `a:${name}`) ?? el(`a:${name}`);
-    if (!kid(clrScheme, `a:${name}`)) insertBefore(clrScheme, holder, ['a:extLst', ...SCHEME_NAMES.slice(SCHEME_NAMES.indexOf(name) + 1).map((n) => `a:${n}`)]);
-    holder.children = [el('a:srgbClr', { val: hex(colors.colors[name]) })];
+    const value = hex(colors.colors[name]);
+    let holder = kid(clrScheme, `a:${name}`);
+    // A colour left as it was keeps how it is written (a system colour stays one).
+    if (holder && heldColor(holder) === value) continue;
+    if (!holder) {
+      holder = el(`a:${name}`);
+      insertBefore(clrScheme, holder, ['a:extLst', ...SCHEME_NAMES.slice(SCHEME_NAMES.indexOf(name) + 1).map((n) => `a:${n}`)]);
+    }
+    holder.children = [el('a:srgbClr', { val: value })];
   }
 }
 
@@ -164,6 +188,8 @@ export function setThemeFonts(themePart: DeckPart, fonts: FontPair, tx: Transact
     const font = kid(fontScheme, which);
     if (!font) continue;
     const latin = kid(font, 'a:latin');
+    // A typeface left as it was keeps its panose, pitch and charset.
+    if (latin?.attrs.typeface === typeface) continue;
     if (latin) latin.attrs = { typeface };
     else font.children.unshift(el('a:latin', { typeface }));
   }
@@ -181,10 +207,25 @@ export function setDarkPages(master: MasterPart, dark: boolean, tx: Transaction)
   map.attrs = { ...map.attrs, ...(dark ? DARK_MAP : LIGHT_MAP) };
 }
 
+/**
+ * Slide › Theme's answer, applied: the colours and fonts go to `master`'s theme only, and only those changed from what it
+ * has now (another master keeps its own theme, and what was left alone is written as it was); light or dark pages go to every
+ * master. `themeMissing`: colours or fonts were asked for but the master has no theme part to put them in.
+ */
+export function applyTheme(deck: Deck, master: MasterPart, answer: { colors: ColorScheme; fonts: FontPair; dark: boolean }, tx: Transaction): { themeMissing: boolean } {
+  const now = currentDesign(master);
+  const colorsChanged = colorsDiffer(answer.colors.colors, now.colors);
+  const fontsChanged = answer.fonts.major !== now.major || answer.fonts.minor !== now.minor;
+  const theme = deck.themePart(master);
+  if (theme && colorsChanged) setThemeColors(theme, answer.colors, tx);
+  if (theme && fontsChanged) setThemeFonts(theme, answer.fonts, tx);
+  for (const m of deck.masters) if ((m.colorMap.bg1 === 'dk1') !== answer.dark) setDarkPages(m, answer.dark, tx);
+  deck.refreshThemes();
+  return { themeMissing: (colorsChanged || fontsChanged) && !theme };
+}
+
 /** The colours and fonts of another deck's (or a theme file's) theme, to apply to this one. Null if it has none. */
 export async function readOtherTheme(bytes: Uint8Array, name: string): Promise<{ colors: ColorScheme; fonts: FontPair } | null> {
-  const { OpcPackage, parseXml } = await import('@golemdocs/docx');
-  const { readTheme } = await import('../drawingml/theme.ts');
   const pkg = await OpcPackage.read(bytes);
   // A theme file (.thmx) points at its theme from the package; a deck, from its first master.
   const root = await pkg.relationships('');
@@ -221,21 +262,22 @@ const isRelOf = (type: string, wanted: string): boolean => type === wanted || ty
 
 /**
  * The list style that a placeholder on a master or layout passes to every slide that inherits it: on a master, its text
- * style for that kind of placeholder (`p:titleStyle`, `p:bodyStyle`, `p:otherStyle`); on a layout, the placeholder's own list
- * style. Made when missing (with `create`). Undefined for a slide, or a shape that is not a placeholder.
+ * style for its title or body placeholders (`p:titleStyle`, `p:bodyStyle`); otherwise (a layout's placeholder, a master's
+ * date, footer or slide number) the placeholder's own list style. Made when missing (with `create`). Undefined for a slide, or a shape that is not a placeholder.
  */
 export function inheritedStyleOf(part: PagePart, element: XmlElement, create: boolean): XmlElement | undefined {
   if (isSlidePart(part)) return undefined;
   const ph = placeholderOf(element);
   if (!ph) return undefined;
-  if (isMasterPart(part)) {
-    const which = masterStyleFor(ph.type);
-    if (!which) return undefined;
+  // A master's title and body placeholders pass on its title and body styles. Its others (date, footer, slide number...)
+  // pass on their own list style, as a layout's do: `p:otherStyle` is the text of every shape and text box, not theirs.
+  const which = isMasterPart(part) ? masterStyleFor(ph.type) : null;
+  if (which === 'p:titleStyle' || which === 'p:bodyStyle') {
     const styles = kid(part.xml, 'p:txStyles') ?? (create ? addKid(part.xml, 'p:txStyles', ['p:extLst']) : undefined);
     if (!styles) return undefined;
     return kid(styles, which) ?? (create ? addKid(styles, which, which === 'p:titleStyle' ? ['p:bodyStyle', 'p:otherStyle', 'p:extLst'] : which === 'p:bodyStyle' ? ['p:otherStyle', 'p:extLst'] : ['p:extLst']) : undefined);
   }
-  if (!isLayoutPart(part)) return undefined;
+  if (!isLayoutPart(part) && !isMasterPart(part)) return undefined;
   const body = kid(element, 'p:txBody');
   if (!body) return undefined;
   return kid(body, 'a:lstStyle') ?? (create ? addKid(body, 'a:lstStyle', ['a:p']) : undefined);

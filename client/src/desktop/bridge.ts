@@ -60,9 +60,10 @@ export interface DesktopBridge {
   setTimes(path: string, times: { created?: number; modified?: number }): Promise<number | null>;
   /**
    * Whether the system marks a vault file as downloaded from the internet (macOS quarantine, Windows' Zone.Identifier): an HTML page so
-   * marked is from elsewhere (docs/html-pages.md §1). False in a shell too old to tell, and where the system has no such mark.
+   * marked is from elsewhere (docs/html-pages.md §1). False where the system has no such mark; null in a shell too old to tell, which
+   * page view counts as downloaded (a page from the vault folder is foreign until marked as the person's).
    */
-  downloaded(path: string): Promise<boolean>;
+  downloaded(path: string): Promise<boolean | null>;
   /** Adds a line to the app's log file (desktop/src-tauri/src/log.rs). Never rejects: a shell too old to keep a log, or a failed write, is skipped. */
   log?(line: string): Promise<void>;
 }
@@ -204,7 +205,7 @@ export function desktopBridge(): DesktopBridge | null {
       core.invoke<boolean>('vault_downloaded', { path }).then(
         (marked) => marked === true,
         (error: unknown) => {
-          if (isMissingCommand(error)) return false;
+          if (isMissingCommand(error)) return null;
           throw error;
         },
       ),

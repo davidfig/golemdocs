@@ -135,4 +135,9 @@ export const USER_MIGRATIONS: string[][] = [
        PRIMARY KEY (doc_id, day)
      )`,
   ],
+  // 14: whether an HTML page in the document is the owner's own (docs/html-pages.md §1). 1: something from outside put bytes in since the
+  // owner last said it was theirs (an editor saved it, a room took an editor's changes, it was made by another account, or the owner's
+  // app saw it come from a download or an import); 0: the owner marked it as theirs (Mark as Mine); null: neither, ever. Only the owner's
+  // Mark as Mine clears it; the owner's own saves leave it as it is.
+  [`ALTER TABLE documents ADD COLUMN outside INTEGER`, `UPDATE documents SET outside = 1 WHERE created_by IS NOT NULL OR saved_by IS NOT NULL`],
 ];

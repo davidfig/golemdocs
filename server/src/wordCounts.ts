@@ -40,6 +40,11 @@ export interface WordCountInput {
   day: string;
   words: number;
   start: number | null;
+  /**
+   * The start was moved by the session that sends it, past words changed elsewhere (in another app, by an agent) between two
+   * sessions of the same day, which were not written here: it replaces the day's start rather than giving way to it.
+   */
+  shifted?: boolean;
 }
 
 const count = (value: unknown): number | null => (Number.isInteger(value) && (value as number) >= 0 && (value as number) <= MAX_WORDS ? (value as number) : null);
@@ -51,11 +56,11 @@ export function readDays(body: unknown): { days: WordCountInput[]; fill: boolean
   if (o.days.length > MAX_DAYS_PER_REQUEST) throw new HttpError(400, `at most ${MAX_DAYS_PER_REQUEST} days at a time`);
   const days: WordCountInput[] = [];
   for (const d of o.days as unknown[]) {
-    const item = d as { day?: unknown; words?: unknown; start?: unknown } | null;
+    const item = d as { day?: unknown; words?: unknown; start?: unknown; shifted?: unknown } | null;
     const words = count(item?.words);
     const start = item?.start === undefined || item?.start === null ? null : count(item.start);
     if (typeof item?.day !== 'string' || !DAY.test(item.day) || words === null || (item?.start != null && start === null)) throw new HttpError(400, 'expected { day: "yyyy-mm-dd", words, start? }');
-    days.push({ day: item.day, words, start });
+    days.push({ day: item.day, words, start, ...(item.shifted === true && start !== null && { shifted: true }) });
   }
   return { days, fill: o.fill === true };
 }
@@ -67,20 +72,30 @@ export async function wordCountsOf(db: UserDb, docId: string): Promise<WordCount
 
 /**
  * Keeps days' counts. A day already kept takes the new count (it is the later one), and keeps the start it had: the start is
- * when the day's writing began, whichever device saw it first. With `fill` (counts of past versions) a day already kept is
- * left alone: a count from a version is never better than one seen while writing.
+ * when the day's writing began, whichever device saw it first, unless the new one is `shifted` (moved past words changed
+ * elsewhere), which takes its place. With `fill` (counts of past versions) a day already kept is left alone: a count from a
+ * version is never better than one seen while writing.
  */
 export async function keepWordCounts(db: UserDb, docId: string, days: readonly WordCountInput[], fill: boolean, now = Date.now()): Promise<void> {
   if (!days.length) return;
-  const conflict = fill ? 'DO NOTHING' : 'DO UPDATE SET words = excluded.words, start = COALESCE(word_counts.start, excluded.start), updated_at = excluded.updated_at';
+  const keepStart = 'DO UPDATE SET words = excluded.words, start = COALESCE(word_counts.start, excluded.start), updated_at = excluded.updated_at';
+  const newStart = 'DO UPDATE SET words = excluded.words, start = excluded.start, updated_at = excluded.updated_at';
+  const groups: [readonly WordCountInput[], string][] = fill
+    ? [[days, 'DO NOTHING']]
+    : [
+        [days.filter((d) => !d.shifted), keepStart],
+        [days.filter((d) => d.shifted), newStart],
+      ];
   // D1 allows 100 bound values in a statement, and each day takes five. `all`, not `run` or `runAll`: those drop the cached
   // document lists, which a word count has no business doing.
-  for (let i = 0; i < days.length; i += ROWS_PER_STATEMENT) {
-    const chunk = days.slice(i, i + ROWS_PER_STATEMENT);
-    await db.all(
-      `INSERT INTO word_counts (doc_id, day, words, start, updated_at) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?)').join(', ')} ON CONFLICT(doc_id, day) ${conflict}`,
-      chunk.flatMap((d) => [docId, d.day, d.words, d.start, now]),
-    );
+  for (const [group, conflict] of groups) {
+    for (let i = 0; i < group.length; i += ROWS_PER_STATEMENT) {
+      const chunk = group.slice(i, i + ROWS_PER_STATEMENT);
+      await db.all(
+        `INSERT INTO word_counts (doc_id, day, words, start, updated_at) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?)').join(', ')} ON CONFLICT(doc_id, day) ${conflict}`,
+        chunk.flatMap((d) => [docId, d.day, d.words, d.start, now]),
+      );
+    }
   }
   // Bounded: past the limit, the oldest days are forgotten.
   await db.all('DELETE FROM word_counts WHERE doc_id = ? AND day IN (SELECT day FROM word_counts WHERE doc_id = ? ORDER BY day DESC LIMIT -1 OFFSET ?)', [docId, docId, MAX_DAYS_PER_DOCUMENT]);
@@ -95,7 +110,8 @@ export async function deleteWordCounts(db: UserDb, docIds: readonly string[]): P
 }
 
 /**
- * GET answers { days: [{ day, words, start }] }, oldest first, for anyone who can open the document. PUT { days, fill? } keeps
+ * GET answers { days: [{ day, words, start }] }, oldest first, for anyone who can open the document. PUT { days: [{ day, words,
+ * start?, shifted? }], fill? } keeps
  * them, for anyone who can edit it (`canWrite`) while its owner has sync (`requireStorage` throws otherwise).
  */
 export async function handleWordCounts(request: Request, db: UserDb, docId: string, encrypted: boolean, canWrite: boolean, requireStorage: () => void): Promise<Response> {

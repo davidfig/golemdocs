@@ -74,6 +74,8 @@ export function askFunction(locale: string): Promise<string | null> {
     const finish = (name: string) => {
       chosen = name || null;
       dialog.close();
+      // Answered now, not on the dialog's close event (a later task): a key typed as it closes must come after the insert.
+      resolve(chosen);
     };
     ok.addEventListener('click', () => finish(list.value));
     cancel.addEventListener('click', () => dialog.close());

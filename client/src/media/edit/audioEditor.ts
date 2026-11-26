@@ -14,12 +14,12 @@ import { MEDIA_KEEP_LIMIT } from '../mediaFiles.ts';
 import { formatClock } from '../timecode.ts';
 import { spokenTime } from '../viewer.ts';
 import { CantEdit, decode, type Opened } from './decode.ts';
-import { bounce, clampRange, fitChannels, listLength, listOf, loudest, replace, silence, slice, soundsOf, walk, type EditList, type Range } from './editList.ts';
+import { bounce, clampRange, fitChannels, listLength, listOf, loudest, replace, sameList, silence, slice, soundsOf, walk, type EditList, type Range } from './editList.ts';
 import { askForm, type Field, type Value } from './effectDialogs.ts';
 import { WAVES, EQ_BANDS, compressor, decibels, equalizer, fade, gain, noiseProfile, reduceNoise, resampler, reverse, speedAndPitch, tone, type Stream, type Wave } from './effects.ts';
 import { recordingRoom } from './limits.ts';
 import { moveFrame, moveLabels, readLabels, sortLabels, writeLabels, type Change, type Label } from './labels.ts';
-import { digestOf, draftPages, draftsOf, getDraft, putDraft, removeDraft, windowPages } from './pageStore.ts';
+import { digestOf, draftPages, draftsOf, getDraft, markDrafts, putDraft, removeDraft, windowPages } from './pageStore.ts';
 import { columnExtremes } from './peaks.ts';
 import { ListPlayer } from './player.ts';
 import { Recorder } from './recorder.ts';
@@ -92,6 +92,8 @@ const LOUDNESS: readonly [number, number, number][] = [
 const CHANGES = new Set<AudioOp>(['delete', 'trim', 'silence', 'record', 'label', 'generateSilence', 'generateTone', 'gain', 'normalize', 'fadeIn', 'fadeOut', 'reverse', 'noise', 'equalizer', 'compressor', 'speed', 'save']);
 /** Commands that need something selected. */
 const NEEDS_SELECTION = new Set<AudioOp>(['delete', 'trim', 'silence', 'noiseSample', 'zoomSelection']);
+/** Keys that move the cursor or the selection, which stay put while recording. */
+const SELECTION_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', 'Escape', '[', ']']);
 
 /** Shows a progress card once the work has gone on a while; Cancel aborts it. */
 async function withProgress<T>(title: string, work: (signal: AbortSignal, progress: (fraction: number) => void) => Promise<T>): Promise<T> {
@@ -145,8 +147,9 @@ export class AudioEditor {
   private list: EditList;
   private labels: readonly Label[];
   private cues: ReadonlyMap<number, number | null>;
-  /** What is in the file: what the editor opened with, or was last saved. */
+  /** What is in the file: what the editor opened with, or was last saved (and, for a file saved in place, where its cue points are). */
   private saved: { list: EditList; labels: readonly Label[] };
+  private savedCues: ReadonlyMap<number, number | null>;
   /** The selected frames; with nothing selected, the cursor (both ends the same). `anchor` is the end that stays when it is extended. */
   private selection: Range = { from: 0, to: 0 };
   private anchor = 0;
@@ -163,8 +166,11 @@ export class AudioEditor {
   private busy = false;
   private abort: AbortController | null = null;
   private recorder: Recorder | null = null;
-  /** The most frames a recording may have. */
+  /** The most frames a recording may have, and what it takes the place of (as it was when recording started). */
   private room = 0;
+  private recordRange: Range | null = null;
+  /** What an effect's preview is playing. */
+  private previewSound: Sound | null = null;
   private stopping: Promise<void> | null = null;
   private readonly made = new Set<Sound>();
   private work: Promise<unknown> = Promise.resolve();
@@ -192,6 +198,7 @@ export class AudioEditor {
     if (options.encrypted && key) void removeDraft(key).catch(() => undefined);
     if (!still()) {
       opened.sound.release();
+      for (const sound of draft?.sounds ?? []) sound.release();
       return null;
     }
     const editor = new AudioEditor(parent, name, opened, bytes.length, at, store, digest, options, hooks);
@@ -220,6 +227,7 @@ export class AudioEditor {
     this.labelHead = file.head;
     this.cues = new Map((opened.source.kind === 'wav' ? cueFrames(opened.source.layout.extra) : []).map((frame) => [frame, frame]));
     this.saved = { list: this.list, labels: this.labels };
+    this.savedCues = this.cues;
     const cursor = Math.max(0, Math.min(this.length, Math.round(at * this.rate)));
     this.selection = options.selectAll ? { from: 0, to: this.length } : { from: cursor, to: cursor };
     this.anchor = this.selection.from;
@@ -326,14 +334,15 @@ export class AudioEditor {
     return !this.unchangeable && this.future.length > 0;
   }
 
-  /** Whether the sound is not what is in the file (or may not be: a save in place may have caught any step). */
+  /** Whether the sound is not what is in the file (an edit undone, or a cut pasted back, is), or a recording just stopped is still to go in. */
   get dirty(): boolean {
-    return this.lossy ? this.list !== this.saved.list : this.past.length > 0 || this.future.length > 0 || this.stopping !== null;
+    if (this.stopping !== null) return true;
+    return !sameList(this.list, this.saved.list) || (!this.lossy && !sameCues(this.cues, this.savedCues));
   }
 
   /** Whether there is something Save would write. */
   get unsaved(): boolean {
-    return this.lossy && this.list !== this.saved.list;
+    return this.lossy && !sameList(this.list, this.saved.list);
   }
 
   /** The waveform of the whole file, for its thumbnail (see waveform.ts). */
@@ -379,8 +388,15 @@ export class AudioEditor {
     if (this.closed) return;
     this.closed = true;
     this.abort?.abort();
+    // Left while recording (finishRecording wasn't asked for first): the microphone is let go of, and what it heard with it.
+    const recorder = this.recorder;
+    this.recorder = null;
+    this.recordRange = null;
+    if (recorder) void recorder.abandon().catch(() => undefined);
     this.player.close();
     this.previewer.close();
+    this.previewSound?.release();
+    this.previewSound = null;
     this.resize.disconnect();
     cancelAnimationFrame(this.frame);
     window.removeEventListener('beforeunload', this.beforeUnload);
@@ -407,7 +423,10 @@ export class AudioEditor {
       try {
         const bytes = this.lossy ? await withProgress(t('media.audio.saving', { name: this.name }), (_signal, progress) => write(progress)) : await write();
         this.written = { list: state.list, labels: state.labels };
-        if (!this.lossy) this.saved = this.written;
+        if (!this.lossy) {
+          this.saved = this.written;
+          this.savedCues = state.cues;
+        }
         return bytes;
       } catch (e) {
         throw e instanceof TooBig ? new Error(t('media.audio.tooBig')) : e;
@@ -440,6 +459,13 @@ export class AudioEditor {
     if (key && this.digest) this.drafting = this.drafting.then(() => removeDraft(key)).catch(() => undefined);
   }
 
+  /** Resolves once the draft being written, or waiting to be (with a recording just stopped), is on this device. */
+  async draftsWritten(): Promise<void> {
+    await this.stopping;
+    if (this.draftTimer) this.flushDraft();
+    await this.drafting;
+  }
+
   private keepDraft(): void {
     if (!this.lossy || !this.digest) return;
     clearTimeout(this.draftTimer);
@@ -456,6 +482,7 @@ export class AudioEditor {
     const { list, labels, base, digest, drafted } = this;
     this.drafting = this.drafting
       .then(async () => {
+        markDrafts();
         const pages = draftPages(key);
         const sounds = [...soundsOf(list)].filter((sound) => sound !== base);
         for (const sound of sounds) {
@@ -543,7 +570,8 @@ export class AudioEditor {
     this.select(selection.from, selection.to);
     if (this.fitted) this.fit();
     this.changed();
-    if (sound && !this.lossy) this.hooks.edited();
+    // An edit undone, back to what is in the file, leaves nothing to save.
+    if (sound && !this.lossy && this.dirty) this.hooks.edited();
     if (this.lossy) this.keepDraft();
     // A lossy file's labels go with the sound they fit: at once while it is as in the file, else when it is saved.
     if (named && !this.unsaved) this.writeLabels();
@@ -576,7 +604,13 @@ export class AudioEditor {
     this.put(step);
   }
 
+  /** While recording, the selection says where it goes, so it stays as it is. */
+  private get holdsSelection(): boolean {
+    return this.recordRange !== null;
+  }
+
   selectAll(): void {
+    if (this.holdsSelection) return;
     this.select(0, this.length);
     this.changed();
     announce(this.spoken());
@@ -617,13 +651,14 @@ export class AudioEditor {
       try {
         const made = await withProgress(title, (signal, progress) => make(AbortSignal.any([signal, abort.signal]), progress));
         this.busy = false;
-        if (this.closed || this.locked || this.list !== before) {
+        const unused = (): void => {
           for (const sound of soundsOf(made)) if (!this.made.has(sound) && !(clipboard && soundsOf(clipboard.list).has(sound))) sound.release();
-          return;
-        }
+        };
+        if (this.closed || this.locked || this.list !== before) return unused();
         const length = listLength(made);
         const { from } = range;
-        this.edit(replace(before, range, made), this.hasSelection || !kept ? { from, to: from + length } : this.selection, [{ range, length, kept, mirrored }]);
+        // Refused (too big to keep): what was made is let go of.
+        if (!this.edit(replace(before, range, made), this.hasSelection || !kept ? { from, to: from + length } : this.selection, [{ range, length, kept, mirrored }])) unused();
       } catch (e) {
         if (!aborted(e) && !this.closed) this.hooks.notify(e instanceof Error && e.message ? e.message : String(e));
       } finally {
@@ -785,6 +820,7 @@ export class AudioEditor {
         stop: () => this.previewer.stop(),
       },
     });
+    if (!this.closed) this.dropPreview();
     this.hooks.changed();
     if (this.closed || !values || values === 'remove') return this.refocus();
     await apply(make(values));
@@ -798,6 +834,7 @@ export class AudioEditor {
   /** Plays the start of the range through a stream, until it ends or is stopped. */
   private async preview(range: Range, stream: Stream): Promise<void> {
     this.player.stop();
+    this.dropPreview();
     const input = await bounce(this.list, { from: range.from, to: Math.min(range.to, range.from + PREVIEW_S * this.rate) }, this.channels);
     const parts = [stream.put(input), stream.end?.() ?? []].filter((part) => part[0]?.length);
     const length = parts.reduce((sum, part) => sum + part[0]!.length, 0);
@@ -809,6 +846,8 @@ export class AudioEditor {
       at += part[0]!.length;
     }
     const sound = soundOf(whole);
+    if (this.closed) return sound.release();
+    this.previewSound = sound;
     try {
       await new Promise<void>((resolve, reject) => {
         this.previewEnded = resolve;
@@ -817,6 +856,13 @@ export class AudioEditor {
     } finally {
       this.previewEnded = null;
     }
+  }
+
+  /** Stops the preview, and lets go of what it played. */
+  private dropPreview(): void {
+    this.previewer.stop();
+    this.previewSound?.release();
+    this.previewSound = null;
   }
 
   private async sampleNoise(): Promise<void> {
@@ -855,11 +901,13 @@ export class AudioEditor {
 
   /** Records the microphone in place of the selection, or at the cursor. */
   private async record(): Promise<void> {
-    const { from, to } = this.selection;
-    this.room = recordingRoom(this.opened, this.size, this.length - (to - from));
+    const range = this.selection;
+    this.room = recordingRoom(this.opened, this.size, this.length - (range.to - range.from));
     if (!this.room) return this.hooks.notify(t('media.audio.tooBig'));
     this.player.stop();
     this.busy = true;
+    // What is recorded goes where the selection was now, whatever is pressed meanwhile (which can't move it: see `key`).
+    this.recordRange = range;
     this.changed();
     try {
       const recorder = await Recorder.start(
@@ -872,6 +920,9 @@ export class AudioEditor {
           if (this.recorder && this.recorder.frames >= this.room) {
             void this.finishRecording();
             this.hooks.notify(t('media.audio.recordingFull'));
+          } else if (this.recorder?.full) {
+            void this.finishRecording();
+            this.hooks.notify(t('media.audio.noMemory'));
           }
         },
         () => void this.finishRecording(),
@@ -882,6 +933,7 @@ export class AudioEditor {
     } catch (e) {
       const name = (e as Error).name;
       this.busy = false;
+      this.recordRange = null;
       this.hooks.notify(name === 'NotAllowedError' || name === 'SecurityError' ? t('media.audio.microphoneRefused') : t('media.audio.noMicrophone'));
     }
     this.changed();
@@ -892,20 +944,20 @@ export class AudioEditor {
     const { recorder } = this;
     if (!recorder) return this.stopping ?? Promise.resolve();
     this.recorder = null;
+    const range = this.recordRange ?? this.selection;
+    this.recordRange = null;
     // Told of now, so that leaving the document saves it.
     if (!this.lossy) this.hooks.edited();
     const stopping = (async () => {
       try {
         const sound = await recorder.stop();
         this.busy = false;
-        if (!sound.length) return;
-        const { from } = this.selection;
-        const range = this.selection;
+        const { from } = range;
         const length = Math.min(sound.length, this.room);
-        if (this.edit(replace(this.list, range, slice(listOf(sound), { from: 0, to: length })), { from, to: from + length }, [{ range, length, kept: false }])) {
-          if (this.lossy && this.closed) this.flushDraft();
-          announce(t('media.audio.recorded', { time: spokenTime(Math.round(length / this.rate)) }));
-        }
+        // Nothing heard, or refused (read-only now, or too big): what was recorded is let go of.
+        if (!length || !this.edit(replace(this.list, range, slice(listOf(sound), { from: 0, to: length })), { from, to: from + length }, [{ range, length, kept: false }])) return sound.release();
+        if (this.lossy && this.closed) this.flushDraft();
+        announce(t('media.audio.recorded', { time: spokenTime(Math.round(length / this.rate)) }));
       } catch (e) {
         this.hooks.notify((e as Error).message);
       } finally {
@@ -979,10 +1031,12 @@ export class AudioEditor {
 
   /** Moves the cursor by seconds (the Playback menu's Back and Forward), or to the start. */
   jump(seconds: number): void {
+    if (this.holdsSelection) return;
     this.moveTo(this.selection.from + seconds * this.rate, false);
   }
 
   jumpToStart(): void {
+    if (this.holdsSelection) return;
     this.moveTo(0, false);
   }
 
@@ -1028,7 +1082,9 @@ export class AudioEditor {
     } else if (mod || e.altKey) return;
     else if (!onButton && (e.key === 'r' || e.key === 'R')) this.op('record');
     else if (!onButton && (e.key === 'l' || e.key === 'L')) this.op('label');
-    else if (e.key === '[' || e.key === ']') this.toLabel(e.key === ']' ? 1 : -1);
+    else if (this.holdsSelection && SELECTION_KEYS.has(e.key)) {
+      // Kept from the page too, which would scroll.
+    } else if (e.key === '[' || e.key === ']') this.toLabel(e.key === ']' ? 1 : -1);
     else {
       const step = Math.max(1, Math.round(this.perPixel * 10));
       switch (e.key) {
@@ -1085,12 +1141,12 @@ export class AudioEditor {
     this.focus();
     e.preventDefault();
     const label = this.labelAt(e);
-    if (label && !this.recorder) {
+    if (label && !this.holdsSelection) {
       this.select(label.from, label.to);
       this.changed();
       return announce(`${label.text}. ${this.spoken()}`);
     }
-    if (this.recorder) return;
+    if (this.holdsSelection) return;
     const at = (event: PointerEvent): number => this.start + (event.clientX - this.wave.getBoundingClientRect().left) * this.perPixel;
     const from = e.shiftKey ? this.anchor : Math.max(0, Math.min(this.length, Math.round(at(e))));
     const drag = (event: PointerEvent): void => {
@@ -1298,6 +1354,14 @@ export class AudioEditor {
       c.fillText(step < 1 ? this.clock(Math.round(i * step * this.rate)) : formatClock(i * step, this.duration), at + 4, RULER / 2);
     }
   }
+}
+
+/** Whether the cue points are where they were in both. */
+function sameCues(a: ReadonlyMap<number, number | null>, b: ReadonlyMap<number, number | null>): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const [was, is] of a) if (b.get(was) !== is) return false;
+  return true;
 }
 
 /** The frames of a WAV's cue points. */

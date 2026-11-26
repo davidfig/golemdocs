@@ -57,6 +57,9 @@ test('a dropped page shows as a page from elsewhere: its script runs but reads n
   await expect(region.getByRole('toolbar', { name: 'Page' })).toBeVisible();
   await expect(region.getByText('From elsewhere', { exact: true })).toBeVisible();
   await expect(frame(page).locator('body[data-ran="yes"]')).toHaveCount(1);
+  // It posts no forms: it could pose as the app's sign-in and send what is typed anywhere.
+  await expect(page.locator('iframe.wm-page-frame')).toHaveAttribute('sandbox', 'allow-scripts');
+  await expect(frame(page).locator('meta[http-equiv="Content-Security-Policy"]')).toHaveAttribute('content', /form-action 'none'/);
   await expect(frame(page).locator('#out')).toHaveText(/^refused: /);
   await expect(frame(page).locator('golem-embed .golem-embed-error')).toBeVisible();
   // Not even a file beside it: its script could send it away.
@@ -95,6 +98,8 @@ test('marked as mine, a page reads the vault, fills its embed, changes a note an
   await expect.poll(async () => (await state(page)).trust).toBe('own');
   await expect(page.getByRole('region', { name: 'Dashboard.html' }).getByText('Yours', { exact: true })).toBeVisible();
   await expect(frame(page).locator('#out')).toHaveText(/notes: .*Plan/);
+  // The person's own page may post forms.
+  await expect(page.locator('iframe.wm-page-frame')).toHaveAttribute('sandbox', 'allow-scripts allow-forms');
   await expect(frame(page).locator('golem-embed')).toContainText('Ship pages.');
   await expect(frame(page).locator('golem-embed')).not.toContainText('Nothing yet.');
   // Its stylesheet beside it is read from the vault.
@@ -104,6 +109,33 @@ test('marked as mine, a page reads the vault, fills its embed, changes a note an
   await expect(frame(page).locator('body[data-changed="yes"]')).toHaveCount(1, { timeout: 15_000 });
   await expect(frame(page).locator('golem-embed')).toContainText('Share pages.');
   expect((await state(page)).read).toContain('Plan.md');
+});
+
+test("a page's frame is answered only with its load's secret, and Escape leaves the page for its region", async ({ app, page }) => {
+  await app.goto('?doc=welcome');
+  await dropFile(page, text('Plan.md', PLAN));
+  await waitForOpen(app, 'Plan.md');
+  await dropFile(page, text('Dashboard.html', DASHBOARD));
+  await waitForPage(page, 'Dashboard.html');
+  await page.getByRole('button', { name: 'Mark as Mine…' }).click();
+  await page.getByRole('alertdialog', { name: 'Mark This Page as Yours?' }).getByRole('button', { name: 'Mark as Mine' }).click();
+  await expect(frame(page).locator('#out')).toHaveText(/notes: .*Plan/);
+  // What a document the frame moved on to would send: shaped like the runtime's, but without the secret. Nothing answers it.
+  const answered = await frame(page).locator('body').evaluate(
+    () =>
+      new Promise<boolean>((resolve) => {
+        addEventListener('message', (e) => {
+          if ((e.data as { id?: number })?.id === 999) resolve(true);
+        });
+        parent.postMessage({ golem: 1, type: 'request', id: 999, op: 'notes', args: [''] }, '*');
+        setTimeout(() => resolve(false), 1500);
+      }),
+  );
+  expect(answered).toBe(false);
+  // Escape in the page goes to its region, not onto one of the bar's buttons.
+  await frame(page).locator('h1').click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('region', { name: 'Dashboard.html' })).toBeFocused();
 });
 
 test('View › HTML as Document and Source show the same file, and HTML as Page goes back', async ({ app, page }) => {

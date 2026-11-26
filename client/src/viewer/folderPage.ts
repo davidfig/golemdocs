@@ -337,10 +337,12 @@ export async function showFolder(params: URLSearchParams, locale: string): Promi
         const newer = await file!.arrayBuffer();
         if (shown !== was) return;
         if (was.stored) was.stored = new Uint8Array(newer.slice(0));
-        if (page) {
-          const html = await sharedPageHtml(new Uint8Array(newer), fileName(was.path));
-          if (shown === was && html !== null) await page.reload(html);
-        } else viewer?.reload(newer);
+        const html = await sharedPageHtml(new Uint8Array(newer), fileName(was.path));
+        if (shown !== was) return;
+        if (page && html !== null) await page.reload(html);
+        // It became a page, or stopped being one: opened again, shown as what it is now.
+        else if (!!page !== (html !== null)) await go(was.path, '', false);
+        else viewer?.reload(newer);
       } else if (fileOutcome === 'signedOut') {
         end('signedOut');
       } else if (fileOutcome === 'ended') {

@@ -132,10 +132,10 @@ export interface ThemeAnswer {
 /** The colours a scheme is shown by: its text and background colours and its six accents. */
 const SHOWN: readonly SchemeName[] = ['dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'];
 
-const schemeName = (s: ColorScheme): string => (s.id.startsWith('file:') || s.id === 'current' ? s.name : t(`slides.theme.scheme.${s.id}` as MessageKey));
+const schemeName = (s: ColorScheme): string => (s.id.startsWith('file:') || s.id === 'current' ? (s.label ?? s.name) : t(`slides.theme.scheme.${s.id}` as MessageKey));
 const fontName = (f: FontPair): string => {
   const pair = f.major === f.minor ? f.major : t('slides.theme.fontPairPlain', { major: f.major, minor: f.minor });
-  return f.id.startsWith('file:') || f.id === 'current' ? t('slides.theme.fontPair', { name: f.name, pair }) : pair;
+  return f.id.startsWith('file:') || f.id === 'current' ? t('slides.theme.fontPair', { name: f.label ?? f.name, pair }) : pair;
 };
 
 /**
@@ -146,8 +146,8 @@ export function showThemeDialog(current: { colors: Record<SchemeName, string>; m
   const same = (a: Record<SchemeName, string>, b: Record<SchemeName, string>): boolean => SHOWN.every((n) => a[n].toUpperCase() === b[n].toUpperCase());
   const schemes: ColorScheme[] = [...COLOR_SCHEMES];
   const fonts: FontPair[] = [...FONT_PAIRS];
-  if (!schemes.some((s) => same(s.colors, current.colors))) schemes.unshift({ id: 'current', name: t('slides.theme.current', { name: current.name }), colors: current.colors });
-  if (!fonts.some((f) => f.major === current.major && f.minor === current.minor)) fonts.unshift({ id: 'current', name: t('slides.theme.current', { name: current.name }), major: current.major, minor: current.minor });
+  if (!schemes.some((s) => same(s.colors, current.colors))) schemes.unshift({ id: 'current', name: current.name, label: t('slides.theme.current', { name: current.name }), colors: current.colors });
+  if (!fonts.some((f) => f.major === current.major && f.minor === current.minor)) fonts.unshift({ id: 'current', name: current.name, label: t('slides.theme.current', { name: current.name }), major: current.major, minor: current.minor });
 
   const swatches = h('div', { class: 'wm-slides-swatches', attrs: { 'aria-hidden': 'true' } });
   const fontSample = h('div', { class: 'wm-fd-sample wm-slides-font-sample', attrs: { 'aria-hidden': 'true' } });
@@ -198,8 +198,8 @@ export function showThemeDialog(current: { colors: Record<SchemeName, string>; m
       if (message) message.textContent = t('slides.theme.noTheme', { name: file.name });
       return;
     }
-    schemes.unshift({ ...found.colors, name: t('slides.theme.fromName', { name: found.colors.name, file: file.name }) });
-    fonts.unshift({ ...found.fonts, name: t('slides.theme.fromName', { name: found.fonts.name, file: file.name }) });
+    schemes.unshift({ ...found.colors, label: t('slides.theme.fromName', { name: found.colors.name, file: file.name }) });
+    fonts.unshift({ ...found.fonts, label: t('slides.theme.fromName', { name: found.fonts.name, file: file.name }) });
     fill(0, 0);
     colorList.focus();
   });

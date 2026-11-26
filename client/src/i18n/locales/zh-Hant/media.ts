@@ -92,6 +92,7 @@ export const media: Catalog = {
   'media.audio.recording': '正在錄音',
   'media.audio.recorded': '已錄製 {time}',
   'media.audio.recordingFull': '錄製已停止：檔案已達到 Golem Docs 能保存的上限（50 MB）。',
+  'media.audio.noMemory': '記憶體不足。請嘗試較短的片段，或復原產生了長片段的編輯。',
   'media.audio.recordingTime': '正在錄音 {time}',
   'media.audio.microphoneRefused': '未允許 Golem Docs 使用麥克風。請在瀏覽器或系統設定中允許。',
   'media.audio.noMicrophone': '無法使用麥克風。',

@@ -92,6 +92,7 @@ export const media: Catalog = {
   'media.audio.recording': '녹음 중',
   'media.audio.recorded': '{time} 녹음됨',
   'media.audio.recordingFull': '녹음이 중지되었습니다. 파일이 Golem Docs에서 보관할 수 있는 최대 크기(50MB)에 도달했습니다.',
+  'media.audio.noMemory': '메모리가 부족합니다. 더 짧은 구간에서 해 보거나, 긴 구간을 만든 편집을 실행 취소하세요.',
   'media.audio.recordingTime': '녹음 중 {time}',
   'media.audio.microphoneRefused': 'Golem Docs에 마이크 사용이 허용되지 않았습니다. 브라우저 또는 시스템 설정에서 허용하세요.',
   'media.audio.noMicrophone': '마이크를 사용할 수 없습니다.',

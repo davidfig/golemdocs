@@ -49,6 +49,13 @@ function joined(pieces: readonly Piece[]): EditList {
   return out;
 }
 
+/** Whether two lists play the same pieces of the same sounds (an edit undone, or a cut pasted back where it was). */
+export function sameList(a: EditList, b: EditList): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((piece, i) => piece.sound === b[i]!.sound && piece.from === b[i]!.from && piece.length === b[i]!.length);
+}
+
 /** The part of the list in the range (what Copy takes). */
 export function slice(list: EditList, range: Range): EditList {
   const { from, to } = clampRange(list, range);

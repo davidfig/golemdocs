@@ -17,6 +17,11 @@ export interface PagePolicy {
   network: boolean;
   /** Hosts it may connect to (`fetch`, sockets), from its `golem-network` meta; only with `network`. */
   connect: readonly string[];
+  /**
+   * It may post forms (to https addresses, with `network`): an own page only. A page from elsewhere, or one shared with someone, could
+   * otherwise draw a sign-in form under the app's address and post what is typed anywhere.
+   */
+  forms: boolean;
 }
 
 /** What a page asks for in its metas. */
@@ -83,7 +88,7 @@ export function pageAsks(html: string): PageAsks {
  */
 export function policyFor(trust: PageTrust, mayRead: boolean, asks: PageAsks): PagePolicy {
   const open = trust === 'own' || !mayRead;
-  return { scripts: open, network: open, connect: open ? asks.network : [] };
+  return { scripts: open, network: open, connect: open ? asks.network : [], forms: trust === 'own' };
 }
 
 /**
@@ -106,7 +111,7 @@ export function pageCsp(policy: PagePolicy): string {
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'none'",
-    `form-action ${policy.network ? 'https:' : "'none'"}`,
+    `form-action ${policy.network && policy.forms ? 'https:' : "'none'"}`,
   ].join('; ');
 }
 
@@ -324,6 +329,35 @@ export interface RuntimeStart {
   trust: PageTrust;
   /** Where it was scrolled to (a reload keeps the place). */
   scroll: number;
+  /**
+   * This load's secret: every message the runtime sends carries it, and the app answers nothing without it, so a document the frame
+   * moves on to (a form posted elsewhere, a script setting `location`) can't ask for anything in the page's name.
+   */
+  token: string;
+}
+
+/** A new secret for one load of a page's frame. */
+export function newToken(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** A message from a page's frame, as its runtime sends them. */
+export interface FrameMessage {
+  golem: 1;
+  type: string;
+  token: string;
+  id?: number;
+  op?: string;
+  args?: unknown[];
+  href?: string;
+  y?: number;
+}
+
+/** A message from the frame, if it is shaped like the runtime's and carries this load's secret; null for anything else. */
+export function frameMessage(data: unknown, token: string | null): FrameMessage | null {
+  if (!token || !data || typeof data !== 'object') return null;
+  const m = data as Record<string, unknown>;
+  return m.golem === 1 && typeof m.type === 'string' && m.token === token ? (m as unknown as FrameMessage) : null;
 }
 
 /**
@@ -334,7 +368,7 @@ export interface RuntimeStart {
 export function runtimeSource(start: RuntimeStart): string {
   return `(() => {
 const START = ${JSON.stringify(start).replace(/</g, '\\u003c')};
-const post = (m) => parent.postMessage(Object.assign({ golem: 1 }, m), '*');
+const post = (m) => parent.postMessage(Object.assign({}, m, { golem: 1, token: START.token }), '*');
 const pending = new Map();
 const listeners = new Set();
 let next = 1;
@@ -346,7 +380,7 @@ const call = (op, args) => new Promise((resolve, reject) => {
 addEventListener('message', (e) => {
   if (e.source !== parent) return;
   const m = e.data;
-  if (!m || m.golem !== 1) return;
+  if (!m || m.golem !== 1 || m.token !== START.token) return;
   if (m.type === 'reply') {
     const p = pending.get(m.id);
     if (!p) return;
@@ -394,6 +428,7 @@ addEventListener('scroll', () => {
   scrollTimer = setTimeout(() => post({ type: 'scroll', y: scrollY }), 150);
 }, { passive: true });
 addEventListener('keydown', (e) => { if (e.key === 'Escape') post({ type: 'escape' }); });
+addEventListener('pagehide', () => post({ type: 'leaving' }));
 if (START.scroll) addEventListener('load', () => scrollTo(0, START.scroll));
 })();`;
 }

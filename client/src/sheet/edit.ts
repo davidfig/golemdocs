@@ -22,7 +22,7 @@ import { expandStructured, fromFileFormula, toFileFormula } from './formula/file
 import { shiftFormula } from './formula/shift.ts';
 import { deleteSheetText, moveCharts, moveSparklines, moveConditional, moveFilter, moveFormulas, moveLinks, moveNotes, moveScenarioCells, moveTables, moveValidations, moveNames, quoteSheet, renameText, rewriteAll } from './formula/move.ts';
 import type { Move } from './formula/move.ts';
-import { restyle } from './format/styleChange.ts';
+import { look, restyle } from './format/styleChange.ts';
 import { fillRange } from './fill.ts';
 import { pasteCells, pasteTarget } from './pasteCells.ts';
 import { applyFilter } from './filter.ts';
@@ -694,8 +694,18 @@ export function applyEdit(book: Workbook, index: number, op: EditOp): Changed {
         const parsed = parseInput(op.text, book.date1904);
         setValue(book, grid, op.range.r0, op.range.c0, parsed.kind === 'formula' ? { kind: Kind.String, text: op.text } : parsed);
       }
-      // A link looks like one (Excel's Hyperlink style: blue, underlined); taken away, the cells look as before it.
-      formatCells(book, sheet, [op.range], op.link ? { color: 0x0563c1, underline: true } : { color: null, underline: false });
+      // A link looks like one (Excel's Hyperlink style: blue, underlined); taken away, the cells that still look like a link
+      // lose that look, and those given a look of their own since keep it.
+      if (op.link) formatCells(book, sheet, [op.range], { color: 0x0563c1, underline: true });
+      else {
+        const linkLike: CellRange[] = [];
+        for (let r = op.range.r0; r <= Math.min(op.range.r1, op.range.r0 + 4096); r++)
+          for (let c = op.range.c0; c <= Math.min(op.range.c1, op.range.c0 + 256); c++) {
+            const seen = look(book.styles, book.theme, grid.columns[c]?.style(r) ?? 0);
+            if (seen.color === 0x0563c1 && seen.underline) linkLike.push({ r0: r, c0: c, r1: r, c1: c });
+          }
+        if (linkLike.length) formatCells(book, sheet, linkLike, { color: null, underline: false });
+      }
       grid.measure();
       return { ranges: [op.range] };
     }

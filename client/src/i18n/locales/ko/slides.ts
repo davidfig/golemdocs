@@ -79,6 +79,7 @@ export const slides = {
   'slides.theme.fromFile': "프레젠테이션에서…",
   'slides.theme.fromName': "{name} ({file}에서)",
   'slides.theme.noTheme': "{name}에는 사용할 수 있는 테마가 없습니다.",
+  'slides.theme.noThemePart': "이 프레젠테이션에는 테마가 없어 색과 글꼴을 변경할 수 없습니다.",
   'slides.theme.current': "현재: {name}",
   'slides.theme.fontPair': "{name}: {pair}",
   'slides.theme.fontPairPlain': "{major} / {minor}",

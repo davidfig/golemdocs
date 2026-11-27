@@ -9,6 +9,7 @@ import { announce } from './announce.ts';
 import { h, uniqueId } from './dom.ts';
 import { fileIcon } from './fileIcons.ts';
 import { ICONS, iconElement } from './icons.ts';
+import { IS_MAC } from './shortcuts.ts';
 import { optionGroup, pickOption } from './listBox.ts';
 import { tooltip } from './toolbar.ts';
 import { closePopup, openPopup, popupOpenFor } from './popup.ts';
@@ -91,7 +92,7 @@ export class CommandPalette {
   ) {
     const title = tooltip(t('chrome.palette.label'), registry.get('tools.commandPalette').shortcutText);
     this.el = h('button', { class: 'wm-palette-button', attrs: { type: 'button', title, 'aria-label': t('chrome.palette.label'), 'aria-haspopup': 'dialog', 'aria-expanded': 'false' } });
-    this.el.innerHTML = ICONS.commandPalette;
+    this.el.innerHTML = IS_MAC ? ICONS.commandPalette : ICONS.commandPaletteCtrl;
     this.el.addEventListener('mousedown', (e) => e.preventDefault()); // keep the document's focus
     this.el.addEventListener('click', () => this.toggle());
     registry.onExecute = (id) => {

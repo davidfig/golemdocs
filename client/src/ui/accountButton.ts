@@ -49,7 +49,7 @@ export class AccountButton {
   constructor(private readonly host: ChromeHost) {
     this.icon = h('span', { class: 'wm-account-icon' }, personIcon());
     this.signInText = h('span', { class: 'wm-account-text', text: t('dialogs.account.signIn') });
-    this.el = h('button', { class: 'wm-account', attrs: { type: 'button', 'data-signed-in': 'false' } }, this.icon, this.signInText);
+    this.el = h('button', { class: 'wm-account', attrs: { type: 'button', 'data-signed-in': 'false', hidden: '' } }, this.icon, this.signInText);
     this.label(false);
     // Crossing into or out of a phone's width swaps "Sign in" and the icon: say which it is now.
     matchMedia(NARROW).addEventListener('change', () => this.label(this.signedIn()));
@@ -66,6 +66,8 @@ export class AccountButton {
     this.status = status;
     this.subscription = subscription;
     setAttr(this.el, 'data-signed-in', this.signedIn() ? 'true' : 'false');
+    // Not yet known whether anyone is signed in (and nobody was last time): show nothing rather than a "Sign in" that may vanish.
+    this.el.hidden = status.checking === true && !this.signedIn();
     this.label(this.signedIn());
     const picture = this.signedIn() ? (status.picture ?? null) : null;
     if (picture !== this.shownPicture) {

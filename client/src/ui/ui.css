@@ -1730,19 +1730,29 @@ html.wm-titlebar .wm-corner {
   gap: 2px;
 }
 
-/* "DOCX ▾": the format, as a small chip that lists the formats to switch to (a choiceButton). */
+/* At rest the name sits against the right of its field, so the extension after it reads as part of the file's name. */
+.wm-doctitle-input:not(:focus) {
+  padding-right: 1px;
+  text-align: right;
+}
+
+.wm-doctitle-input:not([hidden]) + .wm-doctitle-meta {
+  margin-left: -5px;
+}
+
+/* ".docx ▾": the format, as the name's extension (greyed like the extensions in the file lists), boxed only on hover. It
+   lists the formats to switch to (a choiceButton). */
 .wm-dropdown.wm-format-chip {
   width: auto;
-  height: 17px;
+  height: 19px;
   margin: 0;
-  padding: 0 4px 0 5px;
+  padding: 0 4px;
   gap: 3px;
-  border-radius: 3px;
+  border-color: transparent;
+  border-radius: 4px;
   background: none;
-  color: var(--wm-text);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  color: var(--wm-muted);
+  font: inherit;
   transition: background var(--wm-ease), border-color var(--wm-ease), color var(--wm-ease);
 }
 
@@ -1865,6 +1875,10 @@ html.wm-titlebar .wm-corner {
   font: inherit;
   white-space: nowrap;
   cursor: default;
+}
+
+.wm-account[hidden] {
+  display: none;
 }
 
 .wm-account-icon {
@@ -3306,7 +3320,7 @@ html.wm-titlebar .wm-corner {
     height: 26px;
   }
   .wm-dropdown.wm-format-chip {
-    height: 22px;
+    height: 26px;
   }
   .wm-toolbar {
     min-height: 46px;

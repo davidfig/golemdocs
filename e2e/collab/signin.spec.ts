@@ -199,6 +199,51 @@ test.describe('the sign-in dialog', () => {
   });
 });
 
+test.describe('while the page asks who is signed in', () => {
+  /** Notes, every few milliseconds from the page's start, whether a "Sign in" button showed in the corner. */
+  const watchForSignIn = (page: Page) =>
+    page.addInitScript(() => {
+      const w = window as unknown as { sawSignIn: boolean };
+      w.sawSignIn = false;
+      setInterval(() => {
+        const button = document.querySelector<HTMLElement>('.wm-account');
+        if (button && !button.hidden && button.dataset.signedIn === 'false') w.sawSignIn = true;
+      }, 5);
+    });
+  /** The sign-in check answers late, as on a slow connection. */
+  const slowSignInCheck = (page: Page) =>
+    page.route('**/api/auth/me', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.continue();
+    });
+
+  test('someone signed in never sees "Sign in" flash: the corner shows them from the start', async ({ browser }) => {
+    const person = await newPerson(browser, 'flash');
+    await person.app.goto('?doc=welcome');
+    await expect(person.page.locator('.wm-account')).toHaveAttribute('data-signed-in', 'true');
+    await watchForSignIn(person.page);
+    await slowSignInCheck(person.page);
+    await person.page.reload();
+    await person.app.ready();
+    await expect(person.page.locator('.wm-account')).toHaveAttribute('data-signed-in', 'true');
+    await person.page.waitForResponse('**/api/auth/me');
+    await expect(person.page.locator('.wm-account')).toHaveAttribute('data-signed-in', 'true');
+    expect(await person.page.evaluate(() => (window as unknown as { sawSignIn: boolean }).sawSignIn)).toBe(false);
+    await person.context.close();
+  });
+
+  test('a guest sees nothing in the corner until the answer comes, then Sign in', async ({ browser }) => {
+    const { context, page, app } = await guest(browser);
+    await slowSignInCheck(page);
+    const answered = page.waitForResponse('**/api/auth/me');
+    await app.goto('?doc=welcome');
+    await expect(page.locator('.wm-account')).toBeHidden();
+    await answered;
+    await expect(signInButton(page)).toBeVisible();
+    await context.close();
+  });
+});
+
 test.describe('signed in', () => {
   test('the save indicator says saved to the cloud and the account menu names the account', async ({ browser }) => {
     const person = await newPerson(browser, 'acct');

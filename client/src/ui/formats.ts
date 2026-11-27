@@ -361,7 +361,7 @@ export const PICTURE_KINDS: readonly DocumentKind[] = ['png', 'jpeg', 'webp'];
 /** How the format list is grouped: the popular formats first, then the rest by type. */
 export const FORMAT_GROUPS: { id: 'popular' | 'documents' | 'web' | 'data' | 'markup' | 'images' | 'vector'; kinds: DocumentKind[] }[] = [
   { id: 'popular', kinds: ['docx', 'pdf', 'html', 'md', 'txt'] },
-  { id: 'documents', kinds: ['odt', 'rtf', 'pptx'] },
+  { id: 'documents', kinds: ['odt', 'rtf', 'pptx', 'eml', 'ipynb'] },
   { id: 'web', kinds: ['epub', 'fb2', 'mhtml'] },
   { id: 'data', kinds: ['xlsx', 'csv', 'tsv'] },
   { id: 'markup', kinds: ['tex', 'typst', 'adoc', 'rst', 'org', 'mediawiki', 'textile', 'docbook', 'jats', 'opml'] },

@@ -1914,6 +1914,8 @@ let signedIn: User | null = null;
  * (no subscription) they are saved in this browser, as for someone signed out.
  */
 let account: User | null = null;
+/** The server has said who is signed in (`signedIn` is known): until then the account button shows whoever was last. */
+let userKnown = false;
 /** `connect()` has finished once: until then `account` is only a guess (see `accountForFiles`). */
 let accountResolved = false;
 /**
@@ -1956,6 +1958,7 @@ const accountKnown = new Promise<void>((resolve) => (markAccountKnown = resolve)
  */
 async function connect(lookup: Promise<User | null> = currentUser()): Promise<void> {
   signedIn = await lookup;
+  userKnown = true;
   const plan = signedIn ? await fetchSubscription() : null;
   applyPlan(plan);
   // An unknown plan (offline) or a server that doesn't say leaves sync on; the server refuses what isn't allowed.
@@ -2167,7 +2170,10 @@ function syncStatus(): SyncStatus {
   if (!account) {
     const info = library.local.find((d) => d.id === current.localId);
     const local = { error: null, savedAt: info?.updatedAt ?? null, localSaved: current.unsavedSince === 0 && info !== undefined };
-    return signedIn ? { user: signedIn.email ?? signedIn.name ?? null, picture: signedIn.picture, document: 'unsubscribed', ...local } : { user: null, document: 'guest', ...local };
+    // Before the server answers, whoever was signed in last time, so a signed-in person doesn't first see "Sign in".
+    const who = userKnown ? signedIn : remembered();
+    const checking = userKnown ? {} : { checking: true };
+    return who ? { user: who.email ?? who.name ?? null, picture: who.picture, document: 'unsubscribed', ...local, ...checking } : { user: null, document: 'guest', ...local, ...checking };
   }
   const user = account.email ?? account.name ?? null;
   const id = current.localId;
@@ -9591,7 +9597,9 @@ window.addEventListener('popstate', () => {
   // rooms) waits for their plan, in connect().
   void accountLookup.then((user) => {
     signedIn = user;
+    userKnown = true;
     chrome.accountChanged();
+    showSync();
   });
   firstConnect = connect(accountLookup);
   void sweepJournals().catch(() => {});

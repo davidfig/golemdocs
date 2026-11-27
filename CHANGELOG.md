@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- File › Convert To and the format list listed Email Message and Jupyter Notebook under a second Popular heading at the end; they are now with the other documents.
 - In the desktop app, when Golem Docs is updated while it is open, the vault folder no longer stops syncing with “the convert worker failed”: it says to reload, and the Reload note appears.
 
 ## 0.50.0 - 2026-11-27

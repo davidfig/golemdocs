@@ -462,7 +462,7 @@ export class Chrome {
         checked: () => currentAppearance() === 'auto',
       },
     );
-    r.add({ id: 'tools.commandPalette', label: t('chrome.palette.label'), icon: 'commandPalette', shortcut: 'Mod+Shift+P', run: () => this.palette.toggle(), takesKeyboard: true });
+    r.add({ id: 'tools.commandPalette', label: t('chrome.palette.label'), icon: IS_MAC ? 'commandPalette' : 'commandPaletteCtrl', shortcut: 'Mod+Shift+P', run: () => this.palette.toggle(), takesKeyboard: true });
     r.add({ id: 'view.customizeToolbars', label: t('chrome.view.customizeToolbars'), run: () => this.customize() });
 
     // Insert
@@ -1950,7 +1950,7 @@ export class Chrome {
   // --- Format selector ---------------------------------------------------------------------
 
   /**
-   * The document's format, as a chip after its name ("DOCX ▾") that lists the formats to switch to (Action 'convert'), and the save
+   * The document's format, as its extension after its name (".docx ▾") that lists the formats to switch to (Action 'convert'), and the save
    * indicator: both say something about the open document, so they sit beside its name (DocumentTitle), not in the corner.
    */
   private buildDocumentMeta(): HTMLElement {
@@ -1969,7 +1969,7 @@ export class Chrome {
           return groups;
         },
         name: (kind) => FORMATS[kind as DocumentKind].label,
-        short: (kind) => (FORMATS[kind as DocumentKind].extensions[0] ?? kind).replace(/^\./, '').toUpperCase(),
+        short: (kind) => (FORMATS[kind as DocumentKind].extensions[0] ?? `.${kind}`).toLowerCase(),
       },
       (value) => {
         const to = value as DocumentKind;

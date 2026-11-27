@@ -693,6 +693,8 @@ export interface SyncStatus {
   savedAt?: number | null;
   /** Signed out or without sync: whether the open document's latest changes are saved in this browser. */
   localSaved?: boolean;
+  /** The server hasn't said yet who is signed in (the page is loading): `user` is whoever was last, or null if nobody was. */
+  checking?: boolean;
 }
 
 export const DEFAULT_STATE: ChromeState = {
@@ -722,7 +724,7 @@ export const DEFAULT_STATE: ChromeState = {
   draw: { ...DEFAULT_DRAW_STYLE, tool: null, hasSelection: false, layers: false },
   vector: { tool: 'select', shape: 'star', hasSelection: false, multiple: false, clipped: false, masked: false, layers: false, snap: true, fill: null, stroke: null, strokeWidth: 1, fillType: 'solid', strokeStyle: 'dash:solid', gradient: null, documentColors: [] },
   inTable: false,
-  sync: { user: null, document: 'guest', error: null },
+  sync: { user: null, document: 'guest', error: null, checking: true },
   subscription: null,
 };
 

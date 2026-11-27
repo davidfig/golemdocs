@@ -18,6 +18,8 @@ test('Convert To lists every format in groups, with the current one disabled', a
     'OpenDocument Text (.odt)',
     'Rich Text Format (.rtf)',
     'PowerPoint Presentation (.pptx)',
+    'Email Message (.eml)',
+    'Jupyter Notebook (.ipynb)',
     'EPUB Book (.epub)',
     'FictionBook (.fb2)',
     'Web Archive (.mhtml)',
@@ -39,8 +41,6 @@ test('Convert To lists every format in groups, with the current one disabled', a
     'WebP Image (.webp)',
     'SVG Drawing (.svg)',
     'Compressed SVG Drawing (.svgz)',
-    'Email Message (.eml)',
-    'Jupyter Notebook (.ipynb)',
   ].filter((l) => labels.includes(l)));
   expect(labels.length).toBeGreaterThanOrEqual(25);
   await expect(submenu.getByRole('menuitem', { name: /^Word Document/ })).toHaveAttribute('aria-disabled', 'true');
@@ -75,7 +75,7 @@ test('the Document format chip converts too', async ({ app }) => {
   await blankWith(app, 'Selector text');
   const box = app.page.getByRole('button', { name: 'Document format', exact: true });
   // The chip shows the extension and is described by the format's name.
-  await expect(box.locator('.wm-dropdown-name')).toHaveText('DOCX');
+  await expect(box.locator('.wm-dropdown-name')).toHaveText('.docx');
   await expect(box).toHaveAccessibleDescription('Word Document');
   await box.click();
   await app.page.getByRole('listbox', { name: 'Document format' }).getByRole('option', { name: 'OpenDocument Text' }).click();
@@ -83,7 +83,7 @@ test('the Document format chip converts too', async ({ app }) => {
   await app.ready();
   expect(await app.text()).toBe('Selector text');
   await expect(app.page).toHaveTitle('Document1.odt - Golem Docs');
-  await expect(box.locator('.wm-dropdown-name')).toHaveText('ODT');
+  await expect(box.locator('.wm-dropdown-name')).toHaveText('.odt');
 });
 
 test('converting is reversible: Word to Markdown to Word keeps the document', async ({ app }) => {

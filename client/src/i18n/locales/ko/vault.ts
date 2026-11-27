@@ -34,6 +34,7 @@ export const vault: Catalog = {
   'vault.shellTooOld': '이 기능에는 더 새로운 버전의 데스크톱 앱이 필요합니다. 도움말 › 업데이트 확인을 사용하세요.',
   'vault.problem.access': 'Vault 폴더를 사용할 수 없어 문서가 동기화되지 않습니다. 파일 › Vault 폴더에서 자세한 내용을 확인하세요.',
   'vault.problem.error': '일부 문서를 동기화하지 못했습니다: {message}',
+  'vault.outOfDate': 'Golem Docs가 열려 있는 동안 업데이트되었습니다. 보관 폴더를 계속 동기화하려면 다시 불러오세요.',
   'update.menu': '업데이트 확인…',
   'update.title': '소프트웨어 업데이트',
   'update.checking': '업데이트를 확인하는 중…',

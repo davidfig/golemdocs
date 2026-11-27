@@ -113,3 +113,44 @@ test('a conversion that never answers fails after the time limit instead of wait
   const worker = new ConvertWorker(() => handle, 5, 20);
   await assert.rejects(worker.fromFile(text('x'), 'a.txt'), /did not finish/);
 });
+
+test('a worker whose script went with an old build says to reload, and no more workers are started for nothing', async () => {
+  let handle: ConvertWorkerHandle | undefined;
+  let started = 0;
+  const asked: string[] = [];
+  const worker = new ConvertWorker(
+    () => {
+      started++;
+      handle = { onmessage: null, onerror: null, terminate() {}, postMessage() {} };
+      return handle;
+    },
+    5,
+    1000,
+    async (message) => {
+      asked.push(message);
+      return true;
+    },
+  );
+  const pending = worker.toFile(text('x'), 'a.md');
+  // The browser says nothing when a worker's script is the page (the single-page fallback for a file the deploy removed).
+  handle!.onerror?.({ message: '' });
+  await assert.rejects(pending, /updated while it was open/);
+  assert.deepEqual(asked, ['']);
+  await assert.rejects(worker.fromFile(text('y'), 'b.md'), /updated while it was open/);
+  assert.equal(started, 1, 'no worker is started that cannot load');
+});
+
+test('a worker that dies on the current build still says what it said', async () => {
+  let handle: ConvertWorkerHandle | undefined;
+  const worker = new ConvertWorker(
+    () => (handle = { onmessage: null, onerror: null, terminate() {}, postMessage() {} }),
+    5,
+    1000,
+    async () => false,
+  );
+  const pending = worker.toFile(text('x'), 'a.md');
+  handle!.onerror?.({ message: '' });
+  await assert.rejects(pending, /the convert worker failed/);
+  void worker.toFile(text('y'), 'a.md').catch(() => {});
+  worker.stop();
+});

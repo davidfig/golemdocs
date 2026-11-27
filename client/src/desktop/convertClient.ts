@@ -2,6 +2,7 @@
 // The worker starts with the first conversion and ends after a while with nothing to do, so a vault that is only
 // being watched holds no converters in memory.
 
+import { t } from '../i18n/index.ts';
 import { vaultFormat, vaultKeeps } from './vaultFormats.ts';
 import { isMediaName } from '../media/mediaFiles.ts';
 import type { ConvertReply, ConvertRequest } from './convertWorker.ts';
@@ -24,11 +25,18 @@ export class ConvertWorker implements VaultCodec {
   private readonly waiting = new Map<number, { resolve(bytes: Uint8Array | null): void; reject(error: Error): void }>();
   private nextId = 1;
   private idle: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * The site was updated after this page loaded and the worker's script went with the old build (a deploy keeps only the new one, and
+   * answers the old file with the page itself): no worker can start until the page is reloaded, so every conversion fails at once.
+   */
+  private outdated = false;
 
   constructor(
     private readonly start: () => ConvertWorkerHandle,
     private readonly idleMs = IDLE_MS,
     private readonly jobMs = JOB_MS,
+    /** Whether a worker that died with `message` (often none) died because the site has moved on to another build (see `isChunkOfOldBuild`). */
+    private readonly oldBuild?: (message: string) => Promise<boolean>,
   ) {}
 
   kept(name: string): boolean {
@@ -54,6 +62,7 @@ export class ConvertWorker implements VaultCodec {
   }
 
   private run(op: ConvertRequest['op'], input: Uint8Array, name: string, previous?: Uint8Array): Promise<Uint8Array | null> {
+    if (this.outdated) return Promise.reject(new Error(t('vault.outOfDate')));
     clearTimeout(this.idle);
     const worker = (this.worker ??= this.launch());
     const id = this.nextId++;
@@ -83,19 +92,41 @@ export class ConvertWorker implements VaultCodec {
       else job.resolve(reply.bytes ? new Uint8Array(reply.bytes) : null);
       if (!this.waiting.size) this.idle = setTimeout(() => this.stop(), this.idleMs);
     };
-    // A worker that dies (out of memory, a script error) takes what it was doing with it: those documents are tried again by the next sync.
-    worker.onerror = (event) => this.stop(new Error(event.message || 'the convert worker failed'));
+    // A worker that dies (out of memory, a script error, a script the site no longer has) takes what it was doing with it: those documents are
+    // tried again by the next sync. Its jobs wait for the check of the site, so they fail saying why.
+    worker.onerror = (event) => {
+      if (this.worker !== worker) return;
+      const message = event.message ?? '';
+      const jobs = this.detach();
+      void this.reason(message).then((reason) => {
+        for (const job of jobs) job.reject(reason);
+      });
+    };
     return worker;
   }
 
-  /** Ends the worker; whatever it was working on fails with `reason`. */
-  stop(reason = new Error('the convert worker was stopped')): void {
+  /** Why a worker died with `message`: the app being out of date (from now on, every conversion fails so), or what it said. */
+  private async reason(message: string): Promise<Error> {
+    if (this.oldBuild && (await this.oldBuild(message).catch(() => false))) {
+      this.outdated = true;
+      return new Error(t('vault.outOfDate'));
+    }
+    return new Error(message || 'the convert worker failed');
+  }
+
+  /** Ends the worker and hands back what it was working on. */
+  private detach(): { resolve(bytes: Uint8Array | null): void; reject(error: Error): void }[] {
     clearTimeout(this.idle);
     this.worker?.terminate();
     this.worker = null;
     const jobs = [...this.waiting.values()];
     this.waiting.clear();
-    for (const job of jobs) job.reject(reason);
+    return jobs;
+  }
+
+  /** Ends the worker; whatever it was working on fails with `reason`. */
+  stop(reason = new Error('the convert worker was stopped')): void {
+    for (const job of this.detach()) job.reject(reason);
   }
 }
 

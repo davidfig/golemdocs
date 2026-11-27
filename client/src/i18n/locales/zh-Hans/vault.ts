@@ -34,6 +34,7 @@ export const vault: Catalog = {
   'vault.shellTooOld': '这需要更新版本的桌面应用。请使用“帮助 › 检查更新”。',
   'vault.problem.access': '无法使用保险库文件夹，因此你的文档没有同步。请在“文件 › 保险库文件夹”中查看详情。',
   'vault.problem.error': '部分文档无法同步：{message}',
+  'vault.outOfDate': 'Golem Docs 在打开期间已更新。请重新加载以继续同步你的保管库文件夹。',
   'update.menu': '检查更新…',
   'update.title': '软件更新',
   'update.checking': '正在检查更新…',

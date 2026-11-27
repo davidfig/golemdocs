@@ -39,6 +39,7 @@ export const vault = {
   'vault.shellTooOld': 'This needs a newer version of the desktop app. Use Help › Check for Updates.',
   'vault.problem.access': 'The vault folder can’t be used, so your documents aren’t being synced. Open File › Vault Folder for details.',
   'vault.problem.error': 'Some documents couldn’t be synced: {message}',
+  'vault.outOfDate': 'Golem Docs was updated while it was open. Reload to keep syncing your vault folder.',
   'update.menu': 'Check for Updates…',
   'update.title': 'Software Update',
   'update.checking': 'Checking for updates…',

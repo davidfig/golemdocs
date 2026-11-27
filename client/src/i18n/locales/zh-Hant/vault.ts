@@ -34,6 +34,7 @@ export const vault: Catalog = {
   'vault.shellTooOld': '這需要較新版本的桌面應用程式。請使用「說明 › 檢查更新」。',
   'vault.problem.access': '無法使用保險庫資料夾，因此您的文件沒有同步。請在「檔案 › 保險庫資料夾」中查看詳情。',
   'vault.problem.error': '部分文件無法同步：{message}',
+  'vault.outOfDate': 'Golem Docs 在開啟期間已更新。請重新載入以繼續同步你的保管庫資料夾。',
   'update.menu': '檢查更新…',
   'update.title': '軟體更新',
   'update.checking': '正在檢查更新…',

@@ -39,6 +39,11 @@ export interface VaultHooks {
   openLocalId?(): string | null;
   /** The vault's audio and video too big for the account (see `SyncReport.inPlace`), after every sync, in the folder `root`. */
   inPlace?(files: LocalFile[], root: string): void;
+  /**
+   * Whether the convert worker died with `message` because the site was updated while this page was open (its script went with the old
+   * build): the page offers its reload then, and the sync says to reload rather than that the worker failed.
+   */
+  oldBuild?(message: string): Promise<boolean>;
 }
 
 /** What the shell answers to a scan while iCloud Drive is still downloading files into the folder (desktop/src-tauri/src/icloud.rs). */
@@ -132,7 +137,7 @@ export class VaultService {
   /** The service for this page, or null in a browser (there is no folder to keep). */
   static create(account: () => string | null, hooks: VaultHooks): VaultService | null {
     const bridge = desktopBridge();
-    return bridge ? new VaultService(bridge, account, hooks) : null;
+    return bridge ? new VaultService(bridge, account, hooks, new ConvertWorker(startConvertWorker, undefined, undefined, hooks.oldBuild)) : null;
   }
 
   /** Whether the folder is kept with an account (else with the documents saved in this browser). */

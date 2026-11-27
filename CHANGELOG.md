@@ -6,6 +6,10 @@
 
 - View › Hide Space Between Pages now hides only the space where pages meet: the first page keeps its top margin and the last page its bottom one, so a one-page document looks like a normal page instead of having its text against the edge of the paper.
 
+### Fixed
+
+- In the desktop app, when Golem Docs is updated while it is open, the vault folder no longer stops syncing with “the convert worker failed”: it says to reload, and the Reload note appears.
+
 ## 0.50.0 - 2026-11-27
 
 ### Added

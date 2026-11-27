@@ -41,6 +41,7 @@ export const vault: Catalog = {
   'vault.shellTooOld': 'Cela nécessite une version plus récente de l’application de bureau. Utilisez Aide › Rechercher des mises à jour.',
   'vault.problem.access': 'Le dossier du coffre est inutilisable : vos documents ne sont pas synchronisés. Ouvrez Fichier › Dossier du coffre pour les détails.',
   'vault.problem.error': 'Certains documents n’ont pas pu être synchronisés : {message}',
+  'vault.outOfDate': 'Golem Docs a été mis à jour pendant qu’il était ouvert. Rechargez-le pour continuer à synchroniser votre dossier coffre.',
   'update.menu': 'Rechercher les mises à jour…',
   'update.title': 'Mise à jour du logiciel',
   'update.checking': 'Recherche de mises à jour…',

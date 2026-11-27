@@ -34,6 +34,7 @@ export const vault: Catalog = {
   'vault.shellTooOld': 'この機能にはデスクトップアプリの新しいバージョンが必要です。ヘルプ › アップデートを確認 を使ってください。',
   'vault.problem.access': 'Vault フォルダを使用できないため、ドキュメントは同期されていません。詳細はファイル › Vault フォルダで確認してください。',
   'vault.problem.error': '同期できなかったドキュメントがあります: {message}',
+  'vault.outOfDate': 'Golem Docs を開いている間にアップデートされました。保管フォルダの同期を続けるには再読み込みしてください。',
   'update.menu': 'アップデートを確認…',
   'update.title': 'ソフトウェアアップデート',
   'update.checking': 'アップデートを確認しています…',

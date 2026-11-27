@@ -41,6 +41,7 @@ export const vault: Catalog = {
   'vault.shellTooOld': 'Isso exige uma versão mais recente do aplicativo de desktop. Use Ajuda › Verificar atualizações.',
   'vault.problem.access': 'A pasta do cofre não pode ser usada, então seus documentos não estão sendo sincronizados. Abra Arquivo › Pasta do cofre para ver os detalhes.',
   'vault.problem.error': 'Alguns documentos não puderam ser sincronizados: {message}',
+  'vault.outOfDate': 'O Golem Docs foi atualizado enquanto estava aberto. Recarregue para continuar sincronizando sua pasta do cofre.',
   'update.menu': 'Verificar atualizações…',
   'update.title': 'Atualização de software',
   'update.checking': 'Procurando atualizações…',

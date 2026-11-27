@@ -41,6 +41,7 @@ export const vault: Catalog = {
   'vault.shellTooOld': 'Dafür wird eine neuere Version der Desktop-App benötigt. Wählen Sie Hilfe › Nach Updates suchen.',
   'vault.problem.access': 'Der Tresorordner kann nicht verwendet werden, daher werden deine Dokumente nicht synchronisiert. Details unter Datei › Tresorordner.',
   'vault.problem.error': 'Einige Dokumente konnten nicht synchronisiert werden: {message}',
+  'vault.outOfDate': 'Golem Docs wurde aktualisiert, während es geöffnet war. Laden Sie neu, damit Ihr Tresorordner weiter synchronisiert wird.',
   'update.menu': 'Nach Updates suchen…',
   'update.title': 'Softwareupdate',
   'update.checking': 'Suche nach Updates…',

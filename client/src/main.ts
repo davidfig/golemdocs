@@ -7183,7 +7183,18 @@ function refreshWith(source: DocumentSource, changes?: number): Promise<boolean 
 /** Starts (or restarts, after signing in or out) keeping the vault folder in step. */
 let vaultWatched = false;
 async function connectVault(): Promise<void> {
-  vaultService ??= VaultService.create(() => account?.id ?? null, { settled: flushUploads, changed: (touched) => void vaultChanged(touched), openLocalId: () => current.localId, inPlace: (files) => library.setVaultEntries(vaultMediaEntries((vaultMedia = files))) });
+  vaultService ??= VaultService.create(() => account?.id ?? null, {
+    settled: flushUploads,
+    changed: (touched) => void vaultChanged(touched),
+    openLocalId: () => current.localId,
+    inPlace: (files) => library.setVaultEntries(vaultMediaEntries((vaultMedia = files))),
+    // The convert worker's script went with a deploy while this page was open: only reloading into the new version brings it back.
+    oldBuild: async (message) => {
+      if (!(await isChunkOfOldBuild(message, __BUILD_ID__))) return false;
+      void updateNotice?.show();
+      return true;
+    },
+  });
   if (vaultService && !vaultWatched) {
     vaultWatched = true;
     let last = vaultService.current.state;

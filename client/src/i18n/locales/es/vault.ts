@@ -41,6 +41,7 @@ export const vault: Catalog = {
   'vault.shellTooOld': 'Esto requiere una versión más reciente de la aplicación de escritorio. Usa Ayuda › Buscar actualizaciones.',
   'vault.problem.access': 'La carpeta de la bóveda no se puede usar, así que tus documentos no se sincronizan. Abre Archivo › Carpeta de la bóveda para ver los detalles.',
   'vault.problem.error': 'No se pudieron sincronizar algunos documentos: {message}',
+  'vault.outOfDate': 'Golem Docs se actualizó mientras estaba abierto. Vuelve a cargarlo para seguir sincronizando tu carpeta de la bóveda.',
   'update.menu': 'Buscar actualizaciones…',
   'update.title': 'Actualización de software',
   'update.checking': 'Buscando actualizaciones…',

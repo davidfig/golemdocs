@@ -41,6 +41,7 @@ export const vault: Catalog = {
   'vault.shellTooOld': 'Serve una versione più recente dell’app desktop. Usa Aiuto › Controlla aggiornamenti.',
   'vault.problem.access': 'La cartella del vault non è utilizzabile, quindi i documenti non vengono sincronizzati. Apri File › Cartella del vault per i dettagli.',
   'vault.problem.error': 'Alcuni documenti non sono stati sincronizzati: {message}',
+  'vault.outOfDate': 'Golem Docs è stato aggiornato mentre era aperto. Ricarica per continuare a sincronizzare la cartella del caveau.',
   'update.menu': 'Verifica aggiornamenti…',
   'update.title': 'Aggiornamento software',
   'update.checking': 'Ricerca di aggiornamenti…',

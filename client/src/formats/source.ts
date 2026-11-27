@@ -12,7 +12,7 @@ const ODT_FILE = /\.(odt|fodt)$/i;
 const RTF_FILE = /\.rtf$/i;
 const HTML_FILE = /\.(html?|xhtml)$/i;
 const EPUB_FILE = /\.epub$/i;
-const MHTML_FILE = /\.(mhtml?)$/i;
+const MHTML_FILE = /\.(mht|mhtml)$/i;
 const CSV_FILE = /\.csv$/i;
 const TSV_FILE = /\.(tsv|tab)$/i;
 const TEX_FILE = /\.(tex|latex)$/i;
@@ -104,7 +104,7 @@ export const isZipName = (name: string): boolean => /\.zip$/i.test(name);
 /** Strips a known document extension from a file name. */
 export function stem(name: string): string {
   if (isTextName(name)) return name.replace(/\.[^.]*$/, '');
-  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mhtml?|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|heic|heif|svgz?|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|typ|dbk|docbook|nxml|jats|fb2|opml|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc|xlsx|xlsm|xltx|xltm|pptx|pptm|potx|potm|ppsx|ppsm|mp4|m4v|mov|webm|mkv|ogv|mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i, '');
+  return name.replace(/\.(docx|docm|dotx|doc|dot|odt|rtf|html?|xhtml|mht|mhtml|epub|csv|tsv|tab|png|jpe?g|webp|gif|bmp|heic|heif|svgz?|tex|latex|adoc|asciidoc|asc|rst|rest|org|wiki|mediawiki|textile|typ|dbk|docbook|nxml|jats|fb2|opml|eml|ipynb|fodt|pdf|md|markdown|txt|text|wdoc|xlsx|xlsm|xltx|xltm|pptx|pptm|potx|potm|ppsx|ppsm|mp4|m4v|mov|webm|mkv|ogv|mp3|m4a|aac|wav|ogg|oga|opus|flac)$/i, '');
 }
 
 /**

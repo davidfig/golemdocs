@@ -92,6 +92,10 @@ test('files open as the format their extension names', () => {
   assert.equal(sourceFromFile('a.txt', bytes)?.kind, 'txt');
   assert.equal(sourceFromFile('a.rtf', bytes)?.kind, 'rtf');
   assert.equal(sourceFromFile('a.doc', bytes)?.kind, 'doc');
+  // Both names of a saved web page: Internet Explorer and Word wrote .mht, Chrome writes .mhtml.
+  assert.equal(sourceFromFile('Saved page.MHT', bytes)?.kind, 'mhtml');
+  assert.equal(sourceFromFile('Saved page.mhtml', bytes)?.kind, 'mhtml');
   assert.equal(sourceFromFile('a.wpd', bytes), null);
   assert.equal(stem('Report.final.pdf'), 'Report.final');
+  assert.equal(stem('Saved page.mht'), 'Saved page');
 });

@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.51.1 - Unreleased
+
+### Fixed
+
+- Web pages saved as `.mht` files (the name Internet Explorer and Word gave them) now open, like `.mhtml` ones, instead of Golem Docs saying it doesn't open that kind of file.
+
 ## 0.51.0 - 2026-11-27
 
 ### Added

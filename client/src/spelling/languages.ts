@@ -62,11 +62,13 @@ export function detectLanguage(text: string): SpellLanguage | Unchecked | null {
   if (cjk > letters * 0.3) return 'none';
   if (cyrillic > letters * 0.5) return 'ru';
   if (latin < letters * 0.5) return null;
-  const words = sample.toLowerCase().match(/[\p{L}']+/gu) ?? [];
-  const scores = (Object.keys(WORDS) as (keyof typeof WORDS)[]).map((code) => ({ code, score: words.reduce((n, w) => n + (WORDS[code].has(w) ? 1 : 0), 0) })).sort((a, b) => b.score - a.score);
+  // Each common word counts once: "a" three times over (English, but also Portuguese) is still one stray word.
+  const words = new Set(sample.toLowerCase().match(/[\p{L}']+/gu) ?? []);
+  const scores = (Object.keys(WORDS) as (keyof typeof WORDS)[]).map((code) => ({ code, score: [...words].reduce((n, w) => n + (WORDS[code].has(w) ? 1 : 0), 0) })).sort((a, b) => b.score - a.score);
   const [best, next] = scores;
-  // One language has to stand out: a clear lead, and more than a stray word or two.
-  return best.score >= Math.min(MIN_WORDS, Math.ceil(words.length / 3)) && best.score >= next.score * 1.3 ? best.code : null;
+  // One language has to stand out: a clear lead, and more than a stray word or two, however short the text. A paragraph
+  // just begun ("Make a list") is left to its document's language, rather than flagging its English words as Portuguese.
+  return best.score >= MIN_WORDS && best.score >= next.score * 1.3 ? best.code : null;
 }
 
 /**

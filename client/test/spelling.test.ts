@@ -180,4 +180,8 @@ test('a paragraph is in the language it declares, else the one its words say, el
   assert.equal(paragraphLanguage('es', 'This is the text of the paragraph.', 'en'), 'es');
   assert.equal(paragraphLanguage(undefined, 'Das ist ein Dokument, das Sie bearbeiten können.', 'en'), 'de');
   assert.equal(paragraphLanguage(undefined, 'Hi', 'fr'), 'fr', 'too short to tell');
+  // A sentence just begun: a word or two that another language shares is not enough to leave the document's language.
+  for (const start of ['Make a', 'Make a list', 'I am a', 'A lot', 'Give me a', 'I saw a man on a', 'I had a cat, a dog and a bird']) {
+    assert.equal(paragraphLanguage(undefined, start, 'en'), 'en', start);
+  }
 });

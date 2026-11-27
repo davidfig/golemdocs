@@ -15,6 +15,7 @@
 ## 0.50.0 - 2026-11-27
 
 ### Added
+- Starting a new paragraph no longer flags its first few English words as misspelled for a moment: a sentence such as “Make a list…” was briefly taken for Portuguese and checked against the wrong dictionary.
 
 - New folders are easier to make in the Files sidebar: a New Folder button at the top of the sidebar and File › New Folder (in the desktop app, ⇧⌘N on a Mac and Ctrl+Shift+N on Windows and Linux) make one inside the folder you last picked, ready to name, and the right-click menus now list New Folder with the new documents.
 - The Documents screen has a List view, the default on a phone: each document gets a row with its whole name, its date and size, and a ⋯ button for its commands. Switch between Grid and List at the top of the screen.

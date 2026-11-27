@@ -208,10 +208,15 @@ export class FilesPanel {
     this.inTrash = true;
     this.saveView();
     this.render();
-    void this.host.trash.store.refresh();
+    const refreshed = this.host.trash.store.refresh();
     const first = this.trashList.querySelector<HTMLElement>('.wm-files-row');
     (first ?? this.back).focus();
     this.focusTrash = !first && !this.host.trash.store.loaded;
+    // Listed before, but not with what was just deleted: the keyboard goes to the first row once the listing brings it.
+    if (!first)
+      void refreshed.then(() => {
+        if (this.inTrash && document.activeElement === this.back) this.trashList.querySelector<HTMLElement>('.wm-files-row')?.focus();
+      });
   }
 
   /** Back to the documents, with the keyboard on Trash. */

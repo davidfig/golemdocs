@@ -60,6 +60,7 @@ export const menus = {
   'menus.toolbar.more': 'More buttons',
   'menus.drawer.back': 'Back',
   'menus.drawer.all': 'All menus',
+  'menus.drawer.sections': 'Sections',
   'menus.split.options': '{label} options',
   'menus.palette.more': 'More Colors…',
   'menus.palette.document': 'Document Colors',

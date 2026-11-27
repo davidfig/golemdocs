@@ -20,7 +20,7 @@ import type { User } from '../auth.ts';
 import { formatSize, matchesSearch, relativeTime, syncBadge } from './dashboardFormat.ts';
 import { t } from '../i18n/index.ts';
 import { Thumbnails } from './dashboardThumbnails.ts';
-import { h, isFileDrag, PADLOCK, PADLOCK_OPEN, smallIcon } from './dom.ts';
+import { h, iconButton, isFileDrag, PADLOCK, PADLOCK_OPEN, segmented, smallIcon } from './dom.ts';
 import { takeDropped, type Dropped } from '../storage/droppedFiles.ts';
 import { fileIcon, setFileName, splitExtension } from './fileIcons.ts';
 import { renamedFileName } from '../documentName.ts';
@@ -44,6 +44,39 @@ const SIZE_MAX = 260;
 const SIZE_DEFAULT = 120;
 /** On a phone the default is smaller, so three cards fit across. */
 const SIZE_DEFAULT_NARROW = 100;
+/** Grid (cards with their pictures) or List (a row per document, its whole name): per device, as it suits the screen. */
+const VIEW_KEY = 'golemdocs.dashboardView';
+type View = 'grid' | 'list';
+
+/**
+ * Where the screen is: a folder of the user's own (null: the top level), Trash, or a folder in one someone shared with them (its owner,
+ * the shared folder and the folder in it). Each place gone to is a step in the browser's history, so Back (the phone's back gesture too)
+ * goes up again before it closes the screen.
+ */
+type Place = { kind: 'folder'; id: string | null } | { kind: 'trash' } | { kind: 'shared'; owner: string; root: string; id: string };
+/** The history entry of the screen: how many places in (0: where it opened) and the place. */
+export interface DashboardState {
+  dashboard: true;
+  depth?: number;
+  place?: Place;
+}
+
+const samePlace = (a: Place, b: Place): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+/** A small drawing for the view switch (12 × 12, stroked). */
+function viewIcon(path: string): Node {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 12 12');
+  svg.setAttribute('width', '14');
+  svg.setAttribute('height', '14');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = `<path d="${path}" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>`;
+  return svg;
+}
+const GRID_PATH = 'M1.5 1.5h3.5v3.5h-3.5zM7 1.5h3.5v3.5h-3.5zM1.5 7h3.5v3.5h-3.5zM7 7h3.5v3.5h-3.5z';
+const LIST_PATH = 'M1.5 2.5h1M4.5 2.5h6M1.5 6h1M4.5 6h6M1.5 9.5h1M4.5 9.5h6';
+/** Three dots: a card's menu (its commands, as a right click or a long press shows them). */
+const MORE_DOTS = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="3" cy="8" r="1.5" fill="currentColor"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="13" cy="8" r="1.5" fill="currentColor"/></svg>';
 
 /** What the dashboard asks of the application. */
 export interface DashboardHost {
@@ -150,6 +183,15 @@ export class Dashboard {
   private readonly importButton: HTMLButtonElement;
   private readonly importFolderButton: HTMLButtonElement;
   private readonly newSplit: HTMLElement;
+  /** Grid or List, and the controls that choose and size them. */
+  private view: View = 'grid';
+  private viewSwitch!: { el: HTMLElement; set(value: View): void };
+  private sizeRange!: HTMLInputElement;
+  /** Up a level (inside a folder, Trash or a shared folder): beside the heading, on a phone where the path above the cards is narrow. */
+  private readonly upButton: HTMLButtonElement;
+  /** How many places in from where the screen opened (its history entries after the first), and the place at each. */
+  private depth = 0;
+  private trail: Place[] = [];
   /** Cards showing a "click again to confirm" button, and the timer that resets them. */
   private confirming: { button: HTMLButtonElement; label: string; icon?: string; iconOnly: boolean; timer: number } | null = null;
 
@@ -205,7 +247,7 @@ export class Dashboard {
       showPopupMenu(
         [
           ...newMenuItems((kind) => {
-            this.hide();
+            this.leave();
             this.host.newDocument(folderId, kind);
           }),
           // As the Files pane's menu has them (filesPanel.ts, rootItems and folderItems): New Folder with the new documents.
@@ -229,7 +271,7 @@ export class Dashboard {
     const blank = action('new', t('panels.dashboard.newBlank'), t('panels.dashboard.newBlankLabel'), () => {
       if (this.sharedAt) return this.newShared(this.sharedAt);
       const folderId = this.folderId;
-      this.hide();
+      this.leave();
       this.host.newDocument(folderId);
     });
     this.newButton = blank;
@@ -288,7 +330,7 @@ export class Dashboard {
       showPopupMenu(
         newKindItems((kind) => {
           if (at) return this.newShared(at, kind);
-          this.hide();
+          this.leave();
           this.host.newDocument(folderId, kind);
         }),
         box.left,
@@ -301,14 +343,19 @@ export class Dashboard {
     this.newSplit = newSplit;
     const actions = h('div', { class: 'wm-dash-actions' }, newSplit, importButton, importFolderButton, this.newFolderButton, this.trashButton, this.emptyTrashButton, this.selectionBar);
     const size = this.sizeSlider();
+    this.upButton = iconButton('wm-dash-up', 'M7.5 2L3.5 6l4 4', t('panels.dashboard.up'));
+    this.upButton.hidden = true;
+    this.upButton.addEventListener('click', () => this.up());
+    const viewSwitch = this.viewChooser();
     this.root = h(
       'section',
       { class: 'wm-dashboard', attrs: { 'aria-label': t('panels.dashboard.title') } },
-      h('header', { class: 'wm-dash-head' }, h('h1', { text: t('panels.dashboard.title') }), this.search, size, close),
+      h('header', { class: 'wm-dash-head' }, this.upButton, h('h1', { text: t('panels.dashboard.title') }), this.search, size, viewSwitch, close),
       actions,
       this.scroller,
     );
     this.root.hidden = true;
+    this.applyView();
     this.takeFiles(this.root);
     this.marqueeSelect(this.scroller);
     parent.append(this.root);
@@ -354,7 +401,47 @@ export class Dashboard {
       }
     });
     queueMicrotask(() => apply(size));
+    this.sizeRange = range;
     return range;
+  }
+
+  /** Grid or List: List by default on a phone, where a card's name would be cut to a few letters. */
+  private viewChooser(): HTMLElement {
+    let view: View = narrow().matches ? 'list' : 'grid';
+    try {
+      const saved = localStorage.getItem(VIEW_KEY);
+      if (saved === 'grid' || saved === 'list') view = saved;
+    } catch {
+      // Storage blocked: the default.
+    }
+    this.view = view;
+    this.viewSwitch = segmented<View>(
+      t('panels.dashboard.view'),
+      [
+        { value: 'grid', text: '', title: t('panels.dashboard.viewGrid'), icon: viewIcon(GRID_PATH) },
+        { value: 'list', text: '', title: t('panels.dashboard.viewList'), icon: viewIcon(LIST_PATH) },
+      ],
+      (value) => {
+        this.view = value;
+        try {
+          localStorage.setItem(VIEW_KEY, value);
+        } catch {
+          // Not remembered.
+        }
+        this.applyView();
+        // The pictures of the cards come into view (or go): draw what now shows.
+        if (this.visible) this.render();
+      },
+    );
+    this.viewSwitch.el.classList.add('wm-dash-view');
+    return this.viewSwitch.el;
+  }
+
+  private applyView(): void {
+    this.viewSwitch.set(this.view);
+    this.root.classList.toggle('wm-dash-list', this.view === 'list');
+    // The card size means nothing for rows.
+    this.sizeRange.hidden = this.view === 'list';
   }
 
   get visible(): boolean {
@@ -371,7 +458,9 @@ export class Dashboard {
    * It is a step in the browser's history (so Back closes it); `step` is false when Forward is what brought it here.
    */
   async show(step = true): Promise<void> {
-    if (step && !this.visible && !history.state?.dashboard) history.pushState({ dashboard: true }, '', location.href);
+    if (step && !this.visible && !history.state?.dashboard) history.pushState({ dashboard: true, depth: 0 } satisfies DashboardState, '', location.href);
+    this.depth = (history.state as DashboardState | null)?.depth ?? 0;
+    this.trail = [];
     this.root.hidden = false;
     this.search.value = '';
     this.folderId = null;
@@ -398,22 +487,94 @@ export class Dashboard {
   /** Opens Trash, as a folder of what was deleted (showing the dashboard first, if it isn't). */
   showTrash(): void {
     if (!this.visible) void this.show();
-    this.search.value = '';
-    this.inTrash = true;
-    this.sharedAt = null;
-    this.renaming = null;
-    this.selected.clear();
-    this.render();
-    this.scroller.scrollTop = 0;
-    void this.host.trash.store.refresh();
+    this.go({ kind: 'trash' });
   }
 
   /** Back from Trash to the documents, at the top level. */
   private leaveTrash(): void {
-    this.inTrash = false;
-    this.folderId = null;
+    this.go({ kind: 'folder', id: null });
+  }
+
+  // --- Where it is, and the browser's history -----------------------------------------------
+
+  private get place(): Place {
+    if (this.inTrash) return { kind: 'trash' };
+    if (this.sharedAt) return { kind: 'shared', owner: this.sharedAt.share.ownerId, root: this.sharedAt.share.folderId, id: this.sharedAt.folderId };
+    return { kind: 'folder', id: this.folderId };
+  }
+
+  /** The place one level up, or null at the top. */
+  private parentPlace(): Place | null {
+    const place = this.place;
+    if (place.kind === 'trash') return { kind: 'folder', id: null };
+    if (place.kind === 'shared') {
+      if (place.id === place.root) return { kind: 'folder', id: null };
+      const parent = this.sharedTree?.folders.find((f) => f.id === place.id)?.parentId ?? null;
+      return { ...place, id: parent ?? place.root };
+    }
+    if (place.id === null) return null;
+    return { kind: 'folder', id: this.folders.find((f) => f.id === place.id)?.parentId ?? null };
+  }
+
+  /** Goes to `place` as a step in the browser's history, so Back comes back here. */
+  private go(place: Place): void {
+    if (samePlace(place, this.place) && !this.search.value.trim()) return void this.enter(place);
+    this.depth++;
+    this.trail[this.depth] = place;
+    this.trail.length = this.depth + 1;
+    history.pushState({ dashboard: true, depth: this.depth, place } satisfies DashboardState, '', location.href);
+    this.enter(place);
+  }
+
+  /** Up a level: Back, when the step before was that level; otherwise a step to it. */
+  private up(): void {
+    const parent = this.parentPlace();
+    if (!parent) return;
+    const before = this.depth > 0 ? this.trail[this.depth - 1] : undefined;
+    if (before && samePlace(before, parent)) history.back();
+    else this.go(parent);
+  }
+
+  /** Shows `place` (without a history step: `go` makes one, Back and Forward come here through `restore`). */
+  private enter(place: Place): void {
     this.search.value = '';
+    this.renaming = null;
+    this.selected.clear();
+    if (place.kind === 'shared') {
+      const { owner, root } = place;
+      const share = this.library.sharedFolders.find((f) => f.ownerId === owner && f.folderId === root);
+      if (share) {
+        this.inTrash = false;
+        return this.enterShared({ share, folderId: place.id });
+      }
+      place = { kind: 'folder', id: null };
+    }
+    if (this.sharedAt) this.sharedTree = null;
+    this.sharedAt = null;
+    this.inTrash = place.kind === 'trash';
+    if (place.kind === 'folder') this.folderId = place.id;
     this.render();
+    this.scroller.scrollTop = 0;
+    if (place.kind === 'trash') void this.host.trash.store.refresh();
+  }
+
+  /** Back or Forward came to one of the screen's history entries: it shows the place that entry is for. */
+  restore(state: DashboardState): void {
+    if (!this.visible) void this.show(false);
+    this.depth = state.depth ?? 0;
+    if (state.place) {
+      this.trail[this.depth] = state.place;
+      this.enter(state.place);
+    }
+  }
+
+  /**
+   * Hides it to open or start a document. Deep in folders, the document takes a new history entry of its own, so Back from it comes
+   * back to the folder it was in (at the top, it takes the screen's, and Back goes to the document before, as it always has).
+   */
+  private leave(): void {
+    if (this.depth > 0 && history.state?.dashboard) history.pushState({ dashboard: true, depth: this.depth + 1, place: this.place } satisfies DashboardState, '', location.href);
+    this.hide();
   }
 
   /** Shows on New the picture of the type it makes (the one used last), and names the type in its tooltip. */
@@ -434,7 +595,9 @@ export class Dashboard {
   dismiss(step = true): void {
     if (!this.visible) return;
     this.hide();
-    if (step && history.state?.dashboard) history.back();
+    // Every place gone to is a step: back past them all, to where the screen opened from.
+    if (step && history.state?.dashboard) history.go(-(this.depth + 1));
+    this.depth = 0;
     this.host.closed();
   }
 
@@ -500,6 +663,7 @@ export class Dashboard {
     // The cards are redrawn, so a pending "confirm" goes, and so must its timer (it would reset the next one early).
     this.resetConfirm();
     this.showActions();
+    this.notePlace();
     if (this.inTrash) return this.renderTrash();
     if (this.sharedAt) return this.renderSharedFolder();
     // Searching looks in every folder at once; otherwise this folder's own folders and documents.
@@ -536,6 +700,17 @@ export class Dashboard {
     this.sharedGrid.replaceChildren(...foldersShown.map((f) => this.sharedFolderCard(f)), ...sharedShown.map((d) => this.sharedCard(d)));
 
     this.thumbnails.watch();
+  }
+
+  /** Keeps the history entry in step with the place shown (changed without a step: a folder gone, a folder just made opened), and shows Up. */
+  private notePlace(): void {
+    const state = history.state as DashboardState | null;
+    if (state?.dashboard && this.visible) {
+      const place = this.place;
+      if (!state.place || !samePlace(state.place, place)) history.replaceState({ ...state, place } satisfies DashboardState, '', location.href);
+      this.trail[this.depth] = place;
+    }
+    this.upButton.hidden = this.parentPlace() === null;
   }
 
   // --- Folders shared with the user (docs/folder-sharing.md) ------------------------------------
@@ -596,7 +771,7 @@ export class Dashboard {
     const going = trash.store.going.has(trashKey(item));
     restore.disabled = forever.disabled = going;
     const card = h('article', { class: `wm-card${going ? ' wm-card-going' : ''}` }, open, badges, h('div', { class: 'wm-card-actions' }, restore, forever));
-    this.cardMenu(card, () => trash.menu(item));
+    this.cardMenu(card, () => trash.menu(item), item.name);
     return card;
   }
 
@@ -611,7 +786,7 @@ export class Dashboard {
       h('span', { class: 'wm-card-name', title: share.name }, h('span', { class: 'wm-card-title', text: share.name })),
       h('span', { class: 'wm-card-meta', text: by ? t('panels.dashboard.from', { name: by }) : '' }),
     );
-    open.addEventListener('click', () => this.enterShared({ share, folderId: share.folderId }));
+    open.addEventListener('click', () => this.go({ kind: 'shared', owner: share.ownerId, root: share.folderId, id: share.folderId }));
     const badges = h('div', { class: 'wm-badges' }, h('span', { class: 'wm-badge', text: share.role === 'viewer' ? t('panels.dashboard.viewOnly') : t('panels.dashboard.canEdit') }));
     const leave = this.confirmButton(
       t('panels.dashboard.leave'),
@@ -694,17 +869,12 @@ export class Dashboard {
       const last = i === stops.length - 1;
       const crumb = h('button', { class: 'wm-crumb', text: stop.name, attrs: { type: 'button', ...(last ? { 'aria-current': 'page' } : {}) } });
       crumb.disabled = last;
-      crumb.addEventListener('click', () => {
-        if (stop.id === null) {
-          this.sharedAt = null;
-          this.sharedTree = null;
-          this.folderId = null;
-          this.render();
-        } else this.enterShared({ share: at.share, folderId: stop.id });
-      });
+      crumb.addEventListener('click', () => this.go(stop.id === null ? { kind: 'folder', id: null } : { kind: 'shared', owner: at.share.ownerId, root: at.share.folderId, id: stop.id }));
       parts.push(crumb);
     });
     this.crumbs.replaceChildren(...parts);
+    // On a phone the path is one line that scrolls: the end of it (where this is) shows.
+    this.crumbs.scrollLeft = this.crumbs.scrollWidth;
   }
 
   /** The cards inside a shared folder: its folders, then its documents. Nothing is dragged, selected or moved here. */
@@ -745,7 +915,7 @@ export class Dashboard {
       open = h('div', { class: 'wm-card-open' }, art, input);
     } else {
       open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.openFolder', { name: folder.name }) } }, art, h('span', { class: 'wm-card-name', title: folder.name }, h('span', { class: 'wm-card-title', text: folder.name })), h('span', { class: 'wm-card-meta', text: t('panels.dashboard.items', { count }) }));
-      open.addEventListener('click', () => this.enterShared({ share, folderId: folder.id }));
+      open.addEventListener('click', () => this.go({ kind: 'shared', owner: share.ownerId, root: share.folderId, id: folder.id }));
     }
     const actions = h('div', { class: 'wm-card-actions' });
     if (folder.createdByYou && share.role === 'editor') {
@@ -774,7 +944,7 @@ export class Dashboard {
     } else {
       open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: doc.name }) } }, thumb, h('span', { class: 'wm-card-name', title: doc.name }, fileIcon(doc.name), setFileName(h('span', { class: 'wm-card-title' }), doc.name)), h('span', { class: 'wm-card-meta', text: meta }));
       open.addEventListener('click', () => {
-        this.hide();
+        this.leave();
         this.host.openInSharedFolder(share, doc);
       });
     }
@@ -805,7 +975,7 @@ export class Dashboard {
 
   /** New, inside a shared folder: a blank document there. */
   private newShared(at: { share: SharedFolder; folderId: string }, kind?: DocumentKind): void {
-    this.hide();
+    this.leave();
     this.host.newInSharedFolder(at.share, at.folderId, kind);
   }
 
@@ -832,7 +1002,7 @@ export class Dashboard {
     const meta = [by ? t('panels.dashboard.from', { name: by }) : null, relativeTime(doc.updatedAt)].filter(Boolean).join(' · ');
     const open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: doc.name }) } }, thumb, h('span', { class: 'wm-card-name', title: doc.name }, fileIcon(doc.name), setFileName(h('span', { class: 'wm-card-title' }), doc.name)), h('span', { class: 'wm-card-meta', text: meta }));
     open.addEventListener('click', () => {
-      this.hide();
+      this.leave();
       this.host.openShared(doc);
     });
     const badges = h('div', { class: 'wm-badges' }, h('span', { class: 'wm-badge', text: doc.role === 'viewer' ? t('panels.dashboard.viewOnly') : t('panels.dashboard.canEdit') }));
@@ -873,7 +1043,7 @@ export class Dashboard {
       open = h('button', { class: 'wm-card-open', attrs: { type: 'button', 'aria-label': t('panels.dashboard.open', { name: entry.name }) } }, thumb, h('span', { class: 'wm-card-name', title: entry.name }, fileIcon(entry.name), setFileName(h('span', { class: 'wm-card-title' }), entry.name)), h('span', { class: 'wm-card-meta', text: meta }));
       warmOnHover(open, () => this.host.warm(entry));
       open.addEventListener('click', () => {
-        this.hide();
+        this.leave();
         this.host.open(entry);
       });
     }
@@ -886,7 +1056,7 @@ export class Dashboard {
       this.cardMenu(card, () => [
         { label: t('panels.files.openItem'), run: () => open.click() },
         ...(this.host.canShowInVault?.() ? [{ label: showInFileManagerLabel(), run: () => this.host.showInVault?.({ doc: entry }) }] : []),
-      ]);
+      ], entry.name);
       return card;
     }
     const sync = syncBadge(entry.state, this.host.account() !== null);
@@ -922,7 +1092,7 @@ export class Dashboard {
       // Encrypt… or Decrypt… (a locked document opens by being unlocked, so Open stands for Unlock…).
       ...(entry.locked ? [] : documentItems(entry)),
       { label: t('panels.dashboard.delete'), run: () => remove.click() },
-    ]);
+    ], entry.name);
     this.makeDraggable(card, { kind: 'doc', entry });
     this.makeSelectable(card, `doc:${entry.key}`, entry.name);
     return card;
@@ -948,11 +1118,7 @@ export class Dashboard {
       open.addEventListener('click', () => {
         // A locked encrypted folder opens by being unlocked (docs/encrypted-folders.md).
         if (folder.locked) return void showUnlock();
-        this.search.value = '';
-        this.folderId = folder.id;
-        this.selected.clear();
-        this.render();
-        this.scroller.scrollTop = 0;
+        this.go({ kind: 'folder', id: folder.id });
       });
     }
 
@@ -989,7 +1155,7 @@ export class Dashboard {
       deleteFolder,
       'separator',
       ...newMenuItems((kind) => {
-        this.hide();
+        this.leave();
         this.host.newDocument(folder.id, kind);
       }),
       {
@@ -1007,7 +1173,7 @@ export class Dashboard {
       'separator',
       { label: t('panels.dashboard.import'), run: () => this.host.importFile(folder.id) },
       { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folder.id) },
-    ]);
+    ], folder.name);
     this.makeDraggable(card, { kind: 'folder', folder });
     this.makeDropTarget(card, folder.id);
     this.makeSelectable(card, `folder:${folder.id}`, folder.name);
@@ -1212,15 +1378,13 @@ export class Dashboard {
       const last = i === stops.length - 1;
       const crumb = h('button', { class: 'wm-crumb', text: stop.name, attrs: { type: 'button', ...(last ? { 'aria-current': 'page' } : {}) } });
       crumb.disabled = last;
-      crumb.addEventListener('click', () => {
-        this.folderId = stop.id;
-        this.selected.clear();
-        this.render();
-      });
+      crumb.addEventListener('click', () => this.go({ kind: 'folder', id: stop.id }));
       if (!last) this.makeDropTarget(crumb, stop.id);
       parts.push(crumb);
     });
     this.crumbs.replaceChildren(...parts);
+    // On a phone the path is one line that scrolls: the end of it (where this is) shows.
+    this.crumbs.scrollLeft = this.crumbs.scrollWidth;
   }
 
   /** Runs a change to the folders, then lists everything again (showing why, if it failed). */
@@ -1440,14 +1604,26 @@ export class Dashboard {
     button.replaceChildren(...(icon ? [iconElement(icon)] : []), h('span', { text: label }));
   }
 
-  /** A right click (or Shift+F10, or a long press) on a card: its commands as a menu, so they are reachable without the small icons. */
-  private cardMenu(card: HTMLElement, items: () => PopupItem[]): void {
+  /**
+   * A right click (or Shift+F10, or a long press) on a card: its commands as a menu, so they are reachable without the small icons.
+   * In List the menu is also a button at the end of the row (in place of the icons), named for the card.
+   */
+  private cardMenu(card: HTMLElement, items: () => PopupItem[], name: string): void {
     onContextMenu(card, (e) => {
       // A name being typed keeps the browser's own menu (copy, paste).
       if (e.target instanceof Element && e.target.closest('input, textarea')) return false;
       const before = document.activeElement;
       showPopupMenu(items(), e.clientX, e.clientY, t('panels.files.label'), () => giveBack(before));
     });
+    const label = t('panels.dashboard.moreFor', { name });
+    const more = h('button', { class: 'wm-card-more', title: label, attrs: { type: 'button', 'aria-label': label, 'aria-haspopup': 'menu' } });
+    more.innerHTML = MORE_DOTS;
+    more.addEventListener('click', () => {
+      const box = more.getBoundingClientRect();
+      showPopupMenu(items(), box.right, box.bottom, name, () => giveBack(more));
+    });
+    card.classList.add('wm-has-menu');
+    card.append(more);
   }
 
   /** A card action shown as an icon, named by its tooltip and accessible label. */

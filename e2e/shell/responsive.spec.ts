@@ -144,6 +144,46 @@ test.describe('phone menu drawer', () => {
     await expect(drawer(page).getByRole('button', { name: 'Back' })).toBeHidden();
   });
 
+  test('its sections are buttons above the list: a tap jumps to one, the one in view is marked, and it opens where it was left', async ({ app, page }) => {
+    await page.setViewportSize(PHONE);
+    await app.goto('?doc=welcome');
+    await hamburger(page).click();
+    const sections = drawer(page).getByRole('navigation', { name: 'Sections' });
+    expect(await sections.getByRole('button').allTextContents()).toEqual(['File', 'Edit', 'Insert', 'View', 'Tools', 'Help']);
+    await expect(sections.getByRole('button', { name: 'File' })).toHaveAttribute('aria-current', 'true');
+    await sections.getByRole('button', { name: 'View' }).click();
+    await expect(sections.getByRole('button', { name: 'View' })).toHaveAttribute('aria-current', 'true');
+    await expect(sections.getByRole('button', { name: 'File' })).not.toHaveAttribute('aria-current', 'true');
+    const viewHeading = drawer(page).locator('.wm-drawer-heading', { hasText: 'View' });
+    const top = async () => (await viewHeading.boundingBox())!.y - (await drawer(page).locator('.wm-drawer-list').boundingBox())!.y;
+    expect(await top()).toBeLessThan(20);
+    // Help is short, so its heading never reaches the top: at the end of the list it is the one marked.
+    await sections.getByRole('button', { name: 'Help' }).click();
+    await expect(sections.getByRole('button', { name: 'Help' })).toHaveAttribute('aria-current', 'true');
+    await sections.getByRole('button', { name: 'View' }).click();
+    await page.keyboard.press('Escape');
+    await expect(drawer(page)).toHaveCount(0);
+    await hamburger(page).click();
+    await expect(drawer(page).getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'View' })).toHaveAttribute('aria-current', 'true');
+    // A submenu with headings of its own (Convert To's kinds of file) has its own sections.
+    await drawer(page).getByRole('button', { name: 'File' }).click();
+    await drawer(page).getByRole('menuitem', { name: /^Convert To/ }).click();
+    await expect(drawer(page).locator('.wm-drawer-title')).toHaveText('Convert To');
+    await expect(drawer(page).getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'File' })).toHaveCount(0);
+  });
+
+  test('a swipe to the left closes it', async ({ app, page }) => {
+    await page.setViewportSize(PHONE);
+    await app.goto('?doc=welcome');
+    await hamburger(page).click();
+    await drawer(page).evaluate((el) => {
+      const at = (x: number, y: number) => new Touch({ identifier: 1, target: el, clientX: x, clientY: y });
+      el.dispatchEvent(new TouchEvent('touchstart', { touches: [at(250, 400)], changedTouches: [at(250, 400)], bubbles: true }));
+      el.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [at(120, 410)], bubbles: true }));
+    });
+    await expect(drawer(page)).toHaveCount(0);
+  });
+
   test('a command row runs its command and closes the drawer, returning the keyboard to the document', async ({ app, page }) => {
     await page.setViewportSize(PHONE);
     await app.goto('?doc=welcome');

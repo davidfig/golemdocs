@@ -131,3 +131,20 @@ details[open] > .wm-files-row > .wm-files-twist svg {
   outline: 2px solid var(--wm-hot-border);
   outline-offset: -2px;
 }
+
+/* A phone: the sidebar lies over the document rather than squeezing it to a strip beside it, wide enough for a name to be read (its width
+   dragged on a computer is not kept here), and it is put away once a document is opened from it (main.ts). */
+@media (max-width: 720px) {
+  .wm-files {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 9;
+    width: min(88vw, 340px) !important;
+    box-shadow: 0 0 24px var(--wm-shadow-strong);
+    font-size: 15px;
+  }
+
+  .wm-files .wm-files-row {
+    min-height: 40px;
+  }
+}

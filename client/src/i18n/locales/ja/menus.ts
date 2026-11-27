@@ -62,6 +62,7 @@ export const menus: Partial<Messages> = {
   'menus.toolbar.more': 'その他のボタン',
   'menus.drawer.back': '戻る',
   'menus.drawer.all': 'すべてのメニュー',
+  'menus.drawer.sections': 'セクション',
   'menus.split.options': '{label} のオプション',
   'menus.palette.more': 'その他の色…',
   'menus.palette.document': 'ドキュメントの色',

@@ -79,9 +79,9 @@ import { showFolderShareDialog, showShareDialog } from './ui/shareDialog.ts';
 import { showSignInDialog } from './ui/signIn.ts';
 import { loadSite, site, siteUnknown } from './site.ts';
 import { checkoutUrl, fetchSubscription, portalUrl, sellsSubscriptions, SubscriptionError, waitForSubscription, type Subscription } from './subscription.ts';
-import { Dashboard } from './ui/dashboard.ts';
+import { Dashboard, type DashboardState } from './ui/dashboard.ts';
 import { opensFromCloud } from './ui/dashboardFormat.ts';
-import { showChoice, showConfirm } from './ui/popup.ts';
+import { narrow, showChoice, showConfirm } from './ui/popup.ts';
 import { uniqueName } from './storage/uniqueName.ts';
 import { askToRun, pickScript, showScriptsDialog } from './ui/scriptDialogs.ts';
 import { ScriptsApp } from './scripts/app.ts';
@@ -9070,6 +9070,11 @@ function paintEdits(ctx: CanvasRenderingContext2D, width: number, height: number
 // The account's folders and documents as a tree, left of everything else (see ui/filesPanel.ts).
 const filesPanel = new FilesPanel(document.getElementById('workspace')!, {
   ...libraryHost,
+  // On a phone the sidebar lies over the document: opening one puts it away, so the document shows (fileRows.css).
+  open: (entry: LibraryEntry) => {
+    if (filesOpen && narrow().matches) toggleFilesPanel();
+    libraryHost.open(entry);
+  },
   current: openDocumentIds,
   close: toggleFilesPanel,
   focusEditor: focusInput,
@@ -9556,7 +9561,8 @@ window.addEventListener('popstate', () => {
     if (name) showLoading(name);
     openSource(doc, 'none');
   }
-  if (history.state?.dashboard) void dashboard.show(false);
+  // The Documents screen's own steps (a folder gone into, Trash) come back to the place each was for.
+  if (history.state?.dashboard) dashboard.restore(history.state as DashboardState);
   else if (dashboard.visible) dashboard.dismiss(false);
 });
 

@@ -5,6 +5,17 @@
 ### Added
 
 - New folders are easier to make in the Files sidebar: a New Folder button at the top of the sidebar and File › New Folder (in the desktop app, ⇧⌘N on a Mac and Ctrl+Shift+N on Windows and Linux) make one inside the folder you last picked, ready to name, and the right-click menus now list New Folder with the new documents.
+- The Documents screen has a List view, the default on a phone: each document gets a row with its whole name, its date and size, and a ⋯ button for its commands. Switch between Grid and List at the top of the screen.
+
+### Changed
+
+- The Documents screen on a phone: the heading fits on one row, the actions scroll sideways instead of taking two rows, the folder path stays at the top as you scroll, and the phone's Back gesture (or the new Up button) goes up a folder before it closes the screen.
+- The phone's menu shows File, Edit, Insert, View, Tools and Help as buttons at the top to jump between, marks the one you're in, opens where you left it, and closes with a swipe to the left. Its rows are a little shorter, so more fit on the screen.
+- On a phone the Files sidebar opens over the document instead of squeezing it, and closes when you open a document from it.
+
+### Fixed
+
+- Opening Trash in the Files sidebar from the keyboard sometimes left the keyboard on the Back button instead of the document just deleted.
 
 ## 0.49.0 - 2026-11-26
 

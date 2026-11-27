@@ -62,6 +62,7 @@ export const menus: Partial<Messages> = {
   'menus.toolbar.more': '更多按钮',
   'menus.drawer.back': '返回',
   'menus.drawer.all': '所有菜单',
+  'menus.drawer.sections': '分区',
   'menus.split.options': '{label}选项',
   'menus.palette.more': '其他颜色…',
   'menus.palette.document': '文档颜色',

@@ -62,6 +62,7 @@ export const menus: Partial<Messages> = {
   'menus.toolbar.more': 'Weitere Schaltflächen',
   'menus.drawer.back': 'Zurück',
   'menus.drawer.all': 'Alle Menüs',
+  'menus.drawer.sections': 'Abschnitte',
   'menus.split.options': 'Optionen für {label}',
   'menus.palette.more': 'Weitere Farben…',
   'menus.palette.document': 'Dokumentfarben',

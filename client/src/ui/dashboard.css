@@ -552,3 +552,368 @@ html[data-pages='dark'] .wm-thumb > .wm-thumb-empty {
 .wm-card-going {
   opacity: 0.5;
 }
+
+/* --- Grid or List (dashboard.ts, viewChooser) ---------------------------------------------- */
+
+.wm-dashboard .wm-dash-view {
+  flex: none;
+}
+
+/* The dashboard's own button look would otherwise give each segment a border and a gradient. */
+.wm-dashboard .wm-dash-view .wm-segment {
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-left: 1px solid var(--wm-etch-dark);
+  border-radius: 0;
+  background: none;
+}
+
+.wm-dashboard .wm-dash-view .wm-segment:first-child {
+  border-left: 0;
+}
+
+.wm-dashboard .wm-dash-view .wm-segment[aria-checked='true'] {
+  background: var(--wm-checked-hot);
+}
+
+.wm-dash-size[hidden],
+.wm-dash-up[hidden] {
+  display: none;
+}
+
+/* Up a level: only where the path above the cards is cramped (a phone). */
+.wm-dashboard .wm-dash-up {
+  display: none;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.wm-dash-up svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* A card's menu as a button: in List only (the grid keeps its icons). */
+.wm-dashboard .wm-card-more {
+  display: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-color: transparent;
+  background: none;
+  color: var(--wm-muted);
+}
+
+/* List: a row per folder and document, its picture small and its whole name beside it (wrapping to a second line), the date and size
+   under the name, and its commands in the ⋯ menu at the end. */
+.wm-dash-list .wm-dash-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.wm-dash-list .wm-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'open more' 'badges more';
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 0;
+  min-height: 56px;
+  padding: 6px 2px 6px 6px;
+  border-bottom: 1px solid var(--wm-border, #b9b9b9);
+}
+
+.wm-dash-list .wm-dash-empty {
+  border: 0;
+}
+
+.wm-dash-list .wm-card-open {
+  grid-area: open;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-areas: 'thumb name' 'thumb meta';
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  min-height: 44px;
+}
+
+.wm-dash-list .wm-card-open > .wm-thumb {
+  grid-area: thumb;
+  width: 34px;
+  align-self: center;
+}
+
+.wm-dash-list .wm-card-name,
+.wm-dash-list .wm-card-open > .wm-card-name-input {
+  grid-area: name;
+  align-self: end;
+}
+
+.wm-dash-list .wm-card-meta {
+  grid-area: meta;
+  align-self: start;
+}
+
+/* A folder's picture: the folder alone, without the pages showing through it (too small to read here). */
+.wm-dash-list .wm-folder-mini {
+  display: none;
+}
+
+.wm-dash-list .wm-folder-shape {
+  width: 100%;
+  height: 72%;
+}
+
+.wm-dash-list .wm-folder-shape::before {
+  min-height: 4px;
+}
+
+.wm-dash-list .wm-trash-thumb .wm-file-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* The whole name: two lines, then cut. */
+.wm-dash-list .wm-card-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.wm-dash-list .wm-card-name {
+  align-items: flex-start;
+}
+
+.wm-dash-list .wm-card-name > .wm-file-icon {
+  margin-top: 1px;
+}
+
+.wm-dash-list .wm-badges {
+  grid-area: badges;
+  padding-left: 46px;
+}
+
+.wm-dash-list .wm-badges:empty {
+  display: none;
+}
+
+.wm-dash-list .wm-card-more {
+  grid-area: more;
+  display: grid;
+}
+
+.wm-dash-list .wm-card-actions {
+  grid-area: more;
+}
+
+/* With the menu at the end of the row, the icons would only crowd it. */
+.wm-dash-list .wm-has-menu > .wm-card-actions {
+  display: none;
+}
+
+.wm-dash-list .wm-dashboard .wm-card-actions button,
+.wm-dash-list .wm-card-actions button {
+  flex: none;
+  width: 40px;
+  height: 40px;
+}
+
+.wm-dash-list .wm-card-actions {
+  visibility: visible;
+}
+
+.wm-dash-list .wm-select {
+  top: 50%;
+  left: -2px;
+  translate: 0 -50%;
+}
+
+.wm-dash-list .wm-card.wm-selected {
+  background: var(--wm-hot, #c1d2ee);
+}
+
+.wm-dash-list .wm-card.wm-selected .wm-thumb {
+  outline: none;
+}
+
+@media (hover: hover) {
+  .wm-dash-list .wm-card:hover {
+    background: color-mix(in srgb, var(--wm-hot, #c1d2ee) 45%, transparent);
+  }
+
+  .wm-dashboard .wm-card-more:hover:not(:disabled) {
+    color: var(--wm-text);
+  }
+}
+
+/* A phone: one row of heading (Up, search, Grid or List, close), one row of actions that scrolls sideways rather than wrapping, the path
+   held at the top as the list scrolls, and everything big enough for a finger. */
+@media (max-width: 640px) {
+  .wm-dash-head {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  /* The search box says where this is; the heading stays for a screen reader. */
+  .wm-dash-head h1 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .wm-dashboard .wm-dash-up {
+    display: grid;
+  }
+
+  .wm-dash-up[hidden] {
+    display: none !important;
+  }
+
+  .wm-dash-search {
+    min-width: 0;
+    max-width: none;
+    height: 36px;
+    font-size: 16px;
+  }
+
+  .wm-dash-size {
+    display: none;
+  }
+
+  .wm-dashboard .wm-dash-view .wm-segment {
+    height: 34px;
+    padding: 0 10px;
+  }
+
+  .wm-dashboard .wm-dash-close {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+  }
+
+  .wm-dash-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 8px 10px;
+  }
+
+  .wm-dash-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .wm-dash-actions .wm-button {
+    flex: none;
+    height: 36px;
+  }
+
+  .wm-dash-scroll {
+    padding: 0 10px 24px;
+  }
+
+  .wm-dash-notice:not(:empty) {
+    margin-top: 10px;
+  }
+
+  .wm-dash-crumbs {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 -10px 4px;
+    padding: 6px 10px;
+    background: var(--wm-gutter, #eeeeea);
+    border-bottom: 1px solid var(--wm-border, #b9b9b9);
+  }
+
+  .wm-dashboard .wm-crumb {
+    flex: none;
+    min-height: 32px;
+  }
+
+  .wm-dash-grid {
+    margin-top: 10px;
+  }
+
+  .wm-dash-crumbs:not([hidden]) + .wm-dash-grid {
+    margin-top: 0;
+  }
+
+  .wm-dash-list .wm-card-title {
+    font-size: 15px;
+  }
+
+  .wm-dash-list .wm-card-meta {
+    font-size: 13px;
+  }
+}
+
+/* The dashboard's button look (.wm-dashboard button:not(.wm-button)) is stronger than a class alone: a row's click target, its ⋯ and the
+   path's places are flat. */
+.wm-dashboard.wm-dash-list button.wm-card-open:not(.wm-button),
+.wm-dashboard button.wm-card-more:not(.wm-button) {
+  border: 0;
+  background: none;
+}
+
+.wm-dashboard.wm-dash-list button.wm-card-open:not(.wm-button) {
+  padding: 0;
+}
+
+.wm-dashboard button.wm-crumb:not(.wm-button) {
+  border-color: transparent;
+  background: none;
+}
+
+.wm-dashboard button.wm-crumb:not(.wm-button):disabled {
+  color: inherit;
+  font-weight: 600;
+}
+
+/* Without the size slider (List) the switch takes its place at the end of the heading. */
+.wm-dash-size[hidden] + .wm-dash-view {
+  margin-left: auto;
+}
+
+/* Wide enough: a row's badges sit in it, beside the name, so every row is one height. */
+@media (min-width: 641px) {
+  .wm-dash-list .wm-card {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: 'open badges more';
+  }
+
+  .wm-dash-list .wm-badges {
+    padding-left: 0;
+  }
+}
+
+/* With a mouse, the tick box (shown on pointing) gets a place of its own at the start of the row, rather than over the picture. */
+@media (hover: hover) {
+  .wm-dash-list .wm-card[data-select] {
+    padding-left: 30px;
+  }
+
+  .wm-dash-list .wm-select {
+    left: 6px;
+  }
+}

@@ -552,10 +552,53 @@ html.wm-titlebar .wm-format {
 }
 
 .wm-drawer-list {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 4px;
+}
+
+/* The top level's headings as a row of buttons above the list: a tap jumps to one, and the one in view is marked (menuDrawer.ts). */
+.wm-drawer-sections {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--wm-border);
+}
+
+.wm-drawer-sections::-webkit-scrollbar {
+  display: none;
+}
+
+.wm-drawer-sections[hidden] {
+  display: none;
+}
+
+.wm-drawer-section {
+  flex: none;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--wm-border);
+  border-radius: 16px;
+  background: var(--wm-field-bg);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+}
+
+.wm-drawer-section[aria-current='true'] {
+  border-color: var(--wm-hot-border);
+  background: var(--wm-checked-hot);
+  font-weight: 600;
+}
+
+.wm-drawer-section:focus-visible {
+  outline: 2px solid var(--wm-hot-border);
+  outline-offset: 1px;
 }
 
 .wm-menu-heading {
@@ -580,7 +623,7 @@ html.wm-titlebar .wm-format {
 }
 
 .wm-drawer .wm-item {
-  height: 48px;
+  height: 44px;
   padding: 0 4px;
 }
 

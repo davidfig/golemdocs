@@ -62,6 +62,7 @@ export const menus: Partial<Messages> = {
   'menus.toolbar.more': '버튼 더 보기',
   'menus.drawer.back': '뒤로',
   'menus.drawer.all': '모든 메뉴',
+  'menus.drawer.sections': '섹션',
   'menus.split.options': '{label} 옵션',
   'menus.palette.more': '다른 색…',
   'menus.palette.document': '문서 색상',

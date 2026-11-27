@@ -17,7 +17,8 @@ test('File › Close saves the document and leaves nothing open', async ({ app, 
   const file = await menuContents(app, 'File');
   expect(file!.disabled).toEqual(expect.arrayContaining(['Close', 'Share…', 'Download', 'Rename…']));
   expect(file!.disabled).not.toContain('New');
-  await expect(page.getByRole('combobox', { name: 'Document format' })).toBeDisabled();
+  // With nothing open there is no name, format or save state to show.
+  await expect(page.getByRole('button', { name: 'Document format', exact: true })).toBeHidden();
   // Typing goes nowhere.
   await page.keyboard.type('lost');
   // The closed document was saved, and opens again from the Documents screen.

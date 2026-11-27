@@ -101,6 +101,7 @@ export const dialogs: Partial<Messages> = {
 
   // Sync button and panel
   'dialogs.account.label': 'Compte',
+  'dialogs.account.signIn': 'Se connecter',
   'dialogs.account.guest.title': 'Non connecté',
   'dialogs.account.plan.active': 'Votre abonnement à la synchronisation est actif.',
   'dialogs.account.plan.none': 'Vous n’avez pas d’abonnement à la synchronisation. Abonnez-vous pour garder vos documents dans votre compte, les ouvrir sur n’importe quel appareil et les partager.',

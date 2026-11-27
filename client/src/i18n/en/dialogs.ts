@@ -99,6 +99,7 @@ export const dialogs = {
 
   // Sync button and panel
   'dialogs.account.label': 'Account',
+  'dialogs.account.signIn': 'Sign in',
   'dialogs.account.guest.title': 'Not signed in',
   'dialogs.account.plan.active': 'Your sync subscription is active.',
   'dialogs.account.plan.none': 'You don’t have a sync subscription. Subscribe to keep your documents in your account, open them on any device and share them.',

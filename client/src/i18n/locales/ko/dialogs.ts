@@ -101,6 +101,7 @@ export const dialogs: Partial<Messages> = {
 
   // Sync button and panel
   'dialogs.account.label': '계정',
+  'dialogs.account.signIn': '로그인',
   'dialogs.account.guest.title': '로그인하지 않음',
   'dialogs.account.plan.active': '동기화 구독이 활성화되어 있습니다.',
   'dialogs.account.plan.none': '동기화 구독이 없습니다. 구독하면 문서를 계정에 보관하고, 모든 기기에서 열고, 공유할 수 있습니다.',

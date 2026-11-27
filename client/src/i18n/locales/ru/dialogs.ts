@@ -101,6 +101,7 @@ export const dialogs: Catalog = {
 
   // Sync button and panel
   'dialogs.account.label': 'Аккаунт',
+  'dialogs.account.signIn': 'Войти',
   'dialogs.account.guest.title': 'Вход не выполнен',
   'dialogs.account.plan.active': 'Ваша подписка на синхронизацию активна.',
   'dialogs.account.plan.none': 'У вас нет подписки на синхронизацию. Оформите подписку, чтобы хранить документы в аккаунте, открывать их на любом устройстве и делиться ими.',

@@ -40,7 +40,7 @@ async function pdfPair(browser: import('@playwright/test').Browser) {
 
 test('the one who joins opens the same PDF, as a PDF, and watches: told it is being edited on another device, with Take over', async ({ browser }) => {
   const { context, a, b } = await pdfPair(browser);
-  await expect(b.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/PDF/);
+  await expect(b.page.getByRole('button', { name: 'Document format', exact: true })).toHaveAccessibleDescription(/PDF/);
   await expect(banner(b)).toBeVisible();
   await expect(banner(b)).toContainText('editing this on another device');
   await expect(btn(b, 'Take over')).toBeVisible();

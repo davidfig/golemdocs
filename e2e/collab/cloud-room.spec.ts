@@ -189,8 +189,8 @@ test('a document is not opened in a room when signed out', async ({ browser }) =
 test.describe('a cloud Markdown document in a room', () => {
   test('both devices edit it as Markdown, and the cloud copy is still a Markdown document with its front matter after the edits', { tag: '@heavy' }, async ({ browser }) => {
     const { a, b, doc } = await cloudPair(browser, ['Hello'], { name: 'Notes.md', wrap: (docx) => markdownWdoc(docx, 'title: Notes') });
-    await expect(a.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/Markdown/);
-    await expect(b.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/Markdown/);
+    await expect(a.page.getByRole('button', { name: 'Document format', exact: true })).toHaveAccessibleDescription(/Markdown/);
+    await expect(b.page.getByRole('button', { name: 'Document format', exact: true })).toHaveAccessibleDescription(/Markdown/);
     await expectText(b.app, 'Hello');
     await b.app.type(' from B');
     await expectText(a.app, 'Hello from B');

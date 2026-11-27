@@ -101,6 +101,7 @@ export const dialogs: Partial<Messages> = {
 
   // Sync button and panel
   'dialogs.account.label': '账户',
+  'dialogs.account.signIn': '登录',
   'dialogs.account.guest.title': '未登录',
   'dialogs.account.plan.active': '你的同步订阅已生效。',
   'dialogs.account.plan.none': '你还没有同步订阅。订阅后，可将文档保存在账户中，在任何设备上打开并共享。',

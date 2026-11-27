@@ -101,6 +101,7 @@ export const dialogs: Partial<Messages> = {
 
   // Sync button and panel
   'dialogs.account.label': '帳戶',
+  'dialogs.account.signIn': '登入',
   'dialogs.account.guest.title': '未登入',
   'dialogs.account.plan.active': '你的同步訂閱已生效。',
   'dialogs.account.plan.none': '你還沒有同步訂閱。訂閱後，可將文件儲存在帳戶中，在任何裝置上開啟並共用。',

@@ -13,14 +13,14 @@ const sample = () =>
   });
 
 type App = import('../fixtures').App;
-const formatBox = (app: App) => app.page.locator('.wm-format-field input');
+const formatBox = (app: App) => app.page.getByRole('button', { name: 'Document format', exact: true });
 
 test.describe('Convert To, from a PDF', () => {
   test.beforeEach(async ({ app }) => openPdf(app, sample()));
 
   test('Word Document makes it an editable document with the PDF text', async ({ app }) => {
     await app.menu('File', 'Convert To', 'Word Document');
-    await expect(formatBox(app)).toHaveValue('Word Document');
+    await expect(formatBox(app)).toHaveAccessibleDescription('Word Document');
     await expect(app.page.locator('.wm-forms-palette')).toBeHidden();
     // The converted document is laid out a moment after the format changes.
     await expect.poll(() => app.text()).toContain('Hello PDF world');
@@ -32,18 +32,18 @@ test.describe('Convert To, from a PDF', () => {
 
   test('Plain Text and Markdown carry the text over', async ({ app }) => {
     await app.menu('File', 'Convert To', 'Plain Text');
-    await expect(formatBox(app)).toHaveValue('Plain Text');
+    await expect(formatBox(app)).toHaveAccessibleDescription('Plain Text');
     await expect.poll(() => app.text()).toContain('Hello PDF world');
     await app.menu('File', 'Convert To', 'Markdown');
-    await expect(formatBox(app)).toHaveValue('Markdown');
+    await expect(formatBox(app)).toHaveAccessibleDescription('Markdown');
     await expect.poll(() => app.text()).toContain('Second line of text');
   });
 
   test('converting back to PDF shows the original pages again', async ({ app }) => {
     await app.menu('File', 'Convert To', 'Word Document');
-    await expect(formatBox(app)).toHaveValue('Word Document');
+    await expect(formatBox(app)).toHaveAccessibleDescription('Word Document');
     await app.menu('File', 'Convert To', 'PDF');
-    await expect(formatBox(app)).toHaveValue('PDF');
+    await expect(formatBox(app)).toHaveAccessibleDescription('PDF');
     await expect(app.page.locator('.wm-forms-palette')).toBeVisible();
     expect(await pageCount(app.page)).toBe(1);
   });
@@ -57,7 +57,7 @@ test.describe('Convert To, from a PDF', () => {
 
   test('a document edited as Word downloads as .docx, not as the PDF', async ({ app }) => {
     await app.menu('File', 'Convert To', 'Word Document');
-    await expect(formatBox(app)).toHaveValue('Word Document');
+    await expect(formatBox(app)).toHaveAccessibleDescription('Word Document');
     const file = await app.download(() => app.menu('File', 'Download'));
     expect(file.name).toMatch(/\.docx$/);
     expect(file.bytes.subarray(0, 2).toString('latin1')).toBe('PK');
@@ -115,7 +115,7 @@ test.describe('vector art in a PDF', () => {
     // A blue triangle, made of paths (no picture in the PDF).
     await openPdf(app, makePdf({ pages: [[{ text: 'Under the triangle', x: 40, y: 30, size: 14 }]], extraContent: '0 0.4 0.8 rg 100 60 m 300 60 l 200 240 l f' }));
     await app.menu('File', 'Convert To', 'Word Document');
-    await expect(formatBox(app)).toHaveValue('Word Document');
+    await expect(formatBox(app)).toHaveAccessibleDescription('Word Document');
     await app.page.waitForFunction(() => (window as unknown as { pages: { images: { svg?: string }[] }[] }).pages[0]?.images.some((i) => i.svg));
     const image = await app.page.evaluate(() => (window as unknown as { pages: { images: { part: string; svg?: string }[] }[] }).pages[0].images.find((i) => i.svg));
     expect(image?.part).toMatch(/\.png$/);

@@ -104,7 +104,7 @@ test.describe('comments in downloaded files', () => {
   test('Markdown writes comments as CriticMarkup', async ({ app, page }) => {
     await richDocument(app);
     await app.menu('File', 'Convert To', 'Markdown');
-    await expect(app.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/Markdown/);
+    await expect(app.page.getByRole('button', { name: 'Document format', exact: true })).toHaveAccessibleDescription(/Markdown/);
     const file = await app.download(() => app.menu('File', 'Download'));
     expect(file.name).toMatch(/\.md$/);
     expect(file.text).toMatch(/\{==alpha==\}\{>>✓ @e2e \([0-9T:\-Z]+\): note on alpha<<\}/);

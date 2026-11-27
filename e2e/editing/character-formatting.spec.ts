@@ -186,10 +186,10 @@ test.describe('Code mark in a Markdown document', () => {
   test('Format ▸ Character ▸ Code marks the selection as code', async ({ app }) => {
     await app.blank();
     // Switch the open document to Markdown with the format box, where the Code mark exists.
-    const formatBox = app.page.getByRole('combobox', { name: 'Document format' });
+    const formatBox = app.page.getByRole('button', { name: 'Document format', exact: true });
     await formatBox.click();
     await app.page.getByRole('option', { name: 'Markdown' }).click();
-    await expect(formatBox).toHaveValue('Markdown');
+    await expect(formatBox).toHaveAccessibleDescription('Markdown');
     await app.focus();
     await app.type('call fn now');
     await app.press('Shift+ArrowLeft', 6);

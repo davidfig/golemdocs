@@ -1,6 +1,7 @@
-// The save indicator at the top right: a dot and a word for whether the open document is saved,
-// to the user's account or, without sync, to this browser. It opens a panel with the details.
-// The account (signing in, the subscription) is the person icon beside it, in accountButton.ts.
+// The save indicator after the document's name: a dot, and a word when something needs the person (offline, not saved, signed
+// out), for whether the open document is saved, to the user's account or, without sync, to this browser. "Saved" and "Saving…"
+// are only the dot (its colour, and a pulse while saving), named for screen readers and in the tooltip. It opens a panel with the
+// details. The account (signing in, the subscription) is at the top right, in accountButton.ts.
 
 import type { Action, ChromeHost, DocumentSync, SyncStatus } from './actions.ts';
 import { h, setAttr } from './dom.ts';
@@ -52,6 +53,8 @@ export class SyncButton {
     this.label.textContent = text;
     setAttr(this.el, 'data-state', status.document);
     setAttr(this.el, 'data-local', status.localSaved ? 'saved' : 'unsaved');
+    // Saved and saving are the usual states: the dot says them, and words are kept for what needs the person.
+    setAttr(this.el, 'data-quiet', ['guest', 'unsubscribed', 'saved', 'saving'].includes(status.document) ? 'true' : 'false');
     this.el.title = status.document === 'failed' && status.error ? t('dialogs.sync.failedWithReason', { tooltip, error: status.error }) : tooltip;
     this.el.setAttribute('aria-label', t('dialogs.sync.ariaLabel', { status: text }));
     if (popupOpenFor(this.el)) openPopup(this.el, this.panel(), () => this.host.focusEditor());

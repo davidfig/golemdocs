@@ -1,4 +1,4 @@
-// File ▸ Convert To and the Document format selector: switching what a document is edited as.
+// File ▸ Convert To and the Document format chip (beside the name): switching what a document is edited as.
 
 import { MOD, expect, test } from './fixtures';
 import { blankWith, buildPng, convertTo, formatLabel, hasItem, importFile, menuContents, status, text, waitForSaved } from './helpers';
@@ -71,15 +71,19 @@ test('the notice after a conversion says what the new format leaves out', { tag:
   await expect.poll(() => status(app.page)).toContain('Now shown as PDF, which can’t be edited.');
 });
 
-test('the Document format selector converts too', async ({ app }) => {
+test('the Document format chip converts too', async ({ app }) => {
   await blankWith(app, 'Selector text');
-  const box = app.page.getByRole('combobox', { name: 'Document format' });
+  const box = app.page.getByRole('button', { name: 'Document format', exact: true });
+  // The chip shows the extension and is described by the format's name.
+  await expect(box.locator('.wm-dropdown-name')).toHaveText('DOCX');
+  await expect(box).toHaveAccessibleDescription('Word Document');
   await box.click();
   await app.page.getByRole('listbox', { name: 'Document format' }).getByRole('option', { name: 'OpenDocument Text' }).click();
   await expect.poll(() => formatLabel(app.page)).toBe('OpenDocument Text');
   await app.ready();
   expect(await app.text()).toBe('Selector text');
   await expect(app.page).toHaveTitle('Document1.odt - Golem Docs');
+  await expect(box.locator('.wm-dropdown-name')).toHaveText('ODT');
 });
 
 test('converting is reversible: Word to Markdown to Word keeps the document', async ({ app }) => {

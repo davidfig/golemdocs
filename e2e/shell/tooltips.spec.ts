@@ -95,7 +95,7 @@ test.describe('tooltips', () => {
     await app.blank();
     await page.getByRole('toolbar').getByRole('combobox', { name: 'Zoom' }).hover();
     await expect(tip(page)).toHaveText('Zoom');
-    await page.getByRole('combobox', { name: 'Document format' }).hover();
+    await page.getByRole('button', { name: 'Document format', exact: true }).hover();
     await expect(tip(page)).toContainText('Document format');
     await page.getByRole('button', { name: 'Command palette' }).hover();
     await expect(tip(page)).toContainText('Command palette');

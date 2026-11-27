@@ -47,8 +47,8 @@ test('a picture document shows the Picture menu and its toolbars instead of the 
 
 test('the document format box names the open format', async ({ app, page }) => {
   await app.blank();
-  const box = page.getByRole('combobox', { name: 'Document format' });
-  await expect(box).toHaveValue(/Word Document/);
+  const box = page.getByRole('button', { name: 'Document format', exact: true });
+  await expect(box).toHaveAccessibleDescription(/Word Document/);
   await expect(menuTitle(app, 'Table')).toBeVisible();
 });
 

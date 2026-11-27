@@ -22,14 +22,17 @@ async function openSyncPanel(page: Page) {
   return page.locator('.wm-sync-panel');
 }
 
-/** The person icon's panel: who is signed in, Sign in / Sign out. */
+/** The Sign in button at the top right, which a guest sees instead of the person icon. */
+const signInButton = (page: Page) => page.getByRole('button', { name: 'Sign in', exact: true });
+
+/** The account's panel (the picture or person icon): who is signed in, Sign out; on a phone, Sign in for a guest. */
 async function openAccountPanel(page: Page) {
   await page.locator('.wm-account').click();
   return page.locator('.wm-sync-panel');
 }
 
 test.describe('a guest (not signed in)', () => {
-  test('the server reports nobody signed in; the save indicator says it is saved in this browser and the account menu offers to sign in', async ({ browser }) => {
+  test('the server reports nobody signed in; the save indicator says it is saved in this browser and the corner offers to sign in', async ({ browser }) => {
     const { context, page, app } = await guest(browser);
     await app.blank();
     await app.type('text');
@@ -38,15 +41,38 @@ test.describe('a guest (not signed in)', () => {
     await expect(button).toHaveAttribute('data-state', 'guest');
     await expect(button).toHaveAttribute('data-local', 'saved', { timeout: 15_000 });
     await expect(page.locator('.wm-account')).toHaveAttribute('data-signed-in', 'false');
+    // Saved is said by the dot alone, named for screen readers; with reduced motion (no pulse for saving) it is said in words.
+    await expect(button).toHaveAccessibleName('Saving: Saved');
+    await expect(button.locator('.wm-sync-label')).toBeHidden();
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(button.locator('.wm-sync-label')).toBeVisible();
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     let panel = await openSyncPanel(page);
     await expect(panel).toContainText('Saved locally');
     await expect(panel).toContainText('isn’t uploaded anywhere');
     await expect(panel.getByRole('button', { name: 'Sign in…' })).toHaveCount(0);
     await page.keyboard.press('Escape');
-    panel = await openAccountPanel(page);
+    // Not a person icon with a panel: one button that asks to sign in, and says why in its tip.
+    const signIn = signInButton(page);
+    await expect(signIn).toBeVisible();
+    await expect(signIn).not.toHaveAttribute('aria-haspopup');
+    await expect(signIn).toHaveAttribute('title', /Without an account, Golem Docs still works/);
+    await signIn.click();
+    await expect(signInDialog(page)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.wm-sync-panel')).toHaveCount(0);
+    await context.close();
+  });
+
+  test('on a phone there is no room for the words: the person icon opens a panel that offers to sign in', async ({ browser }) => {
+    const { context, page, app } = await guest(browser);
+    await app.blank();
+    await page.setViewportSize({ width: 375, height: 760 });
+    await expect(signInButton(page)).toHaveCount(0);
+    const panel = await openAccountPanel(page);
     await expect(panel).toContainText('Not signed in');
-    await expect(panel.getByRole('button', { name: 'Sign in…' })).toBeVisible();
-    await expect(panel.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+    await panel.getByRole('button', { name: 'Sign in…' }).click();
+    await expect(signInDialog(page)).toBeVisible();
     await context.close();
   });
 
@@ -106,8 +132,7 @@ test.describe('the sign-in dialog', () => {
     const { context, page, app } = await guest(browser);
     await app.blank();
     await app.type('before signing in');
-    const panel = await openAccountPanel(page);
-    await panel.getByRole('button', { name: 'Sign in…' }).click();
+    await signInButton(page).click();
     const dialog = signInDialog(page);
     await expect(dialog.getByText('Sign in to subscribe to sync, share documents')).toBeVisible();
     const google = dialog.getByRole('link', { name: 'Continue with Google' });
@@ -132,8 +157,7 @@ test.describe('the sign-in dialog', () => {
       () => dialog.getByRole('button', { name: /close/i }).click(),
       () => page.keyboard.press('Escape'),
     ]) {
-      const panel = await openAccountPanel(page);
-      await panel.getByRole('button', { name: 'Sign in…' }).click();
+      await signInButton(page).click();
       await expect(dialog).toBeVisible();
       await dismiss();
       await expect(dialog).toHaveCount(0);
@@ -151,8 +175,7 @@ test.describe('the sign-in dialog', () => {
     ] as const) {
       const { context, page, app } = await guest(browser);
       await app.goto(`?doc=welcome&auth_error=${reason}`);
-      const panel = await openAccountPanel(page);
-      await panel.getByRole('button', { name: 'Sign in…' }).click();
+      await signInButton(page).click();
       await expect(signInDialog(page).getByRole('alert')).toHaveText(message);
       expect(new URL(page.url()).searchParams.has('auth_error')).toBe(false);
       await context.close();
@@ -163,8 +186,7 @@ test.describe('the sign-in dialog', () => {
     const { context, page, app } = await guest(browser);
     await app.blank();
     await app.type('my draft');
-    const panel = await openAccountPanel(page);
-    await panel.getByRole('button', { name: 'Sign in…' }).click();
+    await signInButton(page).click();
     await signInDialog(page).getByRole('link', { name: /^Continue with Dev User/ }).click();
     await app.ready();
     await expect(page).toHaveURL(/\?doc=local%3A[0-9a-f-]{36}$/);

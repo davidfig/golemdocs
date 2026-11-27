@@ -1,5 +1,6 @@
-// The document's name, centred in the menu bar between the menus and the controls at the right. Click it
-// to rename the document. A name too long for the room ends in "…"; with too little room it is left out.
+// The document's name, centred in the menu bar between the menus and the controls at the right, followed by what describes
+// the document (its format chip and save indicator, `meta`) and who else is editing it. Click the name to rename the document.
+// A name too long for the room ends in "…"; with too little room the name is left out and the rest stays, centred.
 
 import { t } from '../i18n/index.ts';
 import { avatar } from './avatar.ts';
@@ -40,18 +41,20 @@ export class DocumentTitle {
   /**
    * @param menus the menu bar: the title sits to the right of its last visible child
    * @param controls the controls at the right: the title stops short of them
+   * @param meta shown right after the name (the format and save indicator); kept when the name has no room
    * @param rename asks for a new name (the app cleans it, and `show` is called with what was kept)
    */
   constructor(
     private readonly menus: HTMLElement,
     private readonly controls: HTMLElement,
+    private readonly meta: HTMLElement,
     private readonly rename: (name: string) => void,
     private readonly focusEditor: () => void,
   ) {
     this.input = h('input', { class: 'wm-doctitle-input', attrs: { type: 'text', spellcheck: 'false', autocomplete: 'off', maxlength: '120', 'aria-label': t('chrome.title.label') } });
     this.measure = h('span', { class: 'wm-doctitle-measure', attrs: { 'aria-hidden': 'true' } });
     this.presence = h('div', { class: 'wm-presence', attrs: { role: 'img' } });
-    this.el = h('div', { class: 'wm-doctitle', attrs: { hidden: '' } }, this.input, this.presence, this.measure);
+    this.el = h('div', { class: 'wm-doctitle', attrs: { hidden: '' } }, this.input, meta, this.presence, this.measure);
     // Clicking the name selects all of it, so typing replaces it. Chrome keeps the selection a focus makes; WebKit (Safari, and the
     // desktop app's window) lets the mouse button's release put the caret at the click and drop it, so that release is cancelled
     // when it ends the click that gave the field focus.
@@ -95,6 +98,7 @@ export class DocumentTitle {
     const observer = new ResizeObserver(() => this.place());
     observer.observe(menus);
     observer.observe(controls);
+    observer.observe(meta);
   }
 
   /** Shows `name` (`editable`: whether a click may rename it). */
@@ -135,13 +139,25 @@ export class DocumentTitle {
     }
     const right = this.controls.getBoundingClientRect().left;
     const room = right - left - 2 * GAP;
-    this.fits = room >= MIN_WIDTH && this.input.value !== '';
-    this.el.hidden = !this.fits;
-    if (!this.fits) return;
+    // The format and save indicator come first: without room for them as well, the name gives way. (Shown to be measured.)
+    this.el.hidden = false;
+    const metaWidth = Math.ceil(this.meta.offsetWidth);
+    const named = this.input.value !== '';
+    const nameRoom = room - metaWidth - PEOPLE_GAP;
+    this.fits = named && nameRoom >= MIN_WIDTH;
+    this.el.hidden = !named || room < metaWidth;
+    this.input.hidden = !this.fits;
+    if (this.el.hidden) return;
+    if (!this.fits) {
+      this.presence.hidden = true;
+      this.el.style.width = `${metaWidth}px`;
+      this.el.style.left = `${left + GAP + (room - metaWidth) / 2 - origin}px`;
+      return;
+    }
     this.measure.textContent = this.input.value;
-    const titleWidth = Math.min(room, Math.ceil(this.measure.offsetWidth) + PADDING);
-    const shown = this.showPeople(room - Math.min(titleWidth, TITLE_MIN) - PEOPLE_GAP);
-    const beside = shown ? shown + PEOPLE_GAP : 0;
+    const titleWidth = Math.min(nameRoom, Math.ceil(this.measure.offsetWidth) + PADDING);
+    const shown = this.showPeople(nameRoom - Math.min(titleWidth, TITLE_MIN) - PEOPLE_GAP);
+    const beside = metaWidth + PEOPLE_GAP + (shown ? shown + PEOPLE_GAP : 0);
     const rest = left + GAP + (room - Math.min(room, titleWidth + beside)) / 2 - origin;
     if (!this.editing) this.restLeft = rest;
     const start = this.editing ? this.restLeft : rest;

@@ -266,9 +266,9 @@ export async function status(page: Page): Promise<string> {
   return page.evaluate(() => (window as unknown as { status: string }).status);
 }
 
-/** The value shown in the Document format selector. */
+/** The format the Document format chip says the document is (its full name: the chip itself shows the extension). */
 export async function formatLabel(page: Page): Promise<string> {
-  return page.getByRole('combobox', { name: 'Document format' }).inputValue();
+  return page.getByRole('button', { name: 'Document format', exact: true }).evaluate((el) => document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent ?? '');
 }
 
 /** The toast (alert) text showing, if any. */

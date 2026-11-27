@@ -386,7 +386,7 @@ html.wm-titlebar .wm-menubar {
 }
 
 html.wm-titlebar .wm-doctitle,
-html.wm-titlebar .wm-format {
+html.wm-titlebar .wm-corner {
   top: 5px;
 }
 
@@ -1712,27 +1712,50 @@ html.wm-titlebar .wm-format {
   display: none !important;
 }
 
-.wm-format {
+.wm-corner {
   position: absolute;
   top: 2px;
   right: 6px;
   height: 20px;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
-.wm-format-field {
+/* After the document's name: its format chip and save indicator (see documentTitle.ts). */
+.wm-doctitle-meta {
   display: flex;
+  flex: none;
   align-items: center;
-  gap: 5px;
+  gap: 2px;
 }
 
-/* The format picker is a read-only combo box; it sits in the menu bar's row. */
-.wm-format .wm-combo {
-  box-sizing: border-box;
-  height: 19px;
+/* "DOCX ▾": the format, as a small chip that lists the formats to switch to (a choiceButton). */
+.wm-dropdown.wm-format-chip {
+  width: auto;
+  height: 17px;
   margin: 0;
+  padding: 0 4px 0 5px;
+  gap: 3px;
+  border-radius: 3px;
+  background: none;
+  color: var(--wm-text);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  transition: background var(--wm-ease), border-color var(--wm-ease), color var(--wm-ease);
+}
+
+.wm-format-chip:not(:disabled):hover,
+.wm-format-chip[aria-expanded='true'] {
+  background: var(--wm-hot);
+  border-color: var(--wm-hot-border);
+  color: var(--wm-text);
+}
+
+.wm-format-chip .wm-dropdown-caret {
+  border-width: 3px;
+  border-bottom: 0;
 }
 
 /* --- Document name (centred in the menu bar) ------------------------------------------------ */
@@ -1802,16 +1825,23 @@ html.wm-titlebar .wm-format {
 
 /* --- Sync button (top right) --------------------------------------------------------------- */
 
+/* The menu bar's buttons are flat, like its menus, and light up on hover. */
 .wm-sync {
   display: flex;
   align-items: center;
   gap: 5px;
   height: 19px;
-  padding: 0 8px;
-  background: var(--wm-menu-bg);
-  border: 1px solid var(--wm-field-border);
+  padding: 0 6px;
+  color: var(--wm-muted);
+  background: none;
+  border: 1px solid transparent;
   border-radius: 4px;
   cursor: default;
+}
+
+/* Saved and saving: the dot alone (its name is in the tooltip and for screen readers; syncButton.ts). */
+.wm-sync[data-quiet='true'] .wm-sync-label {
+  display: none;
 }
 
 .wm-sync:hover,
@@ -1820,31 +1850,49 @@ html.wm-titlebar .wm-format {
   border-color: var(--wm-hot-border);
 }
 
+/* Signed out: "Sign in", a flat button like the menus. Signed in: the person's picture, or a person icon, in a circle. */
 .wm-account {
   display: flex;
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 19px;
   height: 19px;
-  padding: 0;
+  padding: 0 7px;
   color: var(--wm-text);
-  background: var(--wm-menu-bg);
-  border: 1px solid var(--wm-field-border);
-  border-radius: 50%;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font: inherit;
+  white-space: nowrap;
   cursor: default;
 }
 
+.wm-account-icon {
+  display: none;
+}
+
 .wm-account:hover,
-.wm-account.open {
+.wm-account.open,
+.wm-account[aria-expanded='true'] {
   background: var(--wm-hot);
   border-color: var(--wm-hot-border);
 }
 
 .wm-account[data-signed-in='true'] {
+  width: 19px;
+  padding: 0;
   color: #fff;
   background: var(--wm-hot-border);
   border-color: var(--wm-hot-border);
+  border-radius: 50%;
+}
+
+.wm-account[data-signed-in='true'] .wm-account-icon {
+  display: flex;
+}
+
+.wm-account[data-signed-in='true'] .wm-account-text {
+  display: none;
 }
 
 /* The label and unseen copies of "Saved" and "Saving…" share one grid cell, so it is as wide as the widest (syncButton.ts).
@@ -2114,6 +2162,9 @@ html.wm-titlebar .wm-format {
 .wm-tbutton:focus-visible,
 .wm-combo-input:focus-visible,
 .wm-sync:focus-visible,
+.wm-account:focus-visible,
+.wm-palette-button:focus-visible,
+.wm-format-chip:focus-visible,
 .wm-sync-action:focus-visible,
 .wm-palette-wide:focus-visible,
 .wm-swatch:focus-visible {
@@ -2156,6 +2207,22 @@ html.wm-titlebar .wm-format {
   /* Saving still shows by its colour, without the pulse. */
   .wm-sync[data-state='saving'] .wm-sync-dot {
     animation: none;
+  }
+
+  /* Without the pulse, saved and saving would differ by colour alone: say them. */
+  .wm-sync[data-quiet='true'] .wm-sync-label {
+    display: inline-grid;
+  }
+}
+
+/* The contrast themes say every state in words too, never by the dot's colour alone. */
+:root[data-scheme='contrast'] .wm-sync[data-quiet='true'] .wm-sync-label {
+  display: inline-grid;
+}
+
+@media (forced-colors: active) {
+  .wm-sync[data-quiet='true'] .wm-sync-label {
+    display: inline-grid;
   }
 }
 
@@ -3151,6 +3218,20 @@ html.wm-titlebar .wm-format {
    several, which would leave the document little room. */
 @media (max-width: 720px) {
   /* The menu titles give way to one hamburger button that opens the drawer (menuDrawer.ts). */
+  /* No room for "Sign in": the person icon, which opens the account panel (accountButton.ts). */
+  .wm-account[data-signed-in='false'] {
+    aspect-ratio: 1;
+    padding: 0;
+    background: var(--wm-menu-bg);
+    border-color: var(--wm-field-border);
+    border-radius: 50%;
+  }
+  .wm-account[data-signed-in='false'] .wm-account-icon {
+    display: flex;
+  }
+  .wm-account[data-signed-in='false'] .wm-account-text {
+    display: none;
+  }
   .wm-title {
     display: none;
   }
@@ -3211,7 +3292,7 @@ html.wm-titlebar .wm-format {
   .wm-title {
     padding: 0 12px;
   }
-  .wm-format {
+  .wm-corner {
     top: 6px;
     height: 26px;
   }
@@ -3219,9 +3300,13 @@ html.wm-titlebar .wm-format {
     top: 6px;
     height: 26px;
   }
-  .wm-format .wm-combo,
-  .wm-sync {
+  .wm-sync,
+  .wm-account,
+  .wm-palette-button {
     height: 26px;
+  }
+  .wm-dropdown.wm-format-chip {
+    height: 22px;
   }
   .wm-toolbar {
     min-height: 46px;
@@ -3304,8 +3389,8 @@ html.wm-titlebar .wm-format {
   width: 24px;
   height: 19px;
   padding: 0;
-  background: var(--wm-menu-bg);
-  border: 1px solid var(--wm-field-border);
+  background: none;
+  border: 1px solid transparent;
   border-radius: 4px;
   cursor: default;
   transition: background var(--wm-ease), border-color var(--wm-ease);

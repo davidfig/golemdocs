@@ -101,6 +101,7 @@ export const dialogs: Partial<Messages> = {
 
   // Sync button and panel
   'dialogs.account.label': 'アカウント',
+  'dialogs.account.signIn': 'サインイン',
   'dialogs.account.guest.title': 'サインインしていません',
   'dialogs.account.plan.active': '同期の購読は有効です。',
   'dialogs.account.plan.none': '同期を購読していません。購読すると、ドキュメントをアカウントに保存し、どのデバイスでも開き、共有できます。',

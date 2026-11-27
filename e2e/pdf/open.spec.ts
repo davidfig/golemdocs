@@ -14,7 +14,7 @@ test.describe('opening a PDF', () => {
   test('a three page PDF opens as three pages, in the PDF format, in Fill In mode', async ({ app }) => {
     await openPdf(app, threePages());
     expect(await pageCount(app.page)).toBe(3);
-    await expect(app.page.locator('.wm-format-field input')).toHaveValue('PDF');
+    await expect(app.page.getByRole('button', { name: 'Document format', exact: true })).toHaveAccessibleDescription('PDF');
     await expect(modeButton(app.page, 'Fill In')).toHaveAttribute('aria-checked', 'true');
     await expect(modeButton(app.page, 'Edit PDF')).toHaveAttribute('aria-checked', 'false');
   });

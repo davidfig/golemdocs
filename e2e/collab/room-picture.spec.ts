@@ -29,7 +29,7 @@ async function picturePair(browser: import('@playwright/test').Browser) {
   await person.page.goto('/?doc=welcome');
   await openPicture(person.app, CANVAS());
   const { context, a, b } = await secondDevice(browser, person);
-  await expect(b.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/PNG/);
+  await expect(b.page.getByRole('button', { name: 'Document format', exact: true })).toHaveAccessibleDescription(/PNG/);
   await expect(banner(b)).toBeVisible();
   return { context, a, b };
 }

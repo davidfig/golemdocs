@@ -33,7 +33,7 @@ import { sellsSubscriptions } from '../subscription.ts';
 import { site, siteLink } from '../site.ts';
 import { BRUSH_GROUPS, BRUSH_PRESETS, DASHES } from '../vector/brushPresets.ts';
 import { brushPreview } from './brushPreview.ts';
-import { dropdown, lineSample } from './dropdown.ts';
+import { choiceButton, dropdown, lineSample } from './dropdown.ts';
 import { shapePreview } from './shapePreview.ts';
 import { shapeListBox, shapeName } from './shapePicker.ts';
 import { SHAPE_IDS } from '../vector/shapes.ts';
@@ -141,8 +141,8 @@ export class Chrome {
   /** The phone's typing bar, in the page between the document and the footer; shown while the document has the keyboard (CSS, `wm-typing` on the body). */
   private readonly keysEl = h('div', { class: 'wm-keys' });
   /** The "Format" selector at the right of the menu bar. */
-  private readonly formatBox: HTMLElement;
-  private formatCombo!: Control;
+  private readonly corner: HTMLElement;
+  private formatChip!: Control;
   /** A format conversion is in flight. */
   private converting = false;
   /** Whether the document is saved (or, signed out, an offer to sign in), at the far right. */
@@ -185,9 +185,9 @@ export class Chrome {
       e.preventDefault();
       this.customize();
     });
-    this.formatBox = this.buildFormatBox();
-    this.docTitle = new DocumentTitle(this.menuBar.el, this.formatBox, (name) => host.renameDocument(name), () => host.focusEditor());
-    this.el = h('div', { class: 'wm-chrome' }, this.menuBar.el, this.docTitle.el, this.formatBox, this.toolbarsEl);
+    this.corner = this.buildCorner();
+    this.docTitle = new DocumentTitle(this.menuBar.el, this.corner, this.buildDocumentMeta(), (name) => host.renameDocument(name), () => host.focusEditor());
+    this.el = h('div', { class: 'wm-chrome' }, this.menuBar.el, this.docTitle.el, this.corner, this.toolbarsEl);
     document.getElementById('footer')?.before(this.keysEl);
     this.trackTyping();
     this.buildToolbars();
@@ -1949,59 +1949,68 @@ export class Chrome {
 
   // --- Format selector ---------------------------------------------------------------------
 
-  /** "Format: [Word Document ▾]": switches the open document to another format (Action 'convert'). */
-  private buildFormatBox(): HTMLElement {
+  /**
+   * The document's format, as a chip after its name ("DOCX ▾") that lists the formats to switch to (Action 'convert'), and the save
+   * indicator: both say something about the open document, so they sit beside its name (DocumentTitle), not in the corner.
+   */
+  private buildDocumentMeta(): HTMLElement {
     const { host } = this.options;
-    const kindOf = (label: string) => (Object.keys(FORMATS) as (keyof typeof FORMATS)[]).find((k) => FORMATS[k].label === label);
-    const combo = comboBox(
+    const kinds = () => this.formatKinds();
+    const chip = choiceButton(
       {
         label: t('chrome.formatBox.label'),
-        width: 104,
-        readOnly: true,
-        options: () => this.formatKinds().map((kind) => FORMATS[kind].label),
-        groupLabel: (label) => {
-          const kind = kindOf(label);
-          return kind && t(`menus.format.group.${formatGroup(kind)}`);
-        },
-        value: (s) => FORMATS[documentKind(s)].label,
-        enabled: (s) => !this.converting && !s.nothingOpen,
-        title: (s) =>
-          FORMATS[documentKind(s)].editable ? t('chrome.formatBox.editableTip') : t('chrome.formatBox.readOnlyTip'),
-        commit: (text) => {
-          const to = kindOf(text);
-          if (!to) return false;
-          const action: Action = { kind: 'convert', to };
-          if (!host.supports(action)) {
-            host.notify(t('chrome.formatBox.unavailable', { format: FORMATS[to].label }));
-            return false;
+        groups: () => {
+          const groups: { heading: string; values: string[] }[] = [];
+          for (const kind of kinds()) {
+            const heading = t(`menus.format.group.${formatGroup(kind)}`);
+            if (groups.at(-1)?.heading !== heading) groups.push({ heading, values: [] });
+            groups.at(-1)!.values.push(kind);
           }
-          this.converting = true;
-          this.formatCombo.refresh(this.state);
-          Promise.resolve(host.perform(action))
-            .catch((e: unknown) => host.notify(t('chrome.formatBox.failed', { error: e instanceof Error ? e.message : String(e) })))
-            .finally(() => {
-              this.converting = false;
-              this.formatCombo.refresh(this.state);
-              host.focusEditor();
-            });
-          return true;
+          return groups;
         },
+        name: (kind) => FORMATS[kind as DocumentKind].label,
+        short: (kind) => (FORMATS[kind as DocumentKind].extensions[0] ?? kind).replace(/^\./, '').toUpperCase(),
       },
-      () => this.state,
-      () => host.focusEditor(),
+      (value) => {
+        const to = value as DocumentKind;
+        if (to === documentKind(this.state)) return host.focusEditor();
+        const action: Action = { kind: 'convert', to };
+        if (!host.supports(action)) {
+          host.notify(t('chrome.formatBox.unavailable', { format: FORMATS[to].label }));
+          return host.focusEditor();
+        }
+        this.converting = true;
+        this.formatChip.refresh(this.state);
+        Promise.resolve(host.perform(action))
+          .catch((e: unknown) => host.notify(t('chrome.formatBox.failed', { error: e instanceof Error ? e.message : String(e) })))
+          .finally(() => {
+            this.converting = false;
+            this.formatChip.refresh(this.state);
+            host.focusEditor();
+          });
+      },
     );
-    this.formatCombo = combo;
-    this.syncButton = new SyncButton(this.options.host);
+    chip.el.classList.add('wm-format-chip');
+    chip.el.addEventListener('mousedown', (e) => e.preventDefault()); // keep the document's focus
+    this.formatChip = {
+      el: chip.el,
+      refresh: (s) => {
+        const kind = documentKind(s);
+        chip.set(kind);
+        chip.el.disabled = this.converting || s.nothingOpen;
+        const tip = FORMATS[kind].editable ? t('chrome.formatBox.editableTip') : t('chrome.formatBox.readOnlyTip');
+        chip.el.title = `${FORMATS[kind].label}\n${tip}`;
+      },
+    };
+    this.syncButton = new SyncButton(host);
+    return h('div', { class: 'wm-doctitle-meta' }, chip.el, this.syncButton.el);
+  }
+
+  /** The corner at the right of the menu bar: the command palette, and the account (or Sign in). */
+  private buildCorner(): HTMLElement {
     this.accountButton = new AccountButton(this.options.host);
     this.palette = new CommandPalette(this.registry, (command) => this.commandInfo(command, command.plainLabel), () => this.options.host.documents?.() ?? []);
-    return h(
-      'div',
-      { class: 'wm-format' },
-      this.palette.el,
-      h('div', { class: 'wm-format-field' }, combo.el),
-      this.syncButton.el,
-      this.accountButton.el,
-    );
+    return h('div', { class: 'wm-corner' }, this.palette.el, this.accountButton.el);
   }
 
   /**
@@ -2032,7 +2041,7 @@ export class Chrome {
 
   /** Lists the formats (plus the current one if it isn't switchable) and shows the current one. */
   private syncFormatBox(): void {
-    this.formatCombo.refresh(this.state);
+    this.formatChip.refresh(this.state);
   }
 
   /**

@@ -79,7 +79,7 @@ test.describe('opening a vector drawing', () => {
 
   test('a compressed SVG opens too, and converting to SVG Drawing offers both kinds', async ({ app }) => {
     await app.blank();
-    await app.page.getByRole('combobox', { name: 'Format' }).first().click();
+    await app.page.getByRole('button', { name: 'Document format', exact: true }).click();
     await expect(app.page.getByRole('option', { name: 'SVG Drawing', exact: true })).toBeAttached();
     await expect(app.page.getByRole('option', { name: 'Compressed SVG Drawing' })).toBeAttached();
   });
@@ -682,7 +682,7 @@ test.describe('converting a drawing', () => {
     await openDrawing(app);
     await app.menu('File', 'Convert To', 'PDF (.pdf)');
     await app.page.waitForFunction(() => (window as unknown as { pages: unknown[] }).pages.length === 1, null, { timeout: 30_000 });
-    await expect(app.page.getByRole('combobox', { name: 'Format' }).first()).toHaveValue(/PDF/);
+    await expect(app.page.getByRole('button', { name: 'Document format', exact: true })).toHaveAccessibleDescription(/PDF/);
   });
 
   test('a Word document becomes an SVG drawing with its text as text', async ({ app }) => {

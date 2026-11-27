@@ -184,7 +184,7 @@ test.describe('what the other person sees', () => {
     await guest.page.goto(`/?doc=shared:${doc.id}`);
     await guest.app.ready();
     await expect.poll(() => guest.app.text()).toBe('the notes');
-    await expect(guest.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/Markdown/);
+    await expect(guest.page.getByRole('button', { name: 'Document format', exact: true })).toHaveAccessibleDescription(/Markdown/);
     await owner.context.close();
     await guest.context.close();
   });

@@ -52,6 +52,8 @@ export interface ChoiceSpec {
   groups(current: string): readonly DropdownGroup[];
   name(value: string): string;
   sample?(value: string): Node | null;
+  /** What the button shows for a choice, when that is shorter than its name in the list (a format's extension); its name otherwise. */
+  short?(value: string): string;
   width?: number;
   /** As wide and tall as the fields of a dialog's form (`.wm-input`), rather than `width`. */
   fill?: boolean;
@@ -66,15 +68,18 @@ export function choiceButton(spec: ChoiceSpec, pick: (value: string) => void): {
   const { label } = spec;
   // The choice it shows is its description: the label is its name, which would otherwise hide what it is set to.
   const text = h('span', { class: 'wm-dropdown-name', attrs: { id: uniqueId('wm-choice') } });
+  // A short form on the button (DOCX) still describes it by the full name (Word Document), from an unseen copy.
+  const described = spec.short ? h('span', { attrs: { id: uniqueId('wm-choice'), hidden: '' } }) : text;
   const sample = h('span', { class: 'wm-dropdown-sample' });
-  const button = h('button', { class: spec.fill ? 'wm-dropdown wm-dropdown-fill' : 'wm-dropdown', title: label, attrs: { type: 'button', 'aria-label': label, 'aria-describedby': text.id, 'aria-haspopup': 'listbox', 'aria-expanded': 'false' } }, sample, text, h('span', { class: 'wm-dropdown-caret' }));
+  const button = h('button', { class: spec.fill ? 'wm-dropdown wm-dropdown-fill' : 'wm-dropdown', title: label, attrs: { type: 'button', 'aria-label': label, 'aria-describedby': described.id, 'aria-haspopup': 'listbox', 'aria-expanded': 'false' } }, sample, text, h('span', { class: 'wm-dropdown-caret' }), ...(described === text ? [] : [described]));
   if (spec.width) button.style.width = `${spec.width}px`;
   const control = {
     el: button,
     value: '',
     set(value: string) {
       control.value = value;
-      text.textContent = spec.name(value);
+      text.textContent = spec.short?.(value) ?? spec.name(value);
+      described.textContent = spec.name(value);
       sample.replaceChildren(...(spec.sample?.(value) ? [spec.sample(value)!] : []));
       sample.hidden = !spec.sample;
     },

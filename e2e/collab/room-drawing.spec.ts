@@ -36,7 +36,7 @@ async function drawRectangle(app: App): Promise<void> {
 
 test('a drawing can be shared: the one who joins opens the same drawing as a drawing', async ({ browser }) => {
   const { context, b } = await drawingPair(browser);
-  await expect(b.page.getByRole('combobox', { name: 'Document format' })).toHaveValue(/SVG/);
+  await expect(b.page.getByRole('button', { name: 'Document format', exact: true })).toHaveAccessibleDescription(/SVG/);
   await context.close();
 });
 

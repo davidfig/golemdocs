@@ -49,6 +49,8 @@ test.describe('the save indicator when signed in', () => {
     await person.app.type(' while offline');
     await state(person.page, 'offline');
     await expect(person.page.locator('.wm-sync')).toHaveText('Offline');
+    // What needs the person is said in words, not by the dot alone.
+    await expect(person.page.locator('.wm-sync .wm-sync-label')).toBeVisible();
     await person.page.locator('.wm-sync').click();
     await expect(person.page.locator('.wm-sync-panel')).toContainText('Keep working');
     await person.page.keyboard.press('Escape');

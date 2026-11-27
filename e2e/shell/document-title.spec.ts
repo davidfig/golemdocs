@@ -33,7 +33,8 @@ test.describe('Document name', () => {
 
   test('is left out when the window has no room for it', async ({ app, page }) => {
     await app.blank();
-    await page.setViewportSize({ width: 360, height: 800 });
+    // At phone widths the menus fold into one button and a short name still fits: only a window narrower than that leaves it out.
+    await page.setViewportSize({ width: 240, height: 800 });
     await expect(title(page)).toBeHidden();
     await page.setViewportSize({ width: 1280, height: 800 });
     await expect(title(page)).toBeVisible();

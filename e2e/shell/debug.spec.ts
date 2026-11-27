@@ -48,8 +48,8 @@ test.describe('debug overlays', () => {
     await app.type('typing');
     const panel = statusPanels(page).filter({ has: page.getByRole('heading', { name: 'Edit' }) });
     await expect(panel).toBeVisible();
-    await expect(debugRow(panel, 'to screen')).toBeVisible();
-    await expect(debugRow(panel, 'worker')).toBeVisible();
+    // The last edit, and the worst of the last minute with where its time went.
+    for (const row of ['last', 'worst', 'waited', 'worker', 'page busy', 'drawing', '> 50 ms']) await expect(debugRow(panel, row)).toBeVisible();
   });
 
   test('Pages and glyphs, CPU time and the frame-time rows all live in the Render panel', async ({ app, page }) => {

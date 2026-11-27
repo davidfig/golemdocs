@@ -64,7 +64,8 @@ test('the notice after a conversion says what the new format leaves out', { tag:
   await convertTo(app, 'Plain Text (.txt)', 'Plain Text');
   await expect.poll(() => status(app.page)).toMatch(/only downloading a \.txt file leaves out all formatting, tables and images/);
   await convertTo(app, 'Web Page (.html)', 'Web Page');
-  await expect.poll(() => status(app.page)).toMatch(/only downloading a \.html file leaves out page setup, headers and footers, comments and embedded pictures/);
+  // A web page opens as a page of its own (slower than a document), and its notice comes once it has: as long as convertTo allows.
+  await expect.poll(() => status(app.page), { timeout: 30_000 }).toMatch(/only downloading a \.html file leaves out page setup, headers and footers, comments and embedded pictures/);
   await convertTo(app, 'Word Document (.docx)', 'Word Document');
   await expect.poll(() => status(app.page)).toBe('Now editing as Word Document. Nothing was lost.');
   await convertTo(app, 'PDF (.pdf)', 'PDF');

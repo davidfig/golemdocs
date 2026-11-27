@@ -185,7 +185,7 @@ test.describe('Help menu documents', () => {
     await app.goto('?doc=welcome');
     await openMenu(app, 'Help');
     const rows = await page.locator('.wm-menu > .wm-item, .wm-menu > [role=separator]').evaluateAll((els) => els.map((el) => (el.getAttribute('role') === 'separator' ? '—' : (el.querySelector('span.label')?.textContent ?? ''))));
-    expect(rows).toEqual(['Keyboard Shortcuts', 'Open Sample', '—', 'What’s New', 'Send Feedback…', '—', 'About Golem Docs', 'Golem Docs Website', 'Privacy Policy', 'Terms of Service']);
+    expect(rows).toEqual(['Keyboard Shortcuts', 'Open Sample', '—', 'What’s New', 'Send Feedback…', '—', 'About Golem Docs', 'Golem Docs Website', 'Download the Desktop App', 'Privacy Policy', 'Terms of Service']);
   });
 });
 

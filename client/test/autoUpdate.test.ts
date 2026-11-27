@@ -90,3 +90,14 @@ test('something done while the site was being asked puts it off', async () => {
   assert.equal(await autoUpdateTick(h), 'busy');
   assert.deepEqual(applied, []);
 });
+
+test('a look while an update is being put in does nothing, so it is never put in twice', async () => {
+  let release!: () => void;
+  const { h, applied } = host({ apply: (update) => new Promise<void>((resolve) => ((release = resolve), applied.push(update))) });
+  const first = autoUpdateTick(h);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(await autoUpdateTick(h), 'busy');
+  release();
+  assert.equal(await first, 'updating');
+  assert.deepEqual(applied, ['site']);
+});

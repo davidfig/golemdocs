@@ -216,7 +216,7 @@ import { MAX_PIXELS, MAX_SIDE } from './formats/imagePixels.ts';
 import { formatAllows } from './ui/formats.ts';
 import { DEFAULT_STATE, FORMATS, PICTURE_KINDS, VECTOR_KINDS, initTooltips, kindFromName, mountChrome, type DocumentKind, type DocumentSync, type FormatState, type FormMode, type SyncStatus, type ViewMode } from './ui/index.ts';
 import type { AudioOp, MediaOp } from './ui/actions.ts';
-import { h, modalOpen, stripMnemonic } from './ui/dom.ts';
+import { h, isFormField, modalOpen, stripMnemonic } from './ui/dom.ts';
 import { ScreenReaderSupport } from './screenReaderSupport.ts';
 import { cycleRegions, focusFirst, type Region } from './ui/focusRegions.ts';
 import { caretBlinks, caretPoints, forcedColors, onAccessibilityChange, rereadCaretOptions } from './ui/accessibilityOptions.ts';
@@ -404,6 +404,8 @@ let formMode: FormMode = 'fill';
 let status = '';
 /** Edit round trips (command sent to its result on screen), for View › Debug › Edit times. */
 const editTimes = new EditTimes();
+/** When the oldest edit not answered yet was sent, for the latency readout (0: none waiting). */
+let editSent = 0;
 /** How long the current document took to open, ms. */
 let loadTimes: { pages: number; glyphs: number; firstPage: number; total: number; read: number; fonts: number; body: number; headers: number } | null = null;
 /** Layout finished for the current document. */
@@ -799,6 +801,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   cameraPlaced = false;
   userMoved = false;
   editTimes.clear();
+  editSent = 0; // an edit of the document being left will never be answered
   loadTimes = null;
   pendingNotice = null;
   annotating = false;
@@ -1752,7 +1755,7 @@ function documentEdited(): void {
   const now = performance.now();
   if (!current.unsavedSince) current.unsavedSince = now;
   clearTimeout(autosaveTimer);
-  const wait = Math.min(AUTOSAVE_DELAY_MS, current.unsavedSince + AUTOSAVE_MAX_WAIT_MS - now);
+  const wait = appInstalling ? 0 : Math.min(AUTOSAVE_DELAY_MS, current.unsavedSince + AUTOSAVE_MAX_WAIT_MS - now);
   autosaveTimer = window.setTimeout(() => {
     pageTask('autosave');
     void saveInBrowser();
@@ -5199,8 +5202,6 @@ let comments: SelectionUpdate['comments'] = [];
 let canUndo = false;
 let canRedo = false;
 let blinkTimer = 0;
-/** When the last edit command was sent, for the latency readout. */
-let editSent = 0;
 
 /** The selection as HTML, once the layout worker has written it (it follows a moment after the selection settles). */
 let selectionHtml: { text: string; html: string } | null = null;
@@ -7175,6 +7176,8 @@ const vaultDialog = new VaultDialog({
 // The desktop app's own updates: told in the update note at the same times as a new site (updateNotice.ts), and looked for on demand
 // by Help › Check for Updates. Installing saves what is open first.
 const updateService: UpdateService | null = isDesktopApp() ? UpdateService.create(desktopUpdater()) : null;
+/** An update of the app is being put in by itself (Update automatically): it restarts when done, so edits are saved without waiting. */
+let appInstalling = false;
 async function installAppUpdate(): Promise<void> {
   if (!updateService) return;
   saveIfEdited();
@@ -7192,6 +7195,9 @@ if (isDesktopApp()) {
     lastActivity,
     busy: () => {
       if (current.unsavedSince || savesInFlight) return 'saving';
+      // Something typed and not sent: a comment, or a field (a link, a name, Find...) with text in it.
+      const field = document.activeElement;
+      if (commentsPanel.hasDraft || (isFormField(field) && ((field as HTMLInputElement).value ?? field?.textContent ?? '').trim() !== '')) return 'typing';
       if (!uploads.settled || current.shared?.dirty || current.shared?.uploading) return 'uploading';
       if (vaultService?.current.progress) return 'syncing';
       if (audioEditor?.recording || audioEditor?.playing || [...document.querySelectorAll<HTMLMediaElement>('audio, video')].some((media) => !media.paused)) return 'playing';
@@ -7202,7 +7208,18 @@ if (isDesktopApp()) {
     },
     // The app's own update is the one the note's check last found (every 10 minutes); the site's small build.json is asked each time.
     pending: () => updateToOffer(__BUILD_ID__, updateService ? async () => updateService.offer !== null : undefined),
-    apply: (update) => (update === 'app' ? installAppUpdate() : reloadForUpdate()),
+    apply: async (update) => {
+      if (update === 'site') return reloadForUpdate();
+      // The download can take a while and the restart can't be stopped once it is going: the note says it is coming, and every edit
+      // made meanwhile is saved at once.
+      appInstalling = true;
+      updateNotice?.installing();
+      try {
+        await installAppUpdate();
+      } finally {
+        appInstalling = false;
+      }
+    },
     lastUpdate: storedLastUpdate,
     noteUpdate: storeLastUpdate,
   };

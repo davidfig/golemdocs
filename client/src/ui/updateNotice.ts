@@ -88,6 +88,13 @@ export class UpdateNotice {
     showNotice(this.el, true);
   }
 
+  /** An update of the app is being installed by itself (Update automatically): the note says so until the app restarts. */
+  installing(): void {
+    this.display('app');
+    this.now.disabled = this.later.disabled = true;
+    this.message.textContent = t('update.installing');
+  }
+
   private async install(): Promise<void> {
     this.now.disabled = this.later.disabled = true;
     this.message.textContent = t('update.installing');

@@ -1947,6 +1947,8 @@ html.wm-titlebar .wm-corner {
 .wm-sync[data-local='unsaved'][data-state='guest'] .wm-sync-dot,
 .wm-sync[data-local='unsaved'][data-state='unsubscribed'] .wm-sync-dot {
   background: #d08a00;
+  /* Not saved yet: it pulses like Saving, so the state isn't told by colour alone (reduced motion shows the words instead). */
+  animation: wm-sync-pulse 1s ease-in-out infinite alternate;
 }
 
 .wm-sync[data-state='saved'] .wm-sync-dot {
@@ -2219,7 +2221,9 @@ html.wm-titlebar .wm-corner {
   }
 
   /* Saving still shows by its colour, without the pulse. */
-  .wm-sync[data-state='saving'] .wm-sync-dot {
+  .wm-sync[data-state='saving'] .wm-sync-dot,
+  .wm-sync[data-local='unsaved'][data-state='guest'] .wm-sync-dot,
+  .wm-sync[data-local='unsaved'][data-state='unsubscribed'] .wm-sync-dot {
     animation: none;
   }
 

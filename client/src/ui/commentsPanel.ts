@@ -302,6 +302,11 @@ export class CommentsPanel {
     return { el: card, desired: this.host.placeCaret(), height: 0, active: true, top: NaN };
   }
 
+  /** Whether something is typed in a comment box and not sent yet (an update that restarts the app waits for it). */
+  get hasDraft(): boolean {
+    return [...this.drafts.values()].some((text) => text.trim() !== '');
+  }
+
   /** A text box that keeps what's typed in it across redraws and grows with it. */
   private box(key: string, text: string, placeholder = ''): HTMLTextAreaElement {
     const box = h('textarea', { class: 'wm-comment-box', attrs: { rows: '1', 'data-box': key, placeholder, 'aria-label': placeholder || t('panels.comments.edit') } });

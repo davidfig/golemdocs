@@ -57,10 +57,23 @@ export interface AutoUpdateHost {
 /** What a look found; for tests and the log. */
 export type AutoUpdateOutcome = 'off' | 'active' | 'recent' | 'busy' | 'none' | 'updating';
 
+/** The hosts with an update being put in (or a look waiting for the site's answer): a second look meanwhile does nothing. */
+const inFlight = new WeakSet<AutoUpdateHost>();
+
 /** One look: whether to update now, and doing it if so. */
 export async function autoUpdateTick(host: AutoUpdateHost): Promise<AutoUpdateOutcome> {
   const minutes = host.minutes();
   if (minutes <= 0) return 'off';
+  if (inFlight.has(host)) return 'busy';
+  inFlight.add(host);
+  try {
+    return await look(host, minutes);
+  } finally {
+    inFlight.delete(host);
+  }
+}
+
+async function look(host: AutoUpdateHost, minutes: number): Promise<AutoUpdateOutcome> {
   const now = host.now();
   if (now - host.lastActivity() < minutes * 60_000) return 'active';
   const last = host.lastUpdate();

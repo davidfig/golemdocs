@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { DesktopUpdater } from '../src/desktop/bridge.ts';
-import { UpdateService } from '../src/desktop/updateService.ts';
+import { SNOOZE_MS, UpdateService } from '../src/desktop/updateService.ts';
 
 function setup(found: { version: string; notes: string | null } | null | Error) {
   const calls: string[] = [];
@@ -38,4 +38,17 @@ test('a check that fails says so, and install goes to the shell', async () => {
   await assert.rejects(s.service.check(), /offline/);
   await s.service.install();
   assert.deepEqual(s.calls, ['check', 'install']);
+});
+
+test('"Later" puts a version off for a few hours, and a newer version is offered at once', () => {
+  const stored = new Map<string, string>();
+  let clock = 1_000_000;
+  const updater: DesktopUpdater = { check: async () => null, install: async () => {} };
+  const service = new UpdateService(updater, { get: (k) => stored.get(k) ?? null, set: (k, v) => void stored.set(k, v) }, () => clock);
+  assert.equal(service.snoozed('0.52.0'), false);
+  service.snooze('0.52.0');
+  assert.equal(service.snoozed('0.52.0'), true);
+  assert.equal(service.snoozed('0.53.0'), false);
+  clock += SNOOZE_MS;
+  assert.equal(service.snoozed('0.52.0'), false);
 });

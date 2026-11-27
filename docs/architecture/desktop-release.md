@@ -82,7 +82,7 @@ The page updates itself (it is the website), so only the shell, the Rust code an
 ```
  app opens (+10 s), then with the site's check (every 10 min, on coming to the front, back online)
    --> UpdateNotice.check --> updateToOffer --> UpdateService.check --> update_check --> GET /api/downloads/updater.json
-   newer version --> the update note (ui/updateNotice.ts): Update and Restart / Later (until the next check)
+   newer version --> the update note (ui/updateNotice.ts): Update and Restart / Later (4 hours for that version, per device: `golem.updateSnooze`)
    Help › Check for Updates … --> Software Update dialog (ui/updateDialog.ts), always answers
    Update and Restart --> update_install: download, verify the signature against the public key in tauri.conf.json, replace the app, restart
 ```

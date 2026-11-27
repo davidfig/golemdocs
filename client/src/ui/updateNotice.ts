@@ -2,7 +2,8 @@
 // (buildCheck.ts), when a hidden tab comes back to the front and when it goes back online. In the desktop app the same check asks the
 // app too, so a new app and a new site are one note at the same times: a new app says Update and Restart (which loads the new site
 // too), a new site alone says Reload. Nothing happens by itself (Update automatically, desktop/autoUpdate.ts, is the person's own
-// choice): both buttons save what is open first, and "Later" hides the note until the next check finds an update still waiting.
+// choice): both buttons save what is open first. "Later" hides the note until the next check finds an update still waiting; for a
+// new app it puts that version off for a few hours (updateService.ts `snooze`), and only a new site is offered meanwhile.
 
 import { CHECK_EVERY_MS, CHECK_MIN_GAP_MS, updateToOffer } from '../buildCheck.ts';
 import { t } from '../i18n/index.ts';
@@ -12,8 +13,10 @@ import './newVersionNotice.css';
 
 /** The desktop app's own updates, as the note needs them. */
 export interface AppUpdates {
-  /** Whether a newer version of the app is waiting. */
+  /** Whether a newer version of the app is waiting that the note may offer (not one put off with Later). */
   check(): Promise<boolean>;
+  /** "Later" on a new app: put it off for a while. */
+  snooze(): void;
   /** Saves, installs it and restarts; it only comes back if the install failed. */
   install(): Promise<void>;
 }
@@ -40,7 +43,10 @@ export class UpdateNotice {
     const close = iconButton('wm-version-notice-close', CLOSE_ICON, t('dialogs.update.later'));
     this.el.append(close, this.message, h('div', { class: 'wm-version-notice-actions' }, this.now, this.later));
     close.addEventListener('click', () => showNotice(this.el, false));
-    this.later.addEventListener('click', () => showNotice(this.el, false));
+    this.later.addEventListener('click', () => {
+      if (this.kind === 'app') this.app?.snooze();
+      showNotice(this.el, false);
+    });
     this.now.addEventListener('click', () => (this.kind === 'app' ? void this.install() : this.reload()));
     this.el.hidden = true;
     parent.append(this.el);

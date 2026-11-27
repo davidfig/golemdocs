@@ -7686,7 +7686,16 @@ updateNotice = new UpdateNotice(
   document.body,
   __BUILD_ID__,
   () => void reloadForUpdate(),
-  updateService ? { check: async () => (await updateService.check()) !== null, install: installAppUpdate } : undefined,
+  updateService
+    ? {
+        check: async () => {
+          const offer = await updateService.check();
+          return offer !== null && !updateService.snoozed(offer.version);
+        },
+        snooze: () => updateService.offer && updateService.snooze(updateService.offer.version),
+        install: installAppUpdate,
+      }
+    : undefined,
 );
 
 // --- Searching every document ------------------------------------------------------------------

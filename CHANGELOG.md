@@ -8,7 +8,7 @@
 
 ### Changed
 
-- The desktop app now looks for a new version of itself every 10 minutes, together with the website, and tells you in the same note at the bottom (Update and Restart) instead of a separate window, so you never get two update messages. Help › Check for Updates still checks at once.
+- The desktop app now looks for a new version of itself every 10 minutes, together with the website, and tells you in the same note at the bottom (Update and Restart) instead of a separate window, so you never get two update messages. Later puts a new version off for four hours; Help › Check for Updates still checks at once.
 - A calmer top bar: the document's format is a small chip after its name (.docx, click it to convert to another format), the save indicator sits beside it and stays quiet while everything is saved, showing words only when something needs you (offline, not saved, signed out). The buttons at the right are flat, like the menus.
 - When you're not signed in, the top right shows a Sign in button instead of a person icon, and it opens the sign-in dialog in one click. On a phone it stays an icon.
 - View › Hide Space Between Pages now hides only the space where pages meet: the first page keeps its top margin and the last page its bottom one, so a one-page document looks like a normal page instead of having its text against the edge of the paper.

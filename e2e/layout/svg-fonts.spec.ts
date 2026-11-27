@@ -61,3 +61,9 @@ test('a font at an address is not fetched', async ({ app, page }) => {
   expect(await reach(app)).toBeLessThan(330);
   expect(asked).toBe(false);
 });
+
+test('letter spacing spreads the text out', async ({ app }) => {
+  // In the fallback alone: ten H's 0.6 em wide, each 10 further apart, reach past where they would end unspaced.
+  await open(app, svg('').replace('font-size="50"', 'font-size="50" letter-spacing="10"'), 'spaced.svg');
+  await expect.poll(() => reach(app)).toBeGreaterThan(370);
+});

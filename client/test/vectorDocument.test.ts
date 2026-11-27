@@ -220,3 +220,10 @@ test('a PDF follows paint-order: the stroke is painted first, then the fill over
   assert.equal(names.filter((o) => o === 'Tj' || o === 'TJ').length, 2);
   assert.ok(names.indexOf('Tr') < names.lastIndexOf('Tj'));
 });
+
+test('in the PDF, letter and word spacing are the text\'s character and word spacing', async () => {
+  const pdf = PdfDocument.load(await sceneToPdf(readSvg('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50"><text x="10" y="20" font-size="10" letter-spacing="0.2em" word-spacing="3">a b</text></svg>')));
+  const ops = pdf.pages[0].operations();
+  assert.deepEqual(ops.find((o) => o.op === 'Tc')?.operands, [2]);
+  assert.deepEqual(ops.find((o) => o.op === 'Tw')?.operands, [3]);
+});

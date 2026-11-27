@@ -2,10 +2,10 @@
 
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
-import { aliasedFamily, fontCss, loadFonts } from '../src/vector/fonts.ts';
+import { aliasedFamily, featureSets, fontCss, fontKey, loadFonts } from '../src/vector/fonts.ts';
 import { paintScene } from '../src/vector/paint.ts';
 import { sceneToPng } from '../src/formats/vectorDoc.ts';
-import { parseFontFaces, parseStylesheet } from '../src/vector/style.ts';
+import { featuresOf, parseFontFaces, parseStylesheet, spacingOf } from '../src/vector/style.ts';
 import { readSvg } from '../src/vector/svgRead.ts';
 import { writeSvg } from '../src/vector/svgWrite.ts';
 import { FakeCanvas, FakeContext, installFakeCanvas } from './fakeCanvas.ts';
@@ -115,4 +115,56 @@ test('the picture of a drawing is drawn in its fonts, which are then let go of',
   } finally {
     fake.restore();
   }
+});
+
+test('features: font-feature-settings and font-variant-numeric as one list, inherited', () => {
+  assert.equal(featuresOf([{ 'font-feature-settings': "'lnum'" }]), '"lnum" 1');
+  assert.equal(featuresOf([{ 'font-feature-settings': '"liga" off, "ss01" 2' }, { 'font-variant-numeric': 'tabular-nums lining-nums' }]), '"tnum" 1, "lnum" 1, "liga" 0, "ss01" 2');
+  assert.equal(featuresOf([{}, { 'font-feature-settings': 'normal' }]), '');
+  assert.equal(featuresOf([{ 'font-feature-settings': '"toolong", lnum' }]), '');
+});
+
+test('spacing: lengths, ems and percentages of the font size', () => {
+  assert.equal(spacingOf('3', 20), 3);
+  assert.equal(spacingOf('0.1em', 20), 2);
+  assert.equal(spacingOf('10%', 20), 2);
+  assert.equal(spacingOf('normal', 20), 0);
+  assert.equal(spacingOf(undefined, 20), 0);
+});
+
+test('a face is loaded once more with each list of features the text asks for, and that text is drawn in it', async () => {
+  const scene = readSvg(svg(face('Face', 'a') + face('Face', 'b', 'font-weight:700;'), '<text font-family="Face" style="font-feature-settings:\'lnum\'">12</text><text font-family="Face">34</text><g style="font-variant-numeric:tabular-nums"><text font-family="Face">56</text></g>'));
+  assert.deepEqual(featureSets(scene), ['"lnum" 1', '"tnum" 1']);
+  const fonts = await loadFonts(scene);
+  assert.equal(added.size, 6);
+  assert.deepEqual([...added].map((f) => f.descriptors.featureSettings ?? '').sort(), ['', '', '"lnum" 1', '"lnum" 1', '"tnum" 1', '"tnum" 1']);
+  const ctx = new FakeContext(new FakeCanvas(100, 50));
+  paintScene(ctx as unknown as CanvasRenderingContext2D, scene, 100, 50, { fonts: fonts.aliases });
+  const families = ctx.ops('fillText').map((c) => /"([^"]+)"/.exec(String(c.font))![1]);
+  assert.equal(new Set(families).size, 3, families.join());
+  assert.equal(families[1], fonts.aliases.get('face'));
+  fonts.release();
+  assert.equal(added.size, 0);
+  // Asking for new features in the drawing is a new set of fonts.
+  assert.notEqual(fontKey(scene), fontKey(readSvg(svg(face('Face', 'a') + face('Face', 'b', 'font-weight:700;')))));
+});
+
+test('letter and word spacing: the canvas spaces the run where it can, else it is set a character at a time', () => {
+  const source = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50"><text x="10" y="20" font-size="10" letter-spacing="2" word-spacing="0.5em" text-anchor="end">a b<tspan>c</tspan></text></svg>';
+  // The fake measures 5 a letter, and has no spacing of its own.
+  const plain = new FakeContext(new FakeCanvas(200, 50));
+  paintScene(plain as unknown as CanvasRenderingContext2D, readSvg(source), 200, 50);
+  // a, space, b: 3 × (5 + 2) + 5 for the space; c: 7. The 33 end at 10.
+  assert.deepEqual(plain.ops('fillText').map((c) => [c.args[0], c.args[1]]), [['a', -23], [' ', -16], ['b', -4], ['c', 3]]);
+  const native = Object.assign(new FakeContext(new FakeCanvas(200, 50)), { letterSpacing: '0px', wordSpacing: '0px' });
+  const seen: string[] = [];
+  const measure = native.measureText;
+  native.measureText = (text: string) => {
+    seen.push(`${native.letterSpacing}/${native.wordSpacing}`);
+    return measure(text);
+  };
+  paintScene(native as unknown as CanvasRenderingContext2D, readSvg(source), 200, 50);
+  assert.deepEqual(native.ops('fillText').map((c) => c.args[0]), ['a b', 'c']);
+  assert.ok(seen.every((s) => s === '2px/5px'), seen.join());
+  assert.equal(native.letterSpacing, '0px', 'set back after the text');
 });

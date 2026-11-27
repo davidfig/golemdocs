@@ -19,6 +19,7 @@
 - File › Convert To and the format list listed Email Message and Jupyter Notebook under a second Popular heading at the end; they are now with the other documents.
 - In the desktop app, when Golem Docs is updated while it is open, the vault folder no longer stops syncing with “the convert worker failed”: it says to reload, and the Reload note appears.
 - Starting a new paragraph no longer flags its first few English words as misspelled for a moment: a sentence such as “Make a list…” was briefly taken for Portuguese and checked against the wrong dictionary.
+- SVG drawings: text keeps its letter and word spacing, on screen and in PDFs, and fonts the file embeds show the features it asks for, such as lining numbers (`font-feature-settings`, `font-variant-numeric`).
 
 ## 0.50.0 - 2026-11-27
 

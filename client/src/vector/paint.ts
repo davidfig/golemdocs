@@ -14,7 +14,7 @@ import { readGradient, readPattern } from './gradients.ts';
 import { fontSizeOf, findNode, localBounds, outline, viewBoxMatrix } from './geometry.ts';
 import type { Matrix, PathCommand, Scene, SceneNode, Style, TextNode } from './model.ts';
 import type { Bounds } from './pathData.ts';
-import { inherited, parseColor, parseLength, parseNumbers, strokeUnderFill, urlReference } from './style.ts';
+import { featuresOf, inherited, parseColor, parseLength, parseNumbers, spacingOf, strokeUnderFill, urlReference } from './style.ts';
 import type { Rgba } from './style.ts';
 
 // For callers that fetch the painter when first needed: what it draws with comes with it.
@@ -202,8 +202,42 @@ function paintShape(walk: Walk, node: SceneNode, chain: readonly Style[], comman
 function fontFor(chain: readonly Style[], fonts?: FontAliases): string {
   const style = inherited(chain, 'font-style');
   const weight = inherited(chain, 'font-weight');
-  const family = aliasedFamily(inherited(chain, 'font-family') ?? 'sans-serif', fonts);
+  const family = aliasedFamily(inherited(chain, 'font-family') ?? 'sans-serif', fonts, featuresOf(chain));
   return `${style === 'italic' || style === 'oblique' ? 'italic ' : ''}${weight && weight !== 'normal' ? `${weight} ` : ''}${fontSizeOf(chain)}px ${family}`;
+}
+
+/** Text in a run's letter and word spacing (`letter-spacing`, `word-spacing`), drawn and measured alike. */
+interface Spaced {
+  width(text: string): number;
+  draw(text: string, x: number, y: number, how: 'fill' | 'stroke'): void;
+}
+
+/**
+ * The canvas spaces text itself where it can (`letterSpacing`, `wordSpacing`); elsewhere a spaced run is set a character at a
+ * time, which loses kerning between them. The spacing is left set until the next run's.
+ */
+function spaced(ctx: Context2D, letter: number, word: number): Spaced {
+  const canvas = ctx as Context2D & { letterSpacing?: string; wordSpacing?: string };
+  const native = 'letterSpacing' in canvas && 'wordSpacing' in canvas;
+  if (native) {
+    canvas.letterSpacing = `${letter}px`;
+    canvas.wordSpacing = `${word}px`;
+  }
+  const plain: Spaced = {
+    width: (text) => ctx.measureText(text).width,
+    draw: (text, x, y, how) => (how === 'fill' ? ctx.fillText(text, x, y) : ctx.strokeText(text, x, y)),
+  };
+  if (native || (!letter && !word)) return plain;
+  const step = (ch: string): number => ctx.measureText(ch).width + letter + (ch === ' ' ? word : 0);
+  return {
+    width: (text) => [...text].reduce((n, ch) => n + step(ch), 0),
+    draw: (text, x, y, how) => {
+      for (const ch of text) {
+        plain.draw(ch, x, y, how);
+        x += step(ch);
+      }
+    },
+  };
 }
 
 function paintText(walk: Walk, node: TextNode, chain: readonly Style[]): void {
@@ -211,11 +245,14 @@ function paintText(walk: Walk, node: TextNode, chain: readonly Style[]): void {
   const anchor = inherited(chain, 'text-anchor');
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
+  /** Sets the context up for a run (its font and spacing). */
+  const setUp = (runChain: readonly Style[]): Spaced => {
+    ctx.font = fontFor(runChain, walk.options.fonts);
+    const size = fontSizeOf(runChain);
+    return spaced(ctx, spacingOf(inherited(runChain, 'letter-spacing'), size), spacingOf(inherited(runChain, 'word-spacing'), size));
+  };
   // Widths of the runs, so a chunk can be centred or right-aligned as a whole.
-  const widths = node.runs.map((run) => {
-    ctx.font = fontFor([run.style, ...chain], walk.options.fonts);
-    return ctx.measureText(run.text).width;
-  });
+  const widths = node.runs.map((run) => setUp([run.style, ...chain]).width(run.text));
   let total = 0;
   for (const w of widths) total += w;
   let x = node.x - (anchor === 'middle' ? total / 2 : anchor === 'end' ? total : 0);
@@ -226,7 +263,7 @@ function paintText(walk: Walk, node: TextNode, chain: readonly Style[]): void {
     if (run.y !== undefined) y = run.y;
     x += run.dx ?? 0;
     y += run.dy ?? 0;
-    ctx.font = fontFor(runChain, walk.options.fonts);
+    const text = setUp(runChain);
     const box = { x, y: y - fontSizeOf(runChain) * 0.8, width: widths[i], height: fontSizeOf(runChain) };
     const fillOpacity = parseFloat(inherited(runChain, 'fill-opacity') ?? '1');
     const fill = paintFor(walk, inherited(runChain, 'fill') ?? 'black', runChain, box, Number.isFinite(fillOpacity) ? fillOpacity : 1);
@@ -236,7 +273,7 @@ function paintText(walk: Walk, node: TextNode, chain: readonly Style[]): void {
     const paintFill = (): void => {
       if (!fill) return;
       ctx.fillStyle = fill;
-      ctx.fillText(run.text, x, y);
+      text.draw(run.text, x, y, 'fill');
     };
     const paintStroke = (): void => {
       if (!stroke || strokeWidth <= 0) return;
@@ -244,7 +281,7 @@ function paintText(walk: Walk, node: TextNode, chain: readonly Style[]): void {
       ctx.lineWidth = strokeWidth;
       const join = inherited(runChain, 'stroke-linejoin');
       ctx.lineJoin = join === 'round' || join === 'bevel' ? join : 'miter';
-      ctx.strokeText(run.text, x, y);
+      text.draw(run.text, x, y, 'stroke');
     };
     if (strokeUnderFill(runChain)) {
       paintStroke();
@@ -255,6 +292,7 @@ function paintText(walk: Walk, node: TextNode, chain: readonly Style[]): void {
     }
     x += widths[i];
   });
+  spaced(ctx, 0, 0);
 }
 
 function paintNode(walk: Walk, node: SceneNode, parentChain: readonly Style[]): void {

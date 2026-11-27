@@ -15,9 +15,36 @@ export const PRESENTATION = new Set([
 /** The properties a child takes from its parent when it doesn't set them. */
 export const INHERITED = new Set([
   'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset',
-  'visibility', 'color', 'clip-rule', 'font-family', 'font-size', 'font-weight', 'font-style', 'font-variant', 'text-anchor', 'letter-spacing', 'word-spacing', 'marker-start', 'marker-mid', 'marker-end',
+  'visibility', 'color', 'clip-rule', 'font-family', 'font-size', 'font-weight', 'font-style', 'font-variant', 'text-anchor', 'letter-spacing', 'word-spacing', 'font-feature-settings', 'font-variant-numeric', 'marker-start', 'marker-mid', 'marker-end',
   'paint-order', 'shape-rendering', 'text-rendering', 'image-rendering', 'writing-mode', 'direction', 'cursor', 'pointer-events',
 ]);
+
+/** `letter-spacing` or `word-spacing` in user units, for text of size `size`: 0 for `normal` or anything unreadable. */
+export function spacingOf(value: string | undefined, size: number): number {
+  const v = value?.trim().toLowerCase();
+  if (!v || v === 'normal') return 0;
+  const m = /^([-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?)\s*(em|%)$/.exec(v);
+  if (m) return (Number(m[1]) * size) / (m[2] === '%' ? 100 : 1);
+  return parseLength(v) ?? 0;
+}
+
+const NUMERIC: Record<string, string> = { 'lining-nums': 'lnum', 'oldstyle-nums': 'onum', 'proportional-nums': 'pnum', 'tabular-nums': 'tnum', 'diagonal-fractions': 'frac', 'stacked-fractions': 'afrc', ordinal: 'ordn', 'slashed-zero': 'zero' };
+
+/**
+ * The OpenType features text asks for (`font-feature-settings`, and `font-variant-numeric` as the features it stands for), as
+ * one canonical list (`"lnum" 1, "tnum" 1`); '' for none. The same list means the same features.
+ */
+export function featuresOf(chain: readonly Style[]): string {
+  const out = new Map<string, number>();
+  for (const word of (inherited(chain, 'font-variant-numeric') ?? '').trim().toLowerCase().split(/\s+/)) if (NUMERIC[word]) out.set(NUMERIC[word], 1);
+  const settings = inherited(chain, 'font-feature-settings')?.trim();
+  if (settings && settings !== 'normal')
+    for (const part of settings.split(',')) {
+      const m = /^\s*["']([\x20-\x7e]{4})["']\s*(on|off|\d+)?\s*$/i.exec(part);
+      if (m) out.set(m[1], m[2] === undefined || /^on$/i.test(m[2]) ? 1 : /^off$/i.test(m[2]) ? 0 : Number(m[2]));
+    }
+  return [...out].map(([tag, value]) => `"${tag}" ${value}`).join(', ');
+}
 
 /** The value of a property for a node whose ancestors' styles are `chain` (nearest first, the node's own first). */
 export function inherited(chain: readonly Style[], property: string): string | undefined {

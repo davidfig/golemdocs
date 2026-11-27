@@ -8,7 +8,7 @@ import { decodeImage } from '../formats/imageCodec.ts';
 import { viewBoxMatrix } from '../vector/geometry.ts';
 import { apply, invert } from '../vector/matrix.ts';
 import type { Scene } from '../vector/model.ts';
-import { fontCss, loadFonts, type SceneFonts } from '../vector/fonts.ts';
+import { fontKey, loadFonts, type SceneFonts } from '../vector/fonts.ts';
 import { loadImages, paintScene } from '../vector/paint.ts';
 import type { ImageCache } from '../vector/paint.ts';
 import { CSS_PX_PER_POINT, type Camera } from '../view/camera.ts';
@@ -118,7 +118,7 @@ export class VectorLayer {
 
   /** Loads the fonts a drawing embeds, in place of the last one's, unless they are the same; painted again when they come. */
   private showFonts(scene: Scene | null): void {
-    const css = scene ? fontCss(scene) : '';
+    const css = scene ? fontKey(scene) : '';
     if (css === this.fontCss) return;
     this.fontCss = css;
     this.fonts?.release();

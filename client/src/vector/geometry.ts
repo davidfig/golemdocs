@@ -6,7 +6,7 @@ import type { Matrix, PathCommand, Scene, SceneNode, Style, TextNode } from './m
 import { IDENTITY } from './model.ts';
 import { ellipsePath, pathBounds, rectPath } from './pathData.ts';
 import type { Bounds } from './pathData.ts';
-import { inherited, parseLength } from './style.ts';
+import { inherited, parseLength, spacingOf } from './style.ts';
 
 export type { Bounds };
 
@@ -38,7 +38,9 @@ export function textBounds(node: TextNode, chain: readonly Style[] = [node.style
   for (const run of node.runs) {
     const runSize = parseLength(run.style['font-size']) ?? base;
     size = Math.max(size, runSize);
-    width += [...run.text].length * runSize * 0.55;
+    const chars = [...run.text];
+    const runChain = [run.style, ...chain];
+    width += chars.length * (runSize * 0.55 + spacingOf(inherited(runChain, 'letter-spacing'), runSize)) + chars.filter((ch) => ch === ' ').length * spacingOf(inherited(runChain, 'word-spacing'), runSize);
   }
   const x = anchor === 'middle' ? node.x - width / 2 : anchor === 'end' ? node.x - width : node.x;
   return { x, y: node.y - size * 0.8, width, height: size * 1.0 };

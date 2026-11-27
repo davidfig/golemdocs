@@ -11,7 +11,7 @@ import { averageColor, readGradient } from './gradients.ts';
 import { gradientInLocal } from './gradientEdit.ts';
 import { apply } from './matrix.ts';
 import type { Matrix, PathCommand, Scene, SceneNode, Style } from './model.ts';
-import { inherited, parseColor, parseLength, parseNumbers, strokeUnderFill, urlReference } from './style.ts';
+import { inherited, parseColor, parseLength, parseNumbers, spacingOf, strokeUnderFill, urlReference } from './style.ts';
 import type { Rgba } from './style.ts';
 import { pdfChar } from '../formats/pdfExport.ts';
 
@@ -148,7 +148,10 @@ function paintText(out: Out, node: Extract<SceneNode, { kind: 'text' }>, chain: 
     if (!font) out.fonts.set(name, (font = out.pdf.standardFont(name)));
     const size = fontSizeOf(runChain);
     const text = [...run.text].map((ch) => pdfChar(ch.codePointAt(0)).text).join('');
-    return { run, runChain, font, size, text, width: font.widthOf(text, size) };
+    const letter = spacingOf(inherited(runChain, 'letter-spacing'), size);
+    const word = spacingOf(inherited(runChain, 'word-spacing'), size);
+    const spaces = [...text].filter((ch) => ch === ' ').length;
+    return { run, runChain, font, size, text, letter, word, width: font.widthOf(text, size) + letter * [...text].length + word * spaces };
   });
   const total = pieces.reduce((n, p) => n + p.width, 0);
   x -= anchor === 'middle' ? total / 2 : anchor === 'end' ? total : 0;
@@ -174,7 +177,7 @@ function paintText(out: Out, node: Extract<SceneNode, { kind: 'text' }>, chain: 
       }
       // The page is flipped to put y downward; text is flipped back so that it stands up.
       d.transform(1, 0, 0, -1, x, y);
-      d.text(p.text, 0, 0, { font: p.font, size: p.size, ...(render !== 'stroke' && { color: unitColor(fill!) }), render });
+      d.text(p.text, 0, 0, { font: p.font, size: p.size, ...(p.letter && { charSpacing: p.letter }), ...(p.word && { wordSpacing: p.word }), ...(render !== 'stroke' && { color: unitColor(fill!) }), render });
       d.restore();
     };
     if (p.text && fill && strokes) {

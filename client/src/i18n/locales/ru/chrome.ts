@@ -175,6 +175,7 @@ export const chrome: Catalog = {
   'chrome.help.shortcuts': 'Сочетания &клавиш',
   'chrome.help.about': '&О программе {name}',
   'chrome.help.website': '&Сайт {name}',
+  'chrome.help.download': 'Скачать прило&жение для компьютера',
   'chrome.help.feedback': 'От&править отзыв…',
   'chrome.help.privacy': 'Политика кон&фиденциальности',
   'chrome.help.terms': '&Условия использования',

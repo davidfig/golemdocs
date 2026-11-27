@@ -175,6 +175,7 @@ export const chrome: Partial<Messages> = {
   'chrome.help.shortcuts': 'キーボード ショートカット(&K)',
   'chrome.help.about': '{name} のバージョン情報(&A)',
   'chrome.help.website': '{name} の Web サイト(&W)',
+  'chrome.help.download': 'デスクトップ アプリをダウンロード(&D)',
   'chrome.help.feedback': 'フィードバックを送信(&F)…',
   'chrome.help.privacy': 'プライバシー ポリシー(&P)',
   'chrome.help.terms': '利用規約(&T)',

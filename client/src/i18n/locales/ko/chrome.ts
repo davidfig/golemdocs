@@ -175,6 +175,7 @@ export const chrome: Partial<Messages> = {
   'chrome.help.shortcuts': '바로 가기 키(&K)',
   'chrome.help.about': '{name} 정보(&A)',
   'chrome.help.website': '{name} 웹사이트(&W)',
+  'chrome.help.download': '데스크톱 앱 다운로드(&D)',
   'chrome.help.feedback': '피드백 보내기(&F)…',
   'chrome.help.privacy': '개인정보 처리방침(&P)',
   'chrome.help.terms': '이용 약관(&T)',

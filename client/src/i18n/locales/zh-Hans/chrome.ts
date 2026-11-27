@@ -175,6 +175,7 @@ export const chrome: Partial<Messages> = {
   'chrome.help.shortcuts': '键盘快捷键(&K)',
   'chrome.help.about': '关于 {name}(&A)',
   'chrome.help.website': '{name} 网站(&W)',
+  'chrome.help.download': '下载桌面应用(&D)',
   'chrome.help.feedback': '发送反馈(&F)…',
   'chrome.help.privacy': '隐私政策(&P)',
   'chrome.help.terms': '服务条款(&T)',

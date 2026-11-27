@@ -738,6 +738,9 @@ export class Chrome {
       a('help.about', t('chrome.help.about', { name: this.options.appName ?? 'Golem Docs' }), { kind: 'openSample', id: 'welcome' }),
       // The marketing site (public/home), a page of its own outside the app, unless this server names its own (site.ts).
       { id: 'help.website', label: t('chrome.help.website', { name: this.options.appName ?? 'Golem Docs' }), run: () => void window.open(siteLink('website', '/home'), '_blank', 'noopener') },
+      // The website's download page, for someone using the app in a browser. Not in the desktop or iOS app
+      // (already installed), nor on a server that names its own website (its installers aren't golemdocs.com's).
+      { id: 'help.download', label: t('chrome.help.download'), run: () => void window.open('/home/download', '_blank', 'noopener'), visible: () => !isDesktopApp() && !site().links.website },
       // The built-in documents, or this server's own pages when it names them.
       { id: 'help.privacy', label: t('chrome.help.privacy'), run: () => this.openLegal('privacy', t('chrome.help.privacy')) },
       { id: 'help.terms', label: t('chrome.help.terms'), run: () => this.openLegal('terms', t('chrome.help.terms')) },
@@ -1403,6 +1406,7 @@ export class Chrome {
           sep,
           cmd('help.about'),
           cmd('help.website'),
+          cmd('help.download'),
           cmd('help.privacy'),
           cmd('help.terms'),
         ],

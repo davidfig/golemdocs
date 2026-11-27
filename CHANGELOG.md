@@ -4,6 +4,7 @@
 
 ### Added
 
+- Help › Download the Desktop App opens the website's download page, so you can install Golem Docs on your computer. It shows only when you use Golem Docs in a browser.
 - The desktop app can update itself: in Tools › Options, choose Update automatically and how long the app should sit unused first. It waits until everything is saved and synced, installs the update or loads the new version, and opens your document where you left it.
 
 ### Changed

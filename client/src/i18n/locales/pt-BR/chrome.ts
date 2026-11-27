@@ -175,6 +175,7 @@ export const chrome: Partial<Messages> = {
   'chrome.help.shortcuts': '&Atalhos de Teclado',
   'chrome.help.about': '&Sobre o {name}',
   'chrome.help.website': 'Site do {name} (&W)',
+  'chrome.help.download': '&Baixar o aplicativo para computador',
   'chrome.help.feedback': 'Enviar &Comentários…',
   'chrome.help.privacy': '&Privacidade',
   'chrome.help.terms': '&Termos de Serviço',

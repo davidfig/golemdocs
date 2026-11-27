@@ -173,6 +173,7 @@ export const chrome = {
   'chrome.help.shortcuts': '&Keyboard Shortcuts',
   'chrome.help.about': '&About {name}',
   'chrome.help.website': '{name} Web&site',
+  'chrome.help.download': '&Download the Desktop App',
   'chrome.help.feedback': 'Send &Feedback…',
   'chrome.help.privacy': '&Privacy Policy',
   'chrome.help.terms': '&Terms of Service',

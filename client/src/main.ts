@@ -104,7 +104,7 @@ import { savedViewMode, VIEW_KEY } from './ui/viewMode.ts';
 import { NothingOpenScreen } from './ui/nothingOpen.ts';
 import { AltTextPopover } from './ui/altTextPopover.ts';
 import { showToast } from './ui/toast.ts';
-import { arrangeGrid, arrangePages, nearestPage, onSeam, shownBottom, shownTop, type Bounds, type GridState } from './document/arrange.ts';
+import { arrangeGrid, arrangePages, joinedBand, nearestPage, onSeam, shownBottom, shownTop, type Bounds, type GridState } from './document/arrange.ts';
 import { LayoutClient } from './layout/layoutClient.ts';
 import { PageShelf, nearRange } from './webgl/pageShelf.ts';
 import { MAX_SHARED_TEXT_BYTES } from '@golemdocs/ops/textOps';
@@ -1494,8 +1494,8 @@ function arrange(): void {
   const aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
   const joined = pagesJoined();
   const gap = reflowing() || joined ? 0 : PAGE_GAP;
-  // Hiding the space between pages hides each page's top and bottom margins too, as Word does: only the body is shown.
-  for (const page of pages) page.shown = joined ? page.bodyBand : null;
+  // Hiding the space between pages hides the margins at each seam too, as Word does; the document's own top and bottom keep theirs.
+  for (let i = 0; i < pages.length; i++) pages[i].shown = joined ? joinedBand(i, pages.length, pages[i].bodyBand, pages[i].height) : null;
   if (grid) bounds = arrangeGrid(pages, expectedPages, aspect, gap, gridState);
   else {
     gridState.blanks.length = 0;
@@ -5529,7 +5529,8 @@ function render(): void {
   const caretVisible = caretOn && document.activeElement === input && document.hasFocus();
   syncReflow();
   renderer.flat = reflowing();
-  renderer.joined = pagesJoined();
+  // A lone page has no seam to hide: it keeps its shadow like any page.
+  renderer.joined = pagesJoined() && pages.length > 1;
   if (textView.active) {
     // A big text file: its own bounds, from the top-left corner however short or narrow it is, and drawn by the large-text editor.
     clampView();

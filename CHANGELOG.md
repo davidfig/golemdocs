@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.50.1 - Unreleased
+
+### Changed
+
+- View › Hide Space Between Pages now hides only the space where pages meet: the first page keeps its top margin and the last page its bottom one, so a one-page document looks like a normal page instead of having its text against the edge of the paper.
+
 ## 0.50.0 - 2026-11-27
 
 ### Added

@@ -14,6 +14,17 @@ export interface Page {
 
 type Placed = Omit<Page, 'moveTo'>;
 
+/**
+ * The band of page `index` of `count` to show with the space between pages hidden: its body, but the first page keeps its top
+ * margin and the last its bottom one, so only the seams between pages close up and a lone page is shown whole. Null: all of it.
+ */
+export function joinedBand(index: number, count: number, body: { top: number; bottom: number } | null, height: number): { top: number; bottom: number } | null {
+  if (!body) return null;
+  const top = index === 0 ? 0 : body.top;
+  const bottom = index === count - 1 ? height : body.bottom;
+  return top === 0 && bottom === height ? null : { top, bottom };
+}
+
 /** Where the shown part of a page starts, in document coordinates. */
 export function shownTop(page: Placed): number {
   return page.y + (page.shown?.top ?? 0);

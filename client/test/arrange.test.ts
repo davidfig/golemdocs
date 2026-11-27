@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { arrangeGrid, arrangePages, columnsToFill, gridColumns, nearestPage, onSeam, shownTop, shownBottom, type GridState, type Page } from '../src/document/arrange.ts';
+import { arrangeGrid, arrangePages, columnsToFill, gridColumns, joinedBand, nearestPage, onSeam, shownTop, shownBottom, type GridState, type Page } from '../src/document/arrange.ts';
 
 class TestPage implements Page {
   x = -1;
@@ -89,6 +89,15 @@ test('hiding the white space shows only each page\'s body, the bodies meeting ed
   assert.equal(onSeam(p, 50, 200, 2), false, 'not where the full pages would meet');
   assert.equal(nearestPage(p, 50, 145), p[1], 'just below the seam is the second page, though the first one\'s hidden margin reaches there');
   assert.equal(nearestPage(p, 50, 135), p[0]);
+});
+
+test('hiding the white space closes only the seams: the first page keeps its top margin, the last its bottom one', () => {
+  const body = { top: 30, bottom: 170 };
+  assert.equal(joinedBand(0, 1, body, 200), null, 'a lone page has no seam: it is shown whole');
+  assert.deepEqual(joinedBand(0, 3, body, 200), { top: 0, bottom: 170 });
+  assert.deepEqual(joinedBand(1, 3, body, 200), body);
+  assert.deepEqual(joinedBand(2, 3, body, 200), { top: 30, bottom: 200 });
+  assert.equal(joinedBand(1, 3, null, 200), null, 'no body band: shown whole');
 });
 
 test('a page with no body band is shown whole among cropped ones', () => {

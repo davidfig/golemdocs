@@ -89,6 +89,8 @@ export class FilesPanel {
   /** Back from Trash to the documents. */
   private readonly back = iconButton('wm-files-close', 'M7.5 2L3.5 6l4 4', t('panels.files.backToFiles'));
   private readonly collapse = iconButton('wm-files-close', 'M4 1.5H10.5V8M1.5 4H8V10.5H1.5ZM3.5 7.25H6', t('panels.files.collapseAll'));
+  /** A folder with a plus: File › New Folder, in the folder of the row last picked. */
+  private readonly addFolder = iconButton('wm-files-close', 'M1.5 2.5H4.5L5.5 3.5H10.5V10H1.5ZM6 5V8.5M4.25 6.75H7.75', t('panels.dashboard.newFolder'));
   /** Trash, below the tree. */
   private readonly trashEntry = h('button', { class: 'wm-files-trash-entry', attrs: { type: 'button' }, title: t('trash.note') }, iconElement('trash'), h('span', { class: 'wm-files-name', text: t('trash.title') }));
   /** What was deleted, shown in place of the tree while Trash is open. */
@@ -139,6 +141,7 @@ export class FilesPanel {
     const close = iconButton('wm-files-close', CLOSE_ICON, t('panels.files.close'));
     close.addEventListener('click', () => host.close());
     this.collapse.addEventListener('click', () => this.collapseAll());
+    this.addFolder.addEventListener('click', () => this.newFolderHere());
     this.back.addEventListener('click', () => this.leaveTrash());
     this.back.hidden = true;
     this.trashView.hidden = true;
@@ -146,7 +149,7 @@ export class FilesPanel {
     onContextMenu(this.trashEntry, (e) => this.menuAt(e.clientX, e.clientY, [{ label: t('panels.files.openItem'), run: () => this.enterTrash() }, this.host.trash.emptyItem()], this.trashEntry));
     this.makeTrashTarget(this.trashEntry);
     this.emptyTrash.addEventListener('click', () => void this.host.trash.emptyAll());
-    this.el.append(h('header', { class: 'wm-files-bar' }, this.back, this.title, this.collapse, close), this.notice, this.empty, this.tree, this.trashView, this.trashEntry);
+    this.el.append(h('header', { class: 'wm-files-bar' }, this.back, this.title, this.addFolder, this.collapse, close), this.notice, this.empty, this.tree, this.trashView, this.trashEntry);
     this.notice.hidden = true;
     // Right click, or a long press on a touch screen.
     onContextMenu(this.el, (e) => {
@@ -377,6 +380,7 @@ export class FilesPanel {
     this.trashEntry.hidden = trash;
     this.back.hidden = !trash;
     this.collapse.hidden = trash;
+    this.addFolder.hidden = trash;
     this.title.textContent = trash ? t('trash.title') : t('panels.files.label');
   }
 
@@ -525,10 +529,10 @@ export class FilesPanel {
       deleteFolder,
       'separator',
       ...newMenuItems((kind) => this.host.newDocument(folder.id, kind)),
+      { label: t('panels.dashboard.newFolder'), run: () => void this.newFolder(folder.id) },
       'separator',
       { label: t('panels.dashboard.import'), run: () => this.host.importFile(folder.id) },
       { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folder.id) },
-      { label: t('panels.dashboard.newFolder'), run: () => void this.newFolder(folder.id) },
     ];
   }
 
@@ -536,10 +540,10 @@ export class FilesPanel {
   private rootItems(): PopupItem[] {
     return [
       ...newMenuItems((kind) => this.host.newDocument(null, kind)),
+      { label: t('panels.dashboard.newFolder'), run: () => void this.newFolder(null) },
       'separator',
       { label: t('panels.dashboard.import'), run: () => this.host.importFile(null) },
       { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(null) },
-      { label: t('panels.dashboard.newFolder'), run: () => void this.newFolder(null) },
     ];
   }
 
@@ -592,6 +596,25 @@ export class FilesPanel {
   private startRename(id: string): void {
     this.renaming = id;
     this.render();
+  }
+
+  /**
+   * File › New Folder and the bar's button: a new folder where the person is in the tree, inside the folder of the row last
+   * picked (a folder itself, or the folder a document is in), or at the top level when no row has been. Trash is left first.
+   */
+  newFolderHere(): void {
+    if (this.inTrash) this.leaveTrash();
+    const row = this.tabStop;
+    let parentId: string | null = null;
+    // Rows are `f:<folder id>` and `d:<document key>` (see `row`).
+    if (row?.startsWith('d:')) {
+      const entry = this.entries.find((e) => `d:${e.key}` === row);
+      parentId = entry ? folderOf(entry, this.folders) : null;
+    } else if (row?.startsWith('f:') && this.folders.some((f) => `f:${f.id}` === row)) parentId = row.slice(2);
+    // A folder that can't take a new one (locked inside an encrypted one, or out of reach) gives way to the top level.
+    const target = parentId === null ? null : this.folders.find((f) => f.id === parentId);
+    if (target && target.locked) parentId = null;
+    void this.newFolder(parentId);
   }
 
   /** A new folder in `parentId`, open and ready to be named. */

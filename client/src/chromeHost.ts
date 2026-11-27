@@ -123,6 +123,8 @@ export interface AppHooks {
   audioAction(op: AudioOp): void;
   /** File › New Audio Recording. */
   newRecording(): Promise<void>;
+  /** File › New Folder: opens the Files sidebar and starts a folder there, ready to be named. */
+  newFolder(): void;
   /** Edit › Copy Link to This Moment, for the open audio or video. */
   copyMomentLink(): Promise<void>;
   slidesAction(op: SlidesOp): void;
@@ -227,6 +229,7 @@ const SUPPORTED = new Set<ActionKind>([
   'slides',
   'new',
   'newRecording',
+  'newFolder',
   'open',
   'close',
   'import',
@@ -433,6 +436,8 @@ export function createChromeHost(app: AppHooks): ChromeHost & { openFile(file: F
         case 'newRecording':
           await app.prepareNew(undefined);
           return app.newRecording();
+        case 'newFolder':
+          return app.newFolder();
         case 'open':
           return app.dashboard();
         case 'close':

@@ -407,7 +407,7 @@ export function acceptList(): string {
 }
 
 /** What can still be done with no document open: opening or making one, the account, and the app's own settings and views. */
-const WITHOUT_DOCUMENT = new Set<Action['kind']>(['new', 'newRecording', 'open', 'scripts', 'runScript', 'import', 'importFolder', 'openSample', 'openSaved', 'syncNow', 'signIn', 'signOut', 'subscribe', 'manageSubscription', 'clearLocalData', 'downloadAll', 'toggleFilesPanel', 'toggleFooter', 'toggleToolbars']);
+const WITHOUT_DOCUMENT = new Set<Action['kind']>(['new', 'newRecording', 'newFolder', 'open', 'scripts', 'runScript', 'import', 'importFolder', 'openSample', 'openSaved', 'syncNow', 'signIn', 'signOut', 'subscribe', 'manageSubscription', 'clearLocalData', 'downloadAll', 'toggleFilesPanel', 'toggleFooter', 'toggleToolbars']);
 const DIALOGS_WITHOUT_DOCUMENT = new Set<string>(['options', 'trash', 'vault', 'updates', 'searchAll']);
 
 /** Whether the action means anything with no document open (after File › Close). */
@@ -470,6 +470,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       case 'download':
       case 'downloadAll':
       case 'toggleFilesPanel':
+      case 'newFolder':
       case 'toggleFooter':
       case 'toggleToolbars':
         return true;
@@ -497,6 +498,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
       case 'download':
       case 'downloadAll':
       case 'toggleFilesPanel':
+      case 'newFolder':
       case 'toggleFooter':
       case 'toggleToolbars':
         return true;
@@ -568,6 +570,7 @@ export function formatAllows(profile: FormatProfile, action: Action): boolean {
     case 'convert':
     case 'new':
     case 'newRecording':
+    case 'newFolder':
     case 'open':
     case 'close':
     case 'openSample':

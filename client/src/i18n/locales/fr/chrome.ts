@@ -3,6 +3,7 @@ import type { Messages } from '../../index.ts';
 export const chrome: Partial<Messages> = {
   'chrome.file.new': '&Nouveau',
   'chrome.file.newRecording': 'Nouvel enregistrement &audio',
+  'chrome.file.newFolder': 'Nouveau &dossier',
   'chrome.file.open': '&Ouvrir…',
   'chrome.file.close': '&Fermer',
   'chrome.file.import': '&Importer…',

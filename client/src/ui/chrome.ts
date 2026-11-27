@@ -332,6 +332,8 @@ export class Chrome {
     r.add(
       a('file.new', t('chrome.file.new'), { kind: 'new' }, { icon: 'new', tooltip: t('chrome.file.new.tip') }),
       a('file.newRecording', t('chrome.file.newRecording'), { kind: 'newRecording' }, { icon: 'audioRecord' }),
+      // ⇧⌘N only in the desktop app: a browser keeps it for a new private window.
+      a('file.newFolder', t('chrome.file.newFolder'), { kind: 'newFolder' }, { icon: 'newFolder', ...(isDesktopApp() && { shortcut: 'Mod+Shift+N' }) }),
       a('file.open', t('chrome.file.open'), { kind: 'open' }, { icon: 'open', shortcut: 'Mod+O', tooltip: t('chrome.file.open.tip') }),
       // Only the desktop app gets Mod+W: in a browser the key closes the tab, and a page can't take it.
       a('file.close', t('chrome.file.close'), { kind: 'close' }, { tooltip: t('chrome.file.close.tip'), ...(isDesktopApp() && { shortcut: 'Mod+W' }) }),
@@ -893,6 +895,7 @@ export class Chrome {
         items: [
           cmd('file.new'),
           cmd('file.newRecording'),
+          cmd('file.newFolder'),
           cmd('file.open'),
           this.openRecentItem(),
           cmd('file.close'),

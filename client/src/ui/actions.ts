@@ -427,6 +427,8 @@ export type Action =
   | { kind: 'media'; op: MediaOp }
   | { kind: 'audio'; op: AudioOp }
   | { kind: 'newRecording' }
+  /** File › New Folder: in the Files sidebar, where the person is in it. */
+  | { kind: 'newFolder' }
   | { kind: 'slides'; op: SlidesOp }
   /** How the selected shapes (and the next ones) look; null is none. */
   | { kind: 'vectorStyle'; fill?: string | null; stroke?: string | null; strokeWidth?: number; strokeStyle?: string; fillType?: 'solid' | 'linear' | 'radial' }

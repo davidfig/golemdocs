@@ -96,6 +96,7 @@ dev builds, where they say "isn't available yet"). Update this list as actions a
 - Playback menu (`media`): Play/Pause, Back, Forward, Start, Mute, Slower, Faster, Normal Speed, Captions, Full Screen
 - Edit › Copy Link to This Moment (`copyMomentLink`)
 - File › New Audio Recording (`newRecording`)
+- File › New Folder (`newFolder`, ⇧⌘N in the desktop app): a folder in the Files sidebar, in the folder of the row last picked
 - Audio menu (`audio`; a kept audio file): Edit Audio, Save (MP3 and other lossy files), Record, Delete, Trim to and Silence Selection, Label, Generate (Silence, Tone), Effects (Change Volume, Normalize, Fade In, Fade Out, Reverse, Speed and Pitch, Equalizer, Compressor, Take Noise Sample, Reduce Noise), Zoom In, Out, to Selection and to Whole File, Spectrogram; Undo, Redo, Cut, Copy, Paste and Select All while editing ([audio-editing.md](audio-editing.md))
 
 ## Still needs work

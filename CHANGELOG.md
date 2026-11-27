@@ -1,5 +1,11 @@
 # What’s New in Golem Docs
 
+## 0.50.0 - Unreleased
+
+### Added
+
+- New folders are easier to make in the Files sidebar: a New Folder button at the top of the sidebar and File › New Folder (in the desktop app, ⇧⌘N on a Mac and Ctrl+Shift+N on Windows and Linux) make one inside the folder you last picked, ready to name, and the right-click menus now list New Folder with the new documents.
+
 ## 0.49.0 - 2026-11-26
 
 ### Added

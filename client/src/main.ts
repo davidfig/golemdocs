@@ -6911,6 +6911,7 @@ const chromeHost = createChromeHost({
   openMediaFile: (file) => openMediaFile(file),
   audioAction: (op) => void audioOp(op),
   newRecording: () => newRecording(),
+  newFolder,
   slidesAction: (op) => slidesView.slidesOp(op),
   engine: () => (textView.active ? textEngine : sheetView.active ? sheetEngine : slidesView.active ? slidesEngine : mediaView.active ? mediaEngine : pageView.active ? pageEngine : null),
   openSelection,
@@ -7320,6 +7321,11 @@ const spellMenu = new SpellMenu({
   focusEditor: focusInput,
 });
 /** Where the last right click was, for the menu it may open. */
+/** File › New Folder: the Files sidebar is opened if it is shut, then a folder starts there, ready to be named. */
+function newFolder(): void {
+  if (!filesOpen) toggleFilesPanel();
+  filesPanel.newFolderHere();
+}
 function toggleFilesPanel(): void {
   filesOpen = !filesOpen;
   try {

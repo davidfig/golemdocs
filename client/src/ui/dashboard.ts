@@ -208,11 +208,11 @@ export class Dashboard {
             this.hide();
             this.host.newDocument(folderId, kind);
           }),
+          // As the Files pane's menu has them (filesPanel.ts, rootItems and folderItems): New Folder with the new documents.
+          { label: t('panels.dashboard.newFolder'), run: () => this.newFolderButton.click() },
           'separator',
           { label: t('panels.dashboard.import'), run: () => this.host.importFile(folderId) },
           { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folderId) },
-          // As the Files pane's menu has them (filesPanel.ts, rootItems and folderItems).
-          { label: t('panels.dashboard.newFolder'), run: () => this.newFolderButton.click() },
         ],
         e.clientX,
         e.clientY,
@@ -992,9 +992,6 @@ export class Dashboard {
         this.hide();
         this.host.newDocument(folder.id, kind);
       }),
-      'separator',
-      { label: t('panels.dashboard.import'), run: () => this.host.importFile(folder.id) },
-      { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folder.id) },
       {
         label: t('panels.dashboard.newFolder'),
         run: () =>
@@ -1007,6 +1004,9 @@ export class Dashboard {
             this.renaming = made.id;
           }, false),
       },
+      'separator',
+      { label: t('panels.dashboard.import'), run: () => this.host.importFile(folder.id) },
+      { label: t('panels.dashboard.importFolder'), run: () => this.host.importFolder(folder.id) },
     ]);
     this.makeDraggable(card, { kind: 'folder', folder });
     this.makeDropTarget(card, folder.id);

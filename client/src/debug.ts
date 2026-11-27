@@ -6,7 +6,7 @@ export type DebugPanel = 'Document' | 'Render';
 
 export const DEBUG_FLAGS = [
   { key: 'status', panel: 'Document', label: 'Status', hint: 'Sync and collaboration status, and the room' },
-  { key: 'edit', panel: 'Document', label: 'Edit times', hint: 'How long the last edit took to reach the screen, and how much of that was the layout worker' },
+  { key: 'edit', panel: 'Document', label: 'Edit times', hint: 'How long edits take to reach the screen: the last one, the worst in the last minute (and how much of it was the layout worker), and how many were slow' },
   { key: 'load', panel: 'Document', label: 'Load times', hint: 'How long the document took to load, in parts' },
   { key: 'pages', panel: 'Render', label: 'Pages and glyphs', hint: 'Pages visible, glyphs drawn and draw calls per frame' },
   { key: 'cpu', panel: 'Render', label: 'CPU time', hint: 'How long the last frame took to submit to the GPU' },

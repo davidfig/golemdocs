@@ -1,4 +1,5 @@
 import type { Operation } from '@golemdocs/ops';
+import { pageTask } from '../pageTasks.ts';
 import type { Shape } from '../formats/imageDraw.ts';
 import type { Scene } from '../vector/model.ts';
 import type { FaceDescriptor } from '@golemdocs/layout';
@@ -7,6 +8,7 @@ import type { Format } from '../formats/convert.ts';
 import { t } from '../i18n/index.ts';
 import type { LookUp } from '../spelling/thesaurus.ts';
 import type { A11yHeading, A11yPage, OutlineNode } from './a11y.ts';
+import { clock } from './taskLog.ts';
 import { layoutWorkerName, type DocumentSource, type FromWorker, type LayoutTimings, type LayoutUpdate, type RoomOptions, type RoomState, type SelectionUpdate, type SpellIssue, type TextMark, type ToWorker, type WireCommand } from './protocol.ts';
 
 /** Callbacks for one document. None fire after another document is opened. */
@@ -181,7 +183,7 @@ export class LayoutClient {
   }
 
   command(command: WireCommand): void {
-    this.send({ type: 'command', doc: this.doc, command });
+    this.send({ type: 'command', doc: this.doc, command, sentAt: clock() });
   }
 
   /** Puts a picture in the open document at the caret. */
@@ -415,6 +417,7 @@ export class LayoutClient {
   }
 
   private receive(message: FromWorker): void {
+    pageTask(message.type);
     if (message.type === 'embed') {
       const reply = (file: { name: string; bytes: ArrayBuffer } | null): void => this.send({ type: 'embedFile', request: message.request, file }, file ? [file.bytes] : []);
       (this.embeds?.(message.title) ?? Promise.resolve(null)).then(reply, () => reply(null));

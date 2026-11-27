@@ -2,8 +2,13 @@
 
 ## 0.50.1 - Unreleased
 
+### Added
+
+- The desktop app can update itself: in Tools › Options, choose Update automatically and how long the app should sit unused first. It waits until everything is saved and synced, installs the update or loads the new version, and opens your document where you left it.
+
 ### Changed
 
+- The desktop app now looks for a new version of itself every 10 minutes, together with the website, and tells you in the same note at the bottom (Update and Restart) instead of a separate window, so you never get two update messages. Help › Check for Updates still checks at once.
 - A calmer top bar: the document's format is a small chip after its name (DOCX ▾, click it to convert to another format), the save indicator sits beside it and stays quiet while everything is saved, showing words only when something needs you (offline, not saved, signed out). The buttons at the right are flat, like the menus.
 - When you're not signed in, the top right shows a Sign in button instead of a person icon, and it opens the sign-in dialog in one click. On a phone it stays an icon.
 - View › Hide Space Between Pages now hides only the space where pages meet: the first page keeps its top margin and the last page its bottom one, so a one-page document looks like a normal page instead of having its text against the edge of the paper.
@@ -12,11 +17,11 @@
 
 - File › Convert To and the format list listed Email Message and Jupyter Notebook under a second Popular heading at the end; they are now with the other documents.
 - In the desktop app, when Golem Docs is updated while it is open, the vault folder no longer stops syncing with “the convert worker failed”: it says to reload, and the Reload note appears.
+- Starting a new paragraph no longer flags its first few English words as misspelled for a moment: a sentence such as “Make a list…” was briefly taken for Portuguese and checked against the wrong dictionary.
 
 ## 0.50.0 - 2026-11-27
 
 ### Added
-- Starting a new paragraph no longer flags its first few English words as misspelled for a moment: a sentence such as “Make a list…” was briefly taken for Portuguese and checked against the wrong dictionary.
 
 - New folders are easier to make in the Files sidebar: a New Folder button at the top of the sidebar and File › New Folder (in the desktop app, ⇧⌘N on a Mac and Ctrl+Shift+N on Windows and Linux) make one inside the folder you last picked, ready to name, and the right-click menus now list New Folder with the new documents.
 - The Documents screen has a List view, the default on a phone: each document gets a row with its whole name, its date and size, and a ⋯ button for its commands. Switch between Grid and List at the top of the screen.

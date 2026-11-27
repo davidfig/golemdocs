@@ -38,7 +38,7 @@ Even in that order the page and the shell are never the same version for everyon
 
 ### One message per update
 
-The page asks for a reload when `/build.json` names a newer site (`ui/updateNotice.ts`), and the shell asks for a restart when `updater.json` names a newer shell (the Software Update dialog). In the desktop app, when a newer shell is on offer, only the Software Update dialog is shown: restarting loads the current site anyway (`shouldOfferReload` in `buildCheck.ts`). With the order above, the site changes after the shell is on offer, so a person on the old shell sees one message, and a person already on the new shell sees only the reload note.
+The page asks for a reload when `/build.json` names a newer site (`ui/updateNotice.ts`). In the desktop app the same note, on the same check, also asks the shell whether `updater.json` names a newer shell (`updateToOffer` in `buildCheck.ts`): if so it says Update and Restart, since restarting loads the current site anyway; otherwise Reload. So there is only ever one message, and it comes at the same times for both. With the order above, the site changes after the shell is on offer, so a person on the old shell is offered the restart, and a person already on the new shell only the reload.
 
 ## One-time setup: Apple signing and notarization
 
@@ -80,9 +80,10 @@ Update signatures are separate: they use the Tauri update key, so signing the in
 The page updates itself (it is the website), so only the shell, the Rust code and `tauri.conf.json`, needs this. `tauri-plugin-updater` does it, driven from the page through two commands of ours (`desktop/src-tauri/src/update.rs`: `update_check`, `update_install`), so the page never names a URL or a file.
 
 ```
- app opens (+10 s), then every 6 h --> UpdateService.checkQuietly --> update_check --> GET /api/downloads/updater.json
-   newer version, not put off --> Software Update dialog (ui/updateDialog.ts): Update and Restart / Later (a day, per version)
-   Help ▸ Check for Updates … --> the same dialog, always answers
+ app opens (+10 s), then with the site's check (every 10 min, on coming to the front, back online)
+   --> UpdateNotice.check --> updateToOffer --> UpdateService.check --> update_check --> GET /api/downloads/updater.json
+   newer version --> the update note (ui/updateNotice.ts): Update and Restart / Later (until the next check)
+   Help › Check for Updates … --> Software Update dialog (ui/updateDialog.ts), always answers
    Update and Restart --> update_install: download, verify the signature against the public key in tauri.conf.json, replace the app, restart
 ```
 
@@ -90,8 +91,9 @@ The page updates itself (it is the website), so only the shell, the Rust code an
 - **What CI builds**: `src-tauri/tauri.release.conf.json` turns on `bundle.createUpdaterArtifacts` for CI only (a local `cargo tauri build` has no key). That adds a `.app.tar.gz` for the Mac (universal, so it serves both Macs), and a `.sig` file beside it and beside the Windows `-setup.exe` and the Linux `.AppImage`.
 - **What publishing does** (`pnpm publish:desktop`): uploads the update files (the Mac one under a versioned name, because a name never changes its bytes once served) and writes `updater.json`: `{ version, notes (that version's changelog section), pub_date, platforms: { darwin-aarch64, darwin-x86_64, windows-x86_64, linux-x86_64: { signature, url } } }`, with each url on golemdocs.com/api/downloads. It refuses a release whose update files are unsigned or missing a platform.
 - **Only builds that carry the plugin and this key can update.** Installers from before the plugin, and any build made with another key, never see updates. The first release that carries it must be installed by hand.
-- **Nothing is installed unasked**; the app restarts only after the person chooses Update and Restart, and the vault sync and unsaved edits are not specially waited for (the page saves as it goes, but a restart in the middle of typing can lose the last seconds), so the dialog says it will restart.
-- **Not covered by automated tests**: the plugin and the restart need a real signed build. The offer logic (`updateService.ts`) and the manifest format (`updaterManifest`) are.
+- **Nothing is installed unasked**, unless the person asked for it once: the app restarts only after the person chooses Update and Restart, and the vault sync and unsaved edits are not specially waited for (the page saves as it goes, but a restart in the middle of typing can lose the last seconds), so the note and the dialog say it will restart; both save what is open first (`installAppUpdate` in `main.ts`).
+- **Updating by itself** (Tools › Options › Update automatically: off, or after 5, 15, 30 or 60 minutes without activity; a synced setting, `golem.autoUpdate`, offered only in the desktop app). `desktop/autoUpdate.ts` looks every minute (`autoUpdateTick`): once no key, click, pointer move or wheel has come for the chosen time and nothing is in flight (unsaved or saving, an upload waiting or going, a vault sync running, audio or video playing or recording, a modal dialog open, an encrypted session unlocked, which a reload would lock), it puts in what is waiting. A new shell (`UpdateService.offer`, from the note's last check) is installed and the app restarts; otherwise a site that serves another build (`isOutOfDate`) is reloaded through `reloadForUpdate`. Both save first, and the document opens again where it was. It waits at least 30 minutes between two updates of its own (`AUTO_UPDATE_GAP_MS`, per device), so one that doesn't take can't loop. A browser tab is never reloaded on its own.
+- **Not covered by automated tests**: the plugin and the restart need a real signed build. Which update is offered (`updateToOffer`), when the app updates by itself (`autoUpdate.ts`) and the manifest format (`updaterManifest`) are.
 
 ## The download page
 

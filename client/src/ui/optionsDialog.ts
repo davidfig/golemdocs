@@ -9,7 +9,8 @@ import { h, segmented } from './dom.ts';
 import { choiceButton } from './dropdown.ts';
 import { CARET_WIDTHS, caretBlinks, caretWidth, setCaretBlinks, setCaretWidth, type CaretWidth } from './accessibilityOptions.ts';
 import { screenReaderOn, setScreenReader } from './screenReader.ts';
-import { desktopMenu } from '../desktop/bridge.ts';
+import { desktopMenu, isDesktopApp } from '../desktop/bridge.ts';
+import { AUTO_UPDATE_CHOICES, autoUpdateMinutes, setAutoUpdateMinutes, type AutoUpdateMinutes } from '../desktop/autoUpdate.ts';
 import { IS_MAC } from './shortcuts.ts';
 import { inAppMenuOnMac, keepMenuInFullScreen, setInAppMenuOnMac, setKeepMenuInFullScreen } from './fullScreen.ts';
 import { scrollPastEndOn, setScrollPastEnd } from './scrollOptions.ts';
@@ -58,6 +59,14 @@ export function optionsPanel(): HTMLElement {
     setFooterWordPeriod(v as WordPeriod);
   });
   footerWords.set(footerWordPeriod());
+  const autoUpdate = choiceButton(
+    { label: t('update.auto'), groups: () => [{ values: AUTO_UPDATE_CHOICES.map(String) }], name: (v) => (v === '0' ? t('update.auto.off') : t('update.auto.after', { minutes: v })), width: 240 },
+    (v) => {
+      autoUpdate.set(v);
+      setAutoUpdateMinutes(Number(v) as AutoUpdateMinutes);
+    },
+  );
+  autoUpdate.set(String(autoUpdateMinutes()));
   return h(
     'div',
     { class: 'wm-options' },
@@ -88,6 +97,8 @@ export function optionsPanel(): HTMLElement {
       check(t('dialogs.options.lockGuides'), lockGuidesOn(), setLockGuides),
     ),
     h('fieldset', {}, h('legend', { text: t('dialogs.options.live') }), h('label', {}, t('dialogs.options.liveLimit'), liveLimit.el), h('p', { class: 'wm-hint', text: t('dialogs.options.liveHint') })),
+    // The desktop app updates itself; a browser tab is never reloaded on its own.
+    ...(isDesktopApp() ? [h('fieldset', {}, h('legend', { text: t('update.auto.legend') }), h('label', {}, t('update.auto'), autoUpdate.el), h('p', { class: 'wm-hint', text: t('update.auto.hint') }))] : []),
   );
 }
 

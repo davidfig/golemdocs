@@ -107,7 +107,7 @@ Audio and video can be gigabytes, so they don't cross the bridge as a document d
 
 ## Updates
 
-The shell updates itself through `tauri-plugin-updater`: `UpdateService` (`client/src/desktop/updateService.ts`) asks the shell shortly after start and every 6 hours whether a newer signed version exists (`update_check`, `desktop/src-tauri/src/update.rs`), the Software Update dialog (`ui/updateDialog.ts`, also Help › Check for Updates) offers it, and `update_install` replaces the app and restarts it. "Later" holds an offer back for a day per version (`word.updateSnooze`, per device). How releases are signed and published is in [Releasing the desktop app](desktop-release.md#updating-the-shell).
+The shell updates itself through `tauri-plugin-updater`: `UpdateService` (`client/src/desktop/updateService.ts`) asks the shell whether a newer signed version exists (`update_check`, `desktop/src-tauri/src/update.rs`) together with the site's own update check, 10 seconds after start and then every 10 minutes; a newer shell is offered in the same update note as a new site (`ui/updateNotice.ts`, Update and Restart instead of Reload), or installed when the app is idle if Update automatically is on. Help › Check for Updates opens the Software Update dialog (`ui/updateDialog.ts`), and `update_install` replaces the app and restarts it. How releases are signed and published is in [Releasing the desktop app](desktop-release.md#updating-the-shell).
 
 ## The Mac menu bar
 

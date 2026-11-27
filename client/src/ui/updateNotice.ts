@@ -1,16 +1,32 @@
-// A note near the bottom when the site has been updated while this page was open, with a button to
-// reload into the new version. The page asks now and then (buildCheck.ts), and when a hidden tab comes
-// back to the front. It never reloads by itself: "Reload" saves what is open first (the caller's
-// `reload`), and "Later" hides the note until the next check finds the site still ahead.
+// A note near the bottom when there is something newer than what is running, with a button to move to it. The page asks now and then
+// (buildCheck.ts), when a hidden tab comes back to the front and when it goes back online. In the desktop app the same check asks the
+// app too, so a new app and a new site are one note at the same times: a new app says Update and Restart (which loads the new site
+// too), a new site alone says Reload. Nothing happens by itself (Update automatically, desktop/autoUpdate.ts, is the person's own
+// choice): both buttons save what is open first, and "Later" hides the note until the next check finds an update still waiting.
 
-import { CHECK_EVERY_MS, CHECK_MIN_GAP_MS, shouldOfferReload } from '../buildCheck.ts';
+import { CHECK_EVERY_MS, CHECK_MIN_GAP_MS, updateToOffer } from '../buildCheck.ts';
 import { t } from '../i18n/index.ts';
 import { CLOSE_ICON, h, iconButton, keepAboveFooter } from './dom.ts';
 import { showNotice } from './notice.ts';
 import './newVersionNotice.css';
 
+/** The desktop app's own updates, as the note needs them. */
+export interface AppUpdates {
+  /** Whether a newer version of the app is waiting. */
+  check(): Promise<boolean>;
+  /** Saves, installs it and restarts; it only comes back if the install failed. */
+  install(): Promise<void>;
+}
+
+/** How soon after the app starts it asks about its own update (the site it just loaded is current). */
+const FIRST_APP_CHECK_MS = 10_000;
+
 export class UpdateNotice {
   readonly el = h('aside', { class: 'wm-version-notice', attrs: { 'aria-label': t('dialogs.update.label') } });
+  private readonly message = h('p', { attrs: { role: 'status' } });
+  private readonly now = h('button', { class: 'wm-button', attrs: { type: 'button' } });
+  private readonly later = h('button', { class: 'wm-version-notice-off', text: t('dialogs.update.later'), attrs: { type: 'button' } });
+  private kind: 'app' | 'site' = 'site';
   private lastCheck = 0;
   private checking = false;
 
@@ -18,20 +34,19 @@ export class UpdateNotice {
     parent: HTMLElement,
     private readonly running: string,
     private readonly reload: () => void,
-    /** In the desktop app: whether a newer shell is on offer, which makes its own dialog the only message (see `shouldOfferReload`). */
-    private readonly shellUpdateOnOffer?: () => Promise<boolean>,
+    /** In the desktop app: its own updates, told in this same note. */
+    private readonly app?: AppUpdates,
   ) {
     const close = iconButton('wm-version-notice-close', CLOSE_ICON, t('dialogs.update.later'));
-    const now = h('button', { class: 'wm-button', text: t('dialogs.update.reload'), attrs: { type: 'button' } });
-    const later = h('button', { class: 'wm-version-notice-off', text: t('dialogs.update.later'), attrs: { type: 'button' } });
-    this.el.append(close, h('p', { text: t('dialogs.update.message') }), h('div', { class: 'wm-version-notice-actions' }, now, later));
+    this.el.append(close, this.message, h('div', { class: 'wm-version-notice-actions' }, this.now, this.later));
     close.addEventListener('click', () => showNotice(this.el, false));
-    later.addEventListener('click', () => showNotice(this.el, false));
-    now.addEventListener('click', () => this.reload());
+    this.later.addEventListener('click', () => showNotice(this.el, false));
+    this.now.addEventListener('click', () => (this.kind === 'app' ? void this.install() : this.reload()));
     this.el.hidden = true;
     parent.append(this.el);
     if (running === '') return; // development: there is no build to compare with
     setInterval(() => void this.check(), CHECK_EVERY_MS);
+    if (app) setTimeout(() => void this.check(), FIRST_APP_CHECK_MS);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') void this.check();
     });
@@ -51,19 +66,37 @@ export class UpdateNotice {
     this.checking = true;
     this.lastCheck = now;
     try {
-      if (await shouldOfferReload(this.running, this.shellUpdateOnOffer)) showNotice(this.el, true);
+      const update = await updateToOffer(this.running, this.app && (() => this.app!.check()));
+      if (update) this.display(update);
     } finally {
       this.checking = false;
     }
   }
 
-  /** The page knows it is out of date (a chunk is gone), so only the shell's own update can take the place of the note. */
+  /** The page knows it is out of date (a chunk is gone): a new app if there is one, else a reload. */
   async show(): Promise<void> {
-    try {
-      if (this.shellUpdateOnOffer && (await this.shellUpdateOnOffer())) return;
-    } catch {
-      /* ask no more: show the note */
-    }
+    const app = this.app ? await this.app.check().catch(() => false) : false;
+    this.display(app ? 'app' : 'site');
+  }
+
+  private display(kind: 'app' | 'site'): void {
+    // Installing: the note says so until the app restarts, and no check changes it.
+    if (this.now.disabled) return;
+    this.kind = kind;
+    this.message.textContent = t(kind === 'app' ? 'update.note' : 'dialogs.update.message');
+    this.now.textContent = t(kind === 'app' ? 'update.install' : 'dialogs.update.reload');
     showNotice(this.el, true);
+  }
+
+  private async install(): Promise<void> {
+    this.now.disabled = this.later.disabled = true;
+    this.message.textContent = t('update.installing');
+    try {
+      await this.app!.install();
+    } catch (error) {
+      this.message.textContent = t('update.failed', { message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      this.now.disabled = this.later.disabled = false;
+    }
   }
 }

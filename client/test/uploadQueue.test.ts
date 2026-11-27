@@ -114,3 +114,16 @@ test('deleting a copy that is uploading waits for that upload to finish, and not
   await q.flush();
   assert.deepEqual(sent, ['a']);
 });
+
+test('settled only once nothing waits to be uploaded or is being uploaded', async () => {
+  let finish = () => {};
+  const { q } = queue(() => new Promise<void>((resolve) => (finish = resolve)));
+  assert.equal(q.settled, true);
+  q.schedule('a');
+  assert.equal(q.settled, false, 'waiting for the pause');
+  await tick(10);
+  assert.equal(q.settled, false, 'being uploaded');
+  finish();
+  await tick();
+  assert.equal(q.settled, true);
+});

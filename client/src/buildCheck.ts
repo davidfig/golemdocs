@@ -42,16 +42,11 @@ export async function isChunkOfOldBuild(message: string, running: string, fetche
 }
 
 /**
- * Whether to tell the person the site has been updated. The desktop app is the site inside a shell, and when a newer shell is on offer
- * its Software Update dialog covers this: restarting loads the current site, so the reload note would only be a second message
- * for the same update. `shellUpdateOnOffer` is absent in a browser. A shell that can't be asked is treated as having no update.
+ * What update to tell the person about: a new version of the desktop app (installing it restarts the app, which loads the current
+ * site too, so it is the one message), the site alone (a reload), or none. `appUpdate` is absent in a browser; one that can't be asked
+ * (offline, say) counts as no update of the app.
  */
-export async function shouldOfferReload(running: string, shellUpdateOnOffer?: () => Promise<boolean>, fetcher: typeof fetch = fetch): Promise<boolean> {
-  if (!(await isOutOfDate(running, fetcher))) return false;
-  if (!shellUpdateOnOffer) return true;
-  try {
-    return !(await shellUpdateOnOffer());
-  } catch {
-    return true;
-  }
+export async function updateToOffer(running: string, appUpdate?: () => Promise<boolean>, fetcher: typeof fetch = fetch): Promise<'app' | 'site' | null> {
+  if (appUpdate && (await appUpdate().catch(() => false))) return 'app';
+  return (await isOutOfDate(running, fetcher)) ? 'site' : null;
 }

@@ -3,6 +3,7 @@
 // when the window is shown again, and a sync whenever either changed. Syncs never overlap. Signed in, the other side is
 // the account; signed out, it is the documents saved in this browser (vaultGuest.ts), so the folder works without an account.
 
+import { pageTask } from '../pageTasks.ts';
 import { CloudError } from '../cloud.ts';
 import { addPointers, pointerState, writeGuide, type PointerState } from './agentGuide.ts';
 import { desktopBridge, type DesktopBridge } from './bridge.ts';
@@ -308,6 +309,7 @@ export class VaultService {
   }
 
   private async look(): Promise<void> {
+    pageTask('vault sync');
     this.lastLook = Date.now();
     const progress = this.status.progress;
     if (this.running && progress && syncStuck(progress.since, Date.now())) {

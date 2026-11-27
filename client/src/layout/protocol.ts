@@ -330,7 +330,7 @@ export type ToWorker =
   | { type: 'textAt'; doc: number; request: number; page: number; x: number; y: number }
   /** Brings a place in the text (paragraph index, offset) to the top of the view, through the layout updates' `keep`, while the pages up to it are laid out. */
   | { type: 'goTo'; doc: number; place: [number, number] }
-  | { type: 'command'; doc: number; command: WireCommand }
+  | { type: 'command'; doc: number; command: WireCommand; /** When the page sent it (`clock()` in taskLog.ts), for View › Debug › Edit times. */ sentAt?: number }
   /** Puts a picture in the document at the caret (its bytes go into the document; its size is in EMUs). */
   | { type: 'replacePicture'; doc: number; bytes: ArrayBuffer; ext: string; aspect: number }
   | { type: 'insertImage'; doc: number; bytes: ArrayBuffer; ext: string; width: number; height: number; description?: string }
@@ -458,6 +458,12 @@ export interface SelectionUpdate {
   canRedo: boolean;
   /** Worker time from receiving the last command to sending this, ms (0 if not after a command). */
   workerMs: number;
+  /** Of `workerMs`, how long finding the squiggles took (only after a command). */
+  spellMs?: number;
+  /** How long the command waited before the worker took it up, and the tasks it waited behind (only after a command). */
+  waited?: { ms: number; behind: { name: string; ms: number }[] };
+  /** When the worker sent this (`clock()` in taskLog.ts), so the page can tell how long it was held up (only after a command). */
+  postedAt?: number;
   /** Other people's carets (in a collaboration room). */
   remote: { page: number; x: number; y: number; height: number; color: number; name: string }[];
   /** What other people have selected: rectangles per person, as (page, x, y, width, height) runs. */

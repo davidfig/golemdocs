@@ -102,6 +102,7 @@ import { annotatedPdf, reflow } from '../formats/pdfFile.ts';
 import { APP_WORDS } from '../spelling/appWords.ts';
 import { affixEncoding, Dictionary, ENGLISH_SMALL_WORDS } from '../spelling/dictionary.ts';
 import { loadThesaurus } from '../spelling/thesaurus.ts';
+import { clock, TaskLog, type TaskTime } from './taskLog.ts';
 import { DICTIONARY_FILES, documentLanguage, paragraphLanguage, type SpellLanguage, type Unchecked } from '../spelling/languages.ts';
 
 /** Milliseconds of layout between updates: small enough that the first pages show quickly. */
@@ -468,6 +469,8 @@ class OpenDocument {
   private keepView: { pos: Pos; dy: number } | null = null;
   /** When the last command arrived (for the latency readout). */
   private commandAt = 0;
+  /** How long the last command waited to be handled, and behind what (View › Debug › Edit times). */
+  waited: { ms: number; behind: TaskTime[] } | null = null;
   /** The result of the last Find or Replace All, sent with the next selection. */
   private search: SelectionUpdate['search'] | null = null;
   /** What the last Spelling and Grammar step found, sent with the next selection. */
@@ -539,6 +542,7 @@ class OpenDocument {
           onSlice: async () => {
             this.flush();
             await yieldTask();
+            taskLog.begin('layout');
           },
           sliceMs: SLICE_MS,
           signal: this.controller.signal,
@@ -579,6 +583,7 @@ class OpenDocument {
       if (performance.now() - sliceStart > SLICE_MS) {
         this.flush();
         await yieldTask();
+        taskLog.begin('layout');
         sliceStart = performance.now();
       }
     }
@@ -713,6 +718,9 @@ class OpenDocument {
     const commentRects = new Float64Array(commented.reduce((n, c) => n + c.rects.length, 0) * 5);
     let k = 0;
     for (const c of commented) for (const r of c.rects) commentRects.set([r.page.id, r.x, r.y, r.width, r.height], 5 * k++);
+    const spellStart = performance.now();
+    const spellMarks = this.spellMarks(editor);
+    const spellMs = performance.now() - spellStart;
     const update: SelectionUpdate = {
       caret: caret(g.caret),
       rects,
@@ -720,7 +728,7 @@ class OpenDocument {
       activeComment: editor.activeComment(),
       commentRects,
       changes: this.changeRects(editor),
-      spellMarks: this.spellMarks(editor),
+      spellMarks,
       focus: caret(g.focus),
       at: editor.selectionIndex(),
       reveal: this.reveal,
@@ -729,6 +737,9 @@ class OpenDocument {
       canUndo: this.canUndo(),
       canRedo: this.canRedo(),
       workerMs: this.commandAt ? performance.now() - this.commandAt : 0,
+      ...(this.commandAt && { spellMs }),
+      ...(this.commandAt && this.waited && { waited: this.waited }),
+      ...(this.commandAt && { postedAt: clock() }),
       remote,
       search: this.search ?? undefined,
       remoteRects,
@@ -761,6 +772,7 @@ class OpenDocument {
     this.documentInfo = undefined;
     this.reveal = false;
     this.commandAt = 0;
+    this.waited = null;
     this.sendPresence();
     this.scheduleSelectionHtml(editor, update.text);
     return update;
@@ -887,6 +899,7 @@ class OpenDocument {
     clearTimeout(this.selectionHtmlTimer);
     if (!text || text.length > SELECTION_HTML_LIMIT) return;
     this.selectionHtmlTimer = setTimeout(async () => {
+      taskLog.begin('selection as HTML');
       const { document } = this;
       if (!document || this.closed || this.editor !== editor) return;
       const body = editor.selectedFragments();
@@ -2199,7 +2212,11 @@ class OpenDocument {
     const sinceTyped = performance.now() - this.typedAt;
     const settling = typing !== null && sinceTyped < SPELL_SETTLE_MS;
     clearTimeout(this.settleTimer);
-    if (settling) this.settleTimer = setTimeout(() => this.sendSelection(), SPELL_SETTLE_MS - sinceTyped + 20);
+    if (settling)
+      this.settleTimer = setTimeout(() => {
+        taskLog.begin('spelling');
+        this.sendSelection();
+      }, SPELL_SETTLE_MS - sinceTyped + 20);
     const documentLang = documentLanguageOf(editor);
     const viewPages = this.viewPages;
     const pages = viewPages && this.session ? this.session.displayPages.slice(viewPages.from, viewPages.to) : undefined;
@@ -3122,9 +3139,11 @@ async function save(doc: number, request: number, lens?: Format): Promise<void> 
     // Asked for while the document was loading, or with commands still to run: once they have.
     const turn = open?.doc === doc ? open.turn() : null;
     if (turn) await turn;
+    taskLog.begin('save');
     if (open?.doc !== doc || (!open.document && !open.original)) throw new Error(t('app.documentNotOpen'));
     // Pictures others added that haven't been needed yet are brought in, so the file holds them all.
     await open.document?.fetchMissingMedia();
+    taskLog.begin('save');
     // A document changed since it was opened records when.
     if (open.document && open.edited) open.document.properties.modified = now();
     // What the body holds is known exactly: the edits up to this one, read in the same synchronous stretch as it is written. What is written
@@ -3286,6 +3305,12 @@ self.onunhandledrejection = (event: PromiseRejectionEvent) => {
   if (current && !current.closed) post({ type: 'error', doc: current.doc, message: event.reason instanceof Error ? event.reason.message : String(event.reason) });
 };
 
+/** What the worker has been doing, so an edit can say what it waited behind (View › Debug › Edit times). */
+const taskLog = new TaskLog();
+
+/** Names a message for the task log: a command by its kind ("insert", "delete"...), anything else by its type. */
+const taskName = (message: ToWorker): string => (message.type === 'command' ? message.command.kind : message.type);
+
 /** Messages from the page not handled yet, in the order they were sent. */
 const inbox: ToWorker[] = [];
 /** An `open` is waiting for the page's language: the messages after it wait with it. */
@@ -3304,6 +3329,10 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
 function handleInbox(): void {
   while (!held && inbox.length) {
     const message = inbox.shift()!;
+    const handledAt = clock();
+    taskLog.begin(taskName(message), handledAt);
+    if (message.type === 'command' && message.sentAt && current?.doc === message.doc)
+      current.waited = { ms: Math.max(0, handledAt - message.sentAt), behind: taskLog.within(message.sentAt, handledAt) };
     if (message.type === 'open') {
       // After the language (at start-up), so the document's errors and name are in it. A language
       // that failed to load leaves English, rather than the document never opening.

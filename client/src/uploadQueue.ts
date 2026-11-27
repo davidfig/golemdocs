@@ -129,6 +129,11 @@ export class UploadQueue {
     this.offline = false;
   }
 
+  /** Whether nothing is waiting to be uploaded or being uploaded. */
+  get settled(): boolean {
+    return this.dirty.size === 0 && this.uploading === null && this.flushing === null && this.batching.size === 0;
+  }
+
   /** Whether `id` is waiting to be uploaded, or being uploaded now. */
   pending(id: string): boolean {
     return this.dirty.has(id) || this.uploading === id;

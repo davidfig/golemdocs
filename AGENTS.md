@@ -68,7 +68,7 @@ The desktop and iOS apps are the live website inside a native shell (`desktop/sr
 
 - Call a command that the previous shell lacks through `desktop/bridge.ts` and treat a missing command (`isMissingCommand`) as "shell too old": skip an optional step, or say to update the app (`ShellTooOldError`). Test it in `client/test/bridge.test.ts`.
 - Never remove or rename a shell command, or change what one takes or returns. Add a new one.
-- In the desktop app the reload note is not shown while a shell update is on offer; the Software Update dialog is the one message (`shouldOfferReload`).
+- In the desktop app a new shell and a new site are told in one note, found by one check (`updateToOffer` in `buildCheck.ts`, every 10 minutes): Update and Restart for a new shell (which loads the new site too), Reload for the site alone. The Software Update dialog opens only from Help › Check for Updates.
 
 See `docs/architecture/desktop-release.md`.
 

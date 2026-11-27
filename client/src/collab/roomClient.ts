@@ -10,6 +10,7 @@
 // document and saves it as if alone, the others watch it (read-only) and open it again each time it
 // is saved. Watching, we may take it over.
 
+import { pageTask } from '../pageTasks.ts';
 import {
   ROOM_CLOSE,
   ROOM_POLICY,
@@ -226,6 +227,7 @@ export class RoomClient {
       // A socket given up on (it timed out, or we left) can still deliver or close late, even after
       // its replacement opened: only the current one speaks for the room.
       socket.onmessage = (event) => {
+        pageTask('room');
         if (this.socket === socket) this.onMessage(JSON.parse(String(event.data)) as MultiplayerServerMessage);
       };
       socket.onclose = (event) => {

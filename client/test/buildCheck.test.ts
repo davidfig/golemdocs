@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fetchBuildId, isChunkOfOldBuild, isOutOfDate, shouldOfferReload } from '../src/buildCheck.ts';
+import { fetchBuildId, isChunkOfOldBuild, isOutOfDate, updateToOffer } from '../src/buildCheck.ts';
 
 const replying = (body: BodyInit, status = 200): typeof fetch => async () => new Response(body, { status });
 const failing: typeof fetch = async () => {
@@ -38,13 +38,16 @@ test('a development page (no build id) never asks', async () => {
   assert.deepEqual(asked, []);
 });
 
-test('the reload note is for a page that is out of date, unless the desktop app has a newer shell on offer', async () => {
+test('the update note offers a new app before a new site, and the site alone otherwise', async () => {
   const newer = replying('{"id":"def"}');
-  assert.equal(await shouldOfferReload('abc', undefined, newer), true); // a browser
-  assert.equal(await shouldOfferReload('abc', async () => false, newer), true); // the shell is current
-  assert.equal(await shouldOfferReload('abc', async () => true, newer), false); // the shell update's dialog says it
-  assert.equal(await shouldOfferReload('abc', async () => Promise.reject(new Error('offline')), newer), true); // can't ask: say it
-  assert.equal(await shouldOfferReload('abc', async () => true, replying('{"id":"abc"}')), false); // not out of date at all
+  const same = replying('{"id":"abc"}');
+  assert.equal(await updateToOffer('abc', undefined, newer), 'site'); // a browser
+  assert.equal(await updateToOffer('abc', undefined, same), null);
+  assert.equal(await updateToOffer('abc', async () => false, newer), 'site'); // the app is current
+  assert.equal(await updateToOffer('abc', async () => true, newer), 'app'); // restarting loads the new site too
+  assert.equal(await updateToOffer('abc', async () => true, same), 'app');
+  assert.equal(await updateToOffer('abc', async () => Promise.reject(new Error('offline')), newer), 'site'); // can't ask the app
+  assert.equal(await updateToOffer('abc', async () => false, same), null);
 });
 
 const SCRIPT_FAILURES = [

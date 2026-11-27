@@ -1,4 +1,5 @@
 import './style.css';
+import { clock, followPageTasks, pageTask, pageTasksWithin } from './pageTasks.ts';
 import { installAutomation } from './automation.ts';
 import warAndPeaceUrl from '../../scripts/war-and-peace.txt?url';
 import { replacementFor } from '@golemdocs/editor/pattern';
@@ -89,7 +90,7 @@ import { buttonScript } from './live/scriptAddress.ts';
 import { scriptState } from './scripts/state.ts';
 import { fetchForScript } from '@golemdocs/script/fetch';
 import { NewVersionNotice } from './ui/newVersionNotice.ts';
-import { isChunkOfOldBuild } from './buildCheck.ts';
+import { isChunkOfOldBuild, updateToOffer } from './buildCheck.ts';
 import { UpdateNotice } from './ui/updateNotice.ts';
 import { SharedDeviceNotice } from './ui/sharedDeviceNotice.ts';
 import { SignInExpiredNotice } from './ui/signInExpiredNotice.ts';
@@ -144,6 +145,8 @@ import { saveFile } from './ui/saveFile.ts';
 import { VaultService } from './desktop/vaultService.ts';
 import { excludedFolders, keepsCopy, setExcludedFolders, setKeepsCopy } from './desktop/vaultShared.ts';
 import { UpdateService } from './desktop/updateService.ts';
+import { describeEdit, EditTimes, SLOW_EDIT_MS } from './editTimes.ts';
+import { AUTO_UPDATE_TICK_MS, autoUpdateMinutes, autoUpdateTick, storeLastUpdate, storedLastUpdate, watchActivity, type AutoUpdateHost } from './desktop/autoUpdate.ts';
 import { UpdateDialog } from './ui/updateDialog.ts';
 import { VersionHistoryDialog } from './ui/versionHistoryDialog.ts';
 import { TrashStore, type TrashDeps, type TrashItem } from './trash.ts';
@@ -399,8 +402,8 @@ let annotating = false;
 /** A PDF's pages: filling in its form, or editing the form itself. */
 let formMode: FormMode = 'fill';
 let status = '';
-/** Latest edit round trip (command sent to its selection update), ms. */
-let editTimes: { total: number; worker: number } | null = null;
+/** Edit round trips (command sent to its result on screen), for View › Debug › Edit times. */
+const editTimes = new EditTimes();
 /** How long the current document took to open, ms. */
 let loadTimes: { pages: number; glyphs: number; firstPage: number; total: number; read: number; fonts: number; body: number; headers: number } | null = null;
 /** Layout finished for the current document. */
@@ -795,7 +798,7 @@ function beginOpen(source: DocumentSource, options: OpenOptions): { name: string
   loaded = false;
   cameraPlaced = false;
   userMoved = false;
-  editTimes = null;
+  editTimes.clear();
   loadTimes = null;
   pendingNotice = null;
   annotating = false;
@@ -1728,6 +1731,8 @@ let newDocumentFolder: string | null = null;
 let autosaveTimer = 0;
 /** Saves write one at a time, in order, so a new document's first saves don't each create a copy. */
 let saving: Promise<unknown> = Promise.resolve();
+/** Saves started and not yet written (updating by itself waits for them). */
+let savesInFlight = 0;
 
 /** A save's thumbnail waits this long after the last edit (and for an idle moment) before it is drawn. */
 const THUMBNAIL_QUIET_MS = 3000;
@@ -1748,7 +1753,10 @@ function documentEdited(): void {
   if (!current.unsavedSince) current.unsavedSince = now;
   clearTimeout(autosaveTimer);
   const wait = Math.min(AUTOSAVE_DELAY_MS, current.unsavedSince + AUTOSAVE_MAX_WAIT_MS - now);
-  autosaveTimer = window.setTimeout(() => void saveInBrowser(), Math.max(0, wait));
+  autosaveTimer = window.setTimeout(() => {
+    pageTask('autosave');
+    void saveInBrowser();
+  }, Math.max(0, wait));
 }
 
 /** Saves now if there are unsaved edits (another document is opening, or the page is going away). */
@@ -2025,6 +2033,7 @@ const SETTING_APPLIED: Record<SyncedKey, (() => void) | null> = {
   'golem.liveBackgroundLimit': null, // read each time a background update starts
   'golem.sharedVaultOff': null, // read by the vault's next sync
   'golem.sharedVaultFolders': null, // read by the vault's next sync
+  'golem.autoUpdate': null, // read at each look (desktop/autoUpdate.ts)
   'word.viewMode': rereadViewMode,
   'word.formattingMarks': rereadViewOptions,
   'word.ruler': rereadViewOptions,
@@ -2740,6 +2749,8 @@ function saveInBrowser(): Promise<string | null> {
     }
   });
   saving = done;
+  savesInFlight++;
+  void done.finally(() => savesInFlight--);
   return done;
 }
 
@@ -5251,8 +5262,19 @@ function applySelection(update: SelectionUpdate): void {
   canUndo = update.canUndo;
   canRedo = update.canRedo;
   if (editSent) {
-    editTimes = { total: performance.now() - editSent, worker: update.workerMs };
+    // Timed to the frame that shows it (the render asked for above runs first), from the oldest keystroke not yet answered.
+    const sent = editSent;
+    const { workerMs: worker, spellMs: spell, waited } = update;
+    const answered = performance.now() - sent;
+    // The worker had answered at `postedAt`: what the page was busy with until it took the answer up.
+    const arrived = clock();
+    const page = update.postedAt ? { ms: Math.max(0, arrived - update.postedAt), behind: pageTasksWithin(update.postedAt, arrived) } : undefined;
     editSent = 0;
+    requestAnimationFrame(() => {
+      const at = performance.now();
+      editTimes.record({ at, total: at - sent, worker, spell, waited, answered, page });
+      if (debugFlags().edit) updateDebug();
+    });
   }
   // Copy and cut read the selected text from `selection` (see the clipboard handlers). The textarea is empty, or in Screen Reader Mode holds the text around the caret.
   const caretPage = update.focus ? pages.findIndex((page) => page.id === update.focus!.page) : -1;
@@ -5345,7 +5367,7 @@ function send(command: WireCommand): void {
   if (embeddedDrawing) return;
   if (!BACKGROUND_COMMANDS.has(command.kind)) commandsSent++;
   if (command.kind !== 'move' && command.kind !== 'pointer' && command.kind !== 'select' && command.kind !== 'selectAll' && command.kind !== 'find' && command.kind !== 'spellNext' && command.kind !== 'spellWords' && command.kind !== 'spellIgnored' && command.kind !== 'spellCheck' && command.kind !== 'autoFormat' && command.kind !== 'autoCorrect' && command.kind !== 'spellAt' && command.kind !== 'countWords' && command.kind !== 'getProperties' && command.kind !== 'selectWord') {
-    editSent = performance.now();
+    editSent ||= performance.now();
     if (FORMATS[current.kind].editable || (annotating && ANNOTATION_EDITS.has(command.kind))) documentEdited();
   }
   worker.command(command);
@@ -5500,7 +5522,21 @@ function updateDebug(): void {
       ]),
     );
   }
-  if (flags.edit && editTimes) panels.push(debugPanel('Edit', [['to screen', ms(editTimes.total, 1)], ['worker', ms(editTimes.worker, 1)]]));
+  const edits = flags.edit ? editTimes.summary(performance.now()) : null;
+  if (edits) {
+    const worst = describeEdit(edits.worst);
+    panels.push(
+      debugPanel('Edit', [
+        ['last', ms(edits.last.total, 1)],
+        ['worst', ms(edits.worst.total, 1)],
+        ['  waited', worst.waited],
+        ['  worker', worst.worker],
+        ['  page busy', worst.page],
+        ['  drawing', worst.draw],
+        [`> ${SLOW_EDIT_MS} ms`, `${edits.slow} of ${edits.count}`],
+      ]),
+    );
+  }
   statusPanelsEl.replaceChildren(...panels);
   const rows: DebugRow[] = [];
   if (flags.pages && lastStats) {
@@ -5521,6 +5557,9 @@ function updateDebug(): void {
 }
 
 onDebugFlagsChange(updateDebug);
+// Edit times names what the page was doing when an answer was held up; only while it is shown.
+followPageTasks(debugFlags().edit);
+onDebugFlagsChange(() => followPageTasks(debugFlags().edit));
 onThemeChange(requestRender);
 renderInfoEl.addEventListener('click', () => {
   frames.clear();
@@ -5528,6 +5567,7 @@ renderInfoEl.addEventListener('click', () => {
 });
 
 function render(): void {
+  pageTask('drawing');
   frameQueued = false;
   const caretOnly = frameCaretOnly;
   frameCaretOnly = true;
@@ -7132,10 +7172,42 @@ const vaultDialog = new VaultDialog({
   focusEditor: focusInput,
 });
 
-// Help ▸ Check for Updates (the desktop app only), and the offer that comes by itself when the app finds a newer shell.
-const updateService: UpdateService | null = isDesktopApp() ? UpdateService.create(desktopUpdater(), (offer) => updateDialog.open(offer)) : null;
-const updateDialog = new UpdateDialog({ service: updateService, focusEditor: focusInput });
-updateService?.start();
+// The desktop app's own updates: told in the update note at the same times as a new site (updateNotice.ts), and looked for on demand
+// by Help › Check for Updates. Installing saves what is open first.
+const updateService: UpdateService | null = isDesktopApp() ? UpdateService.create(desktopUpdater()) : null;
+async function installAppUpdate(): Promise<void> {
+  if (!updateService) return;
+  saveIfEdited();
+  await saving.catch(() => {});
+  await updateService.install();
+}
+const updateDialog = new UpdateDialog({ service: updateService, install: installAppUpdate, focusEditor: focusInput });
+
+// Updating by itself (Tools › Options › Update automatically, the desktop app): once the app is left alone and nothing is in flight.
+if (isDesktopApp()) {
+  const lastActivity = watchActivity(window);
+  const host: AutoUpdateHost = {
+    now: Date.now,
+    minutes: autoUpdateMinutes,
+    lastActivity,
+    busy: () => {
+      if (current.unsavedSince || savesInFlight) return 'saving';
+      if (!uploads.settled || current.shared?.dirty || current.shared?.uploading) return 'uploading';
+      if (vaultService?.current.progress) return 'syncing';
+      if (audioEditor?.recording || audioEditor?.playing || [...document.querySelectorAll<HTMLMediaElement>('audio, video')].some((media) => !media.paused)) return 'playing';
+      if (modalOpen()) return 'dialog';
+      // Reloading locks an unlocked session; the idle lock does that first unless it is turned off.
+      if (isUnlocked()) return 'unlocked';
+      return null;
+    },
+    // The app's own update is the one the note's check last found (every 10 minutes); the site's small build.json is asked each time.
+    pending: () => updateToOffer(__BUILD_ID__, updateService ? async () => updateService.offer !== null : undefined),
+    apply: (update) => (update === 'app' ? installAppUpdate() : reloadForUpdate()),
+    lastUpdate: storedLastUpdate,
+    noteUpdate: storeLastUpdate,
+  };
+  setInterval(() => void autoUpdateTick(host).catch(() => undefined), AUTO_UPDATE_TICK_MS);
+}
 
 const VAULT_ASKED_KEY = 'word.vaultAsked';
 
@@ -7593,7 +7665,12 @@ const signInExpiredNotice = new SignInExpiredNotice(document.body, () => void si
 // A new release: offer What's New (once per version, unless turned off).
 const newVersionNotice = new NewVersionNotice(document.body, () => openSource('changelog'));
 // The site updated while this page was open: offer a reload, once what is open is saved.
-updateNotice = new UpdateNotice(document.body, __BUILD_ID__, () => void reloadForUpdate(), updateService ? async () => (await updateService.check()) !== null : undefined);
+updateNotice = new UpdateNotice(
+  document.body,
+  __BUILD_ID__,
+  () => void reloadForUpdate(),
+  updateService ? { check: async () => (await updateService.check()) !== null, install: installAppUpdate } : undefined,
+);
 
 // --- Searching every document ------------------------------------------------------------------
 // Each document has an index kept in this browser (see search/searchLibrary.ts); the panel searches

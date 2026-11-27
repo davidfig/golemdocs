@@ -17,7 +17,7 @@ const zipNames = (bytes: Buffer): string[] => Object.keys(unzip(bytes)).sort();
 
 const tree = (page: Page) => page.getByRole('navigation', { name: 'Files' });
 
-test('a folder’s public link shows its tree; links inside it open in the tab, and links out of it go nowhere', async ({ browser }) => {
+test('a folder’s public link shows its tree; links inside it open in the tab, and links out of it go nowhere', { tag: '@heavy' }, async ({ browser }) => {
   const owner = await newPerson(browser, 'owner');
   await owner.page.goto('/?doc=welcome');
   await owner.app.ready();

@@ -260,7 +260,7 @@ test.describe('a cloud drawing in a room', () => {
     await importFile(a.app, { name: 'drawing.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200"><rect id="red" x="20" y="20" width="120" height="80" fill="#e53935"/></svg>') });
     const layers = (page: import('@playwright/test').Page) => page.getByRole('tree', { name: 'Layers' }).getByRole('treeitem');
     await expect(layers(a.page)).toHaveCount(1, { timeout: 30_000 });
-    const doc = await waitForCloudDoc(a.page);
+    const doc = await waitForCloudDoc(a.page, (docs) => docs.find((d) => d.name.endsWith('.svg')));
 
     const other = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
     await signInAs(other, a.email);
@@ -296,7 +296,7 @@ test.describe('a cloud PDF in a room', () => {
     const a = await newPerson(browser, 'pdf');
     await a.page.goto('/?doc=welcome');
     await openPdf(a.app, makePdf({ pages: [[{ text: 'Hello PDF world', x: 40, y: 240, size: 18 }, { text: 'Second line of text', x: 40, y: 200, size: 18 }]] }));
-    const doc = await waitForCloudDoc(a.page);
+    const doc = await waitForCloudDoc(a.page, (docs) => docs.find((d) => d.name.endsWith('.pdf')));
 
     const other = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
     await signInAs(other, a.email);
@@ -339,7 +339,7 @@ test.describe('a cloud picture in a room', () => {
     const a = await newPerson(browser, 'picture');
     await a.page.goto('/?doc=welcome');
     await openPicture(a.app, makePng(400, 300, () => [255, 255, 255, 255]));
-    const doc = await waitForCloudDoc(a.page);
+    const doc = await waitForCloudDoc(a.page, (docs) => docs.find((d) => d.name.endsWith('.png')));
 
     const other = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
     await signInAs(other, a.email);

@@ -7320,7 +7320,6 @@ const spellMenu = new SpellMenu({
   addUserWord,
   focusEditor: focusInput,
 });
-/** Where the last right click was, for the menu it may open. */
 /** File › New Folder: the Files sidebar is opened if it is shut, then a folder starts there, ready to be named. */
 function newFolder(): void {
   if (!filesOpen) toggleFilesPanel();

@@ -79,7 +79,10 @@ export async function cloudDocs(page: Page): Promise<CloudDoc[]> {
   return response.ok() ? ((await response.json()) as CloudDoc[]) : [];
 }
 
-/** Waits until the account holds a document (the app uploads what you type), and returns it. */
+/**
+ * Waits until the account holds a document (the app uploads what you type), and returns it. Pass `pick` when the test opened
+ * something after the welcome page: the blank Document1 it leaves can reach the account first, and `docs[0]` would be that.
+ */
 export async function waitForCloudDoc(page: Page, pick: (docs: CloudDoc[]) => CloudDoc | undefined = (docs) => docs[0]): Promise<CloudDoc> {
   let found: CloudDoc | undefined;
   await expect

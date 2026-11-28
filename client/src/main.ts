@@ -6683,6 +6683,8 @@ window.addEventListener('keydown', (e) => {
   // A dialog keeps its keys, and Enter or Space on a button reached with the keyboard (in a dialog-like list, the Files sidebar) is its click, not a new paragraph.
   if (e.defaultPrevented || modalOpen()) return;
   if ((e.key === 'Enter' || e.key === ' ') && e.target instanceof HTMLElement && e.target.tabIndex >= 0 && e.target.matches('button, a[href], [role="button"], [role="treeitem"]')) return;
+  // Tab moves between a note's own buttons (ui/notice.ts) rather than going to the document.
+  if (e.key === 'Tab' && e.target instanceof HTMLElement && e.target.closest('.wm-notice')) return;
   const commands = editingCommand(editKey(e, MAC));
   if (!commands) return;
   e.preventDefault();
@@ -7692,6 +7694,7 @@ updateNotice = new UpdateNotice(
           const offer = await updateService.check();
           return offer !== null && !updateService.snoozed(offer.version);
         },
+        version: () => updateService.offer?.version,
         snooze: () => updateService.offer && updateService.snooze(updateService.offer.version),
         install: installAppUpdate,
       }

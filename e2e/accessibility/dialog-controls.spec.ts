@@ -231,12 +231,14 @@ test.describe('Notes at the bottom of the window', () => {
     await app.goto('?doc=welcome');
     const notice = page.getByRole('complementary', { name: 'New version' });
     await expect(notice).toBeVisible();
-    await expect(said(page)).toContainText('has been released');
+    await expect(said(page)).toContainText('Updated to Golem Docs');
     await app.focus();
     // F6 goes through the parts of the window; the note is one of them while it shows.
     const inNotice = () => page.evaluate(() => !!document.activeElement?.closest('.wm-notice'));
     for (let i = 0; i < 12 && !(await inNotice()); i++) await app.press('F6');
     expect(await inNotice()).toBe(true);
+    await expect(notice.getByRole('button', { name: 'What’s new' })).toBeFocused();
+    await app.press('Tab');
     await expect(notice.getByRole('button', { name: 'Close' })).toBeFocused();
     await app.press('Enter');
     await expect(notice).toBeHidden();

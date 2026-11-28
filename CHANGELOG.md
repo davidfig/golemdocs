@@ -2,6 +2,11 @@
 
 ## 0.51.1 - Unreleased
 
+### Changed
+
+- Tools › Options is tidier: its settings are on four tabs (General, Editing, Drawing and Accessibility) instead of one long list, and it opens on the tab you last used.
+- Update messages are now a small dark toast at the bottom of the window. A new version says it is ready, with Restart to update (or Reload in a browser); after an update a green toast says "Updated to Golem Docs" with its version and a What's new link, and goes away by itself. Close the toast to put an update off for later. With the keyboard, F6 reaches the toast and Tab moves between its buttons.
+
 ### Fixed
 
 - Web pages saved as `.mht` files (the name Internet Explorer and Word gave them) now open, like `.mhtml` ones, instead of Golem Docs saying it doesn't open that kind of file.

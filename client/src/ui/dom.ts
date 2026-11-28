@@ -168,6 +168,25 @@ export function roving(group: HTMLElement, items: string, current: string, verti
   });
 }
 
+/** Tabs over panes; returns the tab strip (a tab list: Left and Right go from tab to tab). `onShow` hears each tab shown. */
+export function tabStrip(panes: readonly (readonly [string, HTMLElement])[], first = 0, onShow?: (index: number) => void): HTMLElement {
+  const strip = h('div', { class: 'wm-find-tabs', attrs: { role: 'tablist' } });
+  const buttons = panes.map(([label], i) => {
+    const button = h('button', { class: 'wm-find-tab', text: label, attrs: { type: 'button', role: 'tab' } });
+    button.addEventListener('click', () => show(i));
+    strip.append(button);
+    return button;
+  });
+  const show = (i: number) => {
+    buttons.forEach((button, k) => button.setAttribute('aria-selected', String(k === i)));
+    panes.forEach(([, pane], k) => (pane.hidden = k !== i));
+    onShow?.(i);
+  };
+  show(first);
+  tabList(strip, panes.map(([, pane]) => pane));
+  return strip;
+}
+
 /**
  * A tab strip (`role="tablist"` of `role="tab"` buttons): one Tab stop on the shown tab, Left and Right (Home, End) to
  * show another. With `panes` (one per tab, in order), each tab says which pane it controls and each pane is named by its tab.

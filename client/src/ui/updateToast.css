@@ -1,0 +1,131 @@
+/* The update toast (see updateToast.ts): one dark line centered near the bottom, its actions as links. Dark in every theme, so it stands
+   apart from the page; green once an update is installed. */
+
+.wm-update-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + var(--wm-footer-clearance, 0px));
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.wm-update-toast {
+  display: flex;
+  pointer-events: auto;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: min(640px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 8px 8px 8px 14px;
+  border-radius: 9px;
+  background: #24242a;
+  box-shadow: var(--wm-float-shadow);
+  font: 13px/1.4 var(--wm-font, system-ui, sans-serif);
+  color: #f2f2f4;
+  animation: wm-update-toast-rise 0.18s ease-out;
+}
+
+.wm-update-toast-success {
+  background: #1d4a31;
+}
+
+.wm-update-toast[hidden] {
+  display: none;
+}
+
+.wm-update-toast p {
+  margin: 0;
+}
+
+.wm-update-toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.wm-update-toast-action {
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: #9db4ff;
+  cursor: pointer;
+}
+
+.wm-update-toast-success .wm-update-toast-action {
+  color: #a6e3bd;
+}
+
+.wm-update-toast-action:hover {
+  text-decoration: underline;
+}
+
+.wm-update-toast-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+  text-decoration: none;
+}
+
+.wm-update-toast-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+}
+
+.wm-update-toast-close:hover {
+  background: rgb(255 255 255 / 0.12);
+}
+
+.wm-update-toast-close svg {
+  fill: none;
+  stroke: #aaa;
+  stroke-width: 1.5;
+}
+
+.wm-update-toast :focus-visible {
+  outline: 2px solid #9db4ff;
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+@keyframes wm-update-toast-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wm-update-toast {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .wm-update-toast {
+    border: 1px solid CanvasText;
+  }
+
+  .wm-update-toast-action {
+    color: LinkText;
+  }
+
+  .wm-update-toast-close svg {
+    stroke: ButtonText;
+  }
+}

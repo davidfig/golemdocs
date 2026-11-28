@@ -78,12 +78,11 @@ export const dialogs: Partial<Messages> = {
 
   // New version notice
   'dialogs.newVersion.label': '新版本',
-  'dialogs.newVersion.message': 'Golem Docs {version} 已发布。',
-  'dialogs.newVersion.view': '查看新功能',
-  'dialogs.newVersion.off': '不再显示',
+  'dialogs.newVersion.message': '已更新到 Golem Docs {version}',
+  'dialogs.newVersion.view': '新功能',
   'dialogs.newVersion.close': '关闭',
   'dialogs.update.label': '有可用更新',
-  'dialogs.update.message': 'Golem Docs 有新版本。您的工作会先被保存。',
+  'dialogs.update.message': 'Golem Docs 有新版本可用',
   'dialogs.update.reload': '重新加载',
   'dialogs.update.later': '稍后',
 
@@ -148,6 +147,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.vault.none': '你的文档尚未作为文件保存在此电脑上。',
   'dialogs.sync.vault.problem': '未同步：{message}',
   'dialogs.options.title': '选项',
+  'dialogs.options.general': '常规',
+  'dialogs.options.editing': '编辑',
   'dialogs.options.view': '视图',
   'dialogs.options.fullScreenMenu': '全屏时保留菜单栏',
   'dialogs.options.scrollPastEnd': '允许滚动到文档末尾之后半屏',

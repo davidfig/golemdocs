@@ -4,7 +4,8 @@
 import { getLocale, t } from '../../i18n/index.ts';
 import type { FontChoice } from '../actions.ts';
 import { colorName } from '../colorName.ts';
-import { h, roving, tabList, uniqueId } from '../dom.ts';
+import { h, roving, uniqueId } from '../dom.ts';
+export { tabStrip } from '../dom.ts';
 import { choiceButton } from '../dropdown.ts';
 import { closePopup, dialogTitleBar, openPopup, popupOpenFor } from '../popup.ts';
 import { paletteContents, PALETTE } from '../toolbar.ts';
@@ -106,24 +107,6 @@ export function numberInput(label: string, value: string, step = '1', min?: stri
 
 /** A label, its control, and what goes after it (a unit), on one line. */
 export const field = (label: string, control: HTMLElement, after?: string): HTMLElement => h('label', { class: 'wm-page-field' }, h('span', { text: label }), control, after === undefined ? null : h('span', { class: 'wm-page-unit', text: after }));
-
-/** Tabs over panes; returns the tab strip (a tab list: Left and Right go from tab to tab). */
-export function tabStrip(panes: readonly (readonly [string, HTMLElement])[]): HTMLElement {
-  const strip = h('div', { class: 'wm-find-tabs', attrs: { role: 'tablist' } });
-  const buttons = panes.map(([label], i) => {
-    const button = h('button', { class: 'wm-find-tab', text: label, attrs: { type: 'button', role: 'tab' } });
-    button.addEventListener('click', () => show(i));
-    strip.append(button);
-    return button;
-  });
-  const show = (i: number) => {
-    buttons.forEach((button, k) => button.setAttribute('aria-selected', String(k === i)));
-    panes.forEach(([, pane], k) => (pane.hidden = k !== i));
-  };
-  show(0);
-  tabList(strip, panes.map(([, pane]) => pane));
-  return strip;
-}
 
 /**
  * Makes `group` (holding `role="radio"` buttons, such as a gallery of tiles) a radio group: one Tab stop on the chosen

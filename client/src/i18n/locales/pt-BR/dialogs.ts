@@ -78,12 +78,11 @@ export const dialogs: Partial<Messages> = {
 
   // New version notice
   'dialogs.newVersion.label': 'Nova versão',
-  'dialogs.newVersion.message': 'O Golem Docs {version} foi lançado.',
-  'dialogs.newVersion.view': 'Ver novidades',
-  'dialogs.newVersion.off': 'Não mostrar novamente',
+  'dialogs.newVersion.message': 'Atualizado para o Golem Docs {version}',
+  'dialogs.newVersion.view': 'Novidades',
   'dialogs.newVersion.close': 'Fechar',
   'dialogs.update.label': 'Atualização disponível',
-  'dialogs.update.message': 'Há uma nova versão do Golem Docs. Seu trabalho é salvo antes.',
+  'dialogs.update.message': 'Há uma nova versão do Golem Docs disponível',
   'dialogs.update.reload': 'Recarregar',
   'dialogs.update.later': 'Depois',
 
@@ -148,6 +147,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.vault.none': 'Seus documentos ainda não são mantidos como arquivos neste computador.',
   'dialogs.sync.vault.problem': 'Sem sincronizar: {message}',
   'dialogs.options.title': 'Opções',
+  'dialogs.options.general': 'Geral',
+  'dialogs.options.editing': 'Edição',
   'dialogs.options.view': 'Exibir',
   'dialogs.options.fullScreenMenu': 'Manter a barra de menus em tela inteira',
   'dialogs.options.scrollPastEnd': 'Permitir rolar meia tela além do fim do documento',

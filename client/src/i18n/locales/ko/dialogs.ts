@@ -78,12 +78,11 @@ export const dialogs: Partial<Messages> = {
 
   // New version notice
   'dialogs.newVersion.label': '새 버전',
-  'dialogs.newVersion.message': 'Golem Docs {version}이(가) 출시되었습니다.',
-  'dialogs.newVersion.view': '새로운 기능 보기',
-  'dialogs.newVersion.off': '다시 표시 안 함',
+  'dialogs.newVersion.message': 'Golem Docs {version}(으)로 업데이트됨',
+  'dialogs.newVersion.view': '새로운 기능',
   'dialogs.newVersion.close': '닫기',
   'dialogs.update.label': '업데이트 사용 가능',
-  'dialogs.update.message': 'Golem Docs의 새 버전이 있습니다. 작업 내용이 먼저 저장됩니다.',
+  'dialogs.update.message': 'Golem Docs의 새 버전을 사용할 수 있습니다',
   'dialogs.update.reload': '새로 고침',
   'dialogs.update.later': '나중에',
 
@@ -148,6 +147,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.vault.none': '문서가 아직 이 컴퓨터에 파일로 저장되지 않았습니다.',
   'dialogs.sync.vault.problem': '동기화되지 않음: {message}',
   'dialogs.options.title': '옵션',
+  'dialogs.options.general': '일반',
+  'dialogs.options.editing': '편집',
   'dialogs.options.view': '보기',
   'dialogs.options.fullScreenMenu': '전체 화면에서도 메뉴 표시줄 유지',
   'dialogs.options.scrollPastEnd': '문서 끝 아래로 반 화면만큼 더 스크롤할 수 있게 하기',

@@ -30,6 +30,7 @@ test.describe('Shared controls', () => {
   test('a segmented choice is a radio group: one Tab stop, and the arrow keys choose', async ({ app }) => {
     await app.blank();
     await app.menu('Tools', 'Options');
+    await app.page.getByRole('dialog', { name: 'Options' }).getByRole('tab', { name: 'Accessibility' }).click();
     const widths = app.page.getByRole('radiogroup', { name: 'Caret width' });
     const thin = widths.getByRole('radio', { name: 'Thin' });
     await expect(thin).toHaveAttribute('aria-checked', 'true');
@@ -75,5 +76,27 @@ test.describe('Shared controls', () => {
     await expect(said).toContainText(['Left 20, top 20, 130 by 79']);
     await app.press('Shift+ArrowDown');
     await expect(said).toContainText(['Left 20, top 30, 130 by 79']);
+  });
+});
+
+test.describe('Tools › Options', () => {
+  test('its pages are tabs the arrow keys move between, and it opens again on the last one shown', async ({ app }) => {
+    await app.blank();
+    await app.menu('Tools', 'Options');
+    const options = app.page.getByRole('dialog', { name: 'Options' });
+    const tabs = options.getByRole('tablist');
+    await expect(tabs.getByRole('tab')).toHaveText(['General', 'Editing', 'Drawing', 'Accessibility']);
+    const general = tabs.getByRole('tab', { name: 'General' });
+    await expect(general).toHaveAttribute('aria-selected', 'true');
+    await expect(options.getByRole('tabpanel', { name: 'General' }).getByRole('group', { name: 'View' })).toBeVisible();
+    await general.focus();
+    await app.press('ArrowRight');
+    await expect(tabs.getByRole('tab', { name: 'Editing' })).toBeFocused();
+    await expect(options.getByRole('checkbox', { name: 'Raise ordinals (1st, 2nd, 3rd)' })).toBeVisible();
+    await expect(options.getByRole('group', { name: 'View' })).toBeHidden();
+    await app.press('Escape');
+    await expect(options).toBeHidden();
+    await app.menu('Tools', 'Options');
+    await expect(app.page.getByRole('dialog', { name: 'Options' }).getByRole('tab', { name: 'Editing' })).toHaveAttribute('aria-selected', 'true');
   });
 });

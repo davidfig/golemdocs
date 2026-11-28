@@ -78,12 +78,11 @@ export const dialogs: Catalog = {
 
   // New version notice
   'dialogs.newVersion.label': 'Новая версия',
-  'dialogs.newVersion.message': 'Вышла новая версия Golem Docs {version}.',
+  'dialogs.newVersion.message': 'Golem Docs обновлён до версии {version}',
   'dialogs.newVersion.view': 'Что нового',
-  'dialogs.newVersion.off': 'Больше не показывать',
   'dialogs.newVersion.close': 'Закрыть',
   'dialogs.update.label': 'Доступно обновление',
-  'dialogs.update.message': 'Доступна новая версия Golem Docs. Ваша работа сначала сохранится.',
+  'dialogs.update.message': 'Доступна новая версия Golem Docs',
   'dialogs.update.reload': 'Перезагрузить',
   'dialogs.update.later': 'Позже',
 
@@ -148,6 +147,8 @@ export const dialogs: Catalog = {
   'dialogs.sync.vault.none': 'Ваши документы пока не хранятся как файлы на этом компьютере.',
   'dialogs.sync.vault.problem': 'Не синхронизируется: {message}',
   'dialogs.options.title': 'Параметры',
+  'dialogs.options.general': 'Общие',
+  'dialogs.options.editing': 'Правка',
   'dialogs.options.view': 'Вид',
   'dialogs.options.fullScreenMenu': 'Оставлять строку меню в полноэкранном режиме',
   'dialogs.options.scrollPastEnd': 'Разрешить прокрутку на пол-экрана за конец документа',

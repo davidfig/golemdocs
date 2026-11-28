@@ -1,4 +1,4 @@
-/* The new-version note (see newVersionNotice.ts), centered near the bottom of the window. */
+/* The note card at the bottom of the window, for the expired sign-in note (signInExpiredNotice.ts). The update toasts are updateToast.css. */
 
 .wm-version-notice {
   position: fixed;

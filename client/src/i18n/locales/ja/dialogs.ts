@@ -78,12 +78,11 @@ export const dialogs: Partial<Messages> = {
 
   // New version notice
   'dialogs.newVersion.label': '新バージョン',
-  'dialogs.newVersion.message': 'Golem Docs {version} がリリースされました。',
-  'dialogs.newVersion.view': '新機能を見る',
-  'dialogs.newVersion.off': '今後表示しない',
+  'dialogs.newVersion.message': 'Golem Docs {version} に更新しました',
+  'dialogs.newVersion.view': '新機能',
   'dialogs.newVersion.close': '閉じる',
   'dialogs.update.label': 'アップデートがあります',
-  'dialogs.update.message': 'Golem Docs の新しいバージョンがあります。作業内容は先に保存されます。',
+  'dialogs.update.message': 'Golem Docs の新しいバージョンがあります',
   'dialogs.update.reload': '再読み込み',
   'dialogs.update.later': '後で',
 
@@ -148,6 +147,8 @@ export const dialogs: Partial<Messages> = {
   'dialogs.sync.vault.none': 'ドキュメントはまだこのコンピュータにファイルとして保存されていません。',
   'dialogs.sync.vault.problem': '同期されていません: {message}',
   'dialogs.options.title': 'オプション',
+  'dialogs.options.general': '全般',
+  'dialogs.options.editing': '編集',
   'dialogs.options.view': '表示',
   'dialogs.options.fullScreenMenu': '全画面表示でもメニュー バーを表示する',
   'dialogs.options.scrollPastEnd': '文書の末尾より半画面分先までスクロールできるようにする',

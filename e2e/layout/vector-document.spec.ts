@@ -475,6 +475,7 @@ test.describe('free drawing', () => {
     await expect(app.page.getByRole('button', { name: 'Stroke Style' })).toBeVisible();
 
     await app.menu('Tools', 'Options');
+    await app.page.getByRole('dialog', { name: 'Options' }).getByRole('tab', { name: 'Drawing' }).click();
     const options = app.page.getByRole('dialog', { name: 'Options' });
     const pressure = options.getByRole('checkbox', { name: /harder a tablet’s pen is pressed/ });
     await expect(pressure).toBeChecked();
@@ -526,6 +527,7 @@ test.describe('free drawing', () => {
   test('Tools ▸ Options ▸ Drawing: with "select after pencil" off a finished stroke is not selected, and the setting is kept', async ({ app }) => {
     await openDrawing(app);
     await app.menu('Tools', 'Options');
+    await app.page.getByRole('dialog', { name: 'Options' }).getByRole('tab', { name: 'Drawing' }).click();
     const options = app.page.getByRole('dialog', { name: 'Options' });
     const select = options.getByRole('checkbox', { name: 'Select a pencil stroke when it is finished' });
     await expect(select).toBeChecked();

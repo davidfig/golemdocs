@@ -76,12 +76,11 @@ export const dialogs = {
 
   // New version notice
   'dialogs.newVersion.label': 'New version',
-  'dialogs.newVersion.message': 'Golem Docs {version} has been released.',
-  'dialogs.newVersion.view': 'See What’s New',
-  'dialogs.newVersion.off': 'Don’t show again',
+  'dialogs.newVersion.message': 'Updated to Golem Docs {version}',
+  'dialogs.newVersion.view': 'What’s new',
   'dialogs.newVersion.close': 'Close',
   'dialogs.update.label': 'Update available',
-  'dialogs.update.message': 'A new version of Golem Docs is available. Your work is saved first.',
+  'dialogs.update.message': 'A new version of Golem Docs is available',
   'dialogs.update.reload': 'Reload',
   'dialogs.update.later': 'Later',
 
@@ -146,6 +145,8 @@ export const dialogs = {
   'dialogs.sync.vault.none': 'Your documents aren’t kept as files on this computer yet.',
   'dialogs.sync.vault.problem': 'Not syncing: {message}',
   'dialogs.options.title': 'Options',
+  'dialogs.options.general': 'General',
+  'dialogs.options.editing': 'Editing',
   'dialogs.options.view': 'View',
   'dialogs.options.fullScreenMenu': 'Keep the menu bar in full screen',
   'dialogs.options.scrollPastEnd': 'Allow scrolling half a screen past the end of the document',

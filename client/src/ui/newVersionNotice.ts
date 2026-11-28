@@ -1,16 +1,17 @@
-// A note in the bottom left when a new version has been released, with a button to What's New.
-// Closing it hides it until the next release; "Don't show again" turns it off for good (a synced
-// preference, see settingsSync.ts). The first run on a device only records the version, so a new
-// visitor isn't told about a release they never missed.
+// A toast after an update: "Updated to Golem Docs X", with What's New a click away. It shows once per version and goes by itself after a
+// while (not while the pointer or the keyboard is on it, nor in Screen Reader Mode). The first run on a device only records the version,
+// so a new visitor isn't told about a release they never missed. Someone who once chose "Don't show again" (a synced preference, see
+// settingsSync.ts) still isn't shown it.
 
 import { version } from '../../../package.json';
 import { t } from '../i18n/index.ts';
-import { CLOSE_ICON, h, iconButton, keepAboveFooter } from './dom.ts';
-import { showNotice } from './notice.ts';
-import './newVersionNotice.css';
+import { screenReaderOn } from './screenReader.ts';
+import { type UpdateToast, updateToast } from './updateToast.ts';
 
 const SEEN_KEY = 'golem.newVersion.seen';
 const OFF_KEY = 'golem.newVersion.off';
+/** How long the toast stays up untouched. */
+const SHOWN_MS = 12_000;
 
 function read(key: string): string | null {
   try {
@@ -29,33 +30,46 @@ function write(key: string, value: string): void {
 }
 
 export class NewVersionNotice {
-  readonly el = h('aside', { class: 'wm-version-notice', attrs: { 'aria-label': t('dialogs.newVersion.label') } });
+  private readonly toast: UpdateToast;
+  readonly el: HTMLElement;
+  private timer = 0;
 
   constructor(parent: HTMLElement, openChangelog: () => void) {
-    const close = iconButton('wm-version-notice-close', CLOSE_ICON, t('dialogs.newVersion.close'));
-    const view = h('button', { class: 'wm-button', text: t('dialogs.newVersion.view'), attrs: { type: 'button' } });
-    const hide = h('button', { class: 'wm-version-notice-off', text: t('dialogs.newVersion.off'), attrs: { type: 'button' } });
-    this.el.append(close, h('p', { text: t('dialogs.newVersion.message', { version }) }), h('div', { class: 'wm-version-notice-actions' }, view, hide));
-    close.addEventListener('click', () => showNotice(this.el, false));
-    view.addEventListener('click', () => {
-      showNotice(this.el, false);
+    this.toast = updateToast(parent, t('dialogs.newVersion.label'), t('dialogs.newVersion.close'), 'success');
+    this.el = this.toast.el;
+    this.toast.message.textContent = t('dialogs.newVersion.message', { version });
+    this.toast.action(t('dialogs.newVersion.view')).addEventListener('click', () => {
+      this.toast.show(false);
       openChangelog();
     });
-    hide.addEventListener('click', () => {
-      write(OFF_KEY, '1');
-      showNotice(this.el, false);
-    });
+    this.toast.close.addEventListener('click', () => this.toast.show(false));
+    // Held while the pointer or the keyboard is on it; the clock starts again once both have left.
+    const hold = () => clearTimeout(this.timer);
+    const release = () => {
+      if (!this.el.matches(':hover') && !this.el.contains(document.activeElement)) this.arm();
+    };
+    this.el.addEventListener('pointerenter', hold);
+    this.el.addEventListener('focusin', hold);
+    this.el.addEventListener('pointerleave', release);
+    this.el.addEventListener('focusout', () => setTimeout(release));
+
     const first = read(SEEN_KEY) === null;
     const isNew = !first && read(SEEN_KEY) !== version;
     write(SEEN_KEY, version);
-    this.el.hidden = true;
-    parent.append(this.el);
-    showNotice(this.el, isNew && read(OFF_KEY) !== '1');
-    keepAboveFooter(this.el);
+    if (isNew && read(OFF_KEY) !== '1') {
+      this.toast.show(true);
+      this.arm();
+    }
   }
 
-  /** "Don't show again" came from the account: the note goes, if it is showing. */
+  private arm(): void {
+    clearTimeout(this.timer);
+    if (this.el.hidden || screenReaderOn()) return;
+    this.timer = window.setTimeout(() => this.toast.show(false), SHOWN_MS);
+  }
+
+  /** "Don't show again" came from the account: the toast goes, if it is showing. */
   rereadOff(): void {
-    if (read(OFF_KEY) === '1') showNotice(this.el, false);
+    if (read(OFF_KEY) === '1') this.toast.show(false);
   }
 }

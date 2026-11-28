@@ -2072,6 +2072,28 @@ html.wm-titlebar .wm-corner {
 
 /* --- Tools > Options (see optionsDialog.ts) ----------------------------------------------------- */
 
+.wm-options-dialog .wm-find-tabs {
+  padding-top: 8px;
+}
+
+/* The panes share one cell, so the dialog is as big as the largest and doesn't jump when the tab changes. */
+.wm-options {
+  display: grid;
+  min-width: 440px;
+}
+
+.wm-options-pane {
+  display: flex;
+  grid-area: 1 / 1;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wm-options-pane[hidden] {
+  display: flex;
+  visibility: hidden;
+}
+
 .wm-options fieldset {
   margin: 0;
   padding: 2px 10px 8px;

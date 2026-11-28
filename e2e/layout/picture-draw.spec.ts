@@ -293,6 +293,7 @@ test.describe('a drawing tablet’s pen', () => {
   test('with pen pressure turned off in Tools ▸ Options, the Pen draws one width however hard it is pressed', async ({ app }) => {
     await openPicture(app, CANVAS);
     await app.menu('Tools', 'Options');
+    await app.page.getByRole('dialog', { name: 'Options' }).getByRole('tab', { name: 'Drawing' }).click();
     const options = app.page.getByRole('dialog', { name: 'Options' });
     await options.getByRole('checkbox', { name: /harder a tablet’s pen is pressed/ }).uncheck();
     await options.getByRole('button', { name: 'OK' }).click();

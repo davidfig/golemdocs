@@ -38,6 +38,7 @@ test.describe('Autocorrect as you type', () => {
   test('every rule can be turned off in Tools ▸ Options, and is kept', async ({ app }) => {
     await app.blank();
     await app.menu('Tools', 'Options');
+    await app.page.getByRole('dialog', { name: 'Options' }).getByRole('tab', { name: 'Editing' }).click();
     const options = app.page.getByRole('dialog', { name: 'Options' });
     for (const label of ['Replace straight quotes with smart quotes', 'Capitalize the first letter of sentences', 'Replace three dots with an ellipsis (…)']) {
       const box = options.getByRole('checkbox', { name: label });
@@ -57,6 +58,7 @@ test.describe('Autocorrect as you type', () => {
     await app.type('I recieve teh mail. ');
     await expect.poll(() => app.text()).toBe('I receive the mail. ');
     await app.menu('Tools', 'Options');
+    await app.page.getByRole('dialog', { name: 'Options' }).getByRole('tab', { name: 'Editing' }).click();
     const options = app.page.getByRole('dialog', { name: 'Options' });
     await options.getByRole('button', { name: 'Edit List…' }).click();
     const list = app.page.getByRole('dialog', { name: 'Replacement List' });

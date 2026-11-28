@@ -184,11 +184,11 @@ export function dialogTitleBar(title: string, onClose: () => void): HTMLElement 
 }
 
 /** A small modal dialog (About, Keyboard Shortcuts). */
-export function showDialog(title: string, body: Node, onClose?: () => void): void {
-  const dialog = h('dialog', { class: 'wm-dialog', attrs: { 'aria-label': title } });
+export function showDialog(title: string, body: Node, onClose?: () => void, options: { top?: HTMLElement; className?: string } = {}): void {
+  const dialog = h('dialog', { class: options.className ? `wm-dialog ${options.className}` : 'wm-dialog', attrs: { 'aria-label': title } });
   const done = () => dialog.close();
   const ok = h('button', { class: 'wm-button wm-primary', text: t('menus.dialog.ok') });
-  dialog.append(dialogTitleBar(title, done), h('div', { class: 'wm-dialog-body' }, body), h('div', { class: 'wm-dialog-buttons' }, ok));
+  dialog.append(dialogTitleBar(title, done), ...(options.top ? [options.top] : []), h('div', { class: 'wm-dialog-body' }, body), h('div', { class: 'wm-dialog-buttons' }, ok));
   // Keys stay in the dialog: the document's handlers listen on the window.
   dialog.addEventListener('keydown', (e) => e.stopPropagation());
   ok.addEventListener('click', done);

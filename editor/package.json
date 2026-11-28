@@ -2,7 +2,7 @@
   "name": "@golemdocs/editor",
   "private": true,
   "description": "Document editor core (private workspace package, not on npm)",
-  "version": "0.51.0",
+  "version": "0.52.0",
   "license": "MIT",
   "type": "module",
   "exports": {

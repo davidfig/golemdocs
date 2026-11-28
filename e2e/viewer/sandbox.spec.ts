@@ -56,7 +56,17 @@ async function serve(): Promise<{ origin: string; served: string[]; missing: str
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { origin, served, missing, close: () => new Promise((resolve) => server.close(() => resolve())) };
+  // The browser keeps its connections open (keep-alive), and `close` waits for them: end them, or it can wait out the test's time.
+  return {
+    origin,
+    served,
+    missing,
+    close: () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      }),
+  };
 }
 
 /** Share of a screenshot's pixels that are white (page) and dark (text), read in a page of its own. */

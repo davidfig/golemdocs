@@ -17,10 +17,11 @@ const banner = (app: App) => app.page.locator('.wm-watch');
 /** Clicks the middle of a cell (once the workbook is open: a watcher opens it again after each save). */
 async function clickCell(page: Page, row: number, col: number): Promise<void> {
   const where = () => page.evaluate(([r, c]) => (window as unknown as { sheetEditor: { pointOf(r: number, c: number): { x: number; y: number } | null } }).sheetEditor.pointOf(r, c), [row, col]);
-  await expect.poll(async () => (await state(page)).loaded && (await where()) !== null, { timeout: 30_000 }).toBe(true);
-  const at = (await where())!;
+  // Keep the point the poll found: asked again, it can be null, the workbook having been opened again in between.
+  let at: { x: number; y: number } | null = null;
+  await expect.poll(async () => (await state(page)).loaded && (at = await where()) !== null, { timeout: 30_000 }).toBe(true);
   const box = (await page.locator('#canvas').boundingBox())!;
-  await page.mouse.click(box.x + at.x, box.y + at.y);
+  await page.mouse.click(box.x + at!.x, box.y + at!.y);
 }
 
 /** What a cell holds, as typed. */

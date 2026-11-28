@@ -7,7 +7,7 @@ import { test, expect } from '../fixtures';
 import { CLIENT_ORIGIN } from '../ports.ts';
 import { clickTopLink, folderProject, newPerson, signedOutContext } from '../collab/helpers';
 
-test('the folder page’s tree is a named landmark worked from the keyboard, and F6 moves between it and the document', async ({ browser }) => {
+test('the folder page’s tree is a named landmark worked from the keyboard, and F6 moves between it and the document', { tag: '@heavy' }, async ({ browser }) => {
   const owner = await newPerson(browser, 'owner');
   await owner.page.goto('/?doc=welcome');
   await owner.app.ready();
